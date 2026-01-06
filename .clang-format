@@ -1,0 +1,26 @@
+---
+# Google 스타일을 기반으로 하되 탭 설정을 적용합니다.
+BasedOnStyle: Google
+
+# 탭(Tab) 사용 여부: Always (항상 탭 사용)
+UseTab: Always
+
+# 탭의 크기 (보통 4로 설정하며, 에디터 표시 설정에 따름)
+TabWidth: 4
+IndentWidth: 4
+
+# 한 줄의 최대 길이
+ColumnLimit: 100
+
+# 중괄호 스타일 (Attach: 옆에 붙이기 - Google 스타일 기본)
+BreakBeforeBraces: Attach
+
+# 네임스페이스 들여쓰기 안함
+NamespaceIndentation: None
+
+# 포인터(*)의 위치 (Left: int* p)
+PointerAlignment: Left
+
+# 연속된 줄 맞춤 시 탭 사용 설정
+AlignAfterOpenBracket: Align
+ContinuationIndentWidth: 4

@@ -17,9 +17,16 @@
 Graduation-Project/
 ├── .github/              # Issue/PR 템플릿, GitHub Actions 설정
 ├── docs/                 # 기획서, 설계도(UML), 중간/최종 보고서 PDF
+├── include/              # 프로젝트의 공통 헤더 파일 (.h, .hpp) 
+│   ├── frontend/         # 백엔드 관련 헤더
+│   └── backend/          # 프론트엔드 관련 헤더
 ├── src/                  # 실제 소스 코드 (Frontend, Backend 분리)
-│   ├── frontend/         
-│   └── backend/          
+│   ├── frontend/         # 백엔드 기능 구현부
+│   └── backend/          # 프론트엔드(UI) 기능 구현부
+├── lib/                  # 외부 라이브러리 (OpenCV, Qt 등)
+│   └── [LibraryName]
+│       ├── include/      # 외부 라이브러리의 헤더 파일
+│       └── bin/          # 외부 라이브러리의 빌드된 바이너리 (.lib, .dll)
 ├── data/                 # (AI/DB 프로젝트인 경우) 샘플 데이터셋, SQL 덤프
 ├── tests/                # 테스트 코드
 ├── assets/               # README용 이미지, 로고, 시연 영상(GIF)

@@ -5,7 +5,7 @@
 ## 📌 프로젝트 소개 (Introduction)
 - **개발 기간** : 2026.01.05 ~ 2026.XX.XX
 
-- **팀명 / 팀원** : 팀명 / 심동준,방희수,박준현,강민수
+- **팀명 / 팀원** : 팀명 / 심동준, 방희수, 박준현, 강민수
 
 - **주요 기능** :
     - 핵심 기능 1 :
@@ -18,11 +18,11 @@ Graduation-Project/
 ├── .github/              # Issue/PR 템플릿, GitHub Actions 설정
 ├── docs/                 # 기획서, 설계도(UML), 중간/최종 보고서 PDF
 ├── include/              # 프로젝트의 공통 헤더 파일 (.h, .hpp) 
-│   ├── frontend/         # 백엔드 관련 헤더
-│   └── backend/          # 프론트엔드 관련 헤더
+│   ├── frontend/         # 프론트엔드 관련 헤더
+│   └── backend/          # 백엔드 관련 헤더
 ├── src/                  # 실제 소스 코드 (Frontend, Backend 분리)
-│   ├── frontend/         # 백엔드 기능 구현부
-│   └── backend/          # 프론트엔드(UI) 기능 구현부
+│   ├── frontend/         # 프론트엔드(UI) 기능 구현부
+│   └── backend/          # 백엔드 기능 구현부
 ├── lib/                  # 외부 라이브러리 (OpenCV, Qt 등)
 │   └── [LibraryName]
 │       ├── include/      # 외부 라이브러리의 헤더 파일

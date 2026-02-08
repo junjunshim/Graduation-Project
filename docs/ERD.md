@@ -29,7 +29,7 @@
 3. **`role_assignments`**: 유저-노드 간의 권한 매핑
     - `id`: (PK)
     - `user_id`: (FK -> users.user_id)
-    - `node_id`: (FK -> organiation_nodes.node_id)
+    - `node_id`: (FK -> organization_nodes.node_id)
     - `role`: 어떤 유저가 어떤 노드에서 어떤 역할(ADMIN, MEMBER 등)을 하는지 정의
 
 4. **`work_items`**: 업무 및 프로젝트 데이터

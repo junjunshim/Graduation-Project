@@ -551,3 +551,6 @@ out/
 .docker/
 *.log
 docker-compose.override.yml
+
+# .env
+.env

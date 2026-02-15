@@ -1,0 +1,40 @@
+services:
+  # 1. 데이터베이스 서비스 (PostgreSQL)
+  db:
+    image: postgres:15
+    container_name: grad_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "{DB_PORT}:5432"  # 로컬 PC의 포트와 컨테이너의 5432 연결
+    volumes:
+      # ./data 폴더에 있는 schema.sql을 컨테이너 시작 시 자동 실행
+      - ./data:/docker-entrypoint-initdb.d
+      # DB 데이터를 로컬에 저장 (컨테이너가 꺼져도 데이터 유지)
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. 백엔드 API 서비스 (C++ Drogon)
+  backend:
+    build:
+      context: .                # 빌드할 파일들이 있는 위치 (루트)
+      dockerfile: Dockerfile.backend  # 사용할 레시피 파일 이름
+    container_name: grad_backend
+    ports:
+      - "${SERVER_PORT}:8080"             # API 서버 포트 개방
+    depends_on:
+      - db                      # 중요: DB가 먼저 켜진 후에 서버 실행
+    environment:
+      # C++ 코드 내에서 사용할 환경변수 (DB 접속 정보 등)
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    volumes:
+      - .:/app                  # 로컬 소스 수정을 컨테이너에 즉시 반영 (개발용)
+
+volumes:
+  postgres_data:                # DB 데이터 보존용 볼륨 정의

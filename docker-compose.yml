@@ -8,6 +8,8 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
+    # ports:
+    #  - "${DB_PORT}:5432"  # 로컬 PC의 포트와 컨테이너의 5432 연결
     volumes:
       # ./data 폴더에 있는 schema.sql을 컨테이너 시작 시 자동 실행
       - ./data:/docker-entrypoint-initdb.d

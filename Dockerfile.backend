@@ -1,0 +1,28 @@
+# 1. 빌드 환경 설정 (Ubuntu 22.04 기반)
+FROM ubuntu:22.04
+
+# 2. 패키지 설치 시 인터랙티브 모드 방지
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 3. 필수 도구 및 라이브러리 설치
+RUN apt-get update && apt-get install -y \
+    gcc g++ cmake git \
+    libjsoncpp-dev uuid-dev zlib1g-dev \
+    libpq-dev postgresql-client \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 4. Drogon 프레임워크 빌드 및 설치
+WORKDIR /tmp
+RUN git clone https://github.com/drogonframework/drogon.git && \
+    cd drogon && \
+    git submodule update --init && \
+    mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && make install && \
+    cd /tmp && rm -rf drogon
+
+# 5. 작업 디렉토리 설정
+WORKDIR /app
+
+# 6. 실행 명령어 (컨테이너 유지용)
+CMD ["tail", "-f", "/dev/null"]

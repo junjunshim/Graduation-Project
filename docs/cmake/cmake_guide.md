@@ -9,4 +9,4 @@ c/c++ 프로젝트이 빌드 과정을 자동화하고 관리하는 시스템 �
 
 필요시 따로 설치하여 작업할 것
 
-해당 프로젝트에서 사용될 cmake 사용 방법은 [cmake_manual.md](.github/docs/cmake/cmake_manual.md)에서 확인
+해당 프로젝트에서 사용될 cmake 사용 방법은 [cmake_manual.md](docs/cmake/cmake_manual.md)에서 확인

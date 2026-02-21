@@ -38,7 +38,7 @@ root CMakeLists.txt의 마지막 라인을 통해서 해당 CMakeLists.txt가 �
 우리 프로젝트에서는 api 서버와 db를 docker를 통하여 컨테이너에서 작동된다. \
 따라서 api 서버 빌드를 위해서는 생성된 컨테이너 내부에서 빌드를 진행해야한다.
 
-- [docker_manual.md](.github/docs/docker/docker_manual.md)에 있는 방식으로 컨테이너를 생성한다.
+- [docker_manual.md](../docker/docker_manual.md)에 있는 방식으로 컨테이너를 생성한다.
 - 컨테이너 생성 후, 처음 빌드한다면 아래 명령어 입력(파일 추가 및 삭제, 라이브러리 변경 같은 경우 아래 방식으로 해야함)
 
 ```cmd

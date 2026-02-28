@@ -18,7 +18,7 @@
     - `node_id`: (PK, 개인 사용자 시 => users.personal_node_id) 
     - `node_type`: COMPANY, DIVISION, TEAM, USER 등
     - `parent_node_id`: 상위 노드 참조 (Self-referencing)
-    - `path`: 트리 탐색 최적화를 위한 경로 저장 (예: `1/5/12/`)
+    - `path`: 트리 탐색 최적화를 위한 경로를 배열로 저장
     - `name`: 조직명 or 사용자 이름
     - `created_at`: timestamp
 2. **`users`**: 실제 서비스 이용자 정보
@@ -54,10 +54,10 @@
 
 | node_id | node_type | parent_node_id | name | path |
 | :---: | :---: | :---: | :---: | :---: |
-| 999 | user | NULL | 김철수 | 999/ |
-| 100 | company | NULL | 클라우드나인 | 100/ |
-| 200 | department | 100 | 백앤드 개발부 | 100/200/ |
-| 300 | team | 200 | api 개발팀 | 100/200/300/ |
+| 999 | user | NULL | 김철수 | {999} |
+| 100 | company | NULL | 클라우드나인 | {100} |
+| 200 | department | 100 | 백앤드 개발부 | {100, 200} |
+| 300 | team | 200 | api 개발팀 | {100, 200, 300} |
 
 - 작업 영역을 나타낸다, 위에서 부터 김철수 개인 공간, 회사, 부서, 팀 
 ---
@@ -114,7 +114,7 @@ INSERT INTO users (user_id, email, name) VALUES ('U-101', 'kim@test.com', '김�
 
 -- 2. 개인 전용 노드 생성 (부모 없음 = 독립 공간)
 INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (999, 'USER', NULL, '김철수의 개인공간', '999/');
+VALUES (999, 'USER', NULL, '김철수의 개인공간', ARRAY[999]);
 
 -- 3. 유저와 노드 매핑 및 권한 부여
 UPDATE users SET personal_node_id = 999 WHERE user_id = 'U-101';
@@ -125,7 +125,7 @@ INSERT INTO role_assignments (user_id, node_id, role) VALUES ('U-101', 999, 'ADM
 ```sql
 --- 1. 팀 생성
 INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (500, 'TEAM', NULL, '프론트엔드 개발팀', '500/');
+VALUES (500, 'TEAM', NULL, '프론트엔드 개발팀', ARRAY[500]);
 
 --- 2. 팀 생성자에 관리자 권한 부여
 INSERT INTO role_assignments (user_id, node_id, role)
@@ -135,6 +135,12 @@ VALUES ('U-101', 500, 'ADMIN');
 SELECT user_id FROM users WHERE email = 'lee@email.com'; -- 결과: 'U-102'
 INSERT INTO role_assignments (user_id, node_id, role)
 VALUES ('U-102', 500, 'MEMBER'); -- 'U-102 유저에게 멤버 권한 부여'
+
+-- 4. 부서 생성 (팀 하위)
+-- 부모(100)의 path인 {100}에 자신의 ID(200)를 추가하여 {100, 200} 생성
+INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
+VALUES (200, 'DEPARTMENT', 100, '백엔드 개발부', ARRAY[500, 200]);
+
 ```
 
 ### 3. 팀 소유 업무 생성 및 팀원에게 배정

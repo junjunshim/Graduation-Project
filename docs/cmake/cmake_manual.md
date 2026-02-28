@@ -42,7 +42,7 @@ root CMakeLists.txt의 마지막 라인을 통해서 해당 CMakeLists.txt가 �
 - 컨테이너 생성 후, 처음 빌드한다면 아래 명령어 입력(파일 추가 및 삭제, 라이브러리 변경 같은 경우 아래 방식으로 해야함)
 
 ```cmd
-docker exec -it grad_server /bin/bash   #컨테이너 접속
+docker exec -it grad_backend /bin/bash   #컨테이너 접속
 
 mkdir build && cd build     #빌드 폴더 생성 및 이동
 

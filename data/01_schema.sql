@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     personal_node_id INTEGER REFERENCES organization_nodes(node_id),
     create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-
 );
 
 -- 3. 유저와 노드 간이 권한 매핑

@@ -3,217 +3,317 @@
 
 -- #1 유저 생성 로직 (이후 password 해싱 값으로 변경)
 /* 유저 시드 생성
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-', '@.com', '', '');
+매개변수 => user_id, email, name, password_hash
+-- 1) 유저 생성
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('', '', '', '')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
 
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (, 'USER', NULL, '', ARRAY[]);
+-- 2) 개인 전용 노드 생성 및 매핑
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
 
-UPDATE users SET personal_node_id = WHERE user_id = 'U-';
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (, 'U-', , 'ADMIN');
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+
+-- 3) 전용 노드에 대한 권한 매핑
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 */
 
 
 -- 1) 유저 생성
- INSERT INTO users (user_id, email, name, password_hash) 
- VALUES ('U-1', 'admin@gmail.com', '관리자', 'admin@1234');
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-1', 'admin@gmail.com', '관리자', 'admin@1234')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
 
 -- 2) 개인 전용 노드 생성 및 매핑
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (1, 'USER', NULL, '관리자 개인공간', ARRAY[1]);
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
 
-UPDATE users SET personal_node_id = 1 WHERE user_id = 'U-1';
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
 
 -- 3) 전용 노드에 대한 권한 매핑
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (1, 'U-1', 1, 'ADMIN');
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
 -- 추가 유저 생성
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-2', 'kim1234@naver.com', '김철수', 'kim@1234');
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-2', 'kim1234@naver.com', '김철수', 'kim@1234')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (2, 'USER', NULL, '김철수 개인공간', ARRAY[2]);
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-3', 'na1234@naver.com', '나영희', 'na@1234')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
-UPDATE users SET personal_node_id = 2 WHERE user_id = 'U-2';
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-4', 'da5678@gmail.com', '다람쥐', 'da@5678')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (2, 'U-2', 2, 'ADMIN');
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-5', 'ra9988@gmail.com', '라랄라', 'ra!9988')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-3', 'na1234@naver.com', '나영희', 'na@1234');
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-6', 'ma6767@naver.com', '마맘미아', 'ma!9191')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (3, 'USER', NULL, '나영희 개인공간', ARRAY[3]);
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-7', 'ba3409@naver.com', '바할라', 'baba22@!')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
-UPDATE users SET personal_node_id = 3 WHERE user_id = 'U-3';
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-8', 'sa1231@gmail.com', '사사삭', 'sasasak@1122')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (3, 'U-3', 3, 'ADMIN');
-
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-4', 'da5678@gmail.com', '다람쥐', 'da@5678');
-
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (4, 'USER', NULL, '다람쥐 개인공간', ARRAY[4]);
-
-UPDATE users SET personal_node_id = 4 WHERE user_id = 'U-4';
-
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (4, 'U-4', 4, 'ADMIN');
-
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-5', 'ra9988@gmail.com', '라랄라', 'ra!9988');
-
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (5, 'USER', NULL, '라랄라 개인공간', ARRAY[5]);
-
-UPDATE users SET personal_node_id = 5 WHERE user_id = 'U-5';
-
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (5, 'U-5', 5, 'ADMIN');
-
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-6', 'ma6767@naver.com', '마맘미아', 'ma!9191');
-
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (6, 'USER', NULL, '마맘미아 개인공간', ARRAY[6]);
-
-UPDATE users SET personal_node_id = 6 WHERE user_id = 'U-6';
-
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (6, 'U-6', 6, 'ADMIN');
-
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-7', 'ba3409@naver.com', '바할라', 'baba22@!');
-
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (7, 'USER', NULL, '바할라 개인공간', ARRAY[7]);
-
-UPDATE users SET personal_node_id = 7 WHERE user_id = 'U-7';
-
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (7, 'U-7', 7, 'ADMIN');
-
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-8', 'sa1231@gmail.com', '사사삭', 'sasasak@1122');
-
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (8, 'USER', NULL, '사사삭 개인공간', ARRAY[8]);
-
-UPDATE users SET personal_node_id = 8 WHERE user_id = 'U-8';
-
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (8, 'U-8', 8, 'ADMIN');
-
-INSERT INTO users (user_id, email, name, password_hash)
-VALUES ('U-10', 'samsung3333@gmail.com', '삼성회사 계정 관리자', 'samsung@3333');
-
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (10, 'USER', NULL, '삼성회사 계정 관리자 개인공간', ARRAY[10]);
-
-UPDATE users SET personal_node_id = 10 WHERE user_id = 'U-10';
-
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (10, 'U-10', 10, 'ADMIN');
+INSERT INTO users (user_id, email, name, password_hash) 
+VALUES ('U-10', 'samsung3333@gmail.com', '삼성회사 계정 관리자', 'samsung@3333')
+RETURNING user_id AS new_user_id, name AS new_user_name \gset
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
+RETURNING node_id AS new_node_id \gset
+UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 
 -- #2 팀 생성 및 팀원 추가 로직
 /*
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (, 'COMPANY', NULL, '', ARRAY[]);
+-- 최상위 노드 생성
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
+VALUES ('', NULL, '', '{}')
+RETURNING node_id AS new_node_id \gset
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (, '', , 'ADMIN');
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (, '', , 'MANAGER');
+-- 노드를 생성하는 유저의 user_id 를 매개변수로 입력
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES ('', :new_node_id, 'ADMIN');
+
+-- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = ''
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, , ''
+FROM selected_user;
+
+-- 3) 부서 추가(하위 노드 추가★★★★★)(매개변수 상위 노드의 node_id)
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
+VALUES ('DEPARTMENT', , '', '{}')
+RETURNING node_id AS new_node_id \gset
+
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
+
+WITH parent_info AS (
+    SELECT path FROM organization_nodes WHERE node_id = 
+)
+UPDATE organization_nodes 
+SET path = p.path || (SELECT path FROM organization_nodes WHERE node_id = :new_node_id)
+FROM parent_info p 
+WHERE node_id = :new_node_id;
 */
 
--- 1) 회사 전용 노드 생성
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (100, 'COMPANY', NULL, '삼성', ARRAY[100]);
+-- 1) 최상위 노드 생성
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
+VALUES ('COMPANY', NULL, '삼성', '{}')
+RETURNING node_id AS new_node_id \gset
 
--- 2) 회사 관리자 계정에 권한 부여
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (100, 'U-10', 100, 'ADMIN');
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
 
--- 3) 회사 전용 노드에 부서 팀장들 권한 매핑(회사 노드의 매니저)
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (101, 'U-1', 100, 'MANAGER');
+-- 노드를 생성하는 유저의 user_id 를 매개변수로 입력
+INSERT INTO role_assignments (user_id, node_id, role) 
+VALUES ('U-10', :new_node_id, 'ADMIN');
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role)
-VALUES (102, 'U-2', 100, 'MANAGER');
 
--- 4) 부서 추가 및 부서 팀장들 관리자로 추가
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
-VALUES (200, 'DEPARTMENT', 100, '개발부서', ARRAY[100, 200]);
+-- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'kim1234@naver.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 10, 'MANAGER'
+FROM selected_user;
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (200, 'U-1', 200, 'ADMIN');
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'na1234@naver.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 10, 'MANAGER'
+FROM selected_user;
 
-INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path) 
-VALUES (300, 'DEPARTMENT', 100, '영업부서', ARRAY[100, 300]);
+-- 3) 부서 추가(하위 노드 추가★★★★★)(매개변수 상위 노드의 node_id)
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
+VALUES ('DEPARTMENT', 10, '개발부서', '{}')
+RETURNING node_id AS new_node_id \gset
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (300, 'U-2', 300, 'ADMIN');
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
 
--- 5) 부서에 팀원 추가
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (201, 'U-3', 200, 'MEMBER');
+WITH parent_info AS (
+    SELECT path FROM organization_nodes WHERE node_id = 10 
+)
+UPDATE organization_nodes 
+SET path = p.path || (SELECT path FROM organization_nodes WHERE node_id = :new_node_id)
+FROM parent_info p 
+WHERE node_id = :new_node_id;
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (202, 'U-4', 200, 'MEMBER');
+INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
+VALUES ('DEPARTMENT', 10, '영업부서', '{}')
+RETURNING node_id AS new_node_id \gset
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (203, 'U-5', 200, 'MEMBER');
+UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (301, 'U-6', 300, 'MEMBER');
+WITH parent_info AS (
+    SELECT path FROM organization_nodes WHERE node_id = 10 
+)
+UPDATE organization_nodes 
+SET path = p.path || (SELECT path FROM organization_nodes WHERE node_id = :new_node_id)
+FROM parent_info p 
+WHERE node_id = :new_node_id;
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (302, 'U-7', 300, 'MEMBER');
+-- 4) 부서에 팀장 추가(상위 노드의 admin이 하위 노드의 admin 권한 부여)(매개변수 상위 node_id, 담당할 사람의 email)
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'kim1234@naver.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 11, 'ADMIN'
+FROM selected_user;
 
-INSERT INTO role_assignments (assignment_id, user_id, node_id, role) 
-VALUES (303, 'U-8', 300, 'MEMBER');
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'na1234@naver.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 12, 'ADMIN'
+FROM selected_user;
+
+-- 5) 부서에 팀원 추가 (매개변수 해당 노드 node_id , 유저 이메일)
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'da5678@gmail.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 11, 'MEMBER'
+FROM selected_user;
+
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'ra9988@gmail.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 11, 'MEMBER'
+FROM selected_user;
+
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'ma6767@naver.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 11, 'MEMBER'
+FROM selected_user;
+
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'ba3409@naver.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 12, 'MEMBER'
+FROM selected_user;
+
+WITH selected_user AS (
+    SELECT user_id FROM users WHERE email = 'sa1231@gmail.com'
+)
+INSERT INTO role_assignments (user_id, node_id, role) 
+SELECT user_id, 12, 'MEMBER'
+FROM selected_user;
 
 -- #3 작업 생성 및 팀원 배정
-
--- 1) 회사 전체 업무 생성
--- 최상위 업무 생성
+/*
+-- 노드의 최상위 업무 생성(해당 노드의 id, 담당할 유저의 user_id 매개변수)
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-100', 100, NULL, 'U-10', 'S26', 'S26 관련 통합 TODO');
+VALUES ('WI-', , NULL, '', '', '');
 
--- 하위 업무 생성
+-- 하위 업무 생성(상위 업무의 work_item_id를 추가로 매개변수로 입력)
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-101', 100, 'WI-100', 'U-1', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
+VALUES ('WI-', , 'WI-', '', '', '');
+
+*/
+INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
+VALUES ('WI-1', 10, NULL, 'U-10', 'S26', 'S26 관련 통합 TODO');
 
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-102', 100, 'WI-100', 'U-2', 'S26 신규 시장 개척', '영업 부서가 맡을 프로젝트');
+VALUES ('WI-2', 10, 'WI-1', 'U-2', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
+
+INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
+VALUES ('WI-3', 10, 'WI-1', 'U-3', 'S26 신규 시장 개척', '영업 부서가 맡을 프로젝트');
 
 -- 상위 노드의 업무를 하위 노드의 업무로 가져오기
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-200', 200, 'WI-101', 'U-1', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
+VALUES ('WI-4', 11, 'WI-2', 'U-2', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
 
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-300', 300, 'WI-102', 'U-2', 'S26 신규 시장 개척', '영업 부서가 맡을 프로젝트');
+VALUES ('WI-5', 12, 'WI-3', 'U-3', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
 
 -- 업무 생성 및 팀원 배정
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-201', 200, 'WI-200', 'U-3', '악성 코드 분석/탐지 도구 개발', '악성코드를 자동으로 분석하고 진단하는 백신 및 탐지 시스템');
+VALUES ('WI-6', 11, 'WI-4', 'U-4', '악성 코드 분석/탐지 도구 개발', '악성코드를 자동으로 분석하고 진단하는 백신 및 탐지 시스템');
 
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-202', 200, 'WI-200', 'U-4', '모의 해킹 자동화 도구 개발', '취약점 분석 효율을 높이기 위한 자동화 도구');
+VALUES ('WI-7', 11, 'WI-4', 'U-5', '보안 솔루션 개발', '난독화, 무결성 검증, 암호화, 접근 제어 등 보안 솔루션 개발');
 
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-203', 200, 'WI-200', 'U-5', '보안 솔루션 개발', '난독화, 무결성 검증, 암호화, 접근 제어 등 보안 솔루션 개발');
+VALUES ('WI-8', 11, 'WI-4', 'U-6', '신규 시장 후보군 선정', '시장성이 있는 지역 선정하여 후보군 마련');
 
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-301', 300 , 'WI-300', 'U-6', '신규 시장 후보군 선정', '시장성이 있는 지역 선정하여 후보군 마련');
+VALUES ('WI-9', 12, 'WI-5', 'U-7', '현지화 제품에 들어갈 기능 선정', '해당 시장에서 성공할 수 있는 기능 선정');
 
 INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-302', 300 , 'WI-300', 'U-7', '현지화 제품에 들어갈 기능 선정', '해당 시장에서 성공할 수 있는 기능 선정');
-
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-303', 300 , 'WI-300', 'U-8', '마케팅 및 유통 전략 선정', '현지에 맞는 마케팅 방법과 유통 전략을 선정');
+VALUES ('WI-10', 12, 'WI-5', 'U-8', '마케팅 및 유통 전략 선정', '현지에 맞는 마케팅 방법과 유통 전략을 선정');

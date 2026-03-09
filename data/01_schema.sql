@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS organization_nodes (
     node_type VARCHAR(20) NOT NULL,
     parent_node_id INTEGER REFERENCES organization_nodes(node_id),
     name VARCHAR(100) NOT NULL,
-    path TEXT[] NOT NULL,
+    path INTEGER[] NOT NULL,
     create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

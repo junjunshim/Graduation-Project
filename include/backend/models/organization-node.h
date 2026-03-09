@@ -15,6 +15,6 @@ struct OrganizationNode {
     std::string node_type;                   // VARCHAR(20) NOT NULL
     std::optional<int32_t> parent_node_id;   // REFERENCES organization_nodes(node_id)
     std::string name;                        // VARCHAR(100) NOT NULL
-    std::vector<std::string> path;           // TEXT[] NOT NULL
+    std::vector<int32_t> path;           // TEXT[] NOT NULL
     Timestamp create_at;                     // DEFAULT CURRENT_TIMESTAMP (노드 생성 일시)
 };

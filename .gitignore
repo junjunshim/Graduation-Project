@@ -554,3 +554,7 @@ docker-compose.override.yml
 
 # .env
 .env
+
+# config.yaml && output.yaml
+config.yaml
+output.yaml

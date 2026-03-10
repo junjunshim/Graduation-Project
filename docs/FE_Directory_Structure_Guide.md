@@ -3,7 +3,7 @@
 ## 1) Directory Structure
 
 ```
-src/frontend/                                  
+grad_client/                                  
   electron/                           # Electron 전용
     main/                             # 메인 프로세스 코드(창/OS 기능)
     preload/                          # 프리로드(안전한 통로만 renderer에 노출)

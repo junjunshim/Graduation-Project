@@ -1,8 +1,11 @@
 # 1. 생성될 실행 파일 이름
 set(BINARY_NAME "grad_server")
 
-# 2. 컴파일할 소스 파일 목록 (파일이 늘어나면 여기에 추가)
-set(SOURCE_FILES main.cc)
+# 2. 컴파일할 소스 파일 자동 스캔
+file(GLOB_RECURSE ALL_SOURCES 
+    "main.cc"
+    "controllers/*.cc"
+)
 
 # 3. 시스템에 설치된 필수 패키지 찾기 (Drogon 및 의존성)
 find_package(Drogon REQUIRED)
@@ -14,7 +17,7 @@ find_package(ZLIB REQUIRED)
 find_package(PostgreSQL REQUIRED)
 
 # 5. 실행 파일 생성 명령
-add_executable(${BINARY_NAME} ${SOURCE_FILES})
+add_executable(${BINARY_NAME} ${ALL_SOURCES})
 
 # 6. 라이브러리 합체 (Linking)
 # - Drogon::Drogon: 서버 엔진

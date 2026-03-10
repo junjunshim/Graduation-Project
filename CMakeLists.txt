@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # 1. 헤더 파일 경로 설정 (우리가 만든 .h 파일들)
-include_directories(include)
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # 2. 내부 lib 폴더 경로 설정 (프로젝트 내부 바이너리 라이브러리)
 # CMAKE_SOURCE_DIR는 프로젝트 최상위 루트 경로를 의미

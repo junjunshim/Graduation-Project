@@ -10,7 +10,7 @@
  - **project(GraduationProject)** => 프로젝트의 이름을 설정
  - **set(CMAKE_CXX_STANDARD 17) \
     set(CMAKE_CXX_STANDARD_REQUIRED ON)** => C++ 17 버전을 사용 및 해당 버전이 없으면 빌드 중단
- - **include_directories(include)** => 사용자 지정 라이브러리의 디렉터리 위치 지정
+ - **include_directories(${CMAKE_SOURCE_DIR}/include)** => 사용자 지정 라이브러리의 디렉터리 위치 지정
  - **set(PROJECT_LIB_DIR \${CMAKE_SOURCE_DIR}/lib)  
     link_directories(${PROJECT_LIB_DIR})** => 외부 바이너리 라이브러리 파일 링크
  - **add_subdirectory(src/backend)** => 실제 소스 코드 위치 지정
@@ -19,13 +19,15 @@
 실제 서버 프로그램을 만드는 로직 \
 root CMakeLists.txt의 마지막 라인을 통해서 해당 CMakeLists.txt가 적용된다.
  - **set(BINARY_NAME "grad_server")** => 최종적으로 생성될 실행 파일 이름
- - **set(SOURCE_FILES main.cc)** => 컴파일 해야할 소스 코드들 지정 \
- ex) controller.cc 추가 시, set(SOURCE_FILES main.cc controller.cc) 이런식으로 추가
+ - **file(GLOB_RECURSE ALL_SOURCES \
+    "main.cc" \
+    "controllers/*.cc" )** => 컴파일 해야할 소스 코드들 지정 \
+   ex) controller.cc 추가 시, set(SOURCE_FILES main.cc controller.cc) 이런식으로 추가
  - **find_package(Drogon REQUIRED) \
     find_package(Jsoncpp REQUIRED) \
     find_package(ZLIB REQUIRED)** => docker에서 설치한 drogon 관련 패키지 불러오기
  - **find_package(PostgreSQL REQUIRED)** => docker에서 설치한 PostgreSQL 관련 패키지 불러오기
- - **add_executable(\${BINARY_NAME} ${SOURCE_FILES})** => 소스 파일을 이용하여 실행 파일 생성
+ - **add_executable(\${BINARY_NAME} ${ALL_SOURCES})** => 소스 파일을 이용하여 실행 파일 생성
  - **target_link_libraries(${BINARY_NAME}\
     PRIVATE \
     Drogon::Drogon \

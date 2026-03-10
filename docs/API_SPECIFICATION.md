@@ -39,3 +39,6 @@
 - success response
 ```json
 ```
+- error response
+```json
+```

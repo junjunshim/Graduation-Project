@@ -56,3 +56,32 @@
   "message" : 내부 에러 메세지
 }
 ```
+
+---
+### 최상위 노드 추가 api(version 1)
+- **endpoint** : /api/v1/org/nodes
+- **method** : Post
+- **description** : 최상위 노드(organization_nodes)를 생성한다.
+- **request body**
+```json
+{
+  "node_type" : "COMPANY",
+  "name" : "삼성",
+  "user_id" : "U-1",
+  "role_name" : "ADMIN",
+}
+```
+- **success response**
+```json
+{
+  "status" : "success",
+  "new_node_id" : 12
+}
+```
+- **error response**
+```json
+{
+  "status" : "error",
+  "message" : 내부 에러 메세지
+}
+```

@@ -35,12 +35,7 @@ SELECT register_user ('U-10', 'samsung3333@gmail.com', '삼성회사 계정 관�
 SELECT create_top_node($1, $2, $3, $4);
 
 -- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = ''
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, , ''
-FROM selected_user;
+SELECT add_role($1, $2, $3);
 
 -- 3) 부서 추가(하위 노드 추가★★★★★)(매개변수 상위 노드의 node_id)
 INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
@@ -62,19 +57,9 @@ WHERE node_id = :new_node_id;
 SELECT create_top_node('COMPANY', '삼성', 'U-10', 'ADMIN');
 
 -- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'kim1234@naver.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 10, 'MANAGER'
-FROM selected_user;
+SELECT add_role('kim1234@naver.com', 10, 'MANAGER');
 
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'na1234@naver.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 10, 'MANAGER'
-FROM selected_user;
+SELECT add_role('na1234@naver.com', 10, 'MANAGER');
 
 -- 3) 부서 추가(하위 노드 추가★★★★★)(매개변수 상위 노드의 node_id)
 INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
@@ -106,55 +91,20 @@ FROM parent_info p
 WHERE node_id = :new_node_id;
 
 -- 4) 부서에 팀장 추가(상위 노드의 admin이 하위 노드의 admin 권한 부여)(매개변수 상위 node_id, 담당할 사람의 email)
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'kim1234@naver.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 11, 'ADMIN'
-FROM selected_user;
+SELECT add_role('kim1234@naver.com', 11, 'ADMIN');
 
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'na1234@naver.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 12, 'ADMIN'
-FROM selected_user;
+SELECT add_role('na1234@naver.com', 12, 'ADMIN');
 
 -- 5) 부서에 팀원 추가 (매개변수 해당 노드 node_id , 유저 이메일)
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'da5678@gmail.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 11, 'MEMBER'
-FROM selected_user;
+SELECT add_role('da5678@gmail.com', 11, 'MEMBER');
 
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'ra9988@gmail.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 11, 'MEMBER'
-FROM selected_user;
+SELECT add_role('ra9988@gmail.com', 11, 'MEMBER');
 
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'ma6767@naver.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 11, 'MEMBER'
-FROM selected_user;
+SELECT add_role('ma6767@naver.com', 11, 'MEMBER');
 
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'ba3409@naver.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 12, 'MEMBER'
-FROM selected_user;
+SELECT add_role('ba3409@naver.com', 12, 'MEMBER');
 
-WITH selected_user AS (
-    SELECT user_id FROM users WHERE email = 'sa1231@gmail.com'
-)
-INSERT INTO role_assignments (user_id, node_id, role) 
-SELECT user_id, 12, 'MEMBER'
-FROM selected_user;
+SELECT add_role('sa1231@gmail.com', 12, 'MEMBER');
 
 -- #3 작업 생성 및 팀원 배정
 /*

@@ -67,3 +67,25 @@ BEGIN
 
 END;
 $$ LANGUAGE plpgsql;
+
+-- 3. RoleController::add_role
+CREATE OR REPLACE FUNCTION add_role(
+    p_email VARCHAR,
+    p_node_id INTEGER,
+    p_role_name VARCHAR
+) RETURNS INTEGER AS $$
+DECLARE
+    v_new_role_id INTEGER;
+BEGIN
+    -- 1. 이메일로 유저 검색 후 노드에 추가
+    WITH selected_user AS (
+      SELECT user_id FROM users WHERE email = p_email
+    )
+    INSERT INTO role_assignments (user_id, node_id, role) 
+    SELECT user_id, p_node_id, p_role_name
+    FROM selected_user
+    RETURNING assignment_id INTO v_new_role_id;
+
+    RETURN v_new_role_id;
+END;
+$$ LANGUAGE plpgsql;

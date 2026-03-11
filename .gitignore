@@ -556,3 +556,4 @@ grad_server/grad_server
 grad_server/test/grad_server_test
 grad_server/config.json
 grad_server/config.yaml
+grad_server/models/model.json

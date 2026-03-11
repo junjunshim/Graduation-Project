@@ -29,16 +29,30 @@
 ---
 
 ## API
-### api 명
-- endpoint
-- method
-- description
-- request body
+### 회원가입 api(version 1)
+- **endpoint** : /api/v1/users
+- **method** : Post
+- **description** : 회원가입 절차를 진행한다.
+- **request body**
 ```json
+{
+  "user_id" : "U-1001",
+  "email" : "test123@gmail.com",
+  "name" : "테스터",
+  "password" : "test112233!@#",
+}
 ```
-- success response
+- **success response**
 ```json
+{
+  "status" : "success",
+  "message" : "User registered successfully"
+}
 ```
-- error response
+- **error response**
 ```json
+{
+  "status" : "error",
+  "message" : 내부 에러 메세지
+}
 ```

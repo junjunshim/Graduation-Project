@@ -5,131 +5,29 @@
 /* 유저 시드 생성
 매개변수 => user_id, email, name, password_hash
 -- 1) 유저 생성
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('', '', '', '')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-
--- 2) 개인 전용 노드 생성 및 매핑
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-
--- 3) 전용 노드에 대한 권한 매핑
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ($1,$2,$3,$4);
 */
 
 
 -- 1) 유저 생성
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-1', 'admin@gmail.com', '관리자', 'admin@1234')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-
--- 2) 개인 전용 노드 생성 및 매핑
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-
--- 3) 전용 노드에 대한 권한 매핑
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-1', 'admin@gmail.com', '관리자', 'admin@1234');
 
 -- 추가 유저 생성
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-2', 'kim1234@naver.com', '김철수', 'kim@1234')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-2', 'kim1234@naver.com', '김철수', 'kim@1234');
 
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-3', 'na1234@naver.com', '나영희', 'na@1234')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-3', 'na1234@naver.com', '나영희', 'na@1234');
 
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-4', 'da5678@gmail.com', '다람쥐', 'da@5678')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-4', 'da5678@gmail.com', '다람쥐', 'da@5678');
 
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-5', 'ra9988@gmail.com', '라랄라', 'ra!9988')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-5', 'ra9988@gmail.com', '라랄라', 'ra!9988');
 
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-6', 'ma6767@naver.com', '마맘미아', 'ma!9191')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-6', 'ma6767@naver.com', '마맘미아', 'ma!9191');
 
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-7', 'ba3409@naver.com', '바할라', 'baba22@!')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-7', 'ba3409@naver.com', '바할라', 'baba22@!');
 
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-8', 'sa1231@gmail.com', '사사삭', 'sasasak@1122')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-8', 'sa1231@gmail.com', '사사삭', 'sasasak@1122');
 
-INSERT INTO users (user_id, email, name, password_hash) 
-VALUES ('U-10', 'samsung3333@gmail.com', '삼성회사 계정 관리자', 'samsung@3333')
-RETURNING user_id AS new_user_id, name AS new_user_name \gset
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
-VALUES ('USER', NULL, :'new_user_name' || ' 개인공간', '{}') 
-RETURNING node_id AS new_node_id \gset
-UPDATE users SET personal_node_id = :new_node_id WHERE user_id = :'new_user_id';
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES (:'new_user_id', :new_node_id, 'ADMIN');
+SELECT register_user ('U-10', 'samsung3333@gmail.com', '삼성회사 계정 관리자', 'samsung@3333');
 
 -- #2 팀 생성 및 팀원 추가 로직
 /*

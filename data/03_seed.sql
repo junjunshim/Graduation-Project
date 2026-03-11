@@ -134,15 +134,7 @@ VALUES (:'new_user_id', :new_node_id, 'ADMIN');
 -- #2 팀 생성 및 팀원 추가 로직
 /*
 -- 최상위 노드 생성
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
-VALUES ('', NULL, '', '{}')
-RETURNING node_id AS new_node_id \gset
-
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-
--- 노드를 생성하는 유저의 user_id 를 매개변수로 입력
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES ('', :new_node_id, 'ADMIN');
+SELECT create_top_node($1, $2, $3, $4);
 
 -- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
 WITH selected_user AS (
@@ -169,16 +161,7 @@ WHERE node_id = :new_node_id;
 */
 
 -- 1) 최상위 노드 생성
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
-VALUES ('COMPANY', NULL, '삼성', '{}')
-RETURNING node_id AS new_node_id \gset
-
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-
--- 노드를 생성하는 유저의 user_id 를 매개변수로 입력
-INSERT INTO role_assignments (user_id, node_id, role) 
-VALUES ('U-10', :new_node_id, 'ADMIN');
-
+SELECT create_top_node('COMPANY', '삼성', 'U-10', 'ADMIN');
 
 -- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
 WITH selected_user AS (

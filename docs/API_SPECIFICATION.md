@@ -85,3 +85,70 @@
   "message" : 내부 에러 메세지
 }
 ```
+
+---
+### 역할 추가 api(version 1)
+- **endpoint** : /api/v1/roles
+- **method** : Post
+- **description** : 노드에 역할(권한)을 부여한다.
+- **request body**
+```json
+{
+  "email" : "test123@gmail.com",
+  "node_id" : 13,
+  "role_name" : "ADMIN",
+}
+```
+- **success response**
+```json
+{
+  "status" : "success",
+  "new_role_id" : 12
+}
+```
+- **error response**
+```json
+{
+  "status" : "error",
+  "message" : 내부 에러 메세지
+}
+```
+
+---
+### work_item 추가 api(version 1)
+- **endpoint** : /api/v1/workitems
+- **method** : Post
+- **description** : work_item을 생성한다.
+- **request body**
+```json
+{
+  # 필수 파라미터
+  "work_item_id" : "WI-TEST",
+  "owner_node_id" : 13,
+  "owner_user_id" : "U-TEST",
+  "title" : "TEST-WI",
+  # 선택 파라미터
+  "parent_work_item_id" : "WI-1",
+  "description" : "테스트용 wi",
+  "status" : "todo",
+  "priority" : 3,
+  "weight" : 1,
+  "progress" : 0,
+  "start_date" : "2021-04-12",
+  "due_date" : "2021-05-11"
+}
+```
+- **success response**
+```json
+{
+  "status" : "success",
+  "work_item_id" : "WI-TEST"
+}
+```
+- **error response**
+```json
+{
+  "status" : "error",
+  "message" : 내부 에러 메세지
+}
+```

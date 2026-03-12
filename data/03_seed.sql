@@ -109,42 +109,105 @@ SELECT add_role('sa1231@gmail.com', 12, 'MEMBER');
 -- #3 작업 생성 및 팀원 배정
 /*
 -- 노드의 최상위 업무 생성(해당 노드의 id, 담당할 유저의 user_id 매개변수)
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-', , NULL, '', '', '');
-
--- 하위 업무 생성(상위 업무의 work_item_id를 추가로 매개변수로 입력)
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-', , 'WI-', '', '', '');
-
+SELECT create_work_item (
+    p_work_item_id => 'WI-1',
+    p_owner_node_id => 10,
+    p_owner_user_id => 'U-10',
+    p_title => 'S26',
+    p_description => 'S26 관련 통합 TODO'
+    ..... 추가 인자
+    );
 */
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-1', 10, NULL, 'U-10', 'S26', 'S26 관련 통합 TODO');
+SELECT create_work_item (
+    p_work_item_id => 'WI-1',
+    p_owner_node_id => 10,
+    p_owner_user_id => 'U-10',
+    p_title => 'S26',
+    p_description => 'S26 관련 통합 TODO'
+    );
 
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-2', 10, 'WI-1', 'U-2', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
+SELECT create_work_item (
+    p_work_item_id => 'WI-2',
+    p_owner_node_id => 10,
+    p_owner_user_id => 'U-2',
+    p_title => 'S26 보안 프로그램 개발',
+    p_parent_work_item_id => 'WI-1',
+    p_description => '개발 부서가 맡을 프로젝트'
+    );
 
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-3', 10, 'WI-1', 'U-3', 'S26 신규 시장 개척', '영업 부서가 맡을 프로젝트');
+SELECT create_work_item (
+    p_work_item_id => 'WI-3',
+    p_owner_node_id => 10,
+    p_owner_user_id => 'U-3',
+    p_title => 'S26 신규 시장 개척',
+    p_parent_work_item_id => 'WI-1',
+    p_description => '영업 부서가 맡을 프로젝트'
+    );
 
 -- 상위 노드의 업무를 하위 노드의 업무로 가져오기
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-4', 11, 'WI-2', 'U-2', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
+SELECT create_work_item (
+    p_work_item_id => 'WI-4',
+    p_owner_node_id => 11,
+    p_owner_user_id => 'U-2',
+    p_title => 'S26 보안 프로그램 개발',
+    p_parent_work_item_id => 'WI-2',
+    p_description => '개발 부서가 맡을 프로젝트'
+    );
 
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-5', 12, 'WI-3', 'U-3', 'S26 보안 프로그램 개발', '개발 부서가 맡을 프로젝트');
+SELECT create_work_item (
+    p_work_item_id => 'WI-5',
+    p_owner_node_id => 12,
+    p_owner_user_id => 'U-3',
+    p_title => 'S26 신규 시장 개척',
+    p_parent_work_item_id => 'WI-3',
+    p_description => '영업 부서가 맡을 프로젝트'
+    );
 
 -- 업무 생성 및 팀원 배정
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-6', 11, 'WI-4', 'U-4', '악성 코드 분석/탐지 도구 개발', '악성코드를 자동으로 분석하고 진단하는 백신 및 탐지 시스템');
+SELECT create_work_item (
+    p_work_item_id => 'WI-6',
+    p_owner_node_id => 11,
+    p_owner_user_id => 'U-4',
+    p_title => '악성 코드 분석/탐지 도구 개발',
+    p_parent_work_item_id => 'WI-1',
+    p_description => '악성코드를 자동으로 분석하고 진단하는 백신 및 탐지 시스템'
+    );
 
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-7', 11, 'WI-4', 'U-5', '보안 솔루션 개발', '난독화, 무결성 검증, 암호화, 접근 제어 등 보안 솔루션 개발');
+SELECT create_work_item (
+    p_work_item_id => 'WI-7',
+    p_owner_node_id => 11,
+    p_owner_user_id => 'U-5',
+    p_title => '보안 솔루션 개발',
+    p_parent_work_item_id => 'WI-4',
+    p_description => '난독화, 무결성 검증, 암호화, 접근 제어 등 보안 솔루션 개발'
+    );
 
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-8', 11, 'WI-4', 'U-6', '신규 시장 후보군 선정', '시장성이 있는 지역 선정하여 후보군 마련');
+SELECT create_work_item (
+    p_work_item_id => 'WI-8',
+    p_owner_node_id => 11,
+    p_owner_user_id => 'U-6',
+    p_title => '신규 시장 후보군 선정',
+    p_parent_work_item_id => 'WI-4',
+    p_description => '시장성이 있는 지역 선정하여 후보군 마련'
+    );
 
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-9', 12, 'WI-5', 'U-7', '현지화 제품에 들어갈 기능 선정', '해당 시장에서 성공할 수 있는 기능 선정');
+SELECT create_work_item (
+    p_work_item_id => 'WI-9',
+    p_owner_node_id => 12,
+    p_owner_user_id => 'U-7',
+    p_title =>  '현지화 제품에 들어갈 기능 선정',
+    p_parent_work_item_id => 'WI-5',
+    p_description => '해당 시장에서 성공할 수 있는 기능 선정'
+    );
 
-INSERT INTO work_items (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description) 
-VALUES ('WI-10', 12, 'WI-5', 'U-8', '마케팅 및 유통 전략 선정', '현지에 맞는 마케팅 방법과 유통 전략을 선정');
+SELECT create_work_item (
+    p_work_item_id => 'WI-10',
+    p_owner_node_id => 12,
+    p_owner_user_id => 'U-8',
+    p_title => '마케팅 및 유통 전략 선정',
+    p_parent_work_item_id => 'WI-5',
+    p_description => '현지에 맞는 마케팅 방법과 유통 전략을 선정'
+    );
+
+
+

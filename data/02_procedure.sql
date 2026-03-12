@@ -89,3 +89,54 @@ BEGIN
     RETURN v_new_role_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 4. WorkItemController::createWorkItem
+CREATE OR REPLACE FUNCTION create_work_item(
+    p_work_item_id VARCHAR,
+    p_owner_node_id INTEGER,
+    p_owner_user_id VARCHAR,
+    p_title VARCHAR,
+    p_parent_work_item_id VARCHAR DEFAULT NULL,
+    p_description TEXT DEFAULT NULL,
+    p_status VARCHAR DEFAULT 'todo',
+    p_priority INTEGER DEFAULT 3,
+    p_weight INTEGER DEFAULT 1,
+    p_progress INTEGER DEFAULT 0,
+    p_start_date VARCHAR DEFAULT NULL,
+    p_due_date VARCHAR DEFAULT NULL
+) RETURNS VARCHAR AS $$
+DECLARE
+    v_ret_id VARCHAR;
+BEGIN
+    INSERT INTO work_items (
+        work_item_id, 
+        owner_node_id, 
+        owner_user_id, 
+        title, 
+        parent_work_item_id, 
+        description, 
+        status, 
+        priority, 
+        weight, 
+        progress, 
+        start_date, 
+        due_date
+    ) VALUES (
+        p_work_item_id,
+        p_owner_node_id,
+        p_owner_user_id,
+        p_title,
+        NULLIF(p_parent_work_item_id, ''),
+        NULLIF(p_description, ''),
+        COALESCE(NULLIF(p_status, ''), 'todo'),
+        COALESCE(p_priority, 3),
+        COALESCE(p_weight, 1),
+        COALESCE(p_progress, 0),
+        NULLIF(p_start_date, '')::DATE,
+        NULLIF(p_due_date, '')::DATE
+    )
+    RETURNING work_item_id INTO v_ret_id;
+
+    RETURN v_ret_id;
+END;
+$$ LANGUAGE plpgsql;

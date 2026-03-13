@@ -59,7 +59,7 @@
 
 ---
 ### 최상위 노드 추가 api(version 1)
-- **endpoint** : /api/v1/org/nodes
+- **endpoint** : /api/v1/org/topNodes
 - **method** : Post
 - **description** : 최상위 노드(organization_nodes)를 생성한다.
 - **request body**
@@ -143,6 +143,36 @@
 {
   "status" : "success",
   "work_item_id" : "WI-TEST"
+}
+```
+- **error response**
+```json
+{
+  "status" : "error",
+  "message" : 내부 에러 메세지
+}
+```
+
+---
+### 하위 노드 추가 api(version 1)
+- **endpoint** : /api/v1/org/subNodes
+- **method** : Post
+- **description** : 하위 노드(organization_nodes)을 생성한다.
+- **request body**
+```json
+{
+  "node_type" : "DEPT",
+  "parent_node_id" : 14,
+  "name" : "TEST",
+  "email" : "test123@naver.com",
+  "role_name" : "ADMIN"
+}
+```
+- **success response**
+```json
+{
+  "status" : "success",
+  "new_node_id" : 15
 }
 ```
 - **error response**

@@ -16,7 +16,7 @@ void UserController::createUser(const HttpRequestPtr &req, std::function<void(co
     if(!jsonPtr || (*jsonPtr)["user_id"].isNull() || (*jsonPtr)["email"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["password"].isNull()){
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(user_id, email, name, password_hash)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(user_id, email, name, password)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);

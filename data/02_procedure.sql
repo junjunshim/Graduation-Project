@@ -1,6 +1,6 @@
 -- 컨트롤러에서 사용될 프로시저 생성
 
--- 1. OrgController::createNode
+-- 1. OrgController::createTopNode
 CREATE OR REPLACE FUNCTION create_top_node(
     p_node_type VARCHAR,
     p_name VARCHAR,
@@ -138,5 +138,42 @@ BEGIN
     RETURNING work_item_id INTO v_ret_id;
 
     RETURN v_ret_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 5. OrgController::createSubNode
+CREATE OR REPLACE FUNCTION create_sub_node(
+    p_node_type VARCHAR,
+    p_parent_node_id INTEGER,
+    p_name VARCHAR,
+    p_email VARCHAR,
+    p_role_name VARCHAR
+) RETURNS INTEGER AS $$
+DECLARE
+    v_new_node_id INTEGER;
+BEGIN
+    INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
+    VALUES (
+        nextval('organization_nodes_node_id_seq'),
+        p_node_type,
+        p_parent_node_id,
+        p_name,
+        ARRAY[currval('organization_nodes_node_id_seq')]
+    )
+    RETURNING node_id INTO v_new_node_id;
+
+    UPDATE organization_nodes 
+    SET path = (SELECT path FROM organization_nodes WHERE node_id = p_parent_node_id) || v_new_node_id
+    WHERE node_id = v_new_node_id;
+    
+    WITH selected_user AS (
+      SELECT user_id FROM users WHERE email = p_email
+    )
+    INSERT INTO role_assignments (user_id, node_id, role) 
+    SELECT user_id, v_new_node_id, p_role_name 
+    FROM selected_user;
+
+
+    RETURN v_new_node_id;
 END;
 $$ LANGUAGE plpgsql;

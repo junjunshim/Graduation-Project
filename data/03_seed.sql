@@ -62,38 +62,9 @@ SELECT add_role('kim1234@naver.com', 10, 'MANAGER');
 SELECT add_role('na1234@naver.com', 10, 'MANAGER');
 
 -- 3) 부서 추가(하위 노드 추가★★★★★)(매개변수 상위 노드의 node_id)
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
-VALUES ('DEPARTMENT', 10, '개발부서', '{}')
-RETURNING node_id AS new_node_id \gset
+SELECT create_sub_node('DEPARTMENT', 10, '개발부서', 'kim1234@naver.com', 'ADMIN');
 
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-
-WITH parent_info AS (
-    SELECT path FROM organization_nodes WHERE node_id = 10 
-)
-UPDATE organization_nodes 
-SET path = p.path || (SELECT path FROM organization_nodes WHERE node_id = :new_node_id)
-FROM parent_info p 
-WHERE node_id = :new_node_id;
-
-INSERT INTO organization_nodes (node_type, parent_node_id, name, path) 
-VALUES ('DEPARTMENT', 10, '영업부서', '{}')
-RETURNING node_id AS new_node_id \gset
-
-UPDATE organization_nodes SET path = ARRAY[:new_node_id] WHERE node_id = :new_node_id;
-
-WITH parent_info AS (
-    SELECT path FROM organization_nodes WHERE node_id = 10 
-)
-UPDATE organization_nodes 
-SET path = p.path || (SELECT path FROM organization_nodes WHERE node_id = :new_node_id)
-FROM parent_info p 
-WHERE node_id = :new_node_id;
-
--- 4) 부서에 팀장 추가(상위 노드의 admin이 하위 노드의 admin 권한 부여)(매개변수 상위 node_id, 담당할 사람의 email)
-SELECT add_role('kim1234@naver.com', 11, 'ADMIN');
-
-SELECT add_role('na1234@naver.com', 12, 'ADMIN');
+SELECT create_sub_node('DEPARTMENT', 10, '영업부서', 'na1234@naver.com', 'ADMIN');
 
 -- 5) 부서에 팀원 추가 (매개변수 해당 노드 node_id , 유저 이메일)
 SELECT add_role('da5678@gmail.com', 11, 'MEMBER');

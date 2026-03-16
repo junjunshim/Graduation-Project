@@ -541,16 +541,41 @@ build/
 bin/
 out/
 
-# 라이브러리 파일 해제
-!/lib/**/*.lib
-!/lib/**/*.dll
-!/lib/**/*.a
-!/lib/**/*.so
-
 # Docker
 .docker/
-*.log
 docker-compose.override.yml
 
 # .env
 .env
+.env.local
+.env.*.local
+*.local
+
+# --- Drogon Project (grad_server) ---
+# grad_server 내부의 모든 빌드 결과물 무시
+grad_server/build/
+grad_server/grad_server
+grad_server/test/grad_server_test
+grad_server/config.json
+grad_server/config.yaml
+grad_server/models/model.json
+
+# --- Electron Project (grad_client) ---
+# Logs
+logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Build
+dist/
+dist-electron/
+dist-ssr/
+release/
+
+# Cache
+.eslintcache
+.cache
+
+# Electron package
+*.asar

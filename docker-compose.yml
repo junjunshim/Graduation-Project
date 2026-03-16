@@ -2,7 +2,7 @@ services:
   # 1. 데이터베이스 서비스 (PostgreSQL)
   db:
     image: postgres:15
-    container_name: grad_postgres
+    container_name: ${DB_CONTAINER}
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
@@ -21,15 +21,16 @@ services:
     build:
       context: .                # 빌드할 파일들이 있는 위치 (루트)
       dockerfile: Dockerfile.backend  # 사용할 레시피 파일 이름
-    container_name: grad_backend
+    container_name: ${SERVER_CONTAINER}
     ports:
       - "${SERVER_PORT}:8080"             # API 서버 포트 개방
     depends_on:
       - db                      # 중요: DB가 먼저 켜진 후에 서버 실행
     environment:
       # C++ 코드 내에서 사용할 환경변수 (DB 접속 정보 등)
-      DB_HOST: db
-      DB_PORT: 5432
+      SERVER_PORT: ${SERVER_PORT}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}

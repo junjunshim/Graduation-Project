@@ -1,0 +1,19 @@
+:root {
+  --surface-0: #ffffff;
+  --surface-1: #f7fbff;
+  --surface-2: #eef5ff;
+
+  --text-primary: #22314d;
+  --text-secondary: #435677;
+  --text-muted: #6d7fa6;
+
+  --line-soft: rgba(201, 216, 240, 0.62);
+  --line-soft-strong: rgba(175, 196, 234, 0.82);
+  --line-active: rgba(160, 185, 232, 0.88);
+  --focus-ring: rgba(125, 157, 224, 0.88);
+
+  --shadow-inner: inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  --shadow-card: 0 10px 24px rgba(187, 203, 229, 0.14);
+  --shadow-card-hover: 0 16px 30px rgba(181, 201, 235, 0.18);
+  --shadow-active: 0 18px 36px rgba(176, 198, 235, 0.22);
+}

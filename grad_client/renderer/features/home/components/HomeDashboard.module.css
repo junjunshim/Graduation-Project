@@ -1,0 +1,357 @@
+.hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.8rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at top right, rgba(247, 239, 226, 0.9), transparent 16rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.86));
+  box-shadow: var(--shadow-panel);
+}
+
+.heroContent {
+  max-width: 46rem;
+}
+
+.eyebrow,
+.panelEyebrow {
+  margin: 0 0 0.45rem;
+  font-size: 0.73rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(2rem, 3vw, 3.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+
+.heroDescription {
+  max-width: 38rem;
+  margin: 1rem 0 0;
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+
+.heroActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 15rem;
+}
+
+.primaryLink,
+.secondaryLink,
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.primaryLink {
+  padding: 0.9rem 1.15rem;
+  background: var(--text-primary);
+  color: var(--text-inverse);
+}
+
+.secondaryLink {
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--line-default);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text-primary);
+}
+
+.inlineLink {
+  padding: 0.55rem 0.9rem;
+  color: var(--text-secondary);
+  background: var(--surface-panel-muted);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.statCard,
+.panel,
+.boardPanel,
+.workspaceNote {
+  border: 1px solid var(--line-default);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-panel);
+}
+
+.statCard {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.2rem;
+  border-radius: var(--radius-lg);
+}
+
+.statLabel {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.statValue {
+  font-size: 1.9rem;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.statDescription {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.workspaceNote {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(90deg, rgba(247, 239, 226, 0.82), rgba(255, 255, 255, 0.92));
+}
+
+.noteIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--accent-amber);
+}
+
+.noteTitle {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--text-primary);
+}
+
+.noteText {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.panelGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.panel,
+.boardPanel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-xl);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.panelCaption {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.todoList,
+.recentList,
+.boardCards {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.todoLink,
+.recentItem,
+.boardCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.todoLink:hover,
+.recentItem:hover,
+.boardCard:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+
+.todoLinkMain,
+.recentMain {
+  min-width: 0;
+}
+
+.todoLinkTitle,
+.recentTitle,
+.boardCardTitle {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.todoLinkDescription {
+  margin: 0.3rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.todoLinkMeta {
+  display: grid;
+  justify-items: end;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.todoLinkDate,
+.recentDate,
+.boardCardDate {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.recentSubtitle {
+  display: inline-block;
+  margin-top: 0.3rem;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+}
+
+.boardColumns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.boardColumn {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel-muted);
+}
+
+.boardColumnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.boardColumnTitle {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.boardCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.9rem;
+  height: 1.9rem;
+  padding: 0 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.emptyColumn {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+@media (max-width: 1120px) {
+  .statGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panelGrid,
+  .boardColumns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .hero {
+    flex-direction: column;
+  }
+
+  .heroActions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .primaryLink,
+  .secondaryLink {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .statGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .todoLink,
+  .recentItem,
+  .boardCard,
+  .panelHeader,
+  .workspaceNote {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .todoLinkMeta {
+    justify-items: start;
+  }
+}

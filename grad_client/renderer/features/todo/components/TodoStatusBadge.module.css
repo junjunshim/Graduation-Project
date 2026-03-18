@@ -1,0 +1,33 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.icon {
+  opacity: 0.8;
+}
+
+.planned {
+  border-color: #e5d8c0;
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.inProgress {
+  border-color: #cfddf7;
+  background: var(--accent-blue-soft);
+  color: #2556a8;
+}
+
+.done {
+  border-color: #d3e6d8;
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}

@@ -1,12 +1,12 @@
 @import '../tokens/theme.css';
-@import '../glass/glass.css';
 
 :root {
-  font-family: "Segoe UI Variable", "Segoe UI", "Noto Sans KR", sans-serif;
+  color-scheme: light;
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
   color: var(--text-primary);
-  background: var(--surface-1);
+  background: var(--surface-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -20,7 +20,9 @@ body,
   height: 100%;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -28,7 +30,18 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: var(--surface-1);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 22rem),
+    linear-gradient(180deg, #fbfaf8 0%, #f6f5f2 100%);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font: inherit;
 }
 
 a {
@@ -36,9 +49,47 @@ a {
   text-decoration: none;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
+button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  color: var(--text-primary);
+  background: rgba(59, 130, 246, 0.16);
+}
+
+:focus-visible {
+  outline: 2px solid rgba(55, 53, 47, 0.45);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(155, 150, 139, 0.48);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(107, 103, 95, 0.56);
+  background-clip: padding-box;
 }

@@ -37,3 +37,4 @@
 | Org 하위 노드 | Post | /api/v1/subNodes | 진행중 | [link](api/Post/sub_nodes.md) |
 | Role 부여 | Post | /api/v1/roles | 진행중 | [link](api/Post/role.md) |
 | work_item 생성 | Post | /api/v1/workItems | 진행중 | [link](api/Post/work_item.md) |
+| 사용자 전체 정보 조회 | Get | /api/v1/context/init | 진행중 | [link](api/Get/context_init.md) |

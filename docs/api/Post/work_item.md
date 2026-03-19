@@ -54,7 +54,7 @@
 - Response Syntax
 ```json
 {
-    "status" : "success"
+    "status" : "success",
     "work_item_id" : "WI-101"
 }
 ```

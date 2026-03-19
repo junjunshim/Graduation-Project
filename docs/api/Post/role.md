@@ -36,7 +36,7 @@
 - Response Syntax
 ```json
 {
-    "status" : "success"
+    "status" : "success",
     "new_role_id" : 15
 }
 ```

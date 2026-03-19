@@ -189,7 +189,8 @@ RETURNS TABLE (
     out_title TEXT,
     out_status TEXT,
     out_priority INTEGER,
-    out_extra_info TEXT
+    out_extra_info TEXT,
+    out_updated_at TEXT
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -210,7 +211,8 @@ BEGIN
         n.name::TEXT,
         NULL::TEXT,
         NULL::INTEGER,
-        n.path::TEXT
+        n.path::TEXT,
+        n.updated_at::TEXT
     FROM organization_nodes n
     WHERE n.node_id IN (SELECT node_id FROM accessible_node_ids)
 
@@ -223,7 +225,8 @@ BEGIN
         w.title::TEXT,
         w.status::TEXT,
         w.priority::INTEGER,
-        w.parent_work_item_id::TEXT
+        w.parent_work_item_id::TEXT,
+        w.updated_at::TEXT
     FROM work_items w
     WHERE w.owner_node_id IN (SELECT node_id FROM accessible_node_ids);
 END;

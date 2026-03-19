@@ -54,6 +54,8 @@ void ContextController::getInitialContext(const HttpRequestPtr &req, std::functi
                     item["extra_info"] = row["out_extra_info"].as<std::string>();
                 }
 
+                item["updated_at"] = row["out_updated_at"].as<std::string>();
+
                 items.append(item);
             }
 

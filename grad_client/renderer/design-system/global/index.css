@@ -1,7 +1,6 @@
 @import '../tokens/theme.css';
 
 :root {
-  color-scheme: light;
   font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
@@ -17,7 +16,7 @@ html,
 body,
 #root {
   width: 100%;
-  height: 100%;
+  min-height: 100%;
 }
 
 *,
@@ -30,10 +29,18 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.88), transparent 22rem),
-    linear-gradient(180deg, #fbfaf8 0%, #f6f5f2 100%);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  background: var(--surface-app);
+}
+
+body[data-scroll-surface='workspace'] {
+  background: var(--surface-shell);
+}
+
+body[data-scroll-surface='auth'] {
+  background: var(--surface-app);
 }
 
 body,
@@ -57,6 +64,14 @@ button {
   cursor: pointer;
 }
 
+input,
+textarea,
+select {
+  border: 1px solid var(--line-default);
+  background: var(--surface-input);
+  color: inherit;
+}
+
 img,
 svg {
   display: block;
@@ -65,11 +80,11 @@ svg {
 
 ::selection {
   color: var(--text-primary);
-  background: rgba(59, 130, 246, 0.16);
+  background: rgba(48, 86, 211, 0.16);
 }
 
 :focus-visible {
-  outline: 2px solid rgba(55, 53, 47, 0.45);
+  outline: 2px solid rgba(48, 86, 211, 0.4);
   outline-offset: 2px;
 }
 
@@ -82,14 +97,24 @@ svg {
   background: transparent;
 }
 
+body[data-scroll-surface='workspace']::-webkit-scrollbar-track,
+body[data-scroll-surface='workspace']::-webkit-scrollbar-corner {
+  background: var(--surface-shell);
+}
+
+body[data-scroll-surface='auth']::-webkit-scrollbar-track,
+body[data-scroll-surface='auth']::-webkit-scrollbar-corner {
+  background: var(--surface-app);
+}
+
 ::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   border-radius: 999px;
-  background: rgba(155, 150, 139, 0.48);
+  background: rgba(143, 138, 128, 0.55);
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(107, 103, 95, 0.56);
+  background: rgba(143, 138, 128, 0.78);
   background-clip: padding-box;
 }

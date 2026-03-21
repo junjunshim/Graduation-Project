@@ -1,0 +1,304 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+  padding: var(--space-page-top) var(--space-page-x) var(--space-page-bottom);
+}
+
+.pageIntro {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 44rem;
+}
+
+.eyebrow,
+.sectionEyebrow,
+.metricLabel {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.7rem, 2.5vw, 2.4rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+
+.description,
+.metricDescription,
+.nodePath,
+.nodeMeta,
+.workItemMeta,
+.roleMeta,
+.onboardingDescription,
+.actionCard span,
+.emptyState {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.metricCard,
+.section,
+.onboardingItem,
+.workItemRow,
+.roleRow,
+.actionCard,
+.treeRow {
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.metricCard {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.metricValue {
+  font-size: 1.8rem;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.primaryGrid,
+.secondaryGrid {
+  display: grid;
+  gap: 1rem;
+}
+
+.primaryGrid {
+  grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+}
+
+.secondaryGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.section {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.sectionTitle {
+  margin: 0.2rem 0 0;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.inlineLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.58rem 0.78rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.inlineLink:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.tree,
+.treeChildren,
+.databaseList,
+.actionList,
+.onboardingList {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.treeChildren {
+  margin-left: 1rem;
+  padding-left: 1rem;
+  border-left: 1px solid var(--line-default);
+}
+
+.treeItem {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.treeRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
+}
+
+.nodeTitleBlock,
+.workItemCopy,
+.roleCopy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.nodeTitle,
+.workItemTitle,
+.onboardingTitle,
+.roleCopy strong,
+.actionCard strong {
+  color: var(--text-primary);
+}
+
+.nodeMetaBlock,
+.onboardingActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.nodeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.34rem 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.workItemRow,
+.roleRow,
+.onboardingItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem;
+}
+
+.workItemLink {
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.workItemLink:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.statusBadge,
+.stepIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.36rem 0.62rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.stepIndex {
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.statusTodo {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.statusInProgress {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.statusDone {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.actionCard {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1rem;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.actionCard:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.onboardingMeta {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+@media (max-width: 1100px) {
+  .metricsGrid,
+  .primaryGrid,
+  .secondaryGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+  }
+
+  .sectionHeader,
+  .treeRow,
+  .workItemRow,
+  .roleRow,
+  .onboardingItem {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .nodeMetaBlock,
+  .onboardingActions {
+    justify-content: flex-start;
+  }
+}

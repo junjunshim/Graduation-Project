@@ -37,6 +37,27 @@ int main() {
     LOG_INFO << "Database teseting handler";
 
 
+    // CORS 허용 설정 (모든 도메인 및 포트 허용)
+    drogon::app().registerPostHandlingAdvice([](const drogon::HttpRequestPtr &req, const drogon::HttpResponsePtr &resp) {
+        resp->addHeader("Access-Control-Allow-Origin", "*"); // 모든 도메인 허용
+        resp->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+        resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    });
+
+    // OPTIONS 요청(Preflight) 처리를 위한 간단한 처리 (필요 시)
+    drogon::app().registerPreRoutingAdvice([](const drogon::HttpRequestPtr &req, drogon::AdviceCallback &&acb, drogon::AdviceChainCallback &&accb) {
+        if (req->method() == drogon::Options) {
+            auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->addHeader("Access-Control-Allow-Origin", "*");
+            resp->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+            resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+            resp->setStatusCode(drogon::k200OK);
+            acb(resp);
+            return;
+        }
+        accb();
+    });
+
     //Run HTTP framework,the method will block in the internal event loop
     drogon::app().run();
     return 0;

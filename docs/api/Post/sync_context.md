@@ -1,16 +1,17 @@
-# 사용자 전체 정보 조회 api (version 1)
-- 사용자가 속한 노드와 해당 노드의 모든 work_item를 조회하는 api
+# 사용자 데이터 동기화 api (version 1)
+- 사용자의 마지막 업데이트 시점 이후의 변경 데이터를 조회하는 api
 ## Request
 - Request syntax
 ```json
 {
-    "user_id" : "U-2"
+    "user_id" : "U-2",
+    "last_synced_at" : "2026-01-01 00:00:00"
 }
 ```
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/context/init |
+| Post | http://{서버 url}/api/v1/context/sync |
 
 ---
 - Request Header
@@ -25,6 +26,7 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | user_id | String | 필수 | 유저 검색용 user_id |
+| last_synced_at | String | 필수 | 마지막 동기화 시점 |
 
 ---
 
@@ -40,7 +42,8 @@
             "id" : "3",
             "parent_id" : "1" 또는 없음,
             "title" : "영업 부서",
-            "extra_info" : "{1, 3}"
+            "extra_info" : "{1, 3}",
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
         }
         ,
         # 데이터가 work_item일때
@@ -51,7 +54,8 @@
             "title" : "길찾기 기능 개발",
             "status" : "todo",
             "priority" : 1,
-            "extra_info" : "WI-2" 또는 없음
+            "extra_info" : "WI-2" 또는 없음,
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
         }
     ]
 }
@@ -82,14 +86,14 @@
 | status | String | 선택 | work_item 상태 |
 | priority | Integer | 선택 | work_item 우선순위 |
 | extra_info | String | 선택 | 노드의 path 또는 work_item의 부모 id |
+| updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 
 - 설명<br>
-1. 기본적으로 데이터는 평면 리스트 형태로 제공, 프론트에서 트리형태로 변환하는 로직이 필요<br>
-2. 각 데이터 타입은 반환을 위해서 문자열로 통일, 프론트에서 배열 또는 정수형 데이터 변환하는 로직이 필요
+1. context_init api를 통해서 가져온 데이터를 서버 데이터와 동기화하는 api
+2. 앱에서 지속적으로 서버로 동기화 요청하여 마지막 동기화 시간 이후에 변경된 데이터를 가져온다.
+3. 클라이언트 앱 내부적으로 기존 데이터를 최신 데이터로 변경해야 한다.
 
 ---
 ## 업데이트
 ### version 1 : 서버와 데이터베이스 연결 여부 확인용
-- 개선 사항 : token 기능을 추가하여 매개변수로 user_id을 받지 않게 변경, response elements에 update_at 추가
-
-
+- 개선 사항 : token 기능을 추가하여 매개변수로 user_id을 받지 않게 변경 and last_synced_at 파라미터를 url에 포함하여 get 방식으로 변경, 아직 삭제된 데이터에 대해서는 추적 불가능

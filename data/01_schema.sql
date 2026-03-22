@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS organization_nodes (
     parent_node_id INTEGER REFERENCES organization_nodes(node_id),
     name VARCHAR(100) NOT NULL,
     path INTEGER[] NOT NULL,
-    create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 2. 서비스 이용자 정보
@@ -15,7 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(100) NOT NULL,
     password_hash TEXT NOT NULL,
     personal_node_id INTEGER REFERENCES organization_nodes(node_id),
-    create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 3. 유저와 노드 간이 권한 매핑
@@ -24,7 +26,8 @@ CREATE TABLE IF NOT EXISTS role_assignments (
     user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
     role VARCHAR(20) NOT NULL,
-    create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 4. 업무와 프로젝트 데이터
@@ -42,6 +45,7 @@ CREATE TABLE IF NOT EXISTS work_items (
     start_date DATE,
     due_date DATE,
     create_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT check_date CHECK (due_date >= start_date)
 );
 

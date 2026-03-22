@@ -177,3 +177,114 @@ BEGIN
     RETURN v_new_node_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 6. ContextController::getInitialContext
+CREATE OR REPLACE FUNCTION get_initial_context(
+    p_user_id VARCHAR
+) 
+RETURNS TABLE (
+    out_type TEXT,
+    out_id TEXT,
+    out_parent_id TEXT,
+    out_title TEXT,
+    out_status TEXT,
+    out_priority INTEGER,
+    out_extra_info TEXT,
+    out_updated_at TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH RECURSIVE accessible_node_ids AS (
+        SELECT node_id FROM role_assignments WHERE user_id = p_user_id
+        
+        UNION
+
+        SELECT n.node_id 
+        FROM organization_nodes n
+        JOIN accessible_node_ids a ON n.parent_node_id = a.node_id
+    )
+
+    SELECT 
+        'NODE'::TEXT,
+        n.node_id::TEXT,
+        n.parent_node_id::TEXT,
+        n.name::TEXT,
+        NULL::TEXT,
+        NULL::INTEGER,
+        n.path::TEXT,
+        n.updated_at::TEXT
+    FROM organization_nodes n
+    WHERE n.node_id IN (SELECT node_id FROM accessible_node_ids)
+
+    UNION ALL
+
+    SELECT 
+        'WORK_ITEM'::TEXT,
+        w.work_item_id::TEXT,
+        w.owner_node_id::TEXT,
+        w.title::TEXT,
+        w.status::TEXT,
+        w.priority::INTEGER,
+        w.parent_work_item_id::TEXT,
+        w.updated_at::TEXT
+    FROM work_items w
+    WHERE w.owner_node_id IN (SELECT node_id FROM accessible_node_ids);
+END;
+$$ LANGUAGE plpgsql;
+
+-- 7. ContextController::syncContext
+CREATE OR REPLACE FUNCTION sync_context(
+    p_user_id VARCHAR,
+    p_last_synced_at TIMESTAMP
+) 
+RETURNS TABLE (
+    out_type TEXT,
+    out_id TEXT,
+    out_parent_id TEXT,
+    out_title TEXT,
+    out_status TEXT,
+    out_priority INTEGER,
+    out_extra_info TEXT,
+    out_updated_at TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH RECURSIVE accessible_node_ids AS (
+        SELECT node_id FROM role_assignments WHERE user_id = p_user_id
+        
+        UNION
+
+        SELECT n.node_id 
+        FROM organization_nodes n
+        JOIN accessible_node_ids a ON n.parent_node_id = a.node_id
+    )
+
+    SELECT 
+        'NODE'::TEXT,
+        n.node_id::TEXT,
+        n.parent_node_id::TEXT,
+        n.name::TEXT,
+        NULL::TEXT,
+        NULL::INTEGER,
+        n.path::TEXT,
+        n.updated_at::TEXT
+    FROM organization_nodes n
+    WHERE n.node_id IN (SELECT node_id FROM accessible_node_ids)
+      AND n.updated_at > p_last_synced_at
+
+    UNION ALL
+
+    SELECT 
+        'WORK_ITEM'::TEXT,
+        w.work_item_id::TEXT,
+        w.owner_node_id::TEXT,
+        w.title::TEXT,
+        w.status::TEXT,
+        w.priority::INTEGER,
+        w.parent_work_item_id::TEXT,
+        w.updated_at::TEXT
+    FROM work_items w
+    WHERE w.owner_node_id IN (SELECT node_id FROM accessible_node_ids)
+      AND w.updated_at > p_last_synced_at;
+END;
+$$ LANGUAGE plpgsql;

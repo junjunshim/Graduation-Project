@@ -180,7 +180,7 @@ $$ LANGUAGE plpgsql;
 
 -- 6. ContextController::getInitialContext
 CREATE OR REPLACE FUNCTION get_initial_context(
-    p_user_id VARCHAR
+    p_user_email VARCHAR
 ) 
 RETURNS TABLE (
     out_type TEXT,
@@ -195,7 +195,7 @@ RETURNS TABLE (
 BEGIN
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
-        SELECT node_id FROM role_assignments WHERE user_id = p_user_id
+        SELECT node_id FROM role_assignments WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
         
         UNION
 

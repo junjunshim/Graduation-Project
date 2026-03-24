@@ -32,7 +32,7 @@
 
 | 구분 | Http Method | API Path | 개발현황 | MD링크 |
 | :--- | :--- | :--- | :--- | :--- |
-| 회원가입 | Post | /api/v1/users | 진행중 | [link](api/Post/sing_in.md) |
+| 회원가입 | Post | /api/v1/users | 진행중 | [link](api/Post/sign_in.md) |
 | Org 최상위 노드 | Post | /api/v1/topNodes | 진행중 | [link](api/Post/top_nodes.md) |
 | Org 하위 노드 | Post | /api/v1/subNodes | 진행중 | [link](api/Post/sub_nodes.md) |
 | Role 부여 | Post | /api/v1/roles | 진행중 | [link](api/Post/role.md) |

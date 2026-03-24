@@ -10,8 +10,8 @@ using namespace api::v1;
 // Add definition of your processing function here
 Json::Value AuthController::generateToken(const std::string &user_email){
     auto secret = drogon::app().getCustomConfig()["app"]["jwt_secret"].asString();
-    auto access_exp = drogon::app().getCustomConfig()["app"]["access_token_expiry"].asInt();
-    auto refresh_exp = drogon::app().getCustomConfig()["app"]["refresh_token_expiry"].asInt();
+    auto access_exp = drogon::app().getCustomConfig()["access_token_expiry"].asInt();
+    auto refresh_exp = drogon::app().getCustomConfig()["refresh_token_expiry"].asInt();
 
     auto now = std::chrono::system_clock::now();
 

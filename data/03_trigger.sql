@@ -12,3 +12,4 @@ CREATE TRIGGER trg_update_nodes_time BEFORE UPDATE ON organization_nodes FOR EAC
 CREATE TRIGGER trg_update_users_time BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_roles_time BEFORE UPDATE ON role_assignments FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_workitems_time BEFORE UPDATE ON work_items FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER trg_update_tokens_time BEFORE UPDATE ON user_refresh_tokens FOR EACH ROW EXECUTE FUNCTION update_modified_column();

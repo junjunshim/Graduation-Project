@@ -49,6 +49,14 @@ CREATE TABLE IF NOT EXISTS work_items (
     CONSTRAINT check_date CHECK (due_date >= start_date)
 );
 
--- 5. 검색 최적화를 위한 인덱스
+--5. user의 refresh token
+CREATE TABLE IF NOT EXISTS user_refresh_tokens (
+    user_email VARCHAR(100) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+    refresh_token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 6. 검색 최적화를 위한 인덱스
 CREATE INDEX idx_nodes_path ON organization_nodes USING GIN (path);
 CREATE INDEX idx_work_items_node_id ON work_items(owner_node_id);

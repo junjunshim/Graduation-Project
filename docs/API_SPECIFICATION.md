@@ -39,3 +39,4 @@
 | work_item 생성 | Post | /api/v1/workItems | 진행중 | [link](api/Post/work_item.md) |
 | 사용자 전체 정보 조회 | Post | /api/v1/context/init | 진행중 | [link](api/Post/context_init.md) |
 | 사용자 데이터 동기화 | Post | /api/v1/context/sync | 진행중 | [link](api/Post/sync_context.md) |
+| 로그인 / 토큰 발급 | Post | /api/v1/users/login | 완료 | [link](api/Post/login.md) |

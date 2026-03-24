@@ -288,3 +288,41 @@ BEGIN
       AND w.updated_at > p_last_synced_at;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 8. AuthController::loginUser
+CREATE OR REPLACE FUNCTION login_user (
+    p_email VARCHAR,
+    p_password TEXT,
+    p_refresh_token TEXT,
+    p_refresh_expiry TIMESTAMP
+) 
+RETURNS TABLE (
+    status BOOLEAN,
+    message TEXT
+) AS $$
+DECLARE
+    v_user_password TEXT;
+BEGIN
+    SELECT password_hash INTO v_user_password
+    FROM users
+    WHERE email = p_email;
+
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT FALSE, '사용자를 찾을 수 없습니다.'::TEXT;
+        RETURN;
+    END IF;
+
+    IF v_user_password <> p_password THEN
+        RETURN QUERY SELECT FALSE, '비밀번호가 일치하지 않습니다.'::TEXT;
+        RETURN;
+    END IF;
+
+    INSERT INTO user_refresh_tokens (user_email, refresh_token, expires_at) 
+    VALUES (p_email, p_refresh_token, p_refresh_expiry)
+    ON CONFLICT (user_email) DO UPDATE SET
+        refresh_token = EXCLUDED.refresh_token,
+        expires_at = EXCLUDED.expires_at;
+    
+    RETURN QUERY SELECT TRUE, '로그인 성공'::TEXT;
+END;
+$$ LANGUAGE plpgsql;

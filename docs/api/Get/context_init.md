@@ -4,13 +4,12 @@
 - Request syntax
 ```json
 {
-    "user_id" : "U-2"
 }
 ```
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/context/init |
+| Get | http://{서버 url}/api/v1/context/init |
 
 ---
 - Request Header
@@ -18,13 +17,13 @@
 | 파라미터 | 타입 | 필수여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | Content_type | String | 필수 | application/json |
+| Authorization | String | 필수 | Bearer 사용자 토큰 | 
 
 ---
 - Request Elements
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| user_id | String | 필수 | 유저 검색용 user_id |
 
 ---
 
@@ -92,7 +91,9 @@
 
 ---
 ## 업데이트
-### version 1 : 서버와 데이터베이스 연결 여부 확인용
+### version 1.0 : 서버와 데이터베이스 연결 여부 확인용
 - 개선 사항 : token 기능을 추가하여 매개변수로 user_id을 받지 않게 변경 and get 방식으로 변경
 
-
+### version 1.1 : token 기능 추가한 버전
+- 변경 사항 : 기존 user_id를 넘기는 방식에서 token을 사용한 사용자 인증으로 변경, HttpMethod를 Get 방식으로 변경
+- 개선 사항 : 

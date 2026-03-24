@@ -1,4 +1,4 @@
-# 사용자 전체 정보 조회 api (version 1)
+# 사용자 전체 정보 조회 api (version 1.1)
 - 사용자가 속한 노드와 해당 노드의 모든 work_item를 조회하는 api
 ## Request
 - Request syntax

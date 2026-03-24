@@ -1,17 +1,15 @@
-# 사용자 데이터 동기화 api (version 1)
+# 사용자 데이터 동기화 api (version 1.1)
 - 사용자의 마지막 업데이트 시점 이후의 변경 데이터를 조회하는 api
 ## Request
 - Request syntax
 ```json
 {
-    "user_id" : "U-2",
-    "last_synced_at" : "2026-01-01 00:00:00"
 }
 ```
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/context/sync |
+| Get | http://{서버 url}/api/v1/context/sync |
 
 ---
 - Request Header
@@ -19,14 +17,17 @@
 | 파라미터 | 타입 | 필수여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | Content_type | String | 필수 | application/json |
+| Authorization | String | 필수 | Bearer 사용자 토큰 | 
 
 ---
-- Request Elements
+- Query Parameters
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| user_id | String | 필수 | 유저 검색용 user_id |
-| last_synced_at | String | 필수 | 마지막 동기화 시점 |
+| last_synced_at | String | 필수 | 마지막 동기화 시점 (YYYY-MM-DD HH:MM:SS), 미입력 시 전체 데이터를 반환|
+
+- Example : /api/v1/context/sync?last_synced_at=2026-03-24%2011:10:22
+
 
 ---
 
@@ -95,5 +96,9 @@
 
 ---
 ## 업데이트
-### version 1 : 서버와 데이터베이스 연결 여부 확인용
+### version 1.0 : 서버와 데이터베이스 연결 여부 확인용
 - 개선 사항 : token 기능을 추가하여 매개변수로 user_id을 받지 않게 변경 and last_synced_at 파라미터를 url에 포함하여 get 방식으로 변경, 아직 삭제된 데이터에 대해서는 추적 불가능
+
+### version 1.1 : token 기능 추가한 버전
+- 변경 사항 : 기존 user_id를 넘기는 방식에서 token을 사용한 사용자 인증으로 변경, HttpMethod를 Get 방식으로 변경
+- 개선 사항 : 삭제된 데이터에 대한 동기화 필요

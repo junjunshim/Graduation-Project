@@ -18,7 +18,7 @@ class ContextController : public drogon::HttpController<ContextController>
     // ADD_METHOD_TO(ContextController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
     ADD_METHOD_TO(ContextController::getInitialContext, "/api/v1/context/init", Get, "JwtFilter");
-    ADD_METHOD_TO(ContextController::syncContext, "/api/v1/context/sync", Post);
+    ADD_METHOD_TO(ContextController::syncContext, "/api/v1/context/sync", Get, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:

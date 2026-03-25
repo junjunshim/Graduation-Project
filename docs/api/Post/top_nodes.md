@@ -20,7 +20,7 @@
 | 파라미터 | 타입 | 필수여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | Content_type | String | 필수 | application/json |
- Authorization | String | 필수 | Bearer 사용자 토큰 | 
+| Authorization | String | 필수 | Bearer 사용자 토큰 | 
 
 ---
 - Request Elements

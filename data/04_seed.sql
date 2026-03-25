@@ -54,7 +54,7 @@ WHERE node_id = :new_node_id;
 */
 
 -- 1) 최상위 노드 생성
-SELECT create_top_node('COMPANY', '삼성', 'U-10', 'ADMIN');
+SELECT create_top_node( 'samsung3333@gmail.com', 'COMPANY', '삼성', 'ADMIN');
 
 -- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
 SELECT add_role('kim1234@naver.com', 10, 'MANAGER');

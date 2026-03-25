@@ -17,7 +17,7 @@ class RoleController : public drogon::HttpController<RoleController>
     // METHOD_ADD(RoleController::your_method_name, "/{1}/{2}/list", Get); // path is /api/v1/RoleController/{arg1}/{arg2}/list
     // ADD_METHOD_TO(RoleController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
-    ADD_METHOD_TO(RoleController::addRole, "/api/v1/roles", Post);
+    ADD_METHOD_TO(RoleController::addRole, "/api/v1/roles", Post, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:

@@ -13,10 +13,10 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
     Json::Value ret;
     
     // 1. 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["node_type"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["user_id"].isNull() || (*jsonPtr)["role_name"].isNull()){
+    if(!jsonPtr || (*jsonPtr)["node_type"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["role_name"].isNull()){
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(name, node_type)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(name, node_type, role_name)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -27,19 +27,38 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
     // 2. 비지니스 로직
     auto dbClient = drogon::app().getDbClient();
     
-    std::string sql = "SELECT create_top_node($1, $2, $3, $4)";
+    std::string sql = "SELECT * FROM create_top_node($1, $2, $3, $4)";
 
+    std::string user_email = req->attributes()->get<std::string>("user_email");
     std::string node_type = (*jsonPtr)["node_type"].asString();
     std::string name = (*jsonPtr)["name"].asString();
-    std::string user_id = (*jsonPtr)["user_id"].asString();
     std::string role_name = (*jsonPtr)["role_name"].asString();
 
     dbClient->execSqlAsync(
         sql,
         [callback](const orm::Result &result) {
+            if (result.empty()) {
+                Json::Value ret;
+                ret["status"] = "error";
+                ret["message"] = "노드 생성에 실패했습니다.";
+                auto resp = HttpResponse::newHttpJsonResponse(ret);
+                resp->setStatusCode(k500InternalServerError);
+                callback(resp);
+                return;
+            }
             Json::Value ret;
+            Json::Value item;
+
+            auto row = result[0];
+
+            item["type"] = row["out_type"].as<std::string>();
+            item["id"] = row["out_id"].as<std::string>();
+            item["title"] = row["out_title"].as<std::string>();
+            item["extra_info"] = row["out_extra_info"].as<std::string>();
+            item["updated_at"] = row["out_updated_at"].as<std::string>();
+
             ret["status"] = "success";
-            ret["new_node_id"] = result[0][0].as<int>();
+            ret["data"] = item;
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k201Created);
             callback(resp);
@@ -52,7 +71,7 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
             resp->setStatusCode(k500InternalServerError);
             callback(resp);
         },
-        node_type, name, user_id, role_name
+        user_email, node_type, name, role_name
     );
 }
 

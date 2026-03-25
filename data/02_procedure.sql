@@ -2,31 +2,56 @@
 
 -- 1. OrgController::createTopNode
 CREATE OR REPLACE FUNCTION create_top_node(
+    p_email VARCHAR,
     p_node_type VARCHAR,
     p_name VARCHAR,
-    p_user_id VARCHAR,
     p_role_name VARCHAR DEFAULT 'ADMIN'
-) RETURNS INTEGER AS $$
+) RETURNS TABLE (
+    out_type TEXT,
+    out_id TEXT,
+    out_parent_id TEXT,
+    out_title TEXT,
+    out_status TEXT,
+    out_priority INTEGER,
+    out_extra_info TEXT,
+    out_updated_at TEXT
+) AS $$
 DECLARE
+    v_user_id VARCHAR;
     v_new_node_id INTEGER;
 BEGIN
-    -- 1. 노드 생성 (nextval과 path 처리)
+    -- 1. 사용자 id 가져오기
+    SELECT user_id INTO v_user_id FROM users WHERE email = p_email;
+
+    -- 2. 노드 생성 (nextval과 path 처리)
+    v_new_node_id := nextval('organization_nodes_node_id_seq');
+
     INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
     VALUES (
-        nextval('organization_nodes_node_id_seq'),
+        v_new_node_id,
         p_node_type,
         NULL,
         p_name,
-        ARRAY[currval('organization_nodes_node_id_seq')]
-    )
-    RETURNING node_id INTO v_new_node_id;
+        ARRAY[v_new_node_id]
+    );
 
-    -- 2. 역할 배정 (role_assignments 테이블)
+    -- 3. 역할 배정 (role_assignments 테이블)
     INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (p_user_id, v_new_node_id, p_role_name);
-
-    -- 생성된 노드 ID 반환
-    RETURN v_new_node_id;
+    VALUES (v_user_id, v_new_node_id, p_role_name);
+    
+    -- 4. 생성된 노드 정보 즉시 반환
+    RETURN QUERY
+    SELECT 
+        'NODE'::TEXT,
+        n.node_id::TEXT,
+        n.parent_node_id::TEXT,
+        n.name::TEXT,
+        NULL::TEXT,
+        NULL::INTEGER,
+        n.path::TEXT,
+        n.updated_at::TEXT
+    FROM organization_nodes n
+    WHERE n.node_id = v_new_node_id;
 END;
 $$ LANGUAGE plpgsql;
 

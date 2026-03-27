@@ -48,10 +48,10 @@ std::string AuthController::timePointToString(const std::chrono::system_clock::t
 
 void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     auto jsonPtr = req->getJsonObject();
-    Json::Value ret;
 
     // 1. 유효성 검사
     if(!jsonPtr || (*jsonPtr)["email"].isNull() || (*jsonPtr)["password"].isNull()){
+        Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
         ret["message"] = "필수 파라미터(email, password)가 누락되었습니다.";

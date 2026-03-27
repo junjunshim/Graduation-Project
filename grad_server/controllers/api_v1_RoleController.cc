@@ -7,10 +7,10 @@ using namespace api::v1;
 // Add definition of your processing function here
 void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     auto jsonPtr = req->getJsonObject();
-    Json::Value ret;
 
     // 1. 유효성 검사
     if(!jsonPtr || (*jsonPtr)["email"].isNull() || (*jsonPtr)["node_id"].isNull() || (*jsonPtr)["role_name"].isNull()){
+        Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
         ret["message"] = "필수 파라미터(email, node_id, role_name)가 누락되었습니다.";

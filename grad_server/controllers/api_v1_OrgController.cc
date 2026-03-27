@@ -10,10 +10,10 @@ using namespace drogon_model::grad_project;
 // Add definition of your processing function here
 void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     auto jsonPtr = req->getJsonObject();
-    Json::Value ret;
     
     // 1. 유효성 검사
     if(!jsonPtr || (*jsonPtr)["node_type"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["role_name"].isNull()){
+        Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
         ret["message"] = "필수 파라미터(name, node_type, role_name)가 누락되었습니다.";
@@ -77,10 +77,10 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
 
 void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     auto jsonPtr = req->getJsonObject();
-    Json::Value ret;
 
     // 1. 유효성 검사
     if(!jsonPtr || (*jsonPtr)["node_type"].isNull() || (*jsonPtr)["parent_node_id"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["email"].isNull() || (*jsonPtr)["role_name"].isNull()){
+        Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
         ret["message"] = "필수 파라미터(node_type, parent_node_id, name, email, role_name)가 누락되었습니다.";

@@ -96,4 +96,4 @@
 
 ### version 1.1 : token 기능 추가한 버전
 - 변경 사항 : 기존 user_id를 넘기는 방식에서 token을 사용한 사용자 인증으로 변경, HttpMethod를 Get 방식으로 변경
-- 개선 사항 : 
+- 개선 사항 : 화면 구성에 role 데이터도 필요

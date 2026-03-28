@@ -54,28 +54,28 @@ WHERE node_id = :new_node_id;
 */
 
 -- 1) 최상위 노드 생성
-SELECT create_top_node('COMPANY', '삼성', 'U-10', 'ADMIN');
+SELECT create_top_node('samsung3333@gmail.com', 'COMPANY', '삼성', 'ADMIN');
 
 -- 2) 노드에 유저 추가는 이메일을 통해서 진행됨 (해당 노드 id와 이메일을 매개변수로 입력받는다)
-SELECT add_role('kim1234@naver.com', 10, 'MANAGER');
+SELECT add_role('samsung3333@gmail.com', 'kim1234@naver.com', 10, 'MANAGER');
 
-SELECT add_role('na1234@naver.com', 10, 'MANAGER');
+SELECT add_role('samsung3333@gmail.com', 'na1234@naver.com', 10, 'MANAGER');
 
 -- 3) 부서 추가(하위 노드 추가★★★★★)(매개변수 상위 노드의 node_id)
-SELECT create_sub_node('DEPARTMENT', 10, '개발부서', 'kim1234@naver.com', 'ADMIN');
+SELECT create_sub_node('kim1234@naver.com','DEPARTMENT', 10, '개발부서', 'kim1234@naver.com', 'ADMIN');
 
-SELECT create_sub_node('DEPARTMENT', 10, '영업부서', 'na1234@naver.com', 'ADMIN');
+SELECT create_sub_node('na1234@naver.com','DEPARTMENT', 10, '영업부서', 'na1234@naver.com', 'ADMIN');
 
 -- 5) 부서에 팀원 추가 (매개변수 해당 노드 node_id , 유저 이메일)
-SELECT add_role('da5678@gmail.com', 11, 'MEMBER');
+SELECT add_role('kim1234@naver.com', 'da5678@gmail.com', 11, 'MEMBER');
 
-SELECT add_role('ra9988@gmail.com', 11, 'MEMBER');
+SELECT add_role('kim1234@naver.com', 'ra9988@gmail.com', 11, 'MEMBER');
 
-SELECT add_role('ma6767@naver.com', 11, 'MEMBER');
+SELECT add_role('kim1234@naver.com', 'ma6767@naver.com', 11, 'MEMBER');
 
-SELECT add_role('ba3409@naver.com', 12, 'MEMBER');
+SELECT add_role('na1234@naver.com', 'ba3409@naver.com', 12, 'MEMBER');
 
-SELECT add_role('sa1231@gmail.com', 12, 'MEMBER');
+SELECT add_role('na1234@naver.com', 'sa1231@gmail.com', 12, 'MEMBER');
 
 -- #3 작업 생성 및 팀원 배정
 /*
@@ -89,27 +89,31 @@ SELECT create_work_item (
     ..... 추가 인자
     );
 */
+
 SELECT create_work_item (
+    p_requester_email => 'samsung3333@gmail.com',
     p_work_item_id => 'WI-1',
     p_owner_node_id => 10,
-    p_owner_user_id => 'U-10',
+    p_owner_user_email => 'samsung3333@gmail.com',
     p_title => 'S26',
     p_description => 'S26 관련 통합 TODO'
     );
 
 SELECT create_work_item (
+    p_requester_email => 'samsung3333@gmail.com',
     p_work_item_id => 'WI-2',
     p_owner_node_id => 10,
-    p_owner_user_id => 'U-2',
+    p_owner_user_email => 'kim1234@naver.com',
     p_title => 'S26 보안 프로그램 개발',
     p_parent_work_item_id => 'WI-1',
     p_description => '개발 부서가 맡을 프로젝트'
     );
 
 SELECT create_work_item (
+    p_requester_email => 'samsung3333@gmail.com',
     p_work_item_id => 'WI-3',
     p_owner_node_id => 10,
-    p_owner_user_id => 'U-3',
+    p_owner_user_email => 'na1234@naver.com',
     p_title => 'S26 신규 시장 개척',
     p_parent_work_item_id => 'WI-1',
     p_description => '영업 부서가 맡을 프로젝트'
@@ -117,18 +121,20 @@ SELECT create_work_item (
 
 -- 상위 노드의 업무를 하위 노드의 업무로 가져오기
 SELECT create_work_item (
+    p_requester_email => 'kim1234@naver.com',
     p_work_item_id => 'WI-4',
     p_owner_node_id => 11,
-    p_owner_user_id => 'U-2',
+    p_owner_user_email => 'kim1234@naver.com',
     p_title => 'S26 보안 프로그램 개발',
     p_parent_work_item_id => 'WI-2',
     p_description => '개발 부서가 맡을 프로젝트'
     );
 
 SELECT create_work_item (
+    p_requester_email => 'na1234@naver.com',
     p_work_item_id => 'WI-5',
     p_owner_node_id => 12,
-    p_owner_user_id => 'U-3',
+    p_owner_user_email => 'na1234@naver.com',
     p_title => 'S26 신규 시장 개척',
     p_parent_work_item_id => 'WI-3',
     p_description => '영업 부서가 맡을 프로젝트'
@@ -136,49 +142,51 @@ SELECT create_work_item (
 
 -- 업무 생성 및 팀원 배정
 SELECT create_work_item (
+    p_requester_email => 'kim1234@naver.com',
     p_work_item_id => 'WI-6',
     p_owner_node_id => 11,
-    p_owner_user_id => 'U-4',
+    p_owner_user_email => 'da5678@gmail.com',
     p_title => '악성 코드 분석/탐지 도구 개발',
     p_parent_work_item_id => 'WI-1',
     p_description => '악성코드를 자동으로 분석하고 진단하는 백신 및 탐지 시스템'
     );
 
 SELECT create_work_item (
+    p_requester_email => 'kim1234@naver.com',
     p_work_item_id => 'WI-7',
     p_owner_node_id => 11,
-    p_owner_user_id => 'U-5',
+    p_owner_user_email => 'ra9988@gmail.com',
     p_title => '보안 솔루션 개발',
     p_parent_work_item_id => 'WI-4',
     p_description => '난독화, 무결성 검증, 암호화, 접근 제어 등 보안 솔루션 개발'
     );
 
 SELECT create_work_item (
+    p_requester_email => 'kim1234@naver.com',
     p_work_item_id => 'WI-8',
     p_owner_node_id => 11,
-    p_owner_user_id => 'U-6',
+    p_owner_user_email => 'ma6767@naver.com',
     p_title => '신규 시장 후보군 선정',
     p_parent_work_item_id => 'WI-4',
     p_description => '시장성이 있는 지역 선정하여 후보군 마련'
     );
 
 SELECT create_work_item (
+    p_requester_email => 'na1234@naver.com',
     p_work_item_id => 'WI-9',
     p_owner_node_id => 12,
-    p_owner_user_id => 'U-7',
+    p_owner_user_email => 'ba3409@naver.com',
     p_title =>  '현지화 제품에 들어갈 기능 선정',
     p_parent_work_item_id => 'WI-5',
     p_description => '해당 시장에서 성공할 수 있는 기능 선정'
     );
 
 SELECT create_work_item (
+    p_requester_email => 'na1234@naver.com',
     p_work_item_id => 'WI-10',
     p_owner_node_id => 12,
-    p_owner_user_id => 'U-8',
+    p_owner_user_email => 'sa1231@gmail.com',
     p_title => '마케팅 및 유통 전략 선정',
     p_parent_work_item_id => 'WI-5',
     p_description => '현지에 맞는 마케팅 방법과 유통 전략을 선정'
     );
-
-
-

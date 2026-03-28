@@ -2,31 +2,52 @@
 
 -- 1. OrgController::createTopNode
 CREATE OR REPLACE FUNCTION create_top_node(
+    p_email VARCHAR,
     p_node_type VARCHAR,
     p_name VARCHAR,
-    p_user_id VARCHAR,
     p_role_name VARCHAR DEFAULT 'ADMIN'
-) RETURNS INTEGER AS $$
+) RETURNS TABLE (
+    out_type TEXT,
+    out_id TEXT,
+    out_parent_id TEXT,
+    out_title TEXT,
+    out_extra_info TEXT,
+    out_updated_at TEXT
+) AS $$
 DECLARE
+    v_user_id VARCHAR;
     v_new_node_id INTEGER;
 BEGIN
-    -- 1. 노드 생성 (nextval과 path 처리)
+    -- 1. 사용자 id 가져오기
+    SELECT user_id INTO v_user_id FROM users WHERE email = p_email;
+
+    -- 2. 노드 생성 (nextval과 path 처리)
+    v_new_node_id := nextval('organization_nodes_node_id_seq');
+
     INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
     VALUES (
-        nextval('organization_nodes_node_id_seq'),
+        v_new_node_id,
         p_node_type,
         NULL,
         p_name,
-        ARRAY[currval('organization_nodes_node_id_seq')]
-    )
-    RETURNING node_id INTO v_new_node_id;
+        ARRAY[v_new_node_id]
+    );
 
-    -- 2. 역할 배정 (role_assignments 테이블)
+    -- 3. 역할 배정 (role_assignments 테이블)
     INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (p_user_id, v_new_node_id, p_role_name);
-
-    -- 생성된 노드 ID 반환
-    RETURN v_new_node_id;
+    VALUES (v_user_id, v_new_node_id, p_role_name);
+    
+    -- 4. 생성된 노드 정보 즉시 반환
+    RETURN QUERY
+    SELECT 
+        'NODE'::TEXT,
+        n.node_id::TEXT,
+        n.parent_node_id::TEXT,
+        n.name::TEXT,
+        n.path::TEXT,
+        n.updated_at::TEXT
+    FROM organization_nodes n
+    WHERE n.node_id = v_new_node_id;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -70,31 +91,64 @@ $$ LANGUAGE plpgsql;
 
 -- 3. RoleController::add_role
 CREATE OR REPLACE FUNCTION add_role(
-    p_email VARCHAR,
+    p_requester_email VARCHAR,
+    p_target_email VARCHAR,
     p_node_id INTEGER,
     p_role_name VARCHAR
-) RETURNS INTEGER AS $$
+) RETURNS TABLE (
+    out_status BOOLEAN,
+    out_message TEXT,
+    out_node_id TEXT,
+    out_user_email TEXT,
+    out_role TEXT
+) AS $$
 DECLARE
-    v_new_role_id INTEGER;
+    v_requester_id VARCHAR;
+    v_target_id VARCHAR;
+    v_requester_role VARCHAR;
+    v_new_id INTEGER;
 BEGIN
-    -- 1. 이메일로 유저 검색 후 노드에 추가
-    WITH selected_user AS (
-      SELECT user_id FROM users WHERE email = p_email
-    )
-    INSERT INTO role_assignments (user_id, node_id, role) 
-    SELECT user_id, p_node_id, p_role_name
-    FROM selected_user
-    RETURNING assignment_id INTO v_new_role_id;
+    -- 1. 요청자와 대상자의 user_id 가져오기
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+    SELECT user_id INTO v_target_id FROM users WHERE email = p_target_email;
 
-    RETURN v_new_role_id;
+    IF v_target_id IS NULL THEN
+        RETURN QUERY SELECT FALSE, '대상 사용자를 찾을 수 없습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 2. 요청자의 현재 노드 권한 확인
+    SELECT role INTO v_requester_role 
+    FROM role_assignments 
+    WHERE user_id = v_requester_id AND node_id = p_node_id;
+
+    -- 3. 권한 체크 (ADMIN 또는 MANAGER만 타인에게 권한 부여 가능)
+    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
+        RETURN QUERY SELECT FALSE, '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 4. 이미 권한이 있는지 확인 (중복 방지)
+    IF EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id) THEN
+        RETURN QUERY SELECT FALSE, '해당 사용자는 이미 이 노드에 권한이 있습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 5. 권한 부여 실행
+    INSERT INTO role_assignments (user_id, node_id, role)
+    VALUES (v_target_id, p_node_id, p_role_name)
+    RETURNING assignment_id INTO v_new_id;
+
+    RETURN QUERY SELECT TRUE, '성공적으로 권한이 부여되었습니다.'::TEXT, p_node_id::TEXT, p_target_email::TEXT, p_role_name::TEXT;
 END;
 $$ LANGUAGE plpgsql;
 
 -- 4. WorkItemController::createWorkItem
 CREATE OR REPLACE FUNCTION create_work_item(
+    p_requester_email VARCHAR,
     p_work_item_id VARCHAR,
     p_owner_node_id INTEGER,
-    p_owner_user_id VARCHAR,
+    p_owner_user_email VARCHAR,
     p_title VARCHAR,
     p_parent_work_item_id VARCHAR DEFAULT NULL,
     p_description TEXT DEFAULT NULL,
@@ -104,10 +158,68 @@ CREATE OR REPLACE FUNCTION create_work_item(
     p_progress INTEGER DEFAULT 0,
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL
-) RETURNS VARCHAR AS $$
+) RETURNS TABLE (
+    out_re_status BOOLEAN,
+    out_message TEXT,
+    out_type TEXT,
+    out_id TEXT,
+    out_parent_id TEXT,
+    out_title TEXT,
+    out_status TEXT,
+    out_priority INTEGER,
+    out_extra_info TEXT,
+    out_updated_at TEXT
+) AS $$
 DECLARE
-    v_ret_id VARCHAR;
+    v_requester_id VARCHAR;
+    v_owner_user_id VARCHAR;
+    v_requester_role VARCHAR;
+    v_owner_user_role VARCHAR;
+    v_requester_parent_role VARCHAR;
 BEGIN
+    -- 1. 요청자와 대상자의 user_id 가져오기
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+    SELECT user_id INTO v_owner_user_id FROM users WHERE email = p_owner_user_email;
+
+    IF v_requester_id IS NULL OR v_owner_user_id IS NULL THEN
+        RETURN QUERY SELECT FALSE, '사용자를 찾을 수 없습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 2. 요청자의 work_itme이 생성될 노드의 권한 확인
+    SELECT role INTO v_requester_role 
+    FROM role_assignments 
+    WHERE user_id = v_requester_id AND node_id = p_owner_node_id;
+
+    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER', 'MEMBER') THEN
+        RETURN QUERY SELECT FALSE, '요청자의 권한이 부족합니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 3. 대상자의 노드에 대한 권한 확인
+    SELECT role INTO v_owner_user_role 
+    FROM role_assignments 
+    WHERE user_id = v_owner_user_id AND node_id = p_owner_node_id;
+    
+    IF v_owner_user_role IS NULL OR v_owner_user_role NOT IN ('ADMIN', 'MANAGER', 'MEMBER') THEN
+        RETURN QUERY SELECT FALSE, '대상자가 해당 노드의 멤버가 아닙니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 4. 부모 work_item이 있을 경우 권한 확인
+    IF p_parent_work_item_id IS NOT NULL AND p_parent_work_item_id <> '' THEN
+        SELECT role INTO v_requester_parent_role 
+        FROM role_assignments 
+        WHERE node_id = (SELECT owner_node_id FROM work_items WHERE work_item_id = p_parent_work_item_id) 
+          AND user_id = v_requester_id;
+          
+        IF v_requester_parent_role IS NULL THEN
+            RETURN QUERY SELECT FALSE, '부모 업무에 대한 권한이 없습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+            RETURN;
+        END IF;
+    END IF;
+
+    -- 5. work_item 생성
     INSERT INTO work_items (
         work_item_id, 
         owner_node_id, 
@@ -124,7 +236,7 @@ BEGIN
     ) VALUES (
         p_work_item_id,
         p_owner_node_id,
-        p_owner_user_id,
+        v_owner_user_id,
         p_title,
         NULLIF(p_parent_work_item_id, ''),
         NULLIF(p_description, ''),
@@ -134,53 +246,106 @@ BEGIN
         COALESCE(p_progress, 0),
         NULLIF(p_start_date, '')::DATE,
         NULLIF(p_due_date, '')::DATE
-    )
-    RETURNING work_item_id INTO v_ret_id;
+    );
 
-    RETURN v_ret_id;
+    -- 6. 생성된 work_item 반환
+    RETURN QUERY
+    SELECT
+        TRUE,
+        'WORK_ITEM'::TEXT,
+        'Work Item이 생성되었습니다.'::TEXT,
+        w.work_item_id::TEXT,
+        w.owner_node_id::TEXT,
+        w.title::TEXT,
+        w.status::TEXT,
+        w.priority::INTEGER,
+        w.parent_work_item_id::TEXT,
+        w.updated_at::TEXT
+    FROM work_items w
+    WHERE w.work_item_id = p_work_item_id;
+
 END;
 $$ LANGUAGE plpgsql;
 
 -- 5. OrgController::createSubNode
 CREATE OR REPLACE FUNCTION create_sub_node(
+    p_requester_email VARCHAR,
     p_node_type VARCHAR,
     p_parent_node_id INTEGER,
     p_name VARCHAR,
-    p_email VARCHAR,
+    p_owner_user_email VARCHAR,
     p_role_name VARCHAR
-) RETURNS INTEGER AS $$
+) RETURNS TABLE (
+    out_status BOOLEAN,
+    out_message TEXT,
+    out_type TEXT,
+    out_id TEXT,
+    out_parent_id TEXT,
+    out_title TEXT,
+    out_extra_info TEXT,
+    out_updated_at TEXT
+) AS $$
 DECLARE
+    v_requester_id VARCHAR;
+    v_owner_user_id VARCHAR;
+    v_requester_role VARCHAR;
     v_new_node_id INTEGER;
+    v_parent_path INTEGER[];
 BEGIN
+    -- 1. 사용자 id 가져오기
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+    SELECT user_id INTO v_owner_user_id FROM users WHERE email = p_owner_user_email;
+
+    IF v_requester_id IS NULL OR v_owner_user_id IS NULL THEN
+        RETURN QUERY SELECT FALSE, '대상 사용자를 찾을 수 없습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 2. 요청자 권한 확인
+    SELECT role INTO v_requester_role
+    FROM role_assignments
+    WHERE user_id = v_requester_id AND node_id = p_parent_node_id;
+
+    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
+        RETURN QUERY SELECT FALSE, '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT,  NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 3. 하위 노드 생성
+    SELECT path INTO v_parent_path FROM organization_nodes WHERE node_id = p_parent_node_id;
+    v_new_node_id := nextval('organization_nodes_node_id_seq');
+
     INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
     VALUES (
-        nextval('organization_nodes_node_id_seq'),
+        v_new_node_id,
         p_node_type,
         p_parent_node_id,
         p_name,
-        ARRAY[currval('organization_nodes_node_id_seq')]
-    )
-    RETURNING node_id INTO v_new_node_id;
-
-    UPDATE organization_nodes 
-    SET path = (SELECT path FROM organization_nodes WHERE node_id = p_parent_node_id) || v_new_node_id
-    WHERE node_id = v_new_node_id;
+        v_parent_path || v_new_node_id
+    );
     
-    WITH selected_user AS (
-      SELECT user_id FROM users WHERE email = p_email
-    )
-    INSERT INTO role_assignments (user_id, node_id, role) 
-    SELECT user_id, v_new_node_id, p_role_name 
-    FROM selected_user;
+    INSERT INTO role_assignments (user_id, node_id, role)
+    VALUES (v_owner_user_id, v_new_node_id, p_role_name);
 
-
-    RETURN v_new_node_id;
+    -- 4. 생성된 노드 정보 즉시 반환
+    RETURN QUERY
+    SELECT 
+        TRUE,
+        '하위 노드가 성공적으로 생성되었습니다.'::TEXT,
+        'NODE'::TEXT,
+        n.node_id::TEXT,
+        n.parent_node_id::TEXT,
+        n.name::TEXT,
+        n.path::TEXT,
+        n.updated_at::TEXT
+    FROM organization_nodes n
+    WHERE n.node_id = v_new_node_id;
 END;
 $$ LANGUAGE plpgsql;
 
 -- 6. ContextController::getInitialContext
 CREATE OR REPLACE FUNCTION get_initial_context(
-    p_user_id VARCHAR
+    p_user_email VARCHAR
 ) 
 RETURNS TABLE (
     out_type TEXT,
@@ -195,7 +360,7 @@ RETURNS TABLE (
 BEGIN
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
-        SELECT node_id FROM role_assignments WHERE user_id = p_user_id
+        SELECT node_id FROM role_assignments WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
         
         UNION
 
@@ -234,7 +399,7 @@ $$ LANGUAGE plpgsql;
 
 -- 7. ContextController::syncContext
 CREATE OR REPLACE FUNCTION sync_context(
-    p_user_id VARCHAR,
+    p_user_email VARCHAR,
     p_last_synced_at TIMESTAMP
 ) 
 RETURNS TABLE (
@@ -250,7 +415,7 @@ RETURNS TABLE (
 BEGIN
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
-        SELECT node_id FROM role_assignments WHERE user_id = p_user_id
+        SELECT node_id FROM role_assignments WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
         
         UNION
 
@@ -286,5 +451,43 @@ BEGIN
     FROM work_items w
     WHERE w.owner_node_id IN (SELECT node_id FROM accessible_node_ids)
       AND w.updated_at > p_last_synced_at;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 8. AuthController::loginUser
+CREATE OR REPLACE FUNCTION login_user (
+    p_email VARCHAR,
+    p_password TEXT,
+    p_refresh_token TEXT,
+    p_refresh_expiry TIMESTAMP
+) 
+RETURNS TABLE (
+    status BOOLEAN,
+    message TEXT
+) AS $$
+DECLARE
+    v_user_password TEXT;
+BEGIN
+    SELECT password_hash INTO v_user_password
+    FROM users
+    WHERE email = p_email;
+
+    IF NOT FOUND THEN
+        RETURN QUERY SELECT FALSE, '사용자를 찾을 수 없습니다.'::TEXT;
+        RETURN;
+    END IF;
+
+    IF v_user_password <> p_password THEN
+        RETURN QUERY SELECT FALSE, '비밀번호가 일치하지 않습니다.'::TEXT;
+        RETURN;
+    END IF;
+
+    INSERT INTO user_refresh_tokens (user_email, refresh_token, expires_at) 
+    VALUES (p_email, p_refresh_token, p_refresh_expiry)
+    ON CONFLICT (user_email) DO UPDATE SET
+        refresh_token = EXCLUDED.refresh_token,
+        expires_at = EXCLUDED.expires_at;
+    
+    RETURN QUERY SELECT TRUE, '로그인 성공'::TEXT;
 END;
 $$ LANGUAGE plpgsql;

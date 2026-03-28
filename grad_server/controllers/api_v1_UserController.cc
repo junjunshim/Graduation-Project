@@ -10,10 +10,10 @@ using namespace drogon_model::grad_project;
 // Add definition of your processing function here
 void UserController::createUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     auto jsonPtr = req->getJsonObject();
-    Json::Value ret;
 
     // 1. 유효성 검사
     if(!jsonPtr || (*jsonPtr)["user_id"].isNull() || (*jsonPtr)["email"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["password"].isNull()){
+        Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
         ret["message"] = "필수 파라미터(user_id, email, name, password)가 누락되었습니다.";

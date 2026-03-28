@@ -62,9 +62,9 @@ SELECT add_role('samsung3333@gmail.com', 'kim1234@naver.com', 10, 'MANAGER');
 SELECT add_role('samsung3333@gmail.com', 'na1234@naver.com', 10, 'MANAGER');
 
 -- 3) 부서 추가(하위 노드 추가★★★★★)(매개변수 상위 노드의 node_id)
-SELECT create_sub_node('DEPARTMENT', 10, '개발부서', 'kim1234@naver.com', 'ADMIN');
+SELECT create_sub_node('kim1234@naver.com','DEPARTMENT', 10, '개발부서', 'kim1234@naver.com', 'ADMIN');
 
-SELECT create_sub_node('DEPARTMENT', 10, '영업부서', 'na1234@naver.com', 'ADMIN');
+SELECT create_sub_node('na1234@naver.com','DEPARTMENT', 10, '영업부서', 'na1234@naver.com', 'ADMIN');
 
 -- 5) 부서에 팀원 추가 (매개변수 해당 노드 node_id , 유저 이메일)
 SELECT add_role('kim1234@naver.com', 'da5678@gmail.com', 11, 'MEMBER');
@@ -89,6 +89,7 @@ SELECT create_work_item (
     ..... 추가 인자
     );
 */
+
 SELECT create_work_item (
     p_requester_email => 'samsung3333@gmail.com',
     p_work_item_id => 'WI-1',

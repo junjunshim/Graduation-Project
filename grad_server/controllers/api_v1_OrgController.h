@@ -18,7 +18,7 @@ class OrgController : public drogon::HttpController<OrgController>
     // ADD_METHOD_TO(OrgController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
     
     ADD_METHOD_TO(OrgController::createTopNode, "/api/v1/org/topNodes", Post, "JwtFilter");
-    ADD_METHOD_TO(OrgController::createSubNode, "/api/v1/org/subNodes", Post);
+    ADD_METHOD_TO(OrgController::createSubNode, "/api/v1/org/subNodes", Post, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:

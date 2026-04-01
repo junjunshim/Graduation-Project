@@ -1,4 +1,4 @@
-# 사용자 전체 정보 조회 api (version 1.1)
+# 사용자 전체 정보 조회 api (version 1.1.1)
 - 사용자가 속한 노드와 해당 노드의 모든 work_item를 조회하는 api
 ## Request
 - Request syntax
@@ -37,6 +37,7 @@
         {
             "type" : "NODE",
             "id" : "3",
+            "node_type" : "DEPARTMENT",
             "parent_id" : "1" 또는 없음,
             "title" : "영업 부서",
             "extra_info" : "{1, 3}",
@@ -78,6 +79,7 @@
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 |
 | id | String | 필수 | 노드 또는 work_item 식별 id|
+| node_type | String | 선택 | node의 type | 
 | parent_id | String | 선택 | 부모 노드 또는 소속 노드 id |
 | title | String | 필수 | 노드 또는 work_item 이름 |
 | status | String | 선택 | work_item 상태 |
@@ -94,6 +96,10 @@
 ### version 1.0 : 서버와 데이터베이스 연결 여부 확인용
 - 개선 사항 : token 기능을 추가하여 매개변수로 user_id을 받지 않게 변경 and get 방식으로 변경
 
-### version 1.1 : token 기능 추가한 버전
+### version 1.1.0 : token 기능 추가한 버전
 - 변경 사항 : 기존 user_id를 넘기는 방식에서 token을 사용한 사용자 인증으로 변경, HttpMethod를 Get 방식으로 변경
+- 개선 사항 : 화면 구성에 role 데이터도 필요
+
+### version 1.1.1 : NODE 타입 데이터의 node_type 값 반환
+- 변경 사항 : NODE 타입 데이터의 node_type데이터도 반환하도록 변경
 - 개선 사항 : 화면 구성에 role 데이터도 필요

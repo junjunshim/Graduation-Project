@@ -12,11 +12,49 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "grad-explorer",
+          "title": "Workflow",
+          "icon": "$(organization)"
+        }
+      ]
+    },
+    "views": {
+      "grad-explorer": [
+        {
+          "type": "webview",
+          "id": "grad-login-view",
+          "name": "Workflow",
+          "when": "!grad:isLoggedIn" 
+        },
+        {
+          "id": "grad-nodes-view",
+          "name": "Workflow",
+          "when": "grad:isLoggedIn",
+          "icon": "$(organization)"
+        }
+      ]
+    },
+    "menus": {
+        "view/title": [
+            {
+                "command": "grad-vscode.logout",
+                "when": "view == grad-nodes-view",
+                "group": "navigation@1" 
+            },
+            {
+                "command": "grad-nodes-view.refreshEntry",
+                "when": "view == grad-nodes-view",
+                "group": "navigation@2"
+            }
+        ]
+    },
     "commands": [
-      {
-        "command": "grad-vscode.helloWorld",
-        "title": "Hello World"
-      }
+      { "command": "grad-vscode.login", "title": "Grad: Login" },
+      { "command": "grad-vscode.logout", "title": "Grad: Logout", "icon": "$(sign-out)" },
+      { "command": "grad-nodes-view.refreshEntry", "title": "Refresh", "icon": "$(refresh)" }
     ]
   },
   "scripts": {

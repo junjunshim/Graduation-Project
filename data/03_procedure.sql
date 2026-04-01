@@ -347,17 +347,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_initial_context(
     p_user_email VARCHAR
 ) 
-RETURNS TABLE (
-    out_type TEXT,
-    out_id TEXT,
-    out_node_type TEXT,
-    out_parent_id TEXT,
-    out_title TEXT,
-    out_status TEXT,
-    out_priority INTEGER,
-    out_extra_info TEXT,
-    out_updated_at TEXT
-) AS $$
+RETURNS SETOF integrated_data AS $$
 BEGIN
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (

@@ -395,16 +395,7 @@ CREATE OR REPLACE FUNCTION sync_context(
     p_user_email VARCHAR,
     p_last_synced_at TIMESTAMP
 ) 
-RETURNS TABLE (
-    out_type TEXT,
-    out_id TEXT,
-    out_parent_id TEXT,
-    out_title TEXT,
-    out_status TEXT,
-    out_priority INTEGER,
-    out_extra_info TEXT,
-    out_updated_at TEXT
-) AS $$
+RETURNS SETOF integrated_data AS $$
 BEGIN
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
@@ -420,6 +411,7 @@ BEGIN
     SELECT 
         'NODE'::TEXT,
         n.node_id::TEXT,
+        n.node_type::TEXT,
         n.parent_node_id::TEXT,
         n.name::TEXT,
         NULL::TEXT,
@@ -435,6 +427,7 @@ BEGIN
     SELECT 
         'WORK_ITEM'::TEXT,
         w.work_item_id::TEXT,
+        NULL::TEXT,
         w.owner_node_id::TEXT,
         w.title::TEXT,
         w.status::TEXT,

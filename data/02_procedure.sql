@@ -350,6 +350,7 @@ CREATE OR REPLACE FUNCTION get_initial_context(
 RETURNS TABLE (
     out_type TEXT,
     out_id TEXT,
+    out_node_type TEXT,
     out_parent_id TEXT,
     out_title TEXT,
     out_status TEXT,
@@ -372,6 +373,7 @@ BEGIN
     SELECT 
         'NODE'::TEXT,
         n.node_id::TEXT,
+        n.node_type::TEXT,
         n.parent_node_id::TEXT,
         n.name::TEXT,
         NULL::TEXT,
@@ -386,6 +388,7 @@ BEGIN
     SELECT 
         'WORK_ITEM'::TEXT,
         w.work_item_id::TEXT,
+        NULL::TEXT,
         w.owner_node_id::TEXT,
         w.title::TEXT,
         w.status::TEXT,

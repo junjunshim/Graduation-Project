@@ -95,6 +95,10 @@ void ContextController::syncContext(const HttpRequestPtr &req, std::function<voi
                 item["type"] = row["out_type"].as<std::string>();
                 item["id"] = row["out_id"].as<std::string>();
 
+                if(!row["out_node_type"].isNull() && !row["out_node_type"].as<std::string>().empty()){
+                    item["node_type"] = row["out_node_type"].as<std::string>();
+                }
+                
                 if(!row["out_parent_id"].isNull() && !row["out_parent_id"].as<std::string>().empty()){
                     item["parent_id"] = row["out_parent_id"].as<std::string>();
                 }

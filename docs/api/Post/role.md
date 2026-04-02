@@ -39,9 +39,11 @@
 {
     "status" : "success",
     "data" : {
+        "type" : "ROLE",
         "node_id" : 10,
         "user_email" : "admin123@naver.com",
-        "role_name" : "ADMIN"
+        "role_name" : "ADMIN",
+        "updated_at":"2026-04-02 13:43:26.402221+00"
     }
 }
 ```
@@ -74,7 +76,10 @@
 ### version 1.0 : 서버와 데이터베이스 연결 여부 확인용
 - 개선 사항 : token 기능, 역할에 대한 권한 테이블 추가, 이메일을 통한 유저 검색을 할때 예외 처리 필요
 
-### version 1.1 : token 기능 추가한 버전
+### version 1.1.0 : token 기능 추가한 버전
 - 변경 사항 : 기존 user_id를 넘기는 방식에서 token을 사용한 사용자 인증으로 변경, 생성한 권한의 데이터를 반환
 - 개선 사항 : 반환 데이터 형식에 더 자세할 필요가 있어보인다.
 
+### version 1.1.1 : 반환 타입 변경
+- 변경 사항 : 생성한 데이터의 반환 형태를 node, work_item과의 일관성 유지
+- 개선 사항 : 

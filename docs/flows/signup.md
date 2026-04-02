@@ -43,7 +43,7 @@ const currentUser = getCurrentUser()
 | :--- | :--- | :--- |
 | 회원가입 (성공) | 대시보드 페이지 | [link](dashboard.md) |
 | 회원가입 (실패) | 현재 페이지 유지 | - |
-| 로그인 | 로그인 페이지 | [link](login.md) |
+| 로그인 | 로그인 페이지 | [link](login.md)  |
 
 ## 전체 흐름 
 

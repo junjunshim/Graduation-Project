@@ -69,7 +69,7 @@ BEGIN
     SELECT user_id INTO v_owner_user_id FROM users WHERE email = p_owner_user_email;
 
     IF v_requester_id IS NULL OR v_owner_user_id IS NULL THEN
-        RETURN QUERY SELECT FALSE, '대상 사용자를 찾을 수 없습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+        RETURN QUERY SELECT FALSE, '대상 사용자를 찾을 수 없습니다.'::TEXT, NULL::integrated_data;
         RETURN;
     END IF;
 
@@ -79,7 +79,7 @@ BEGIN
     WHERE user_id = v_requester_id AND node_id = p_parent_node_id;
 
     IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
-        RETURN QUERY SELECT FALSE, '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT,  NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT;
+        RETURN QUERY SELECT FALSE, '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT,  NULL::integrated_data;
         RETURN;
     END IF;
 
@@ -114,7 +114,7 @@ BEGIN
             NULL::INTEGER,
             n.path::TEXT,
             n.updated_at::TEXT
-        )::integrated_data
+        )::integrated_data AS out_data
     FROM organization_nodes n
     WHERE n.node_id = v_new_node_id;
 END;

@@ -15,18 +15,7 @@ CREATE OR REPLACE FUNCTION create_work_item(
     p_progress INTEGER DEFAULT 0,
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL
-) RETURNS TABLE (
-    out_re_status BOOLEAN,
-    out_message TEXT,
-    out_type TEXT,
-    out_id TEXT,
-    out_parent_id TEXT,
-    out_title TEXT,
-    out_status TEXT,
-    out_priority INTEGER,
-    out_extra_info TEXT,
-    out_updated_at TEXT
-) AS $$
+) RETURNS SETOF action_result AS $$
 DECLARE
     v_requester_id VARCHAR;
     v_owner_user_id VARCHAR;
@@ -39,7 +28,7 @@ BEGIN
     SELECT user_id INTO v_owner_user_id FROM users WHERE email = p_owner_user_email;
 
     IF v_requester_id IS NULL OR v_owner_user_id IS NULL THEN
-        RETURN QUERY SELECT FALSE, '사용자를 찾을 수 없습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+        RETURN QUERY SELECT FALSE, '사용자를 찾을 수 없습니다.'::TEXT, NULL::integrated_data;
         RETURN;
     END IF;
 
@@ -49,7 +38,7 @@ BEGIN
     WHERE user_id = v_requester_id AND node_id = p_owner_node_id;
 
     IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER', 'MEMBER') THEN
-        RETURN QUERY SELECT FALSE, '요청자의 권한이 부족합니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+        RETURN QUERY SELECT FALSE, '요청자의 권한이 부족합니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, NULL::integrated_data;
         RETURN;
     END IF;
 
@@ -59,7 +48,7 @@ BEGIN
     WHERE user_id = v_owner_user_id AND node_id = p_owner_node_id;
     
     IF v_owner_user_role IS NULL OR v_owner_user_role NOT IN ('ADMIN', 'MANAGER', 'MEMBER') THEN
-        RETURN QUERY SELECT FALSE, '대상자가 해당 노드의 멤버가 아닙니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+        RETURN QUERY SELECT FALSE, '대상자가 해당 노드의 멤버가 아닙니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, NULL::integrated_data;
         RETURN;
     END IF;
 
@@ -71,7 +60,7 @@ BEGIN
           AND user_id = v_requester_id;
           
         IF v_requester_parent_role IS NULL THEN
-            RETURN QUERY SELECT FALSE, '부모 업무에 대한 권한이 없습니다.'::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::TEXT, NULL::INTEGER, NULL::TEXT, NULL::TEXT;
+            RETURN QUERY SELECT FALSE, '부모 업무에 대한 권한이 없습니다.'::TEXT, NULL::integrated_data;
             RETURN;
         END IF;
     END IF;
@@ -109,17 +98,19 @@ BEGIN
     RETURN QUERY
     SELECT
         TRUE,
-        'WORK_ITEM'::TEXT,
         'Work Item이 생성되었습니다.'::TEXT,
-        w.work_item_id::TEXT,
-        w.owner_node_id::TEXT,
-        w.title::TEXT,
-        w.status::TEXT,
-        w.priority::INTEGER,
-        w.parent_work_item_id::TEXT,
-        w.updated_at::TEXT
+        ROW(
+            'WORK_ITEM'::TEXT,
+            w.work_item_id::TEXT,
+            NULL::TEXT,
+            w.owner_node_id::TEXT,
+            w.title::TEXT,
+            w.status::TEXT,
+            w.priority::INTEGER,
+            w.parent_work_item_id::TEXT,
+            w.updated_at::TEXT
+        )::integrated_data AS out_data
     FROM work_items w
     WHERE w.work_item_id = p_work_item_id;
-
 END;
 $$ LANGUAGE plpgsql;

@@ -27,7 +27,7 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
     // 2. 비지니스 로직
     auto dbClient = drogon::app().getDbClient();
     
-    std::string sql = "SELECT * from create_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
+    std::string sql = "SELECT out_status, out_message, (out_data).* from create_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
     
     // 필수 파라미터
     std::string requester_email = req->attributes()->get<std::string>("user_email");
@@ -61,7 +61,7 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
 
             auto row = result[0];
             
-            bool success = row["out_re_status"].as<bool>();
+            bool success = row["out_status"].as<bool>();
 
             if(success){
                 ret["status"] = "success";
@@ -77,10 +77,8 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
 
                 item["title"] = row["out_title"].as<std::string>();
 
-                if(item["type"].asString() == "WORK_ITEM"){
-                    item["status"] = row["out_status"].as<std::string>();
-                    item["priority"] = row["out_priority"].as<int>();
-                }
+                item["status"] = row["out_status"].as<std::string>();
+                item["priority"] = row["out_priority"].as<int>();
 
                 if (!row["out_extra_info"].isNull()) {
                     item["extra_info"] = row["out_extra_info"].as<std::string>();

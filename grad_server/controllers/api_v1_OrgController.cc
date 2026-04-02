@@ -95,7 +95,7 @@ void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(
     // 2. 비지니스 로직
     auto dbClient = drogon::app().getDbClient();
 
-    std::string sql = "SELECT * FROM create_sub_node($1, $2, $3, $4, $5, $6)";
+    std::string sql = "SELECT out_status, out_message, (out_data).* FROM create_sub_node($1, $2, $3, $4, $5, $6)";
 
     std::string requester_email = req->attributes()->get<std::string>("user_email");
     std::string node_type = (*jsonPtr)["node_type"].asString();

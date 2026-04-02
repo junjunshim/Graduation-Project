@@ -9,3 +9,9 @@ CREATE TYPE integrated_data AS (
     out_extra_info TEXT,
     out_updated_at TEXT
 );
+
+CREATE TYPE action_result AS (
+    out_status BOOLEAN,
+    out_message TEXT,
+    out_data integrated_data
+);

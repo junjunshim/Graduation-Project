@@ -36,8 +36,8 @@ const currentUser = getCurrentUser()
 | 버튼/기능 | 동작 및 설명 |
 | :--- | :--- |
 | 회원가입 | 회원가입 페이지로 이동 |
-| 이메일 | `form.email` 상태 업데이트|
-| 비밀번호 | `form.password` 상태 업데이트 |
+| 이메일 입력 | `form.email` 상태 업데이트 |
+| 비밀번호 입력 | `form.password` 상태 업데이트 |
 | 로그인 | `signIn` API 호출 및 응답 대기 |
 
 ## 클릭 후 이동 페이지
@@ -87,7 +87,7 @@ import { enterDemoWorkspace, getCurrentUser, signIn } from '../api'
 ### 4. 응답 처리
 - **성공** : 성공 응답 수신 시 `useNavigate` 를 사용하여 대시보드로 이동
 - **실패** : `setFeedback` 을 통해 사용자에게 메시지 노출 및 로딩 상태 해제
-
+<br><br/>
 ### 5. 데모 기능
 ```typescript
 import { enterDemoWorkspace, getCurrentUser, signIn } from '../api'

@@ -48,16 +48,18 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
             
             auto row = result[0];
 
-            bool success = row["out_status"].as<bool>();
+            bool success = row["out_res_status"].as<bool>();
 
 
             if(success){
                 ret["status"] = "success";
                 ret["message"] = row["out_message"].as<std::string>();
 
-                item["node_id"] = row["out_node_id"].as<std::string>();
-                item["user_email"] = row["out_user_email"].as<std::string>();
-                item["role_name"] = row["out_role"].as<std::string>();
+                item["type"] = row["out_type"].as<std::string>();
+                item["node_id"] = row["out_id"].as<std::string>();
+                item["user_email"] = row["out_title"].as<std::string>();
+                item["role_name"] = row["out_status"].as<std::string>();
+                item["updated_at"] = row["out_updated_at"].as<std::string>();
 
                 ret["data"] = item;
 

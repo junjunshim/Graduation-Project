@@ -53,6 +53,7 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
 
             item["type"] = row["out_type"].as<std::string>();
             item["id"] = row["out_id"].as<std::string>();
+            item["node_type"] = row["out_node_type"].as<std::string>();
             item["title"] = row["out_title"].as<std::string>();
             item["extra_info"] = row["out_extra_info"].as<std::string>();
             item["updated_at"] = row["out_updated_at"].as<std::string>();
@@ -129,6 +130,7 @@ void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(
 
                 item["type"] = row["out_type"].as<std::string>();
                 item["id"] = row["out_id"].as<std::string>();
+                item["node_type"] = row["out_node_type"].as<std::string>();
                 item["parent_id"] = row["out_parent_id"].as<std::string>();
                 item["title"] = row["out_title"].as<std::string>();
                 item["extra_info"] = row["out_extra_info"].as<std::string>();

@@ -6,14 +6,7 @@ CREATE OR REPLACE FUNCTION create_top_node(
     p_node_type VARCHAR,
     p_name VARCHAR,
     p_role_name VARCHAR DEFAULT 'ADMIN'
-) RETURNS TABLE (
-    out_type TEXT,
-    out_id TEXT,
-    out_parent_id TEXT,
-    out_title TEXT,
-    out_extra_info TEXT,
-    out_updated_at TEXT
-) AS $$
+) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_user_id VARCHAR;
     v_new_node_id INTEGER;
@@ -42,8 +35,11 @@ BEGIN
     SELECT 
         'NODE'::TEXT,
         n.node_id::TEXT,
+        n.node_type::TEXT,
         n.parent_node_id::TEXT,
         n.name::TEXT,
+        NULL::TEXT,
+        NULL::INTEGER,
         n.path::TEXT,
         n.updated_at::TEXT
     FROM organization_nodes n
@@ -60,16 +56,7 @@ CREATE OR REPLACE FUNCTION create_sub_node(
     p_name VARCHAR,
     p_owner_user_email VARCHAR,
     p_role_name VARCHAR
-) RETURNS TABLE (
-    out_status BOOLEAN,
-    out_message TEXT,
-    out_type TEXT,
-    out_id TEXT,
-    out_parent_id TEXT,
-    out_title TEXT,
-    out_extra_info TEXT,
-    out_updated_at TEXT
-) AS $$
+) RETURNS SETOF action_result AS $$
 DECLARE
     v_requester_id VARCHAR;
     v_owner_user_id VARCHAR;
@@ -117,12 +104,17 @@ BEGIN
     SELECT 
         TRUE,
         '하위 노드가 성공적으로 생성되었습니다.'::TEXT,
-        'NODE'::TEXT,
-        n.node_id::TEXT,
-        n.parent_node_id::TEXT,
-        n.name::TEXT,
-        n.path::TEXT,
-        n.updated_at::TEXT
+        ROW(
+            'NODE'::TEXT,
+            n.node_id::TEXT,
+            n.node_type::TEXT,
+            n.parent_node_id::TEXT,
+            n.name::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            n.path::TEXT,
+            n.updated_at::TEXT
+        )::integrated_data
     FROM organization_nodes n
     WHERE n.node_id = v_new_node_id;
 END;

@@ -11,7 +11,15 @@ CREATE TYPE integrated_data AS (
 );
 
 CREATE TYPE action_result AS (
-    out_status BOOLEAN,
+    out_res_status BOOLEAN,
     out_message TEXT,
-    out_data integrated_data
+    out_type TEXT,           -- 'NODE' or 'WORK_ITEM'
+    out_id TEXT,
+    out_node_type TEXT,      -- 'PROJECT', 'DEPT', etc.
+    out_parent_id TEXT,
+    out_title TEXT,
+    out_status TEXT,
+    out_priority INTEGER,
+    out_extra_info TEXT,
+    out_updated_at TEXT
 );

@@ -27,7 +27,7 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
     // 2. 비지니스 로직
     auto dbClient = drogon::app().getDbClient();
     
-    std::string sql = "SELECT out_status, out_message, (out_data).* from create_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
+    std::string sql = "SELECT * from create_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)";
     
     // 필수 파라미터
     std::string requester_email = req->attributes()->get<std::string>("user_email");
@@ -61,7 +61,7 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
 
             auto row = result[0];
             
-            bool success = row["out_status"].as<bool>();
+            bool success = row["out_res_status"].as<bool>();
 
             if(success){
                 ret["status"] = "success";

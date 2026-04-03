@@ -36,9 +36,11 @@ void ContextController::getInitialContext(const HttpRequestPtr &req, std::functi
 
                 item["title"] = row["out_title"].as<std::string>();
 
-                if(item["type"].asString() == "WORK_ITEM"){
+                if(item["type"].asString() == "WORK_ITEM" || item["type"].asString() == "ROLE"){
                     item["status"] = row["out_status"].as<std::string>();
-                    item["priority"] = row["out_priority"].as<int>();
+                    if(item["type"].asString() == "WORK_ITEM"){
+                        item["priority"] = row["out_priority"].as<int>();
+                    }
                 }
 
                 if (!row["out_extra_info"].isNull()) {
@@ -105,9 +107,11 @@ void ContextController::syncContext(const HttpRequestPtr &req, std::function<voi
 
                 item["title"] = row["out_title"].as<std::string>();
 
-                if(item["type"].asString() == "WORK_ITEM"){
+                if(item["type"].asString() == "WORK_ITEM" || item["type"].asString() == "ROLE"){
                     item["status"] = row["out_status"].as<std::string>();
-                    item["priority"] = row["out_priority"].as<int>();
+                    if(item["type"].asString() == "WORK_ITEM"){
+                        item["priority"] = row["out_priority"].as<int>();
+                    }
                 }
 
                 if (!row["out_extra_info"].isNull()) {

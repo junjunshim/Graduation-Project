@@ -75,7 +75,9 @@ RETURNS SETOF integrated_data AS $$
 BEGIN
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
-        SELECT node_id FROM role_assignments WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
+        SELECT node_id 
+        FROM role_assignments 
+        WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
         
         UNION
 
@@ -96,7 +98,7 @@ BEGIN
         n.updated_at::TEXT
     FROM organization_nodes n
     WHERE n.node_id IN (SELECT node_id FROM accessible_node_ids)
-      AND n.updated_at > p_last_synced_at
+        AND n.updated_at > p_last_synced_at
 
     UNION ALL
 
@@ -112,6 +114,23 @@ BEGIN
         w.updated_at::TEXT
     FROM work_items w
     WHERE w.owner_node_id IN (SELECT node_id FROM accessible_node_ids)
-      AND w.updated_at > p_last_synced_at;
+        AND w.updated_at > p_last_synced_at
+
+    UNION ALL
+
+    SELECT 
+        'ROLE'::TEXT,
+        ra.assignment_id::TEXT,
+        NULL::TEXT,
+        ra.node_id::TEXT,
+        u.email::TEXT,
+        ra.role::TEXT,
+        NULL::INTEGER,
+        NULL::TEXT,
+        ra.updated_at::TEXT
+    FROM role_assignments ra
+    JOIN users u ON ra.user_id = u.user_id
+    WHERE ra.node_id IN (SELECT node_id FROM accessible_node_ids)
+        AND ra.updated_at > p_last_synced_at;
 END;
 $$ LANGUAGE plpgsql;

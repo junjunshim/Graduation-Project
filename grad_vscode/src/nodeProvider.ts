@@ -52,8 +52,8 @@ export class GradNodeProvider implements vscode.TreeDataProvider<NodeItem> {
             // 2. 하위 노드 호출 (자식 찾기)
             console.log(`자식 노드 찾는 중... 부모 ID: ${element.nodeId}`);
             const children = this.allNodes.filter(item => 
-                String(item.parent_id) === String(element.nodeId)
-                // 여기서 item.type === 'NODE' 조건을 빼면 WORK_ITEM도 같이 나옵니다!
+                String(item.parent_id) === String(element.nodeId) &&
+                (item.type === 'NODE' || item.type === 'WORK_ITEM')
             );
             console.log(`${element.label}의 자식 개수:`, children.length);
 
@@ -72,24 +72,56 @@ export class GradNodeProvider implements vscode.TreeDataProvider<NodeItem> {
     }
 
     private mapToNodeItem(item: any): NodeItem {
-        const hasChildren = this.allNodes.some(n => String(n.parent_id) === String(item.id));
+        const hasChildren = this.allNodes.some(n => 
+            String(n.parent_id) === String(item.id) &&
+            (n.type === 'NODE' || n.type === 'WORK_ITEM')
+        );
         
-        // 아이템 타입에 따라 아이콘을 다르게 주면 훨씬 보기 좋습니다.
         const treeItem = new NodeItem(
             item.title || "이름 없음", 
             hasChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
-            String(item.id)
+            String(item.id),
         );
 
-        // WORK_ITEM일 경우 아이콘 변경 (VS Code 내장 아이콘 사용)
-        if (item.type === 'WORK_ITEM') {
-            treeItem.iconPath = new vscode.ThemeIcon('checklist'); // 체크리스트 아이콘
-            treeItem.contextValue = 'workitem';
-        } else {
-            treeItem.iconPath = new vscode.ThemeIcon('organization'); // 부서는 빌딩 아이콘
+        // 3. 타입에 따른 분기 처리
+        if (item.type === 'NODE') {
+            
         }
 
+        if (item.type === 'WORK_ITEM') {
+            treeItem.iconPath = new vscode.ThemeIcon('checklist');
+            treeItem.contextValue = 'workitem';
+
+            // [업무 클릭 시] 부모 노드의 ID를 인자로 넘깁니다.
+            (treeItem as any).command = {
+                command: 'grad-vscode.showMembers',
+                title: '멤버 보기',
+                // 업무의 경우 '부모의 이름'과 '부모의 ID'를 넘겨서 멤버를 찾게 합니다.
+                // (참고: item.parent_id가 부모 노드의 ID입니다)
+                arguments: [item.title, String(item.parent_id), true] // 세 번째 인자는 업무 여부 플래그
+            };
+        } 
+        else {
+            treeItem.iconPath = new vscode.ThemeIcon('organization');
+            treeItem.contextValue = 'node';
+
+            // [노드 클릭 시] 자기 자신의 ID를 넘깁니다.
+            (treeItem as any).command = {
+                command: 'grad-vscode.showMembers',
+                title: '멤버 보기',
+                arguments: [item.title, String(item.id), false]
+            };
+        }
+
+
         return treeItem;
+    }
+
+    // 특정 노드에 속한 멤버(ROLE)들만 반환하는 도우미 함수
+    public getMembersForNode(nodeId: string): any[] {
+        return this.allNodes.filter(item => 
+            item.type === 'ROLE' && String(item.parent_id) === String(nodeId)
+        );
     }
 }
 

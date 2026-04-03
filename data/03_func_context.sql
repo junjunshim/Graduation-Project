@@ -8,7 +8,9 @@ RETURNS SETOF integrated_data AS $$
 BEGIN
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
-        SELECT node_id FROM role_assignments WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
+        SELECT node_id 
+        FROM role_assignments 
+        WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
         
         UNION
 
@@ -43,7 +45,23 @@ BEGIN
         w.parent_work_item_id::TEXT,
         w.updated_at::TEXT
     FROM work_items w
-    WHERE w.owner_node_id IN (SELECT node_id FROM accessible_node_ids);
+    WHERE w.owner_node_id IN (SELECT node_id FROM accessible_node_ids)
+
+    UNION ALL
+
+    SELECT 
+        'ROLE'::TEXT,
+        ra.assignment_id::TEXT,
+        NULL::TEXT,
+        ra.node_id::TEXT,
+        u.email::TEXT,
+        ra.role::TEXT,
+        NULL::INTEGER,
+        NULL::TEXT,
+        ra.updated_at::TEXT
+    FROM role_assignments ra
+    JOIN users u ON ra.user_id = u.user_id
+    WHERE ra.node_id IN (SELECT node_id FROM accessible_node_ids);
 END;
 $$ LANGUAGE plpgsql;
 

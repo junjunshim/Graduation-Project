@@ -1,4 +1,4 @@
-# 사용자 데이터 동기화 api (version 1.1)
+# 사용자 데이터 동기화 api (version 1.1.1)
 - 사용자의 마지막 업데이트 시점 이후의 변경 데이터를 조회하는 api
 ## Request
 - Request syntax
@@ -57,6 +57,15 @@
             "priority" : 1,
             "extra_info" : "WI-2" 또는 없음,
             "updated_at" : "2026-03-19 12:29:24.745634+00"
+        },
+        # 데이터가 role일때
+        {
+            "type" : "ROLE",
+            "id" : "11",
+            "parent_id" : "1",
+            "title" : "test123@gmail.com",
+            "status" : "ADMIN",
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
         }
     ]
 }
@@ -81,12 +90,13 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 노드 또는 work_item 식별 id|
-| parent_id | String | 선택 | 부모 노드 또는 소속 노드 id |
-| title | String | 필수 | 노드 또는 work_item 이름 |
-| status | String | 선택 | work_item 상태 |
+| id | String | 필수 | 노드 or work_item or role 식별 id|
+| node_type | String | 선택 | node의 type | 
+| parent_id | String | 선택 | 부모 노드 or 소속 노드 id |
+| title | String | 필수 | 노드 or work_item 이름 or 권한의 사용자 이메일|
+| status | String | 선택 | work_item 상태 or 권한 이름 |
 | priority | Integer | 선택 | work_item 우선순위 |
-| extra_info | String | 선택 | 노드의 path 또는 work_item의 부모 id |
+| extra_info | String | 선택 | 노드의 path or work_item의 부모 id |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 
 - 설명<br>
@@ -99,6 +109,10 @@
 ### version 1.0 : 서버와 데이터베이스 연결 여부 확인용
 - 개선 사항 : token 기능을 추가하여 매개변수로 user_id을 받지 않게 변경 and last_synced_at 파라미터를 url에 포함하여 get 방식으로 변경, 아직 삭제된 데이터에 대해서는 추적 불가능
 
-### version 1.1 : token 기능 추가한 버전
+### version 1.1.0 : token 기능 추가한 버전
 - 변경 사항 : 기존 user_id를 넘기는 방식에서 token을 사용한 사용자 인증으로 변경, HttpMethod를 Get 방식으로 변경
 - 개선 사항 : 삭제된 데이터에 대한 동기화 필요, role 데이터 추가
+
+### version 1.1.1 : 반환 데이터에 ROLE 추가, NODE 타입 데이터의 node_type 값 반환
+- 변경 사항 : ROLE 데이터도 반환하도록 변경, NODE 타입 데이터의 node_type데이터도 반환하도록 변경
+- 개선 사항 : 삭제된 데이터에 대한 동기화 필요

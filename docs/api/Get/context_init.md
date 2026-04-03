@@ -1,4 +1,4 @@
-# 사용자 전체 정보 조회 api (version 1.1.1)
+# 사용자 전체 정보 조회 api (version 1.1.2)
 - 사용자가 속한 노드와 해당 노드의 모든 work_item를 조회하는 api
 ## Request
 - Request syntax
@@ -54,6 +54,15 @@
             "priority" : 1,
             "extra_info" : "WI-2" 또는 없음,
             "updated_at" : "2026-03-19 12:29:24.745634+00"
+        },
+        # 데이터가 role일때
+        {
+            "type" : "ROLE",
+            "id" : "11",
+            "parent_id" : "1",
+            "title" : "test123@gmail.com",
+            "status" : "ADMIN",
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
         }
     ]
 }
@@ -78,13 +87,13 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 노드 또는 work_item 식별 id|
+| id | String | 필수 | 노드 or work_item or role 식별 id|
 | node_type | String | 선택 | node의 type | 
-| parent_id | String | 선택 | 부모 노드 또는 소속 노드 id |
-| title | String | 필수 | 노드 또는 work_item 이름 |
-| status | String | 선택 | work_item 상태 |
+| parent_id | String | 선택 | 부모 노드 or 소속 노드 id |
+| title | String | 필수 | 노드 or work_item 이름 or 권한의 사용자 이메일|
+| status | String | 선택 | work_item 상태 or 권한 이름 |
 | priority | Integer | 선택 | work_item 우선순위 |
-| extra_info | String | 선택 | 노드의 path 또는 work_item의 부모 id |
+| extra_info | String | 선택 | 노드의 path or work_item의 부모 id |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 
 - 설명<br>
@@ -103,3 +112,7 @@
 ### version 1.1.1 : NODE 타입 데이터의 node_type 값 반환
 - 변경 사항 : NODE 타입 데이터의 node_type데이터도 반환하도록 변경
 - 개선 사항 : 화면 구성에 role 데이터도 필요
+
+### version 1.1.2 : 반환 데이터에 ROLE 추가
+- 변경 사항 : ROLE 데이터도 반환하도록 변경
+- 개선 사항 : 

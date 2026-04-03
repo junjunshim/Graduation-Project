@@ -34,6 +34,12 @@
           "name": "Workflow",
           "when": "grad:isLoggedIn",
           "icon": "$(organization)"
+        },
+        {
+          "type": "webview",
+          "id": "grad-member-view",
+          "name": "Members",
+          "when": "grad:isLoggedIn"
         }
       ]
     },
@@ -54,7 +60,8 @@
     "commands": [
       { "command": "grad-vscode.login", "title": "Grad: Login" },
       { "command": "grad-vscode.logout", "title": "Grad: Logout", "icon": "$(sign-out)" },
-      { "command": "grad-nodes-view.refreshEntry", "title": "Refresh", "icon": "$(refresh)" }
+      { "command": "grad-nodes-view.refreshEntry", "title": "Refresh", "icon": "$(refresh)" },
+      { "command": "grad-vscode.showMembers", "title": "Show Members" }
     ]
   },
   "scripts": {

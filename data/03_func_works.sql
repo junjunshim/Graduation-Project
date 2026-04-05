@@ -156,3 +156,112 @@ BEGIN
     WHERE w.work_item_id = p_work_item_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- WorkItemController::updateWorkItem
+CREATE OR REPLACE FUNCTION update_work_item(
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE,
+    p_title work_items.title%TYPE DEFAULT NULL,
+    p_description work_items.description%TYPE DEFAULT NULL,
+    p_status work_items.status%TYPE DEFAULT NULL,
+    p_priority work_items.priority%TYPE DEFAULT -1,
+    p_weight work_items.weight%TYPE DEFAULT -1,
+    p_progress work_items.progress%TYPE DEFAULT -1,
+    p_start_date VARCHAR DEFAULT NULL,
+    p_due_date VARCHAR DEFAULT NULL
+) RETURNS SETOF action_result AS $$
+DECLARE
+    v_requester_id  users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+BEGIN
+    -- 1. 요청자의 user_id 가져오기
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+
+    IF v_requester_id IS NULL THEN
+        RETURN QUERY SELECT 
+            FALSE, 
+            '사용자를 찾을 수 없습니다.'::TEXT, 
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            NULL::TEXT,
+            NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 2. work_item 존재 여부 확인
+    IF NOT EXISTS (SELECT 1 FROM work_items WHERE work_item_id = p_work_item_id) THEN
+        RETURN QUERY SELECT 
+            FALSE, 
+            '업무를 찾을 수 없습니다.'::TEXT, 
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            NULL::TEXT,
+            NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 3. 요청자의 권한 확인 (업무의 owner_user_id와 일치하거나, 업무가 속한 노드에 대한 ADMIN/ MANAGER 권한 필요)
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM work_items w
+        JOIN role_assignments ra ON ra.node_id = w.owner_node_id
+        WHERE w.work_item_id = p_work_item_id                              
+          AND (w.owner_user_id = v_requester_id OR ra.user_id = v_requester_id AND ra.role IN ('ADMIN', 'MANAGER'))
+    ) THEN
+        RETURN QUERY SELECT 
+            FALSE, 
+            '업무를 수정할 권한이 없습니다.'::TEXT, 
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            NULL::TEXT,
+            NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 4. work_item 업데이트
+    UPDATE work_items
+    SET
+        title = COALESCE(NULLIF(p_title, ''), title),
+        description = COALESCE(NULLIF(p_description, ''), description),
+        status = COALESCE(NULLIF(p_status, ''), status),
+        priority = CASE WHEN p_priority >= 1 AND p_priority <= 5 THEN p_priority ELSE priority END,
+        weight = CASE WHEN p_weight >= 0 THEN p_weight ELSE weight END,
+        progress = CASE WHEN p_progress >= 0 AND p_progress <= 100 THEN p_progress ELSE progress END,
+        start_date = COALESCE(NULLIF(p_start_date, '')::DATE, start_date),
+        due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date)
+    WHERE work_item_id = p_work_item_id;
+
+    -- 5. 업데이트된 work_item 반환
+    RETURN QUERY
+    SELECT
+        TRUE,
+        'Work Item이 업데이트되었습니다.'::TEXT,
+        'WORK_ITEM'::TEXT,
+        w.work_item_id::TEXT,
+        NULL::TEXT,
+        w.owner_node_id::TEXT,
+        w.title::TEXT,
+        w.status::TEXT,
+        w.priority::INTEGER,
+        w.parent_work_item_id::TEXT,
+        w.updated_at::TEXT
+    FROM work_items w
+    WHERE w.work_item_id = p_work_item_id;
+END;
+$$ LANGUAGE plpgsql;

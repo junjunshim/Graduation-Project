@@ -2,26 +2,26 @@
 
 -- WorkItemController::createWorkItem
 CREATE OR REPLACE FUNCTION create_work_item(
-    p_requester_email VARCHAR,
-    p_work_item_id VARCHAR,
-    p_owner_node_id INTEGER,
-    p_owner_user_email VARCHAR,
-    p_title VARCHAR,
-    p_parent_work_item_id VARCHAR DEFAULT NULL,
-    p_description TEXT DEFAULT NULL,
-    p_status VARCHAR DEFAULT 'todo',
-    p_priority INTEGER DEFAULT 3,
-    p_weight INTEGER DEFAULT 1,
-    p_progress INTEGER DEFAULT 0,
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE,
+    p_owner_node_id organization_nodes.node_id%TYPE,
+    p_owner_user_email users.email%TYPE,
+    p_title work_items.title%TYPE,
+    p_parent_work_item_id work_items.parent_work_item_id%TYPE DEFAULT NULL,
+    p_description work_items.description%TYPE DEFAULT NULL,
+    p_status work_items.status%TYPE DEFAULT 'todo',
+    p_priority work_items.priority%TYPE DEFAULT 3,
+    p_weight work_items.weight%TYPE DEFAULT 1,
+    p_progress work_items.progress%TYPE DEFAULT 0,
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL
 ) RETURNS SETOF action_result AS $$
 DECLARE
-    v_requester_id VARCHAR;
-    v_owner_user_id VARCHAR;
-    v_requester_role VARCHAR;
-    v_owner_user_role VARCHAR;
-    v_requester_parent_role VARCHAR;
+    v_requester_id users.user_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_requester_role role_assignments.role%TYPE;
+    v_owner_user_role role_assignments.role%TYPE;
+    v_requester_parent_role role_assignments.role%TYPE;
 BEGIN
     -- 1. 요청자와 대상자의 user_id 가져오기
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;

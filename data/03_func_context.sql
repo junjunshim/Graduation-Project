@@ -2,7 +2,7 @@
 
 -- ContextController::getInitialContext
 CREATE OR REPLACE FUNCTION get_initial_context(
-    p_user_email VARCHAR
+    p_user_email users.email%TYPE
 ) 
 RETURNS SETOF integrated_data AS $$
 BEGIN
@@ -68,7 +68,7 @@ $$ LANGUAGE plpgsql;
 
 -- ContextController::syncContext
 CREATE OR REPLACE FUNCTION sync_context(
-    p_user_email VARCHAR,
+    p_user_email users.email%TYPE,
     p_last_synced_at TIMESTAMP
 ) 
 RETURNS SETOF integrated_data AS $$

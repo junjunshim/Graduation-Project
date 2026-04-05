@@ -2,16 +2,16 @@
 
 -- RoleController::add_role
 CREATE OR REPLACE FUNCTION add_role(
-    p_requester_email VARCHAR,
-    p_target_email VARCHAR,
-    p_node_id INTEGER,
-    p_role_name VARCHAR
+    p_requester_email users.email%TYPE,
+    p_target_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_role_name role_assignments.role%TYPE
 ) RETURNS SETOF action_result AS $$
 DECLARE
-    v_requester_id VARCHAR;
-    v_target_id VARCHAR;
-    v_requester_role VARCHAR;
-    v_new_id INTEGER;
+    v_requester_id users.user_id%TYPE;
+    v_target_id users.user_id%TYPE;
+    v_requester_role role_assignments.role%TYPE;
+    v_new_id role_assignments.assignment_id%TYPE;
 BEGIN
     -- 1. 요청자와 대상자의 user_id 가져오기
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;

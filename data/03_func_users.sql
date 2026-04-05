@@ -2,13 +2,13 @@
 
 -- UserController::register_user
 CREATE OR REPLACE FUNCTION register_user(
-    p_user_id VARCHAR,
-    p_email VARCHAR,
-    p_name VARCHAR,
-    p_password_hash TEXT
+    p_user_id users.user_id%TYPE,
+    p_email users.email%TYPE,
+    p_name users.name%TYPE,
+    p_password_hash users.password_hash%TYPE
 ) RETURNS VOID AS $$
 DECLARE
-    v_new_node_id INTEGER;
+    v_new_node_id organization_nodes.node_id%TYPE;
 BEGIN
     -- 1. 유저 생성
     INSERT INTO users (user_id, email, name, password_hash)
@@ -40,19 +40,19 @@ $$ LANGUAGE plpgsql;
 
 -- AuthController::loginUser
 CREATE OR REPLACE FUNCTION login_user (
-    p_email VARCHAR,
-    p_password TEXT,
-    p_refresh_token TEXT,
-    p_refresh_expiry TIMESTAMP
+    p_email users.email%TYPE,
+    p_password_hash users.password_hash%TYPE,
+    p_refresh_token user_refresh_tokens.refresh_token%TYPE,
+    p_refresh_expiry user_refresh_tokens.expires_at%TYPE
 ) 
 RETURNS TABLE (
     status BOOLEAN,
     message TEXT
 ) AS $$
 DECLARE
-    v_user_password TEXT;
+    v_user_password_hash users.password_hash%TYPE;
 BEGIN
-    SELECT password_hash INTO v_user_password
+    SELECT password_hash INTO v_user_password_hash
     FROM users
     WHERE email = p_email;
 
@@ -61,7 +61,7 @@ BEGIN
         RETURN;
     END IF;
 
-    IF v_user_password <> p_password THEN
+    IF v_user_password_hash <> p_password_hash THEN
         RETURN QUERY SELECT FALSE, '비밀번호가 일치하지 않습니다.'::TEXT;
         RETURN;
     END IF;

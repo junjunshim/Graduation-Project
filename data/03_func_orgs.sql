@@ -2,14 +2,14 @@
 
 -- OrgController::createTopNode
 CREATE OR REPLACE FUNCTION create_top_node(
-    p_email VARCHAR,
-    p_node_type VARCHAR,
-    p_name VARCHAR,
-    p_role_name VARCHAR DEFAULT 'ADMIN'
+    p_email users.email%TYPE,
+    p_node_type organization_nodes.node_type%TYPE,
+    p_name organization_nodes.name%TYPE,
+    p_role_name role_assignments.role%TYPE DEFAULT 'ADMIN'
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
-    v_user_id VARCHAR;
-    v_new_node_id INTEGER;
+    v_user_id users.user_id%TYPE;
+    v_new_node_id organization_nodes.node_id%TYPE;
 BEGIN
     -- 1. 사용자 id 가져오기
     SELECT user_id INTO v_user_id FROM users WHERE email = p_email;
@@ -50,19 +50,19 @@ $$ LANGUAGE plpgsql;
 
 -- OrgController::createSubNode
 CREATE OR REPLACE FUNCTION create_sub_node(
-    p_requester_email VARCHAR,
-    p_node_type VARCHAR,
-    p_parent_node_id INTEGER,
-    p_name VARCHAR,
-    p_owner_user_email VARCHAR,
-    p_role_name VARCHAR
+    p_requester_email users.email%TYPE,
+    p_node_type organization_nodes.node_type%TYPE,
+    p_parent_node_id organization_nodes.node_id%TYPE,
+    p_name organization_nodes.name%TYPE,
+    p_owner_user_email users.email%TYPE,
+    p_role_name role_assignments.role%TYPE
 ) RETURNS SETOF action_result AS $$
 DECLARE
-    v_requester_id VARCHAR;
-    v_owner_user_id VARCHAR;
-    v_requester_role VARCHAR;
-    v_new_node_id INTEGER;
-    v_parent_path INTEGER[];
+    v_requester_id users.user_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_requester_role role_assignments.role%TYPE;
+    v_new_node_id organization_nodes.node_id%TYPE;
+    v_parent_path organization_nodes.path%TYPE;
 BEGIN
     -- 1. 사용자 id 가져오기
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;

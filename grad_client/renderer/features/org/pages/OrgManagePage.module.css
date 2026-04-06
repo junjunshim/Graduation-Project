@@ -220,6 +220,12 @@
   font-weight: 700;
 }
 
+.treeBadge,
+.statusBadge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .treeBadge {
   background: var(--surface-panel-muted);
   color: var(--text-secondary);

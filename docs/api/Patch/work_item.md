@@ -34,14 +34,14 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | work_item_id | String | 필수 | 식별용 id |
-| title | String | 필수 | work_item 이름 |
-| description | String | 선택 | work_item 설명 |
-| status | String | 선택 | 현재 상태(todo, end 등등) |
-| priority | Integer | 선택 | 우선순위 |
-| weight | Integer | 선택 | 가중치 |
-| progress | Integer | 선택 | 진행도 |
-| start_date | DATE | 선택 | 시작 날짜 |
-| due_date | DATE | 선택 | 마감 날짜 |
+| title | String | 선택 | 변경할 work_item 이름 |
+| description | String | 선택 | 변경할 work_item 설명 |
+| status | String | 선택 | 변경할 현재 상태(todo, end 등등) |
+| priority | Integer | 선택 | 변경할 우선순위 |
+| weight | Integer | 선택 | 변경할 가중치 |
+| progress | Integer | 선택 | 변경할 진행도 |
+| start_date | DATE | 선택 | 변경할 시작 날짜 |
+| due_date | DATE | 선택 | 변경할 마감 날짜 |
 
 ---
 

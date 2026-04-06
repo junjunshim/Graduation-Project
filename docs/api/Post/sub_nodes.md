@@ -76,7 +76,7 @@
 | id | String | 필수 | 노드 식별 id |
 | parent_id | String | 필수 | 부모 노드 id |
 | title | String | 필수 | 노드 또는 work_item 이름 |
-| extra_info | String | 선택 | 노드의 path |
+| extra_info | String | 필수 | 노드의 path |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 
 

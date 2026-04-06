@@ -89,10 +89,10 @@
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 |
 | id | String | 필수 | work_item 식별 id|
-| parent_id | String | 선택 | 소속 노드 id |
+| parent_id | String | 필수 | 소속 노드 id |
 | title | String | 필수 | work_item 이름 |
-| status | String | 선택 | work_item 상태 |
-| priority | Integer | 선택 | work_item 우선순위 |
+| status | String | 필수 | work_item 상태 |
+| priority | Integer | 필수 | work_item 우선순위 |
 | extra_info | String | 선택 | work_item의 부모 id |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 

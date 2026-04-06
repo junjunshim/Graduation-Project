@@ -90,7 +90,7 @@
 | id | String | 필수 | 노드 or work_item or role 식별 id|
 | node_type | String | 선택 | node의 type | 
 | parent_id | String | 선택 | 부모 노드 or 소속 노드 id |
-| title | String | 필수 | 노드 or work_item 이름 or 권한의 사용자 이메일|
+| title | String | 필수 | 노드 or work_item 이름 or 권한의 사용자 이메일 |
 | status | String | 선택 | work_item 상태 or 권한 이름 |
 | priority | Integer | 선택 | work_item 우선순위 |
 | extra_info | String | 선택 | 노드의 path or work_item의 부모 id |

@@ -46,7 +46,11 @@ export function AuthPageLayout({
 
   return (
     <main className={[styles.page, hasCustomTitleBar ? styles.pageWithCustomChrome : ''].filter(Boolean).join(' ')}>
-      {hasCustomTitleBar ? <WindowTitleBar variant="auth" contextLabel={formEyebrow} /> : null}
+      {hasCustomTitleBar ? (
+        <div className={styles.titleBarSlot}>
+          <WindowTitleBar variant="auth" contextLabel={formEyebrow} />
+        </div>
+      ) : null}
       <div className={styles.pageInner}>
         <header className={styles.topBar}>
           <div className={styles.brandBlock}>

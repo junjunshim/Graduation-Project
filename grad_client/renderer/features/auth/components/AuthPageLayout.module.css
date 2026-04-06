@@ -5,10 +5,15 @@
 }
 
 .pageWithCustomChrome {
-  grid-template-rows: var(--window-titlebar-height) 1fr;
+  grid-template-rows: var(--window-titlebar-height) minmax(0, 1fr);
+}
+
+.titleBarSlot {
+  min-height: var(--window-titlebar-height);
 }
 
 .pageInner {
+  min-width: 0;
   padding: 1.5rem;
 }
 

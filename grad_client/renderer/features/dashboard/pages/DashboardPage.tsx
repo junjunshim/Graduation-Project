@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
@@ -5,6 +6,54 @@ import { getNodeTypeLabel, getWorkItemStatusLabel, getWorkItemStatusTone } from 
 import { formatWorkspaceDate } from '../../workspace/model/formatters'
 import type { WorkspaceNodeView, WorkItemRecord } from '../../workspace/model/types'
 import styles from './DashboardPage.module.css'
+
+const WIDE_LAYOUT_BREAKPOINT = 1100
+const DEFAULT_URGENT_WORK_ITEM_COUNT = 5
+
+type DashboardSection = {
+  id: string
+  estimatedHeight: number
+  content: ReactNode
+}
+
+function readIsWideLayout() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.innerWidth > WIDE_LAYOUT_BREAKPOINT
+}
+
+function estimateSectionHeight(itemCount: number, minimumRows = 1) {
+  return 2 + Math.max(itemCount, minimumRows)
+}
+
+function distributeSections(sections: DashboardSection[], leftBaseHeight: number, rightBaseHeight: number) {
+  const leftSections: DashboardSection[] = []
+  const rightSections: DashboardSection[] = []
+  let leftHeight = leftBaseHeight
+  let rightHeight = rightBaseHeight
+
+  sections.forEach((section) => {
+    if (leftHeight <= rightHeight) {
+      leftSections.push(section)
+      leftHeight += section.estimatedHeight
+      return
+    }
+
+    rightSections.push(section)
+    rightHeight += section.estimatedHeight
+  })
+
+  return {
+    leftSections,
+    rightSections,
+  }
+}
+
+function renderSections(sections: DashboardSection[]) {
+  return sections.map((section) => <Fragment key={section.id}>{section.content}</Fragment>)
+}
 
 function NodeTree({ node }: { node: WorkspaceNodeView }) {
   return (
@@ -58,6 +107,24 @@ function WorkItemRow({ item }: { item: WorkItemRecord }) {
 
 export function DashboardPage() {
   const currentUser = getCurrentUser()
+  const [isWideLayout, setIsWideLayout] = useState(readIsWideLayout)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const syncLayout = () => {
+      setIsWideLayout(readIsWideLayout())
+    }
+
+    syncLayout()
+    window.addEventListener('resize', syncLayout)
+
+    return () => {
+      window.removeEventListener('resize', syncLayout)
+    }
+  }, [])
 
   if (!currentUser) {
     return null
@@ -65,6 +132,11 @@ export function DashboardPage() {
 
   const overview = getWorkspaceOverview(currentUser.userId)
   const workspaceName = overview.rootNode?.name ?? '워크스페이스'
+  const visibleOrgRoots = overview.roots.filter((node) => node.nodeType !== 'USER')
+  const visibleUrgentWorkItemCount = isWideLayout
+    ? Math.max(DEFAULT_URGENT_WORK_ITEM_COUNT, overview.summary.orgNodeCount)
+    : DEFAULT_URGENT_WORK_ITEM_COUNT
+  const visibleUrgentWorkItems = overview.urgentWorkItems.slice(0, visibleUrgentWorkItemCount)
   const summaryCards = [
     { label: '공유 조직', value: overview.summary.orgNodeCount, description: '운영 중인 조직 수' },
     { label: '전체 업무', value: overview.summary.workItemCount, description: '현재 조회 가능한 업무' },
@@ -127,69 +199,63 @@ export function DashboardPage() {
     )
   }
 
-  return (
-    <section className={styles.page}>
-      <header className={styles.pageIntro}>
-        <p className={styles.eyebrow}>Workspace Overview</p>
-        <h2 className={styles.title}>{workspaceName} 운영 현황</h2>
-        <p className={styles.description}>
-          조직 트리, 최근 등록 업무, 주요 담당자 정보를 문서처럼 정리한 개요 화면입니다.
-        </p>
-      </header>
-
-      <section className={styles.metricsGrid}>
-        {summaryCards.map((card) => (
-          <article key={card.label} className={styles.metricCard}>
-            <p className={styles.metricLabel}>{card.label}</p>
-            <strong className={styles.metricValue}>{card.value}</strong>
-            <p className={styles.metricDescription}>{card.description}</p>
-          </article>
-        ))}
-      </section>
-
-      <div className={styles.primaryGrid}>
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <p className={styles.sectionEyebrow}>Database</p>
-              <h3 className={styles.sectionTitle}>조직 현황</h3>
-            </div>
-            <Link to="/org/manage" className={styles.inlineLink}>
-              조직 관리
-            </Link>
+  const orgSection: DashboardSection = {
+    id: 'org-overview',
+    estimatedHeight: estimateSectionHeight(overview.summary.orgNodeCount),
+    content: (
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <p className={styles.sectionEyebrow}>Database</p>
+            <h3 className={styles.sectionTitle}>조직 현황</h3>
           </div>
+          <Link to="/org/manage" className={styles.inlineLink}>
+            조직 관리
+          </Link>
+        </div>
 
+        <div className={styles.treeViewport}>
           <ul className={styles.tree}>
-            {overview.roots
-              .filter((node) => node.nodeType !== 'USER')
-              .map((node) => (
-                <NodeTree key={node.id} node={node} />
-              ))}
+            {visibleOrgRoots.map((node) => (
+              <NodeTree key={node.id} node={node} />
+            ))}
           </ul>
-        </section>
+        </div>
+      </section>
+    ),
+  }
 
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <p className={styles.sectionEyebrow}>Priority</p>
-              <h3 className={styles.sectionTitle}>우선 확인할 업무</h3>
-            </div>
-            <Link to="/work-items/new" className={styles.inlineLink}>
-              새 업무
-            </Link>
+  const prioritySection: DashboardSection = {
+    id: 'priority-work-items',
+    estimatedHeight: estimateSectionHeight(visibleUrgentWorkItems.length),
+    content: (
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <p className={styles.sectionEyebrow}>Priority</p>
+            <h3 className={styles.sectionTitle}>우선 확인할 업무</h3>
           </div>
+          <Link to="/work-items/new" className={styles.inlineLink}>
+            새 업무
+          </Link>
+        </div>
 
-          <div className={styles.databaseList}>
-            {overview.urgentWorkItems.length > 0 ? (
-              overview.urgentWorkItems.map((item) => <WorkItemRow key={item.workItemId} item={item} />)
-            ) : (
-              <p className={styles.emptyState}>등록된 우선 업무가 없습니다.</p>
-            )}
-          </div>
-        </section>
-      </div>
+        <div className={styles.databaseList}>
+          {visibleUrgentWorkItems.length > 0 ? (
+            visibleUrgentWorkItems.map((item) => <WorkItemRow key={item.workItemId} item={item} />)
+          ) : (
+            <p className={styles.emptyState}>등록된 우선 업무가 없습니다.</p>
+          )}
+        </div>
+      </section>
+    ),
+  }
 
-      <div className={styles.secondaryGrid}>
+  const supportingSections: DashboardSection[] = [
+    {
+      id: 'root-members',
+      estimatedHeight: estimateSectionHeight(overview.rootRoleMembers.length),
+      content: (
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <div>
@@ -216,7 +282,12 @@ export function DashboardPage() {
             )}
           </div>
         </section>
-
+      ),
+    },
+    {
+      id: 'recent-work-items',
+      estimatedHeight: estimateSectionHeight(overview.recentWorkItems.length),
+      content: (
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <div>
@@ -233,7 +304,12 @@ export function DashboardPage() {
             )}
           </div>
         </section>
-
+      ),
+    },
+    {
+      id: 'quick-actions',
+      estimatedHeight: estimateSectionHeight(3, 3),
+      content: (
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <div>
@@ -257,6 +333,50 @@ export function DashboardPage() {
             </Link>
           </div>
         </section>
+      ),
+    },
+  ]
+
+  const balancedSections = isWideLayout
+    ? distributeSections(
+        supportingSections,
+        orgSection.estimatedHeight,
+        prioritySection.estimatedHeight,
+      )
+    : {
+        leftSections: [prioritySection, ...supportingSections],
+        rightSections: [] as DashboardSection[],
+      }
+
+  const mainColumnSections = [orgSection, ...balancedSections.leftSections]
+  const sideColumnSections = isWideLayout ? [prioritySection, ...balancedSections.rightSections] : []
+
+  return (
+    <section className={styles.page}>
+      <header className={styles.pageIntro}>
+        <p className={styles.eyebrow}>Workspace Overview</p>
+        <h2 className={styles.title}>{workspaceName} 운영 현황</h2>
+        <p className={styles.description}>
+          조직 트리, 최근 등록 업무, 주요 담당자 정보를 문서처럼 정리한 개요 화면입니다.
+        </p>
+      </header>
+
+      <section className={styles.metricsGrid}>
+        {summaryCards.map((card) => (
+          <article key={card.label} className={styles.metricCard}>
+            <p className={styles.metricLabel}>{card.label}</p>
+            <strong className={styles.metricValue}>{card.value}</strong>
+            <p className={styles.metricDescription}>{card.description}</p>
+          </article>
+        ))}
+      </section>
+
+      <div className={styles.contentGrid}>
+        <div className={styles.mainColumn}>{renderSections(mainColumnSections)}</div>
+
+        {sideColumnSections.length > 0 ? (
+          <div className={styles.sideColumn}>{renderSections(sideColumnSections)}</div>
+        ) : null}
       </div>
     </section>
   )

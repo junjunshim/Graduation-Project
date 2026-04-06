@@ -99,8 +99,13 @@
 
 .manageGrid {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.1fr) minmax(19rem, 0.82fr);
+  grid-template-columns: minmax(18rem, 0.82fr) minmax(22rem, 1.08fr) minmax(18rem, 0.84fr);
   gap: 1rem;
+  align-items: start;
+}
+
+.manageGrid > * {
+  min-width: 0;
 }
 
 .documentColumn,
@@ -108,12 +113,14 @@
   display: grid;
   gap: 1rem;
   align-content: start;
+  min-width: 0;
 }
 
 .panel {
   display: grid;
   gap: 0.95rem;
   align-content: start;
+  min-width: 0;
 }
 
 .panelHeader {
@@ -132,6 +139,7 @@
 .summaryPanel {
   display: grid;
   gap: 0.45rem;
+  min-width: 0;
 }
 
 .summaryTitle {
@@ -156,23 +164,35 @@
   padding: 0;
   margin: 0;
   list-style: none;
+  min-width: 0;
+}
+
+.treePanel,
+.treeViewport {
+  min-width: 0;
+}
+
+.treeViewport {
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
 }
 
 .treeChildren {
-  margin-left: 1rem;
-  padding-left: 1rem;
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
   border-left: 1px solid var(--line-default);
 }
 
 .treeItem {
   display: grid;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .treeButton {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
   gap: 0.75rem;
   width: 100%;
   padding: 0.85rem 0.95rem;
@@ -207,6 +227,9 @@
 .callout strong,
 .nextActionItem strong {
   color: var(--text-primary);
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .treeBadge,
@@ -247,9 +270,9 @@
 }
 
 .databaseRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
   gap: 0.75rem;
   padding: 0.85rem 0.95rem;
 }
@@ -280,11 +303,22 @@
 
 .input {
   width: 100%;
+  min-width: 0;
   padding: 0.78rem 0.85rem;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-sm);
   background: var(--surface-input);
   color: var(--text-primary);
+}
+
+.summaryTitle,
+.summaryPath,
+.treeButtonMeta,
+.rowMeta,
+.calloutText,
+.nextActionItem span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .callout {
@@ -310,8 +344,24 @@
   border-color: var(--line-strong);
 }
 
-@media (max-width: 1160px) {
+@media (max-width: 1380px) {
   .manageGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+  }
+
+  .actionColumn {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1040px) {
+  .manageGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actionColumn {
+    grid-column: auto;
     grid-template-columns: 1fr;
   }
 }
@@ -322,7 +372,10 @@
   }
 
   .databaseRow,
-  .treeButton,
+  .treeButton {
+    grid-template-columns: 1fr;
+  }
+
   .panelHeader {
     flex-direction: column;
     align-items: flex-start;

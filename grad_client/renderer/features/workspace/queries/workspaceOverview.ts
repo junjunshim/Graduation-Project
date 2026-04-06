@@ -171,7 +171,7 @@ export function getWorkspaceOverview(userId = getCurrentUser()?.userId): Workspa
     visibleNodes,
     visibleWorkItems,
     roots,
-    urgentWorkItems: visibleWorkItems.slice(0, 5),
+    urgentWorkItems: [...visibleWorkItems],
     recentWorkItems: [...visibleWorkItems]
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, 4),

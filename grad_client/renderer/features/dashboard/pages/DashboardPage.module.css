@@ -41,6 +41,8 @@
   margin: 0;
   color: var(--text-secondary);
   line-height: 1.65;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .metricsGrid {
@@ -74,24 +76,31 @@
   color: var(--text-primary);
 }
 
-.primaryGrid,
-.secondaryGrid {
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(19rem, 0.92fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.contentGrid > * {
+  min-width: 0;
+}
+
+.mainColumn,
+.sideColumn {
   display: grid;
   gap: 1rem;
-}
-
-.primaryGrid {
-  grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
-}
-
-.secondaryGrid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start;
+  min-width: 0;
 }
 
 .section {
   display: grid;
   gap: 1rem;
   padding: 1rem;
+  align-content: start;
+  min-width: 0;
 }
 
 .sectionHeader {
@@ -99,6 +108,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 0.8rem;
+  min-width: 0;
 }
 
 .sectionTitle {
@@ -140,25 +150,35 @@
   padding: 0;
   margin: 0;
   list-style: none;
+  align-content: start;
+  min-width: 0;
+}
+
+.treeViewport {
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
 }
 
 .treeChildren {
-  margin-left: 1rem;
-  padding-left: 1rem;
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
   border-left: 1px solid var(--line-default);
 }
 
 .treeItem {
   display: grid;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .treeRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 0.75rem;
   padding: 0.95rem 1rem;
+  min-width: 0;
 }
 
 .nodeTitleBlock,
@@ -175,6 +195,9 @@
 .roleCopy strong,
 .actionCard strong {
   color: var(--text-primary);
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .nodeMetaBlock,
@@ -201,11 +224,12 @@
 .workItemRow,
 .roleRow,
 .onboardingItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
   gap: 0.8rem;
   padding: 0.9rem 1rem;
+  min-width: 0;
 }
 
 .workItemLink {
@@ -282,28 +306,34 @@
 
 @media (max-width: 1100px) {
   .metricsGrid,
-  .primaryGrid,
-  .secondaryGrid {
+  .contentGrid {
     grid-template-columns: 1fr;
+  }
+
+  .sectionHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .treeRow,
+  .workItemRow,
+  .roleRow,
+  .onboardingItem {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineLink {
+    width: fit-content;
+  }
+
+  .nodeMetaBlock,
+  .onboardingActions {
+    justify-content: flex-start;
   }
 }
 
 @media (max-width: 760px) {
   .page {
     padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
-  }
-
-  .sectionHeader,
-  .treeRow,
-  .workItemRow,
-  .roleRow,
-  .onboardingItem {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .nodeMetaBlock,
-  .onboardingActions {
-    justify-content: flex-start;
   }
 }

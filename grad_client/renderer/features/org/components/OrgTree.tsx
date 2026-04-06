@@ -63,7 +63,7 @@ function TreeBranch({
 
 export function OrgTree({ nodes, rootNodes, selectedNodeId, onSelect }: OrgTreeProps) {
   return (
-    <section className={styles.panel}>
+    <section className={[styles.panel, styles.treePanel].join(' ')}>
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.panelEyebrow}>Tree View</p>
@@ -71,17 +71,19 @@ export function OrgTree({ nodes, rootNodes, selectedNodeId, onSelect }: OrgTreeP
         </div>
       </div>
 
-      <ul className={styles.tree}>
-        {rootNodes.map((node) => (
-          <TreeBranch
-            key={node.id}
-            nodeId={node.id}
-            selectedNodeId={selectedNodeId}
-            onSelect={onSelect}
-            nodes={nodes}
-          />
-        ))}
-      </ul>
+      <div className={styles.treeViewport}>
+        <ul className={styles.tree}>
+          {rootNodes.map((node) => (
+            <TreeBranch
+              key={node.id}
+              nodeId={node.id}
+              selectedNodeId={selectedNodeId}
+              onSelect={onSelect}
+              nodes={nodes}
+            />
+          ))}
+        </ul>
+      </div>
     </section>
   )
 }

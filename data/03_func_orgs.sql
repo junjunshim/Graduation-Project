@@ -139,3 +139,78 @@ BEGIN
     WHERE n.node_id = v_new_node_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- OrgController::updateNode
+CREATE OR REPLACE FUNCTION update_node(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_name organization_nodes.name%TYPE,
+    p_node_type organization_nodes.node_type%TYPE
+) RETURNS SETOF action_result AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_requester_role role_assignments.role%TYPE;
+BEGIN
+    -- 1. 사용자 id 가져오기
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+
+    IF v_requester_id IS NULL THEN
+        RETURN QUERY SELECT 
+            FALSE, 
+            '사용자를 찾을 수 없습니다.'::TEXT, 
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            NULL::TEXT,
+            NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 2. 요청자 권한 확인
+    SELECT role INTO v_requester_role
+    FROM role_assignments
+    WHERE user_id = v_requester_id AND node_id = p_node_id;
+
+    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
+        RETURN QUERY SELECT 
+            FALSE, 
+            '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT, 
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            NULL::TEXT,
+            NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 3. 노드 업데이트
+    UPDATE organization_nodes
+    SET name = p_name, node_type = p_node_type
+    WHERE node_id = p_node_id;
+
+    -- 4. 업데이트된 노드 정보 즉시 반환
+    RETURN QUERY
+    SELECT 
+        TRUE,
+        '노드가 성공적으로 업데이트되었습니다.'::TEXT,
+        'NODE'::TEXT,
+        n.node_id::TEXT,
+        n.node_type::TEXT,
+        n.parent_node_id::TEXT,
+        n.name::TEXT,
+        NULL::TEXT,
+        NULL::INTEGER,
+        n.path::TEXT,
+        n.updated_at::TEXT
+    FROM organization_nodes n
+    WHERE n.node_id = p_node_id;
+END;
+$$ LANGUAGE plpgsql;

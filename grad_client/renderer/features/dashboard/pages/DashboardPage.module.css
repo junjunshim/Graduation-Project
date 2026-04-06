@@ -232,6 +232,11 @@
   font-weight: 700;
 }
 
+.statusBadge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .stepIndex {
   background: var(--surface-panel-muted);
   color: var(--text-secondary);

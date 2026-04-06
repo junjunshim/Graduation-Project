@@ -19,6 +19,7 @@ class OrgController : public drogon::HttpController<OrgController>
     
     ADD_METHOD_TO(OrgController::createTopNode, "/api/v1/org/topNodes", Post, "JwtFilter");
     ADD_METHOD_TO(OrgController::createSubNode, "/api/v1/org/subNodes", Post, "JwtFilter");
+    ADD_METHOD_TO(OrgController::updateNode, "/api/v1/org/nodes", Patch, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -27,6 +28,7 @@ class OrgController : public drogon::HttpController<OrgController>
 
     void createTopNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void createSubNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void updateNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }
 }

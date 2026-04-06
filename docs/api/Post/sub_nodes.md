@@ -14,7 +14,7 @@
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/subNodes |
+| Post | http://{서버 url}/api/v1/org/subNodes |
 
 ---
 - Request Header

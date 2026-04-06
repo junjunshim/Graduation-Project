@@ -12,7 +12,7 @@
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/topNodes |
+| Post | http://{서버 url}/api/v1/org/topNodes |
 
 ---
 - Request Header

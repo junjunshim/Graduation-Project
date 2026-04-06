@@ -1,4 +1,5 @@
 .button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -13,10 +14,72 @@
     transform 160ms ease;
 }
 
+.button::before,
+.button::after {
+  position: absolute;
+  left: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 40ms ease,
+    transform 90ms ease;
+}
+
+.button::before {
+  content: '';
+  top: calc(100% + 0.22rem);
+  width: 0.6rem;
+  height: 0.6rem;
+  border-top: 1px solid var(--line-strong);
+  border-left: 1px solid var(--line-strong);
+  background: var(--surface-panel);
+  box-shadow: -2px 2px 6px rgba(15, 23, 42, 0.04);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.button::after {
+  content: attr(data-tooltip);
+  top: calc(100% + 0.55rem);
+  z-index: 12;
+  min-width: max-content;
+  max-width: 14rem;
+  padding: 0.42rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.625rem;
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-hover);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transform: translate3d(-50%, -0.12rem, 0);
+}
+
+.button[data-tooltip='']::before,
+.button[data-tooltip='']::after,
+.button:not([data-tooltip])::before,
+.button:not([data-tooltip])::after {
+  display: none;
+}
+
 .button:hover {
   background: var(--surface-hover);
   border-color: var(--line-strong);
   transform: translateY(-1px);
+}
+
+.button:hover::before,
+.button:hover::after,
+.button:focus-visible::before,
+.button:focus-visible::after {
+  opacity: 1;
+}
+
+.button:hover::after,
+.button:focus-visible::after {
+  transform: translate3d(-50%, 0, 0);
 }
 
 .compact {

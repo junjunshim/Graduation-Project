@@ -17,7 +17,7 @@ export function ThemeToggle({ compact = false }: ThemeToggleProps) {
       className={[styles.button, compact ? styles.compact : ''].filter(Boolean).join(' ')}
       onClick={toggleTheme}
       aria-label={nextModeLabel}
-      title={nextModeLabel}
+      data-tooltip={compact ? nextModeLabel : undefined}
     >
       <span className={styles.icon}>
         <Icon name={iconName} size={16} />

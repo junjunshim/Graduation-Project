@@ -10,7 +10,9 @@ export type IconName =
   | 'sparkles'
   | 'page'
   | 'arrowRight'
+  | 'chevronLeft'
   | 'chevronRight'
+  | 'logOut'
   | 'minimize'
   | 'maximize'
   | 'restore'
@@ -79,7 +81,15 @@ const iconPaths: Record<IconName, ReactNode> = {
     </>
   ),
   arrowRight: <path d="M5 12h13M13 6l6 6-6 6" />,
+  chevronLeft: <path d="M15 6l-6 6 6 6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
+  logOut: (
+    <>
+      <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
+      <path d="M13 8l4 4-4 4" />
+      <path d="M8 12h9" />
+    </>
+  ),
   minimize: <path d="M5 12.5h14" />,
   maximize: <rect x="5.5" y="5.5" width="13" height="13" rx="1.75" />,
   restore: (

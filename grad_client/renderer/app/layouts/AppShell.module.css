@@ -3,10 +3,19 @@
   grid-template-columns: clamp(232px, 16vw, 252px) minmax(0, 1fr);
   min-height: 100vh;
   background: var(--surface-shell);
+  transition: grid-template-columns 180ms ease;
 }
 
 .shellWithCustomChrome {
   grid-template-rows: var(--window-titlebar-height) auto;
+}
+
+.shellWithCustomChrome {
+  --shell-chrome-gap: 0.45rem;
+}
+
+.shellCollapsed {
+  grid-template-columns: 5.5rem minmax(0, 1fr);
 }
 
 .titleBarSlot {
@@ -14,13 +23,27 @@
 }
 
 .sidebar {
+  --sidebar-padding: 0.85rem;
+  padding: var(--sidebar-padding);
+  border-right: 1px solid var(--line-default);
+  background: var(--surface-sidebar);
+}
+
+.sidebarInner {
+  position: sticky;
+  top: var(--sidebar-padding);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.85rem;
-  padding: 0.85rem;
-  border-right: 1px solid var(--line-default);
-  background: var(--surface-sidebar);
+}
+
+.shellWithCustomChrome .sidebar {
+  padding-top: calc(var(--sidebar-padding) + var(--shell-chrome-gap));
+}
+
+.shellWithCustomChrome .sidebarInner {
+  top: calc(var(--window-titlebar-height) + var(--sidebar-padding) + var(--shell-chrome-gap));
 }
 
 .sidebarTop,
@@ -31,16 +54,110 @@
   justify-items: stretch;
 }
 
+.brandHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
 .brandBlock {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
   justify-self: start;
+  min-width: 0;
 }
 
-.brandCopy {
-  display: grid;
-  gap: 0.05rem;
+.sidebarToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border: 1px solid var(--line-default);
+  border-radius: 0.625rem;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.sidebarToggle:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.tooltipAnchor {
+  position: relative;
+}
+
+.tooltipAnchor::before,
+.tooltipAnchor::after {
+  position: absolute;
+  top: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 40ms ease,
+    transform 90ms ease;
+}
+
+.tooltipAnchor::before {
+  content: '';
+  left: calc(100% + 0.32rem);
+  width: 0.6rem;
+  height: 0.6rem;
+  border-top: 1px solid var(--line-strong);
+  border-left: 1px solid var(--line-strong);
+  background: var(--surface-panel);
+  box-shadow: -2px -2px 6px rgba(15, 23, 42, 0.04);
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.tooltipAnchor::after {
+  content: attr(data-tooltip);
+  left: calc(100% + 0.55rem);
+  z-index: 12;
+  min-width: max-content;
+  max-width: 14rem;
+  padding: 0.42rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.625rem;
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-hover);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transform: translate3d(-0.18rem, -50%, 0);
+}
+
+.tooltipAnchor[data-tooltip='']::before,
+.tooltipAnchor[data-tooltip='']::after,
+.tooltipAnchor:not([data-tooltip])::before,
+.tooltipAnchor:not([data-tooltip])::after {
+  display: none;
+}
+
+.tooltipAnchor:hover::before,
+.tooltipAnchor:hover::after,
+.tooltipAnchor:focus-visible::before,
+.tooltipAnchor:focus-visible::after {
+  opacity: 1;
+}
+
+.tooltipAnchor:hover::after,
+.tooltipAnchor:focus-visible::after {
+  transform: translate3d(0, -50%, 0);
 }
 
 .brandMark {
@@ -57,6 +174,51 @@
   letter-spacing: 0.08em;
 }
 
+.brandMarkButton {
+  position: relative;
+  border: 1px solid transparent;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.brandMarkText,
+.brandMarkExpandIcon {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 120ms ease,
+    transform 160ms ease;
+}
+
+.brandMarkText {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.brandMarkExpandIcon {
+  opacity: 0;
+  transform: translate3d(-0.18rem, 0, 0);
+}
+
+.brandMarkButton:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-panel);
+  opacity: 0.96;
+}
+
+.brandMarkButton:focus-visible,
+.sidebarToggle:focus-visible,
+.signOutButton:focus-visible,
+.navItem:focus-visible {
+  outline: 2px solid var(--line-selected);
+  outline-offset: 2px;
+}
+
 .brandEyebrow,
 .cardEyebrow,
 .pageEyebrow {
@@ -68,21 +230,25 @@
   color: var(--text-muted);
 }
 
-.brandTitle {
-  display: block;
-  font-size: 0.95rem;
-  color: var(--text-primary);
-}
-
 .workspaceCard {
   display: grid;
   gap: 0.5rem;
   width: 100%;
+  max-height: 14rem;
   padding: 0.9rem;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-lg);
   background: var(--surface-panel);
   box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  transform-origin: top center;
+  transition:
+    opacity 120ms ease 90ms,
+    transform 180ms ease 80ms,
+    max-height 220ms ease,
+    padding 220ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .workspaceTitle {
@@ -198,6 +364,10 @@
 }
 
 .signOutButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
   width: 100%;
   min-width: 0;
   padding: 0.56rem 0.7rem;
@@ -218,6 +388,17 @@
   transform: translateY(-1px);
   border-color: var(--line-strong);
   background: var(--surface-hover);
+}
+
+.signOutIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.signOutLabel {
+  white-space: nowrap;
 }
 
 .workspace {
@@ -314,8 +495,121 @@
   background: var(--surface-page);
 }
 
+@media (min-width: 1081px) {
+  .shellCollapsed .sidebar {
+    padding-inline: 0.6rem;
+  }
+
+  .shellCollapsed .sidebarTop,
+  .shellCollapsed .sidebarBottom {
+    width: 100%;
+    justify-items: center;
+  }
+
+  .shellCollapsed .statsPanel,
+  .shellCollapsed .navCopy,
+  .shellCollapsed .signOutLabel {
+    display: none;
+  }
+
+  .shellCollapsed .workspaceCard {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-color: transparent;
+    box-shadow: none;
+    opacity: 0;
+    transform: translateY(-0.35rem) scale(0.98);
+    pointer-events: none;
+    transition:
+      opacity 80ms ease,
+      transform 120ms ease,
+      max-height 180ms ease,
+      padding 180ms ease,
+      border-color 80ms ease,
+      box-shadow 80ms ease;
+  }
+
+  .shellCollapsed .brandHeader {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .shellCollapsed .sidebar:hover .brandMarkText,
+  .shellCollapsed .brandMarkButton:focus-visible .brandMarkText {
+    opacity: 0;
+    transform: translate3d(0.12rem, 0, 0);
+  }
+
+  .shellCollapsed .sidebar:hover .brandMarkExpandIcon,
+  .shellCollapsed .brandMarkButton:focus-visible .brandMarkExpandIcon {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .shellCollapsed .navigation {
+    justify-items: center;
+  }
+
+  .shellCollapsed .navItem {
+    justify-content: center;
+    gap: 0;
+    justify-self: center;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .shellCollapsed .navIcon {
+    width: 2rem;
+    height: 2rem;
+    background: transparent;
+  }
+
+  .shellCollapsed .navItem:hover,
+  .shellCollapsed .navItem:focus-visible,
+  .shellCollapsed .signOutButton:hover,
+  .shellCollapsed .signOutButton:focus-visible {
+    border-color: var(--line-strong);
+    background: var(--surface-panel);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .shellCollapsed .brandMarkButton:hover,
+  .shellCollapsed .brandMarkButton:focus-visible {
+    border-color: transparent;
+    background: var(--text-primary);
+    color: var(--text-inverse);
+    box-shadow: var(--shadow-hover);
+    opacity: 1;
+  }
+
+  .shellCollapsed .navItemActive,
+  .shellCollapsed .navItemActive:hover {
+    border-color: var(--line-selected);
+    background: var(--surface-selected);
+    box-shadow: none;
+  }
+
+  .shellCollapsed .signOutButton {
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: 999px;
+  }
+}
+
 @media (max-width: 1080px) {
   .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .shellCollapsed {
     grid-template-columns: 1fr;
   }
 
@@ -323,6 +617,11 @@
     align-items: stretch;
     border-right: 0;
     border-bottom: 1px solid var(--line-default);
+  }
+
+  .sidebarInner {
+    position: static;
+    align-items: stretch;
   }
 
   .sidebarTop,
@@ -352,6 +651,10 @@
   .navItem {
     border: 1px solid var(--line-default);
     background: var(--surface-panel);
+  }
+
+  .sidebarToggle {
+    display: none;
   }
 }
 

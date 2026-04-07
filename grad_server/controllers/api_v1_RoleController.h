@@ -18,6 +18,7 @@ class RoleController : public drogon::HttpController<RoleController>
     // ADD_METHOD_TO(RoleController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
     ADD_METHOD_TO(RoleController::addRole, "/api/v1/roles", Post, "JwtFilter");
+    ADD_METHOD_TO(RoleController::updateRole, "/api/v1/roles", Patch, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -25,6 +26,7 @@ class RoleController : public drogon::HttpController<RoleController>
     // void your_method_name(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, double p1, int p2) const;
 
     void addRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void updateRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }
 }

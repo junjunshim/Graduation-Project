@@ -33,6 +33,8 @@
 | 구분 | Http Method | API Path | 개발현황 | MD링크 |
 | :--- | :--- | :--- | :--- | :--- |
 | 회원가입 | Post | /api/v1/users | 진행중 | [link](api/Post/sign_in.md) |
+| user 데이터 조회 | Get | /api/v1/users | 미진행 | -- |
+| user 데이터 수정 | Patch | /api/v1/users | 미진행 | -- |
 | Org 최상위 노드 | Post | /api/v1/org/topNodes | 완료 | [link](api/Post/top_nodes.md) |
 | Org 하위 노드 | Post | /api/v1/org/subNodes | 완료 | [link](api/Post/sub_nodes.md) |
 | Org 노드 수정 | Patch | /api/v1/org/nodes | 완료 | [link](api/Patch/node.md) |

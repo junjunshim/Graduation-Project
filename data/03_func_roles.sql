@@ -93,3 +93,80 @@ BEGIN
     WHERE assignment_id = v_new_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- RoleController::udpate_role
+CREATE OR REPLACE FUNCTION update_role(
+    p_requester_email users.email%TYPE,
+    p_target_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_change_role_name role_assignments.role%TYPE
+) RETURNS SETOF action_result AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_target_id users.user_id%TYPE;
+    v_requester_role role_assignments.role%TYPE;
+BEGIN
+    -- 1. 요청자와 대상자의 user_id 가져오기
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+    SELECT user_id INTO v_target_id FROM users WHERE email = p_target_email;
+
+    -- 2. 요청자의 현재 노드 권한 확인
+    SELECT role INTO v_requester_role 
+    FROM role_assignments 
+    WHERE user_id = v_requester_id AND node_id = p_node_id;
+
+    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
+        RETURN QUERY SELECT 
+            FALSE, 
+            '요청자가 해당 노드에 권한이 없습니다.'::TEXT, 
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            NULL::TEXT,
+            NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 3. 대상자의 현재 권한 확인
+    IF NOT EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id) THEN
+        RETURN QUERY SELECT 
+            FALSE, 
+            '대상자가 해당 노드에 권한이 없습니다.'::TEXT, 
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::TEXT,
+            NULL::INTEGER,
+            NULL::TEXT,
+            NULL::TEXT;
+        RETURN;
+    END IF;
+
+    -- 4. 새로운 권한 부여
+    UPDATE role_assignments
+    SET role = COALESCE(NULLIF(p_change_role_name, ''), role)
+    WHERE user_id = v_target_id AND node_id = p_node_id;
+
+    -- 5. 결과 반환
+    RETURN QUERY SELECT 
+        TRUE, 
+        '성공적으로 권한이 변경되었습니다.'::TEXT, 
+        'ROLE'::TEXT,
+        p_node_id::TEXT,
+        NULL::TEXT,
+        NULL::TEXT,
+        p_target_email::TEXT,
+        r.role::TEXT,
+        NULL::INTEGER,
+        NULL::TEXT,
+        r.updated_at::TEXT
+    FROM role_assignments r
+    WHERE user_id = v_target_id AND node_id = p_node_id;
+END;
+$$ LANGUAGE plpgsql;

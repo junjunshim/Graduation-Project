@@ -26,15 +26,21 @@ void ContextController::getInitialContext(const HttpRequestPtr &req, std::functi
                 item["type"] = row["out_type"].as<std::string>();
                 item["id"] = row["out_id"].as<std::string>();
 
+                if(!row["out_node_type"].isNull() && !row["out_node_type"].as<std::string>().empty()){
+                    item["node_type"] = row["out_node_type"].as<std::string>();
+                }
+
                 if(!row["out_parent_id"].isNull() && !row["out_parent_id"].as<std::string>().empty()){
                     item["parent_id"] = row["out_parent_id"].as<std::string>();
                 }
 
                 item["title"] = row["out_title"].as<std::string>();
 
-                if(item["type"].asString() == "WORK_ITEM"){
+                if(item["type"].asString() == "WORK_ITEM" || item["type"].asString() == "ROLE"){
                     item["status"] = row["out_status"].as<std::string>();
-                    item["priority"] = row["out_priority"].as<int>();
+                    if(item["type"].asString() == "WORK_ITEM"){
+                        item["priority"] = row["out_priority"].as<int>();
+                    }
                 }
 
                 if (!row["out_extra_info"].isNull()) {
@@ -91,15 +97,21 @@ void ContextController::syncContext(const HttpRequestPtr &req, std::function<voi
                 item["type"] = row["out_type"].as<std::string>();
                 item["id"] = row["out_id"].as<std::string>();
 
+                if(!row["out_node_type"].isNull() && !row["out_node_type"].as<std::string>().empty()){
+                    item["node_type"] = row["out_node_type"].as<std::string>();
+                }
+                
                 if(!row["out_parent_id"].isNull() && !row["out_parent_id"].as<std::string>().empty()){
                     item["parent_id"] = row["out_parent_id"].as<std::string>();
                 }
 
                 item["title"] = row["out_title"].as<std::string>();
 
-                if(item["type"].asString() == "WORK_ITEM"){
+                if(item["type"].asString() == "WORK_ITEM" || item["type"].asString() == "ROLE"){
                     item["status"] = row["out_status"].as<std::string>();
-                    item["priority"] = row["out_priority"].as<int>();
+                    if(item["type"].asString() == "WORK_ITEM"){
+                        item["priority"] = row["out_priority"].as<int>();
+                    }
                 }
 
                 if (!row["out_extra_info"].isNull()) {

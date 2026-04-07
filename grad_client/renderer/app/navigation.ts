@@ -3,17 +3,27 @@ import type { IconName } from '../design-system/primitives/Icon'
 export type NavigationItem = {
   to: string
   label: string
-  end?: boolean
+  description: string
   icon: IconName
-  section: 'workspace' | 'database'
 }
 
-export const navigationSections = [
-  { id: 'workspace', label: '워크스페이스' },
-  { id: 'database', label: '데이터베이스' },
-] as const
-
 export const navigationItems: NavigationItem[] = [
-  { to: '/', label: '홈', end: true, icon: 'home', section: 'workspace' },
-  { to: '/todos', label: '할 일', icon: 'database', section: 'database' },
+  {
+    to: '/dashboard',
+    label: '대시보드',
+    description: '운영 현황과 주요 업무 확인',
+    icon: 'home',
+  },
+  {
+    to: '/org/manage',
+    label: '조직 관리',
+    description: '조직 구조와 권한 관리',
+    icon: 'database',
+  },
+  {
+    to: '/work-items/new',
+    label: '업무 등록',
+    description: '새 업무 등록',
+    icon: 'page',
+  },
 ]

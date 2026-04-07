@@ -1,0 +1,383 @@
+.page {
+  display: grid;
+  gap: 1.25rem;
+  padding: var(--space-page-top) var(--space-page-x) var(--space-page-bottom);
+}
+
+.pageIntro,
+.emptyPanel {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 44rem;
+}
+
+.emptyPanel,
+.panel,
+.summaryPanel,
+.databaseRow,
+.treeButton,
+.nextActionItem,
+.feedback {
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.emptyPanel,
+.panel,
+.summaryPanel {
+  padding: 1rem;
+}
+
+.eyebrow,
+.panelEyebrow {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.7rem, 2.5vw, 2.35rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+}
+
+.description,
+.summaryPath,
+.rowMeta,
+.treeButtonMeta,
+.emptyState,
+.calloutText,
+.nextActionItem span {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.inlineAction,
+.submitButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.72rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: var(--text-primary);
+  color: var(--text-inverse);
+  font-weight: 600;
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+
+.inlineAction:hover,
+.submitButton:hover,
+.nextActionItem:hover {
+  transform: translateY(-1px);
+}
+
+.feedback {
+  padding: 0.82rem 0.95rem;
+}
+
+.feedbackError {
+  background: var(--accent-red-soft);
+  border-color: rgba(180, 35, 24, 0.18);
+  color: var(--accent-red);
+}
+
+.feedbackSuccess {
+  background: var(--accent-green-soft);
+  border-color: rgba(33, 115, 70, 0.16);
+  color: var(--accent-green);
+}
+
+.manageGrid {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.82fr) minmax(22rem, 1.08fr) minmax(18rem, 0.84fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.manageGrid > * {
+  min-width: 0;
+}
+
+.documentColumn,
+.actionColumn {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.panel {
+  display: grid;
+  gap: 0.95rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.panelTitle,
+.summaryTitle {
+  margin: 0.2rem 0 0;
+  color: var(--text-primary);
+}
+
+.summaryPanel {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.summaryTitle {
+  font-size: 1.15rem;
+}
+
+.summaryFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.tree,
+.treeChildren,
+.databaseList,
+.nextActionList {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.treePanel,
+.treeViewport {
+  min-width: 0;
+}
+
+.treeViewport {
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+}
+
+.treeChildren {
+  margin-left: 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--line-default);
+}
+
+.treeItem {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.treeButton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.treeButton:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.treeButtonActive,
+.treeButtonActive:hover {
+  background: var(--surface-selected);
+  border-color: var(--line-selected);
+}
+
+.treeButtonCopy,
+.rowCopy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.treeButtonCopy strong,
+.rowCopy strong,
+.callout strong,
+.nextActionItem strong {
+  color: var(--text-primary);
+  display: block;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.treeBadge,
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.34rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.treeBadge,
+.statusBadge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.treeBadge {
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.statusTodo {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.statusInProgress {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.statusDone {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.databaseRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.databaseRowLink {
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.databaseRowLink:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.label {
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.78rem 0.85rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+.summaryTitle,
+.summaryPath,
+.treeButtonMeta,
+.rowMeta,
+.calloutText,
+.nextActionItem span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.callout {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel-muted);
+}
+
+.nextActionItem {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.9rem 0.95rem;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.nextActionItem:hover {
+  background: var(--surface-hover);
+  border-color: var(--line-strong);
+}
+
+@media (max-width: 1380px) {
+  .manageGrid {
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
+  }
+
+  .actionColumn {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1040px) {
+  .manageGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actionColumn {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+  }
+
+  .databaseRow,
+  .treeButton {
+    grid-template-columns: 1fr;
+  }
+
+  .panelHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

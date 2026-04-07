@@ -1,18 +1,73 @@
-import { RouterProvider, createHashRouter } from 'react-router-dom'
-import { HomePage } from '../features/home/pages/HomePage'
-import { TodoDetailPage } from '../features/todo/pages/TodoDetailPage'
-import { TodoListPage } from '../features/todo/pages/TodoListPage'
+import { Navigate, Outlet, RouterProvider, createHashRouter } from 'react-router-dom'
+import { getCurrentUser } from '../features/auth/api'
+import { LoginPage } from '../features/auth/pages/LoginPage'
+import { SignupPage } from '../features/auth/pages/SignupPage'
+import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
+import { OrgManagePage } from '../features/org/pages/OrgManagePage'
+import { TopNodeSetupPage } from '../features/org/pages/TopNodeSetupPage'
+import { WorkItemCreatePage } from '../features/work-item/pages/WorkItemCreatePage'
+import { WorkItemDetailPage } from '../features/work-item/pages/WorkItemDetailPage'
+import { WorkItemEditPage } from '../features/work-item/pages/WorkItemEditPage'
 import { AppShell } from './layouts/AppShell'
+
+function RootEntry() {
+  const currentUser = getCurrentUser()
+
+  return <Navigate to={currentUser ? '/dashboard' : '/login'} replace />
+}
+
+function RequireSession() {
+  const currentUser = getCurrentUser()
+
+  if (!currentUser) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <Outlet />
+}
+
+function GuestOnly() {
+  const currentUser = getCurrentUser()
+
+  if (currentUser) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <Outlet />
+}
 
 const router = createHashRouter([
   {
     path: '/',
-    element: <AppShell />,
+    element: <RootEntry />,
+  },
+  {
+    element: <GuestOnly />,
     children: [
-      { index: true, element: <HomePage /> },
-      { path: 'todos', element: <TodoListPage /> },
-      { path: 'todos/:todoId', element: <TodoDetailPage /> },
+      { path: '/login', element: <LoginPage /> },
+      { path: '/signup', element: <SignupPage /> },
     ],
+  },
+  {
+    element: <RequireSession />,
+    children: [
+      {
+        path: '/',
+        element: <AppShell />,
+        children: [
+          { path: '/dashboard', element: <DashboardPage /> },
+          { path: '/setup/top-node', element: <TopNodeSetupPage /> },
+          { path: '/org/manage', element: <OrgManagePage /> },
+          { path: '/work-items/new', element: <WorkItemCreatePage /> },
+          { path: '/work-items/:workItemId', element: <WorkItemDetailPage /> },
+          { path: '/work-items/:workItemId/edit', element: <WorkItemEditPage /> },
+        ],
+      },
+    ],
+  },
+  {
+    path: '*',
+    element: <Navigate to="/" replace />,
   },
 ])
 

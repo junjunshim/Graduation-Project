@@ -10,7 +10,15 @@ export type IconName =
   | 'sparkles'
   | 'page'
   | 'arrowRight'
+  | 'chevronLeft'
   | 'chevronRight'
+  | 'logOut'
+  | 'minimize'
+  | 'maximize'
+  | 'restore'
+  | 'close'
+  | 'moon'
+  | 'sun'
 
 type IconProps = SVGProps<SVGSVGElement> & {
   name: IconName
@@ -73,7 +81,43 @@ const iconPaths: Record<IconName, ReactNode> = {
     </>
   ),
   arrowRight: <path d="M5 12h13M13 6l6 6-6 6" />,
+  chevronLeft: <path d="M15 6l-6 6 6 6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
+  logOut: (
+    <>
+      <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
+      <path d="M13 8l4 4-4 4" />
+      <path d="M8 12h9" />
+    </>
+  ),
+  minimize: <path d="M5 12.5h14" />,
+  maximize: <rect x="5.5" y="5.5" width="13" height="13" rx="1.75" />,
+  restore: (
+    <>
+      <path d="M9 9h9.5v9.5H9z" />
+      <path d="M6 15V6h9" />
+    </>
+  ),
+  close: (
+    <>
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </>
+  ),
+  moon: <path d="M19 14.6A7.5 7.5 0 0 1 9.4 5a8.5 8.5 0 1 0 9.6 9.6z" />,
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2.3" />
+      <path d="M12 19.2v2.3" />
+      <path d="M4.9 4.9l1.6 1.6" />
+      <path d="M17.5 17.5l1.6 1.6" />
+      <path d="M2.5 12h2.3" />
+      <path d="M19.2 12h2.3" />
+      <path d="M4.9 19.1l1.6-1.6" />
+      <path d="M17.5 6.5l1.6-1.6" />
+    </>
+  ),
 }
 
 export function Icon({ name, size = 18, ...props }: IconProps) {

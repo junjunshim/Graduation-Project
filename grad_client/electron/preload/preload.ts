@@ -1,24 +1,30 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
+import { WINDOW_CONTROL_CHANNELS } from '../ipc/windowControls'
 
-// --------- Expose some API to the Renderer process ---------
-contextBridge.exposeInMainWorld('ipcRenderer', {
-  on(...args: Parameters<typeof ipcRenderer.on>) {
-    const [channel, listener] = args
-    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
-  },
-  off(...args: Parameters<typeof ipcRenderer.off>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.off(channel, ...omit)
-  },
-  send(...args: Parameters<typeof ipcRenderer.send>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.send(channel, ...omit)
-  },
-  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.invoke(channel, ...omit)
-  },
+if (process.platform === 'win32') {
+  contextBridge.exposeInMainWorld('windowControls', {
+    minimize() {
+      ipcRenderer.send(WINDOW_CONTROL_CHANNELS.minimize)
+    },
+    toggleMaximize() {
+      ipcRenderer.send(WINDOW_CONTROL_CHANNELS.toggleMaximize)
+    },
+    close() {
+      ipcRenderer.send(WINDOW_CONTROL_CHANNELS.close)
+    },
+    isMaximized() {
+      return ipcRenderer.invoke(WINDOW_CONTROL_CHANNELS.isMaximized)
+    },
+    onMaximizeChange(listener: (isMaximized: boolean) => void) {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, isMaximized: boolean) => {
+        listener(isMaximized)
+      }
 
-  // You can expose other APTs you need here.
-  // ...
-})
+      ipcRenderer.on(WINDOW_CONTROL_CHANNELS.maximizeChanged, wrappedListener)
+
+      return () => {
+        ipcRenderer.off(WINDOW_CONTROL_CHANNELS.maximizeChanged, wrappedListener)
+      }
+    },
+  })
+}

@@ -1,7 +1,7 @@
 CREATE TYPE integrated_data AS (
-    out_type TEXT,           -- 'NODE' or 'WORK_ITEM'
+    out_type TEXT,
     out_id TEXT,
-    out_node_type TEXT,      -- 'PROJECT', 'DEPT', etc.
+    out_node_type TEXT,
     out_parent_id TEXT,
     out_title TEXT,
     out_status TEXT,
@@ -13,9 +13,9 @@ CREATE TYPE integrated_data AS (
 CREATE TYPE action_result AS (
     out_res_status BOOLEAN,
     out_message TEXT,
-    out_type TEXT,           -- 'NODE' or 'WORK_ITEM'
+    out_type TEXT,
     out_id TEXT,
-    out_node_type TEXT,      -- 'PROJECT', 'DEPT', etc.
+    out_node_type TEXT,
     out_parent_id TEXT,
     out_title TEXT,
     out_status TEXT,

@@ -15,25 +15,31 @@ BEGIN
     VALUES (p_user_id, p_email, p_name, p_password_hash);
 
     -- 2. 개인 전용 노드 생성
-    INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
+    INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
     VALUES (
-        nextval('organization_nodes_node_id_seq'),
         'USER',
         NULL,
         p_name || ' 개인공간',
-        ARRAY[currval('organization_nodes_node_id_seq')]
+        '{}'::INTEGER[]
     )
     RETURNING node_id INTO v_new_node_id;
 
-    -- 3. 생성된 노드 ID를 유저 테이블에 업데이트
+    -- 3. 생성된 노드의 path 업데이트 (자기 자신을 포함)
+    UPDATE organization_nodes 
+    SET path = ARRAY[v_new_node_id] 
+    WHERE node_id = v_new_node_id;
+
+    -- 4. 생성된 노드 ID를 유저 테이블에 업데이트
     UPDATE users 
     SET personal_node_id = v_new_node_id 
     WHERE user_id = p_user_id;
 
-    -- 4. 개인 노드에 대한 관리자(ADMIN) 권한 부여
+    -- 5. 개인 노드에 대한 관리자(ADMIN) 권한 부여
     INSERT INTO role_assignments (user_id, node_id, role)
     VALUES (p_user_id, v_new_node_id, 'ADMIN');
 
+    -- 6. 개인 노드에 대한 기본 권한 설정
+    PERFORM default_node_authority(v_new_node_id);
 END;
 $$ LANGUAGE plpgsql;
 

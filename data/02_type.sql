@@ -1,3 +1,4 @@
+-- 1. 통합 데이터 반환 타입 정의
 CREATE TYPE integrated_data AS (
     out_type TEXT,
     out_id TEXT,
@@ -10,6 +11,7 @@ CREATE TYPE integrated_data AS (
     out_updated_at TEXT
 );
 
+-- 2. API 통합 반환 타입 정의
 CREATE TYPE action_result AS (
     out_res_status BOOLEAN,
     out_message TEXT,

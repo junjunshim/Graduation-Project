@@ -5,12 +5,23 @@ CREATE OR REPLACE FUNCTION get_initial_context(
     p_user_email users.email%TYPE
 ) 
 RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user_id users.user_id%TYPE;
 BEGIN
+    -- 1. 유저 존재 여부 확인 및 id 가져오기
+    SELECT user_id INTO v_user_id FROM users WHERE email = p_user_email;
+
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'User does not exist : %', p_user_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 유저가 접근 가능한 노드의 모든 데이터 반환 (노드, 작업 항목, 역할, 권한)
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
         SELECT node_id 
         FROM role_assignments 
-        WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
+        WHERE user_id = v_user_id
         
         UNION
 
@@ -61,7 +72,27 @@ BEGIN
         ra.updated_at::TEXT
     FROM role_assignments ra
     JOIN users u ON ra.user_id = u.user_id
-    WHERE ra.node_id IN (SELECT node_id FROM accessible_node_ids);
+    WHERE ra.node_id IN (SELECT node_id FROM accessible_node_ids)
+
+    UNION ALL
+
+    SELECT 
+        'AUTHORITY'::TEXT,
+        auth.authority_id::TEXT,
+        NULL::TEXT,
+        auth.node_id::TEXT,
+        auth.role::TEXT,
+        NULL::TEXT,
+        NULL::INTEGER,
+        auth.authority::TEXT,
+        auth.updated_at::TEXT
+    FROM role_authorities auth
+    WHERE auth.node_id IN (SELECT node_id FROM accessible_node_ids);
+
+    EXCEPTION 
+        WHEN OTHERS THEN
+        RAISE EXCEPTION 'Error fetching initial context for user: % (REASON: %)', p_user_email, SQLERRM
+        USING ERRCODE = 'P0002';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -72,12 +103,23 @@ CREATE OR REPLACE FUNCTION sync_context(
     p_last_synced_at TIMESTAMP
 ) 
 RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user_id users.user_id%TYPE;
 BEGIN
+    -- 1. 유저 존재 여부 확인 및 id 가져오기
+    SELECT user_id INTO v_user_id FROM users WHERE email = p_user_email;
+
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'User does not exist : %', p_user_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 유저가 접근 가능한 노드의 모든 데이터 반환 (노드, 작업 항목, 역할, 권한)
     RETURN QUERY
     WITH RECURSIVE accessible_node_ids AS (
         SELECT node_id 
         FROM role_assignments 
-        WHERE user_id = (SELECT user_id FROM users WHERE email = p_user_email)
+        WHERE user_id = v_user_id
         
         UNION
 
@@ -131,6 +173,27 @@ BEGIN
     FROM role_assignments ra
     JOIN users u ON ra.user_id = u.user_id
     WHERE ra.node_id IN (SELECT node_id FROM accessible_node_ids)
-        AND ra.updated_at > p_last_synced_at;
+        AND ra.updated_at > p_last_synced_at
+        
+    UNION ALL
+
+    SELECT 
+        'AUTHORITY'::TEXT,
+        auth.authority_id::TEXT,
+        NULL::TEXT,
+        auth.node_id::TEXT,
+        auth.role::TEXT,
+        NULL::TEXT,
+        NULL::INTEGER,
+        auth.authority::TEXT,
+        auth.updated_at::TEXT
+    FROM role_authorities auth
+    WHERE auth.node_id IN (SELECT node_id FROM accessible_node_ids)
+        AND auth.updated_at > p_last_synced_at;
+
+    EXCEPTION 
+        WHEN OTHERS THEN
+        RAISE EXCEPTION 'Error fetching sync context for user: % (REASON: %)', p_user_email, SQLERRM
+        USING ERRCODE = 'P0003';
 END;
 $$ LANGUAGE plpgsql;

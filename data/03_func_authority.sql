@@ -18,7 +18,7 @@ BEGIN
     
     -- VIEWER
     INSERT INTO role_authorities (node_id, role, authority)
-    VALUES (p_node_id, 'VIEWER', B'00001000'); -- 뷰어 권한 허용 (해당 노드 조회만 허용)
+    VALUES (p_node_id, 'VIEWER', B'00001001'); -- 뷰어 권한 허용 (노드 조회만 허용)
 END;
 $$ LANGUAGE plpgsql;
 

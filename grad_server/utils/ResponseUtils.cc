@@ -1,0 +1,102 @@
+#include "ResponseUtils.h"
+
+// DB 결과를 프론트엔드 응답용 JSON으로 변환하는 공통 함수
+Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &result) {
+    // 반환 JSON 객체 초기화
+    Json::Value ret;
+    Json::Value items(Json::arrayValue);
+
+    // DB 결과를 순회하며 items 배열에 추가
+    for(auto const &row : result){
+        // item 객체 초기화
+        Json::Value item;
+
+        // DB 결과의 각 행에서 필요한 필드를 추출하여 JSON 객체에 추가
+        // 필수 필드: type, id, title, updated_at
+        // 선택적 필드: node_type, parent_id, status, priority, extra_info
+
+        item["type"] = row["out_type"].as<std::string>();
+        item["id"] = row["out_id"].as<std::string>();
+
+        if(!row["out_node_type"].isNull() && !row["out_node_type"].as<std::string>().empty()){
+            item["node_type"] = row["out_node_type"].as<std::string>();
+        }
+
+        if(!row["out_parent_id"].isNull() && !row["out_parent_id"].as<std::string>().empty()){
+            item["parent_id"] = row["out_parent_id"].as<std::string>();
+        }
+
+        item["title"] = row["out_title"].as<std::string>();
+
+        if(!row["out_status"].isNull() && !row["out_status"].as<std::string>().empty()){
+            item["status"] = row["out_status"].as<std::string>();
+        }
+
+        if(!row["out_priority"].isNull() && row["out_priority"].as<int>() != 0){
+            item["priority"] = row["out_priority"].as<int>();
+        }
+
+        if (!row["out_extra_info"].isNull() && !row["out_extra_info"].as<std::string>().empty()) {
+            item["extra_info"] = row["out_extra_info"].as<std::string>();
+        }
+
+        item["updated_at"] = row["out_updated_at"].as<std::string>();
+
+        // 완성된 item 객체를 items 배열에 추가
+        items.append(item);
+    }
+
+    // 최종 응답 JSON 객체에 status와 data 필드 추가
+    ret["status"] = "success";
+    ret["data"] = items;
+
+    // 완성된 JSON 객체 반환
+    return ret;
+}
+
+// 문자열 에러 메시지에서 Enum으로 변환하는 헬퍼 함수
+DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
+    // 에러 메시지에서 PostgreSQL의 사용자 정의 예외 코드(P0001, P0002 등)를 찾아서 DbErrorCode로 변환
+    if (errMsg.find("P0001") != std::string::npos) return DbErrorCode::UserNotFound;
+    else if (errMsg.find("P0002") != std::string::npos) return DbErrorCode::InitialContextError;
+    else if (errMsg.find("P0003") != std::string::npos) return DbErrorCode::SyncContextError;
+    else return DbErrorCode::Unknown;
+}
+
+// DB 에러 발생 시 Json::Value 반환하는 함수
+Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
+    // DB 에러 메시지 추출
+    std::string errMsg = e.base().what();
+
+    // 에러 메시지를 로그에 기록
+    LOG_ERROR << "Database error: " << errMsg;
+
+    // 반환 JSON 객체 초기화
+    Json::Value ret;
+    ret["status"] = "error";
+
+    // 에러 메시지에서 Enum으로 변환
+    DbErrorCode errorCode = parseDbErrorCode(errMsg);
+
+    // Enum 값에 따라 프론트엔드에 반환할 메시지와 HTTP 상태 코드 설정
+    switch (errorCode) {
+        case DbErrorCode::UserNotFound:
+            ret["message"] = "사용자를 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        case DbErrorCode::InitialContextError:
+            ret["message"] = "사용자 전체 데이터 로드에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        case DbErrorCode::SyncContextError:
+            ret["message"] = "사용자 변경 데이터 로드에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+        default:
+            ret["message"] = "알 수 없는 데이터베이스 에러가 발생했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+    }
+
+    // 완성된 JSON 객체 반환
+    return ret;
+}

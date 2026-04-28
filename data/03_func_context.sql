@@ -12,7 +12,7 @@ BEGIN
     SELECT user_id INTO v_user_id FROM users WHERE email = p_user_email;
 
     IF v_user_id IS NULL THEN
-        RAISE EXCEPTION 'User does not exist : %', p_user_email
+        RAISE EXCEPTION '[P0001]User does not exist : %', p_user_email
         USING ERRCODE = 'P0001';
     END IF;
 
@@ -90,8 +90,10 @@ BEGIN
     WHERE auth.node_id IN (SELECT node_id FROM accessible_node_ids);
 
     EXCEPTION 
+        WHEN SQLSTATE 'P0001' THEN
+        RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION 'Error fetching initial context for user: % (REASON: %)', p_user_email, SQLERRM
+        RAISE EXCEPTION '[P0002]Error fetching initial context for user: % (REASON: %)', p_user_email, SQLERRM
         USING ERRCODE = 'P0002';
 END;
 $$ LANGUAGE plpgsql;
@@ -110,7 +112,7 @@ BEGIN
     SELECT user_id INTO v_user_id FROM users WHERE email = p_user_email;
 
     IF v_user_id IS NULL THEN
-        RAISE EXCEPTION 'User does not exist : %', p_user_email
+        RAISE EXCEPTION '[P0001]User does not exist : %', p_user_email
         USING ERRCODE = 'P0001';
     END IF;
 
@@ -192,8 +194,10 @@ BEGIN
         AND auth.updated_at > p_last_synced_at;
 
     EXCEPTION 
+        WHEN SQLSTATE 'P0001' THEN
+        RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION 'Error fetching sync context for user: % (REASON: %)', p_user_email, SQLERRM
+        RAISE EXCEPTION '[P0003]Error fetching sync context for user: % (REASON: %)', p_user_email, SQLERRM
         USING ERRCODE = 'P0003';
 END;
 $$ LANGUAGE plpgsql;

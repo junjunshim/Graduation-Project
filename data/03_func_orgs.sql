@@ -4,33 +4,42 @@
 CREATE OR REPLACE FUNCTION create_top_node(
     p_email users.email%TYPE,
     p_node_type organization_nodes.node_type%TYPE,
-    p_name organization_nodes.name%TYPE,
-    p_role_name role_assignments.role%TYPE DEFAULT 'ADMIN'
+    p_name organization_nodes.name%TYPE
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_user_id users.user_id%TYPE;
     v_new_node_id organization_nodes.node_id%TYPE;
 BEGIN
-    -- 1. 사용자 id 가져오기
+    -- 1. 유저 존재 여부 확인 및 id 가져오기
     SELECT user_id INTO v_user_id FROM users WHERE email = p_email;
 
-    -- 2. 노드 생성 (nextval과 path 처리)
-    v_new_node_id := nextval('organization_nodes_node_id_seq');
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]User does not exist : %', p_email
+        USING ERRCODE = 'P0001';
+    END IF;
 
-    INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
+    -- 2. 노드 생성
+    INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
     VALUES (
-        v_new_node_id,
         p_node_type,
         NULL,
         p_name,
-        ARRAY[v_new_node_id]
-    );
+        '{}'::INTEGER[]
+    ) RETURNING node_id INTO v_new_node_id;
 
-    -- 3. 역할 배정 (role_assignments 테이블)
+     -- 3. 생성된 노드의 path 업데이트 (자기 자신을 포함)
+    UPDATE organization_nodes
+    SET path = ARRAY[v_new_node_id]
+    WHERE node_id = v_new_node_id;
+
+    -- 3. 소유자 배정 (role_assignments 테이블)
     INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (v_user_id, v_new_node_id, p_role_name);
-    
-    -- 4. 생성된 노드 정보 즉시 반환
+    VALUES (v_user_id, v_new_node_id, 'ADMIN');
+
+    -- 4. 노드에 대한 기본 권한 설정
+    PERFORM default_node_authority(v_new_node_id);
+
+    -- 5. 생성된 노드관련 정보 즉시 반환
     RETURN QUERY
     SELECT 
         'NODE'::TEXT,
@@ -43,7 +52,45 @@ BEGIN
         n.path::TEXT,
         n.updated_at::TEXT
     FROM organization_nodes n
-    WHERE n.node_id = v_new_node_id;
+    WHERE n.node_id = v_new_node_id
+
+    UNION ALL 
+
+    SELECT 
+        'ROLE'::TEXT,
+        ra.assignment_id::TEXT,
+        NULL::TEXT,
+        ra.node_id::TEXT,
+        u.email::TEXT,
+        ra.role::TEXT,
+        NULL::INTEGER,
+        NULL::TEXT,
+        ra.updated_at::TEXT
+    FROM role_assignments ra
+    JOIN users u ON ra.user_id = u.user_id
+    WHERE ra.node_id = v_new_node_id
+
+    UNION ALL
+
+    SELECT 
+        'AUTHORITY'::TEXT,
+        a.authority_id::TEXT,
+        NULL::TEXT,
+        a.node_id::TEXT,
+        NULL::TEXT,
+        a.role::TEXT,
+        a.authority::INTEGER,
+        NULL::TEXT,
+        a.updated_at::TEXT
+    FROM role_authorities a
+    WHERE a.node_id = v_new_node_id;
+
+    EXCEPTION 
+        WHEN SQLSTATE 'P0001' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0004]Error creating top-node: %, requester: %  (REASON: %)', p_name, p_email, SQLERRM
+        USING ERRCODE = 'P0004';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -54,9 +101,8 @@ CREATE OR REPLACE FUNCTION create_sub_node(
     p_node_type organization_nodes.node_type%TYPE,
     p_parent_node_id organization_nodes.node_id%TYPE,
     p_name organization_nodes.name%TYPE,
-    p_owner_user_email users.email%TYPE,
-    p_role_name role_assignments.role%TYPE
-) RETURNS SETOF action_result AS $$
+    p_owner_user_email users.email%TYPE
+) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
@@ -64,24 +110,20 @@ DECLARE
     v_new_node_id organization_nodes.node_id%TYPE;
     v_parent_path organization_nodes.path%TYPE;
 BEGIN
-    -- 1. 사용자 id 가져오기
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 소유자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_owner_user_id FROM users WHERE email = p_owner_user_email;
 
-    IF v_requester_id IS NULL OR v_owner_user_id IS NULL THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '대상 사용자를 찾을 수 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    IF v_owner_user_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Owner user does not exist : %', p_owner_user_email
+        USING ERRCODE = 'P0001';
     END IF;
 
     -- 2. 요청자 권한 확인
@@ -89,43 +131,43 @@ BEGIN
     FROM role_assignments
     WHERE user_id = v_requester_id AND node_id = p_parent_node_id;
 
-    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    IF NOT check_authority_with_override(v_requester_id, p_parent_node_id, B'01000000') THEN
+        RAISE EXCEPTION '[P0006]Insufficient permissions. (sub node creation) for user: %', p_requester_email
+        USING ERRCODE = 'P0006';
+    END IF;
+
+    -- 3. 소유자 권한 확인 (소유자는 최소 MEMBER 권한 필요)
+    IF NOT check_authority_with_override(v_owner_user_id, p_parent_node_id, B'00010000') THEN
+        RAISE EXCEPTION '[P0006]Insufficient permissions. (owner user must have at least MEMBER role) for user: %', p_owner_user_email
+        USING ERRCODE = 'P0006';
     END IF;
 
     -- 3. 하위 노드 생성
     SELECT path INTO v_parent_path FROM organization_nodes WHERE node_id = p_parent_node_id;
-    v_new_node_id := nextval('organization_nodes_node_id_seq');
 
-    INSERT INTO organization_nodes (node_id, node_type, parent_node_id, name, path)
+    INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
     VALUES (
-        v_new_node_id,
         p_node_type,
         p_parent_node_id,
         p_name,
-        v_parent_path || v_new_node_id
-    );
-    
-    INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (v_owner_user_id, v_new_node_id, p_role_name);
+        '{}'::INTEGER[]
+    ) RETURNING node_id INTO v_new_node_id;
 
-    -- 4. 생성된 노드 정보 즉시 반환
+    -- 4. 생성된 노드의 path 업데이트 (부모 노드의 path + 자기 자신)
+    UPDATE organization_nodes
+    SET path = v_parent_path || v_new_node_id
+    WHERE node_id = v_new_node_id;
+    
+    -- 5. 소유자 배정 (role_assignments 테이블)
+    INSERT INTO role_assignments (user_id, node_id, role)
+    VALUES (v_owner_user_id, v_new_node_id, 'ADMIN');
+
+    -- 6. 노드에 대한 기본 권한 설정
+    PERFORM default_node_authority(v_new_node_id);
+
+    -- 7. 생성된 노드 정보 즉시 반환
     RETURN QUERY
     SELECT 
-        TRUE,
-        '하위 노드가 성공적으로 생성되었습니다.'::TEXT,
         'NODE'::TEXT,
         n.node_id::TEXT,
         n.node_type::TEXT,
@@ -136,7 +178,47 @@ BEGIN
         n.path::TEXT,
         n.updated_at::TEXT
     FROM organization_nodes n
-    WHERE n.node_id = v_new_node_id;
+    WHERE n.node_id = v_new_node_id
+
+    UNION ALL
+
+    SELECT 
+        'ROLE'::TEXT,
+        ra.assignment_id::TEXT,
+        NULL::TEXT,
+        ra.node_id::TEXT,
+        u.email::TEXT,
+        ra.role::TEXT,
+        NULL::INTEGER,
+        NULL::TEXT,
+        ra.updated_at::TEXT
+    FROM role_assignments ra
+    JOIN users u ON ra.user_id = u.user_id
+    WHERE ra.node_id = v_new_node_id
+
+    UNION ALL
+
+    SELECT 
+        'AUTHORITY'::TEXT,
+        a.authority_id::TEXT,
+        NULL::TEXT,
+        a.node_id::TEXT,
+        NULL::TEXT,
+        a.role::TEXT,
+        a.authority::INTEGER,
+        NULL::TEXT,
+        a.updated_at::TEXT
+    FROM role_authorities a
+    WHERE a.node_id = v_new_node_id;
+
+    EXCEPTION 
+        WHEN SQLSTATE 'P0001' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0006' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0005]Error creating sub-node: %, requester: %  (REASON: %)', p_name, p_requester_email, SQLERRM
+        USING ERRCODE = 'P0005';
 END;
 $$ LANGUAGE plpgsql;
 

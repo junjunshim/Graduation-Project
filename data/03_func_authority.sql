@@ -10,7 +10,7 @@ BEGIN
 
     -- MANAGER
     INSERT INTO role_authorities (node_id, role, authority)
-    VALUES (p_node_id, 'MANAGER', B'00111111'); -- 관리자 권한 허용 (노드 설정 및 하위 노드 생성, 수정 권한 제외)
+    VALUES (p_node_id, 'MANAGER', B'01111111'); -- 관리자 권한 허용 (노드 설정 및 하위 노드 생성, 수정 권한 제외)
 
     -- MEMBER
     INSERT INTO role_authorities (node_id, role, authority)

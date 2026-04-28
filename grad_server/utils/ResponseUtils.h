@@ -7,10 +7,13 @@
 
 // DB 에러 코드를 나타내는 Enum 클래스
 enum class DbErrorCode {
-    UserNotFound,           // P0001 사용자 없음
-    InitialContextError,    // P0002 사용자 전체 데이터 로드 실패
-    SyncContextError,       // P0003 사용자 변경 데이터 로드 실패
-    Unknown                 // 알 수 없는 에러
+    UserNotFound,               // P0001 사용자 없음
+    InitialContextError,        // P0002 사용자 전체 데이터 로드 실패
+    SyncContextError,           // P0003 사용자 변경 데이터 로드 실패
+    CreateTopNodeError,         // P0004 최상위 노드 생성 실패
+    CreateSubNodeError,         // P0005 하위 노드 생성 실패
+    InsufficientPermissions,    // P0006 권한 부족
+    Unknown                     // 알 수 없는 에러
 };
 
 // 유틸리티 함수 네임스페이스

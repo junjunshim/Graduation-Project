@@ -60,6 +60,9 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     if (errMsg.find("P0001") != std::string::npos) return DbErrorCode::UserNotFound;
     else if (errMsg.find("P0002") != std::string::npos) return DbErrorCode::InitialContextError;
     else if (errMsg.find("P0003") != std::string::npos) return DbErrorCode::SyncContextError;
+    else if (errMsg.find("P0004") != std::string::npos) return DbErrorCode::CreateTopNodeError;
+    else if (errMsg.find("P0005") != std::string::npos) return DbErrorCode::CreateSubNodeError;
+    else if (errMsg.find("P0006") != std::string::npos) return DbErrorCode::InsufficientPermissions;
     else return DbErrorCode::Unknown;
 }
 
@@ -80,21 +83,41 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
 
     // Enum 값에 따라 프론트엔드에 반환할 메시지와 HTTP 상태 코드 설정
     switch (errorCode) {
-        case DbErrorCode::UserNotFound:
+        case DbErrorCode::UserNotFound:{
             ret["message"] = "사용자를 찾을 수 없습니다.";
             ret["http_code"] = drogon::k404NotFound;
             break;
-        case DbErrorCode::InitialContextError:
+        }
+        case DbErrorCode::InitialContextError:{
             ret["message"] = "사용자 전체 데이터 로드에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
-        case DbErrorCode::SyncContextError:
+        }
+        case DbErrorCode::SyncContextError:{
             ret["message"] = "사용자 변경 데이터 로드에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
-        default:
+            break;            
+        }
+        case DbErrorCode::CreateTopNodeError:{
+            ret["message"] = "최상위 노드 생성에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::CreateSubNodeError:{
+            ret["message"] = "하위 노드 생성에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::InsufficientPermissions:{
+            ret["message"] = "권한이 부족합니다.";
+            ret["http_code"] = drogon::k403Forbidden;
+            break;
+        }
+        default:{
             ret["message"] = "알 수 없는 데이터베이스 에러가 발생했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
+        }
     }
 
     // 완성된 JSON 객체 반환

@@ -91,16 +91,16 @@ CREATE OR REPLACE FUNCTION log_work_items_history()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (TG_OP = 'DELETE') THEN
-        INSERT INTO work_item_histories (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description, status, priority, weight, progress, start_date, due_date, created_at, updated_at, change_status)
-        VALUES (OLD.work_item_id, OLD.owner_node_id, OLD.parent_work_item_id, OLD.owner_user_id, OLD.title, OLD.description, OLD.status, OLD.priority, OLD.weight, OLD.progress, OLD.start_date, OLD.due_date, OLD.created_at, OLD.updated_at, 'deleted');
+        INSERT INTO work_item_histories (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description, hidden, status, priority, weight, progress, start_date, due_date, created_at, updated_at, change_status)
+        VALUES (OLD.work_item_id, OLD.owner_node_id, OLD.parent_work_item_id, OLD.owner_user_id, OLD.title, OLD.description, OLD.hidden, OLD.status, OLD.priority, OLD.weight, OLD.progress, OLD.start_date, OLD.due_date, OLD.created_at, OLD.updated_at, 'deleted');
         RETURN OLD;
     ELSIF (TG_OP = 'UPDATE') THEN
-        INSERT INTO work_item_histories (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description, status, priority, weight, progress, start_date, due_date, created_at, updated_at, change_status)
-        VALUES (NEW.work_item_id, NEW.owner_node_id, NEW.parent_work_item_id, NEW.owner_user_id, NEW.title, NEW.description, NEW.status, NEW.priority, NEW.weight, NEW.progress, NEW.start_date, NEW.due_date, NEW.created_at, NEW.updated_at, 'updated');
+        INSERT INTO work_item_histories (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description, hidden, status, priority, weight, progress, start_date, due_date, created_at, updated_at, change_status)
+        VALUES (NEW.work_item_id, NEW.owner_node_id, NEW.parent_work_item_id, NEW.owner_user_id, NEW.title, NEW.description, NEW.hidden, NEW.status, NEW.priority, NEW.weight, NEW.progress, NEW.start_date, NEW.due_date, NEW.created_at, NEW.updated_at, 'updated');
         RETURN NEW;
     ELSIF (TG_OP = 'INSERT') THEN
-        INSERT INTO work_item_histories (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description, status, priority, weight, progress, start_date, due_date, created_at, updated_at, change_status)
-        VALUES (NEW.work_item_id, NEW.owner_node_id, NEW.parent_work_item_id, NEW.owner_user_id, NEW.title, NEW.description, NEW.status, NEW.priority, NEW.weight, NEW.progress, NEW.start_date, NEW.due_date, NEW.created_at, NEW.updated_at, 'inserted');
+        INSERT INTO work_item_histories (work_item_id, owner_node_id, parent_work_item_id, owner_user_id, title, description, hidden, status, priority, weight, progress, start_date, due_date, created_at, updated_at, change_status)
+        VALUES (NEW.work_item_id, NEW.owner_node_id, NEW.parent_work_item_id, NEW.owner_user_id, NEW.title, NEW.description, NEW.hidden, NEW.status, NEW.priority, NEW.weight, NEW.progress, NEW.start_date, NEW.due_date, NEW.created_at, NEW.updated_at, 'inserted');
         RETURN NEW;
     END IF;
     RETURN NULL;

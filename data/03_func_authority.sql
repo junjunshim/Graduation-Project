@@ -3,22 +3,10 @@ CREATE OR REPLACE FUNCTION default_node_authority(
     p_node_id organization_nodes.node_id%TYPE
 ) RETURNS VOID AS $$
 BEGIN
-    -- 노드 생성 시, 해당 노드에 대한 기본 권한 설정
-    -- ADMIN
+    -- 노드 생성 시, 해당 노드에 대한 기본 권한 설정 (role_defaults 테이블에서 가져옴)
     INSERT INTO role_authorities (node_id, role, authority)
-    VALUES (p_node_id, 'ADMIN', B'01111111'); -- 모든 권한 허용
-
-    -- MANAGER
-    INSERT INTO role_authorities (node_id, role, authority)
-    VALUES (p_node_id, 'MANAGER', B'01111111'); -- 관리자 권한 허용 (노드 설정 및 하위 노드 생성, 수정 권한 제외)
-
-    -- MEMBER
-    INSERT INTO role_authorities (node_id, role, authority)
-    VALUES (p_node_id, 'MEMBER', B'00011101'); -- 일반 멤버 권한 허용 (다른 사용자 데이터 삭제, 숨김 데이터 조회 권한 제외)
-    
-    -- VIEWER
-    INSERT INTO role_authorities (node_id, role, authority)
-    VALUES (p_node_id, 'VIEWER', B'00001001'); -- 뷰어 권한 허용 (노드 조회만 허용)
+    SELECT p_node_id, role, default_authority
+    FROM role_defaults;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -27,12 +15,25 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION check_authority_with_override(
     p_user_id users.user_id%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
-    p_required_authority BIT(8)
+    p_required_authority_name authority_constants.name%TYPE
 ) RETURNS BOOLEAN AS $$
 DECLARE
     v_path organization_nodes.path%TYPE;
-    v_final_auth BIT(8);
+    v_final_auth BIT(24);
+    v_required_bit BIT(24);
+    V_deny_bit BIT(24);
 BEGIN
+    -- 0단계: 권한 이름을 비트마스크로 변환
+    SELECT (B'000000000000000000000001'::BIT(24) << bit_position)
+    INTO v_required_bit
+    FROM authority_constants
+    WHERE name = p_required_authority_name;
+
+    IF v_required_bit IS NULL THEN
+        RAISE EXCEPTION '[P0007]Invalid authority name: %', p_required_authority_name
+        USING ERRCODE = 'P0007';
+    END IF;
+
     -- 1단계: 현재 노드(p_node_id)에 직접 설정된 권한 확인
     SELECT BIT_OR(auth.authority) INTO v_final_auth
     FROM role_assignments ra
@@ -60,16 +61,29 @@ BEGIN
         LIMIT 1;
     END IF;
 
-    -- 3단계: DENY 비트(10000000)가 켜져 있으면 무조건 거부
-    IF (v_final_auth & B'10000000') = B'10000000' THEN
+    -- 3단계: DENY 비트(bit 23)가 켜져 있으면 무조건 거부
+    -- 24비트에서 가장 왼쪽 비트 (23번 비트)
+    SELECT (B'000000000000000000000001'::BIT(24) << bit_position)
+    INTO v_deny_bit
+    FROM authority_constants
+    WHERE name = 'DENY';
+
+    IF (v_final_auth & v_deny_bit) = v_deny_bit THEN
         RETURN FALSE;
     END IF;
 
-    -- 4단계: 최종 권한 체크 (B'00000000' 인 경우도 대비)
+    -- 4단계: 최종 권한 체크
     IF v_final_auth IS NULL THEN 
         RETURN FALSE; 
     END IF;
     
-    RETURN (v_final_auth & p_required_authority) = p_required_authority;
+    RETURN (v_final_auth & v_required_bit) = v_required_bit;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0007' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0008]Error checking authority: (REASON : %)', SQLERRM
+        USING ERRCODE = 'P0008';
 END;
 $$ LANGUAGE plpgsql;

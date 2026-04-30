@@ -49,13 +49,26 @@ CREATE TABLE IF NOT EXISTS role_authorities (
     authority_id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
     role role_name NOT NULL,
-    authority BIT(8) NOT NULL, -- Bitmask 권한
+    authority BIT(24) NOT NULL, -- Bitmask 권한 (8 -> 24)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_authorities UNIQUE (node_id, role)
 );
 CREATE INDEX idx_authorities_node_id ON role_authorities(node_id);
 
+-- 4.1 권한 상수 테이블 (하드코딩 방지)
+CREATE TABLE IF NOT EXISTS authority_constants (
+    constant_id SERIAL PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    bit_position INTEGER NOT NULL CHECK (bit_position BETWEEN 0 AND 23),
+    description TEXT
+);
+
+-- 4.2 역할별 기본 권한 테이블
+CREATE TABLE IF NOT EXISTS role_defaults (
+    role role_name PRIMARY KEY,
+    default_authority BIT(24) NOT NULL
+);
 
 -- 5. 업무와 프로젝트 데이터
 CREATE TABLE IF NOT EXISTS work_items (
@@ -139,7 +152,7 @@ CREATE TABLE role_authority_histories (
     history_id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL,
     role role_name NOT NULL,
-    authority BIT(8) NOT NULL,
+    authority BIT(24) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     change_status history_status NOT NULL,

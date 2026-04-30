@@ -13,6 +13,8 @@ enum class DbErrorCode {
     CreateTopNodeError,         // P0004 최상위 노드 생성 실패
     CreateSubNodeError,         // P0005 하위 노드 생성 실패
     InsufficientPermissions,    // P0006 권한 부족
+    InvalidAuthority,           // P0007 찾을 수 없는 권한 
+    AuthorityCheckFailed,       // P0008 권한 체크 실패
     Unknown                     // 알 수 없는 에러
 };
 

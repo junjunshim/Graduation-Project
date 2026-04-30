@@ -63,6 +63,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0004") != std::string::npos) return DbErrorCode::CreateTopNodeError;
     else if (errMsg.find("P0005") != std::string::npos) return DbErrorCode::CreateSubNodeError;
     else if (errMsg.find("P0006") != std::string::npos) return DbErrorCode::InsufficientPermissions;
+    else if (errMsg.find("P0007") != std::string::npos) return DbErrorCode::InvalidAuthority;
+    else if (errMsg.find("P0008") != std::string::npos) return DbErrorCode::AuthorityCheckFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -111,6 +113,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::InsufficientPermissions:{
             ret["message"] = "권한이 부족합니다.";
             ret["http_code"] = drogon::k403Forbidden;
+            break;
+        }
+        case DbErrorCode::InvalidAuthority:{
+            ret["message"] = "찾을 수 없는 권한입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::AuthorityCheckFailed:{
+            ret["message"] = "권한 체크에 실패했습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
             break;
         }
         default:{

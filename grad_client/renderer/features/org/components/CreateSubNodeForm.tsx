@@ -1,15 +1,15 @@
 import type { FormEvent } from 'react'
 import { getNodeTypeLabel } from '../../workspace/model/labels'
+import { SUB_NODE_TYPE_OPTIONS } from '../../workspace/model/options'
 import type { NodeType, UserRecord } from '../../workspace/model/types'
-import styles from '../pages/OrgManagePage.module.css'
-
-const subNodeTypes: Exclude<NodeType, 'USER'>[] = ['DIVISION', 'DEPARTMENT', 'TEAM', 'PROJECT']
+import styles from '../styles/OrgManagePage.module.css'
 
 type CreateSubNodeFormProps = {
   managerEmail: string
   subNodeName: string
   subNodeType: Exclude<NodeType, 'USER'>
   users: UserRecord[]
+  disabled?: boolean
   onManagerEmailChange: (value: string) => void
   onSubNodeNameChange: (value: string) => void
   onSubNodeTypeChange: (value: Exclude<NodeType, 'USER'>) => void
@@ -21,6 +21,7 @@ export function CreateSubNodeForm({
   subNodeName,
   subNodeType,
   users,
+  disabled = false,
   onManagerEmailChange,
   onSubNodeNameChange,
   onSubNodeTypeChange,
@@ -40,9 +41,10 @@ export function CreateSubNodeForm({
         <select
           className={styles.input}
           value={subNodeType}
+          disabled={disabled}
           onChange={(event) => onSubNodeTypeChange(event.target.value as Exclude<NodeType, 'USER'>)}
         >
-          {subNodeTypes.map((type) => (
+          {SUB_NODE_TYPE_OPTIONS.map((type) => (
             <option key={type} value={type}>
               {getNodeTypeLabel(type)}
             </option>
@@ -55,6 +57,7 @@ export function CreateSubNodeForm({
         <input
           className={styles.input}
           value={subNodeName}
+          disabled={disabled}
           onChange={(event) => onSubNodeNameChange(event.target.value)}
           placeholder="예: 프론트엔드, 백엔드, 발표 준비"
         />
@@ -62,7 +65,12 @@ export function CreateSubNodeForm({
 
       <label className={styles.field}>
         <span className={styles.label}>관리자</span>
-        <select className={styles.input} value={managerEmail} onChange={(event) => onManagerEmailChange(event.target.value)}>
+        <select
+          className={styles.input}
+          value={managerEmail}
+          disabled={disabled}
+          onChange={(event) => onManagerEmailChange(event.target.value)}
+        >
           {users.map((member) => (
             <option key={member.userId} value={member.email}>
               {member.name} ({member.userId})
@@ -77,7 +85,7 @@ export function CreateSubNodeForm({
         <p className={styles.calloutText}>새 하위 조직의 관리자는 기본으로 ADMIN 권한을 받습니다.</p>
       </div>
 
-      <button type="submit" className={styles.submitButton}>
+      <button type="submit" className={styles.submitButton} disabled={disabled}>
         하위 조직 추가
       </button>
     </form>

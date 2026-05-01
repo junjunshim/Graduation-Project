@@ -1,6 +1,6 @@
 .page {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
   padding: var(--space-page-top) var(--space-page-x) var(--space-page-bottom);
 }
 
@@ -16,14 +16,14 @@
 .header,
 .panel,
 .emptyState {
-  padding: 1rem;
+  padding: 0.95rem;
 }
 
 .header,
 .panel,
 .emptyState {
   display: grid;
-  gap: 0.95rem;
+  gap: 0.85rem;
 }
 
 .header {
@@ -36,26 +36,26 @@
   margin: 0;
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .title {
   margin: 0;
-  font-size: clamp(1.7rem, 2.7vw, 2.4rem);
-  line-height: 1.05;
-  letter-spacing: -0.04em;
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
 .description,
 .callout p,
-.checkList,
-.contextSubtext {
+.contextSubtext,
+.feedback {
   margin: 0;
   color: var(--text-secondary);
-  line-height: 1.65;
+  line-height: 1.55;
 }
 
 .actions {
@@ -74,9 +74,13 @@
   border-radius: var(--radius-sm);
   font-weight: 600;
   transition:
-    transform 160ms ease,
     border-color 160ms ease,
     background 160ms ease;
+}
+
+button.primaryAction:disabled {
+  opacity: 0.72;
+  cursor: progress;
 }
 
 .primaryAction {
@@ -92,7 +96,7 @@
 
 .primaryAction:hover,
 .secondaryAction:hover {
-  transform: translateY(-1px);
+  opacity: 0.92;
 }
 
 .secondaryAction:hover {
@@ -103,7 +107,58 @@
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 0.98fr) minmax(18rem, 1.02fr);
-  gap: 1rem;
+  gap: 0.9rem;
+}
+
+.field,
+.fieldGrid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fieldGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.label {
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.68rem 0.75rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+.textarea {
+  min-height: 9rem;
+  resize: vertical;
+}
+
+.feedback {
+  padding: 0.72rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.feedbackError {
+  background: var(--accent-red-soft);
+  border-color: rgba(180, 35, 24, 0.18);
+  color: var(--accent-red);
+}
+
+.feedbackSuccess {
+  background: var(--accent-green-soft);
+  border-color: rgba(33, 115, 70, 0.16);
+  color: var(--accent-green);
 }
 
 .panelTitle {
@@ -121,7 +176,7 @@
   display: grid;
   grid-template-columns: 5.5rem minmax(0, 1fr);
   gap: 0.85rem;
-  padding-top: 0.85rem;
+  padding-top: 0.72rem;
   border-top: 1px solid var(--line-default);
 }
 
@@ -154,7 +209,7 @@
 .callout {
   display: grid;
   gap: 0.32rem;
-  padding: 0.95rem;
+  padding: 0.78rem;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-md);
   background: var(--surface-panel-muted);
@@ -162,14 +217,6 @@
 
 .callout strong {
   color: var(--text-primary);
-}
-
-.checkList {
-  padding-left: 1.1rem;
-}
-
-.checkList li + li {
-  margin-top: 0.35rem;
 }
 
 .emptyState {
@@ -189,7 +236,8 @@
 
   .header,
   .actions,
-  .contextRow {
+  .contextRow,
+  .fieldGrid {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: flex-start;

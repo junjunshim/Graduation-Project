@@ -2,32 +2,48 @@ import { Link } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { AssignRoleForm } from '../components/AssignRoleForm'
 import { CreateSubNodeForm } from '../components/CreateSubNodeForm'
+import { InheritedManagersPanel } from '../components/InheritedManagersPanel'
+import { NextActionsPanel } from '../components/NextActionsPanel'
+import { NodeEditForm } from '../components/NodeEditForm'
 import { OrgDetailPanel } from '../components/OrgDetailPanel'
 import { OrgTree } from '../components/OrgTree'
+import { UpdateRoleForm } from '../components/UpdateRoleForm'
 import { useOrgManagement } from '../hooks/useOrgManagement'
-import styles from './OrgManagePage.module.css'
+import styles from '../styles/OrgManagePage.module.css'
 
 export function OrgManagePage() {
   const currentUser = getCurrentUser()
   const {
     assignRoleName,
+    editNodeName,
+    editNodeType,
     feedback,
+    handleNodeUpdateSubmit,
     handleRoleSubmit,
+    handleRoleUpdateSubmit,
     handleSubNodeSubmit,
     managerEmail,
     roleEmail,
     rootNodes,
+    searchQuery,
     selectedDetail,
     selectedNodeId,
     setAssignRoleName,
+    setEditNodeName,
+    setEditNodeType,
     setManagerEmail,
     setRoleEmail,
+    setSearchQuery,
     setSelectedNodeId,
     setSubNodeName,
     setSubNodeType,
+    setUpdateRoleEmail,
+    setUpdateRoleName,
     snapshot,
     subNodeName,
     subNodeType,
+    updateRoleEmail,
+    updateRoleName,
     visibleOrgNodes,
   } = useOrgManagement(currentUser)
 
@@ -78,6 +94,8 @@ export function OrgManagePage() {
           nodes={visibleOrgNodes}
           rootNodes={rootNodes}
           selectedNodeId={selectedNodeId}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
           onSelect={setSelectedNodeId}
         />
 
@@ -86,32 +104,17 @@ export function OrgManagePage() {
         </section>
 
         <aside className={styles.actionColumn}>
-          {selectedDetail ? (
-            <section className={styles.panel}>
-              <div className={styles.panelHeader}>
-                <div>
-                  <p className={styles.panelEyebrow}>Managers</p>
-                  <h3 className={styles.panelTitle}>관리 가능한 사용자</h3>
-                </div>
-              </div>
+          {selectedDetail ? <InheritedManagersPanel managers={selectedDetail.inheritedManagers} /> : null}
 
-              <div className={styles.databaseList}>
-                {selectedDetail.inheritedManagers.length > 0 ? (
-                  selectedDetail.inheritedManagers.map((manager) => (
-                    <article key={manager.userId} className={styles.databaseRow}>
-                      <div className={styles.rowCopy}>
-                        <strong>{manager.name}</strong>
-                        <p className={styles.rowMeta}>
-                          {manager.userId} · {manager.email}
-                        </p>
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <p className={styles.emptyState}>상속된 관리자 정보가 없습니다.</p>
-                )}
-              </div>
-            </section>
+          {selectedDetail ? (
+            <NodeEditForm
+              selectedDetail={selectedDetail}
+              editNodeName={editNodeName}
+              editNodeType={editNodeType}
+              onEditNodeNameChange={setEditNodeName}
+              onEditNodeTypeChange={setEditNodeType}
+              onSubmit={handleNodeUpdateSubmit}
+            />
           ) : null}
 
           <CreateSubNodeForm
@@ -119,6 +122,7 @@ export function OrgManagePage() {
             subNodeName={subNodeName}
             subNodeType={subNodeType}
             users={snapshot.users}
+            disabled={!selectedDetail?.canManage}
             onManagerEmailChange={setManagerEmail}
             onSubNodeNameChange={setSubNodeName}
             onSubNodeTypeChange={setSubNodeType}
@@ -129,30 +133,24 @@ export function OrgManagePage() {
             assignRoleName={assignRoleName}
             roleEmail={roleEmail}
             users={snapshot.users}
+            disabled={!selectedDetail?.canManage}
             onAssignRoleNameChange={setAssignRoleName}
             onRoleEmailChange={setRoleEmail}
             onSubmit={handleRoleSubmit}
           />
 
           {selectedDetail ? (
-            <section className={styles.panel}>
-              <div className={styles.panelHeader}>
-                <div>
-                  <p className={styles.panelEyebrow}>Next Actions</p>
-                  <h3 className={styles.panelTitle}>다음 작업</h3>
-                </div>
-              </div>
-
-              <div className={styles.nextActionList}>
-                {selectedDetail.nextActions.map((action) => (
-                  <Link key={action.label} to={action.href} className={styles.nextActionItem}>
-                    <strong>{action.label}</strong>
-                    <span>{action.description}</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
+            <UpdateRoleForm
+              selectedDetail={selectedDetail}
+              updateRoleEmail={updateRoleEmail}
+              updateRoleName={updateRoleName}
+              onUpdateRoleEmailChange={setUpdateRoleEmail}
+              onUpdateRoleNameChange={setUpdateRoleName}
+              onSubmit={handleRoleUpdateSubmit}
+            />
           ) : null}
+
+          {selectedDetail ? <NextActionsPanel nextActions={selectedDetail.nextActions} /> : null}
         </aside>
       </div>
     </section>

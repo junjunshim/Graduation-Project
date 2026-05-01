@@ -1,6 +1,6 @@
 .shell {
   display: grid;
-  grid-template-columns: clamp(232px, 16vw, 252px) minmax(0, 1fr);
+  grid-template-columns: clamp(204px, 14vw, 224px) minmax(0, 1fr);
   min-height: 100vh;
   background: var(--surface-shell);
   transition: grid-template-columns 180ms ease;
@@ -15,7 +15,7 @@
 }
 
 .shellCollapsed {
-  grid-template-columns: 5.5rem minmax(0, 1fr);
+  grid-template-columns: 3.75rem minmax(0, 1fr);
 }
 
 .titleBarSlot {
@@ -23,7 +23,7 @@
 }
 
 .sidebar {
-  --sidebar-padding: 0.85rem;
+  --sidebar-padding: 0.7rem;
   padding: var(--sidebar-padding);
   border-right: 1px solid var(--line-default);
   background: var(--surface-sidebar);
@@ -34,8 +34,8 @@
   top: var(--sidebar-padding);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.85rem;
+  align-items: stretch;
+  gap: 0.7rem;
 }
 
 .shellWithCustomChrome .sidebar {
@@ -49,7 +49,7 @@
 .sidebarTop,
 .sidebarBottom {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.55rem;
   width: min(100%, 12.75rem);
   justify-items: stretch;
 }
@@ -77,21 +77,19 @@
   height: 2rem;
   flex-shrink: 0;
   border: 1px solid var(--line-default);
-  border-radius: 0.625rem;
-  background: var(--surface-panel);
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-secondary);
   transition:
     background 160ms ease,
     border-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    color 160ms ease;
 }
 
 .sidebarToggle:hover {
   background: var(--surface-hover);
   border-color: var(--line-strong);
   color: var(--text-primary);
-  transform: translateY(-1px);
 }
 
 .tooltipAnchor {
@@ -117,7 +115,7 @@
   border-top: 1px solid var(--line-strong);
   border-left: 1px solid var(--line-strong);
   background: var(--surface-panel);
-  box-shadow: -2px -2px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: none;
   transform: translateY(-50%) rotate(-45deg);
 }
 
@@ -129,14 +127,14 @@
   max-width: 14rem;
   padding: 0.42rem 0.6rem;
   border: 1px solid var(--line-strong);
-  border-radius: 0.625rem;
+  border-radius: var(--radius-sm);
   background: var(--surface-panel);
   box-shadow: var(--shadow-hover);
   color: var(--text-primary);
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.2;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   white-space: nowrap;
   transform: translate3d(-0.18rem, -50%, 0);
 }
@@ -164,14 +162,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.625rem;
-  background: var(--text-primary);
-  color: var(--text-inverse);
-  font-size: 0.82rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .brandMarkButton {
@@ -206,8 +205,6 @@
 }
 
 .brandMarkButton:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-panel);
   opacity: 0.96;
 }
 
@@ -219,27 +216,24 @@
   outline-offset: 2px;
 }
 
-.brandEyebrow,
 .cardEyebrow,
 .pageEyebrow {
   margin: 0;
   font-size: 0.74rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .workspaceCard {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.35rem;
   width: 100%;
   max-height: 14rem;
-  padding: 0.9rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-lg);
-  background: var(--surface-panel);
-  box-shadow: var(--shadow-panel);
+  padding: 0.55rem 0.15rem 0.8rem;
+  border-bottom: 1px solid var(--line-default);
+  background: transparent;
   overflow: hidden;
   transform-origin: top center;
   transition:
@@ -252,15 +246,18 @@
 }
 
 .workspaceTitle {
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--text-primary);
 }
 
 .workspaceText {
   margin: 0;
+  max-width: 100%;
   color: var(--text-secondary);
-  line-height: 1.6;
-  font-size: 0.88rem;
+  line-height: 1.5;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .workspaceMeta {
@@ -268,26 +265,27 @@
   flex-wrap: wrap;
   gap: 0.45rem;
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 .navigation {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.12rem;
   width: 100%;
 }
 
 .navItem {
   display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.7rem 0.75rem;
-  border-radius: var(--radius-md);
+  align-items: center;
+  gap: 0.58rem;
+  padding: 0.54rem 0.48rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   transition:
     background 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
 .navItem:hover {
@@ -298,6 +296,7 @@
 .navItemActive,
 .navItemActive:hover {
   background: var(--surface-selected);
+  border-color: var(--line-selected);
   color: var(--text-primary);
 }
 
@@ -305,10 +304,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
-  border-radius: 0.55rem;
-  background: var(--surface-panel-muted);
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: var(--radius-xs);
+  background: transparent;
   color: currentColor;
 }
 
@@ -319,25 +318,24 @@
 
 .navCopy strong {
   color: var(--text-primary);
-  font-size: 0.92rem;
+  font-size: 0.86rem;
   font-weight: 600;
 }
 
 .navCopy span {
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   line-height: 1.4;
 }
 
 .statsPanel {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 0.3rem;
+  gap: 0.1rem;
   width: 100%;
-  padding: 0.42rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-lg);
-  background: var(--surface-panel);
+  padding: 0.55rem 0 0;
+  border-top: 1px solid var(--line-default);
+  background: transparent;
 }
 
 .statRow {
@@ -346,10 +344,10 @@
   justify-content: space-between;
   gap: 0.55rem;
   min-width: 0;
-  padding: 0.42rem 0.58rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-sm);
-  background: var(--surface-panel-subtle);
+  padding: 0.28rem 0.15rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-secondary);
   font-size: 0.74rem;
   line-height: 1.25;
@@ -357,9 +355,9 @@
 
 .statRow strong {
   color: var(--text-primary);
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -367,25 +365,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
   width: 100%;
   min-width: 0;
-  padding: 0.56rem 0.7rem;
+  padding: 0.5rem 0.55rem;
   border: 1px solid var(--line-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel);
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-secondary);
   font-weight: 600;
   font-size: 0.82rem;
   line-height: 1.2;
   transition:
-    transform 160ms ease,
     border-color 160ms ease,
     background 160ms ease;
 }
 
 .signOutButton:hover {
-  transform: translateY(-1px);
   border-color: var(--line-strong);
   background: var(--surface-hover);
 }
@@ -416,23 +412,23 @@
   top: 0;
   z-index: 5;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.25rem 1.5rem 1rem;
+  gap: 1rem;
+  padding: 0.8rem 1.5rem;
   border-bottom: 1px solid var(--line-default);
   background: var(--surface-page);
 }
 
 .pageMeta {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.18rem;
 }
 
 .pageTitle {
   margin: 0;
-  font-size: clamp(1.55rem, 2vw, 2rem);
-  letter-spacing: -0.04em;
+  font-size: clamp(1.15rem, 1.5vw, 1.45rem);
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
@@ -440,7 +436,8 @@
   margin: 0;
   max-width: 44rem;
   color: var(--text-secondary);
-  line-height: 1.6;
+  font-size: 0.86rem;
+  line-height: 1.45;
 }
 
 .pageActions {
@@ -454,10 +451,10 @@
 .userChip {
   display: grid;
   gap: 0.05rem;
-  padding: 0.55rem 0.75rem;
+  padding: 0.42rem 0.6rem;
   border: 1px solid var(--line-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel);
+  border-radius: var(--radius-sm);
+  background: transparent;
 }
 
 .userName {
@@ -474,19 +471,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.72rem 0.9rem;
-  border-radius: var(--radius-md);
+  padding: 0.58rem 0.75rem;
+  border-radius: var(--radius-sm);
   background: var(--text-primary);
   color: var(--text-inverse);
   font-weight: 600;
   transition:
-    transform 160ms ease,
     opacity 160ms ease;
 }
 
 .primaryAction:hover {
   opacity: 0.94;
-  transform: translateY(-1px);
 }
 
 .main {
@@ -575,16 +570,16 @@
   .shellCollapsed .signOutButton:hover,
   .shellCollapsed .signOutButton:focus-visible {
     border-color: var(--line-strong);
-    background: var(--surface-panel);
-    box-shadow: var(--shadow-hover);
+    background: var(--surface-hover);
+    box-shadow: none;
   }
 
   .shellCollapsed .brandMarkButton:hover,
   .shellCollapsed .brandMarkButton:focus-visible {
     border-color: transparent;
-    background: var(--text-primary);
-    color: var(--text-inverse);
-    box-shadow: var(--shadow-hover);
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    box-shadow: none;
     opacity: 1;
   }
 
@@ -600,7 +595,7 @@
     min-width: 2rem;
     height: 2rem;
     padding: 0;
-    border-radius: 999px;
+    border-radius: var(--radius-sm);
   }
 }
 
@@ -650,7 +645,7 @@
 
   .navItem {
     border: 1px solid var(--line-default);
-    background: var(--surface-panel);
+    background: transparent;
   }
 
   .sidebarToggle {
@@ -659,6 +654,10 @@
 }
 
 @media (max-width: 760px) {
+  .workspaceText {
+    word-break: break-all;
+  }
+
   .navigation {
     grid-template-columns: 1fr;
   }

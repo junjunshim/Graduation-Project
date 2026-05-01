@@ -2,10 +2,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { createTopNode } from '../../workspace/data/orgService'
+import { ORG_NODE_TYPE_OPTIONS } from '../../workspace/model/options'
 import type { NodeType } from '../../workspace/model/types'
 import styles from './TopNodeSetupPage.module.css'
-
-const topNodeTypes: Exclude<NodeType, 'USER'>[] = ['COMPANY', 'DIVISION', 'DEPARTMENT', 'TEAM', 'PROJECT']
 
 const nodeTypeCopy: Record<Exclude<NodeType, 'USER'>, string> = {
   COMPANY: '회사',
@@ -50,7 +49,7 @@ export function TopNodeSetupPage() {
     setSubmitting(false)
 
     if (response.status === 'error') {
-      setFeedback({ tone: 'error', message: '공유 공간을 만들지 못했습니다. 다시 확인해 주세요.' })
+      setFeedback({ tone: 'error', message: response.message })
       return
     }
 
@@ -84,7 +83,7 @@ export function TopNodeSetupPage() {
                 onChange={(event) => setNodeType(event.target.value as Exclude<NodeType, 'USER'>)}
                 className={styles.input}
               >
-                {topNodeTypes.map((type) => (
+                {ORG_NODE_TYPE_OPTIONS.map((type) => (
                   <option key={type} value={type}>
                     {nodeTypeCopy[type]}
                   </option>

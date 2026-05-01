@@ -2,29 +2,9 @@ import type {
   OrganizationNodeRecord,
   RoleMember,
   SelectedNodeDetail,
-  WorkItemRecord,
 } from '../model/types'
 import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService'
-
-function compareByDate(left?: string, right?: string) {
-  return (left ?? '9999-12-31').localeCompare(right ?? '9999-12-31')
-}
-
-function sortNodes(nodes: OrganizationNodeRecord[]) {
-  return [...nodes].sort((left, right) => {
-    return left.path.length - right.path.length || left.name.localeCompare(right.name, 'ko')
-  })
-}
-
-function sortWorkItems(workItems: WorkItemRecord[]) {
-  return [...workItems].sort((left, right) => {
-    return (
-      compareByDate(left.dueDate, right.dueDate) ||
-      right.priority - left.priority ||
-      left.title.localeCompare(right.title, 'ko')
-    )
-  })
-}
+import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 
 function getInheritedManagers(
   node: OrganizationNodeRecord,
@@ -75,8 +55,29 @@ export function getSelectedNodeDetail(nodeId: number, userId?: string): Selected
   }
 
   const directRolesWithNodeId = toRoleMembers(snapshot, node.id)
-  const childNodes = sortNodes(snapshot.nodes.filter((candidate) => candidate.parentNodeId === node.id))
-  const directWorkItems = sortWorkItems(snapshot.workItems.filter((item) => item.ownerNodeId === node.id))
+  const allRolesWithNodeId = snapshot.roles.map((role) => {
+    const user = snapshot.users.find((candidate) => candidate.userId === role.userId)
+
+    return {
+      assignmentId: role.id,
+      userId: role.userId,
+      nodeId: role.nodeId,
+      name: user?.name ?? role.userId,
+      email: user?.email ?? '',
+      roleName: role.roleName,
+    }
+  })
+  const childNodes = sortWorkspaceNodes(snapshot.nodes.filter((candidate) => candidate.parentNodeId === node.id))
+  const directWorkItems = sortWorkspaceWorkItems(snapshot.workItems.filter((item) => item.ownerNodeId === node.id))
+  const canManage = Boolean(
+    userId &&
+      allRolesWithNodeId.some(
+        (role) =>
+          role.userId === userId &&
+          node.path.includes(role.nodeId) &&
+          (role.roleName === 'ADMIN' || role.roleName === 'MANAGER'),
+      ),
+  )
 
   return {
     node,
@@ -90,7 +91,8 @@ export function getSelectedNodeDetail(nodeId: number, userId?: string): Selected
       roleName: role.roleName,
     })),
     directWorkItems,
-    inheritedManagers: getInheritedManagers(node, directRolesWithNodeId, snapshot.users),
+    inheritedManagers: getInheritedManagers(node, allRolesWithNodeId, snapshot.users),
+    canManage,
     nextActions: [
       {
         label: '하위 조직 추가',

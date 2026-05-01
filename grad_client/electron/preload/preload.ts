@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { WINDOW_CONTROL_CHANNELS } from '../ipc/windowControls'
+import { WINDOW_CONTROL_CHANNELS } from '../../shared/ipc/windowControls'
 
 if (process.platform === 'win32') {
   contextBridge.exposeInMainWorld('windowControls', {

@@ -1,7 +1,9 @@
 import type { SignInRequest, SignInResponse, SignUpRequest } from '../model/types'
 import { delay, generateUserId, getUserByEmail, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
+import { getCurrentServerUser, signInServerUser, signOutServerUser, signUpServerUser } from './serverWorkspace'
 import { TEAM_404_DEMO_USER_ID } from './seed'
 import { getCurrentSessionUserId, setCurrentSessionUserId } from './session'
+import { isServerDataSource } from './workspaceMode'
 
 export function getNextGeneratedUserId() {
   return generateUserId(readWorkspaceDb())
@@ -12,6 +14,13 @@ export function getDemoWorkspaceUser() {
 }
 
 export function enterDemoWorkspace() {
+  if (isServerDataSource()) {
+    return {
+      status: 'error' as const,
+      message: '서버 모드에서는 데모 워크스페이스 대신 실제 계정으로 로그인해 주세요.',
+    }
+  }
+
   const demoUser = getDemoWorkspaceUser()
 
   if (!demoUser) {
@@ -30,6 +39,10 @@ export function enterDemoWorkspace() {
 }
 
 export function getCurrentUser() {
+  if (isServerDataSource()) {
+    return getCurrentServerUser()
+  }
+
   const db = readWorkspaceDb()
   const sessionUserId = getCurrentSessionUserId()
 
@@ -41,6 +54,10 @@ export function getCurrentUser() {
 }
 
 export async function signInUser(payload: SignInRequest): Promise<SignInResponse> {
+  if (isServerDataSource()) {
+    return signInServerUser(payload)
+  }
+
   await delay()
 
   const db = readWorkspaceDb()
@@ -72,6 +89,10 @@ export async function signInUser(payload: SignInRequest): Promise<SignInResponse
 }
 
 export async function signUpUser(payload: SignUpRequest) {
+  if (isServerDataSource()) {
+    return signUpServerUser(payload)
+  }
+
   await delay()
 
   const db = readWorkspaceDb()
@@ -142,5 +163,10 @@ export async function signUpUser(payload: SignUpRequest) {
 }
 
 export function signOutUser() {
+  if (isServerDataSource()) {
+    signOutServerUser()
+    return
+  }
+
   setCurrentSessionUserId(null)
 }

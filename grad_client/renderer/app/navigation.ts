@@ -11,7 +11,7 @@ export const navigationItems: NavigationItem[] = [
   {
     to: '/dashboard',
     label: '대시보드',
-    description: '운영 현황과 주요 업무 확인',
+    description: '내 업무와 마감 임박 확인',
     icon: 'home',
   },
   {

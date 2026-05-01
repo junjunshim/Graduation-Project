@@ -7,7 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.75rem;
   min-height: var(--window-titlebar-height);
   border-bottom: 1px solid var(--line-default);
   -webkit-app-region: drag;
@@ -25,16 +25,16 @@
 .left {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.55rem;
   min-width: 0;
-  padding-inline: 0.7rem;
+  padding-inline: 0.65rem;
   padding-block: 0.25rem;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
   min-width: 0;
 }
 
@@ -42,20 +42,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.45rem;
-  height: 1.45rem;
-  border-radius: 0.45rem;
-  background: var(--text-primary);
-  color: var(--text-inverse);
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .brandTitle {
   color: var(--text-primary);
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -96,7 +97,7 @@
 .right {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.32rem;
   margin-left: auto;
   -webkit-app-region: no-drag;
 }
@@ -104,18 +105,18 @@
 .workspaceActions {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.32rem;
 }
 
 .actionLink {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 2rem;
-  padding-inline: 0.75rem;
+  height: 1.8rem;
+  padding-inline: 0.62rem;
   border: 1px solid var(--line-default);
-  border-radius: 0.6rem;
-  background: var(--surface-panel);
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 600;
@@ -132,10 +133,10 @@
 .userChip {
   display: grid;
   gap: 0.05rem;
-  padding: 0.4rem 0.65rem;
+  padding: 0.32rem 0.55rem;
   border: 1px solid var(--line-default);
-  border-radius: 0.6rem;
-  background: var(--surface-panel);
+  border-radius: var(--radius-sm);
+  background: transparent;
 }
 
 .userName {
@@ -167,8 +168,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.9rem;
-  min-width: 2.9rem;
+  width: 2.7rem;
+  min-width: 2.7rem;
   height: var(--window-titlebar-height);
   color: var(--text-secondary);
   transition:

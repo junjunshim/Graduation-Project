@@ -9,51 +9,51 @@
     "Noto Sans KR",
     sans-serif;
 
-  --radius-xl: 1rem;
-  --radius-lg: 0.875rem;
-  --radius-md: 0.75rem;
-  --radius-sm: 0.625rem;
-  --radius-xs: 0.5rem;
+  --radius-xl: 0.5rem;
+  --radius-lg: 0.5rem;
+  --radius-md: 0.45rem;
+  --radius-sm: 0.375rem;
+  --radius-xs: 0.25rem;
 
-  --shadow-window: 0 20px 48px rgba(15, 23, 42, 0.08);
-  --shadow-panel: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-hover: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-window: none;
+  --shadow-panel: none;
+  --shadow-hover: none;
 
-  --space-page-x: 2rem;
-  --space-page-top: 2rem;
-  --space-page-bottom: 3rem;
+  --space-page-x: 1.5rem;
+  --space-page-top: 1.35rem;
+  --space-page-bottom: 2rem;
   --space-page-x-mobile: 1rem;
   --space-page-top-mobile: 1rem;
   --space-page-bottom-mobile: 1.5rem;
 
-  --space-section-lg: 1.75rem;
-  --space-section: 1.25rem;
-  --space-stack: 0.9rem;
-  --space-compact: 0.6rem;
+  --space-section-lg: 1.35rem;
+  --space-section: 1rem;
+  --space-stack: 0.75rem;
+  --space-compact: 0.5rem;
 
-  --space-panel-lg: 1.5rem;
-  --space-panel: 1.125rem;
-  --space-panel-compact: 0.9rem;
+  --space-panel-lg: 1.1rem;
+  --space-panel: 0.9rem;
+  --space-panel-compact: 0.75rem;
 
-  --space-control-y: 0.75rem;
-  --space-control-x: 0.9rem;
-  --space-pill-y: 0.48rem;
-  --space-pill-x: 0.7rem;
+  --space-control-y: 0.62rem;
+  --space-control-x: 0.75rem;
+  --space-pill-y: 0.3rem;
+  --space-pill-x: 0.52rem;
   --window-titlebar-height: 48px;
 }
 
 :root,
 [data-theme='light'] {
   --surface-app: #ffffff;
-  --surface-shell: #f7f6f3;
-  --surface-sidebar: #fbfbfa;
+  --surface-shell: #fbfbfa;
+  --surface-sidebar: #f7f7f5;
   --surface-page: #ffffff;
   --surface-panel: #ffffff;
-  --surface-panel-muted: #f7f7f5;
-  --surface-panel-subtle: #fcfcfb;
-  --surface-hover: #f1f1ef;
-  --surface-selected: #ecebe7;
-  --surface-selected-strong: #e5e3dd;
+  --surface-panel-muted: #f6f6f4;
+  --surface-panel-subtle: #fafaf9;
+  --surface-hover: #f4f4f2;
+  --surface-selected: #f0f5ff;
+  --surface-selected-strong: #e5eeff;
   --surface-input: #ffffff;
   --surface-input-disabled: #f7f7f5;
 
@@ -62,12 +62,12 @@
   --text-muted: #8f8a80;
   --text-inverse: #ffffff;
 
-  --line-default: #e9e8e4;
-  --line-strong: #d7d4cc;
-  --line-selected: #c8c3b8;
+  --line-default: #e7e5df;
+  --line-strong: #d4d1c8;
+  --line-selected: #b9c8ef;
 
-  --accent-blue-soft: #eef4ff;
-  --accent-blue: #3056d3;
+  --accent-blue-soft: #edf4ff;
+  --accent-blue: #2f5fb8;
   --accent-amber-soft: #fcf3d9;
   --accent-amber: #8b6415;
   --accent-green-soft: #edf7ee;
@@ -78,15 +78,15 @@
 
 [data-theme='dark'] {
   --surface-app: #191919;
-  --surface-shell: #1c1c1c;
-  --surface-sidebar: #202020;
+  --surface-shell: #191919;
+  --surface-sidebar: #1f1f1f;
   --surface-page: #191919;
   --surface-panel: #202020;
   --surface-panel-muted: #262626;
   --surface-panel-subtle: #232323;
-  --surface-hover: #2b2b2b;
-  --surface-selected: #313131;
-  --surface-selected-strong: #3a3a3a;
+  --surface-hover: #292929;
+  --surface-selected: #243047;
+  --surface-selected-strong: #2b3a57;
   --surface-input: #232323;
   --surface-input-disabled: #272727;
 
@@ -97,10 +97,10 @@
 
   --line-default: #303030;
   --line-strong: #3c3c3c;
-  --line-selected: #4a4a4a;
+  --line-selected: #4a5f8f;
 
-  --accent-blue-soft: rgba(58, 86, 196, 0.18);
-  --accent-blue: #8aa3ff;
+  --accent-blue-soft: rgba(88, 124, 194, 0.18);
+  --accent-blue: #93afe8;
   --accent-amber-soft: rgba(138, 104, 24, 0.2);
   --accent-amber: #f0c266;
   --accent-green-soft: rgba(33, 115, 70, 0.22);

@@ -4,11 +4,20 @@ export type IconName =
   | 'home'
   | 'database'
   | 'search'
+  | 'bell'
+  | 'helpCircle'
+  | 'user'
   | 'calendar'
   | 'clock'
   | 'checkCircle'
+  | 'alertTriangle'
   | 'sparkles'
   | 'page'
+  | 'fileText'
+  | 'plus'
+  | 'users'
+  | 'messageCircle'
+  | 'trendingUp'
   | 'arrowRight'
   | 'chevronLeft'
   | 'chevronRight'
@@ -45,6 +54,25 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M16 16l4.5 4.5" />
     </>
   ),
+  bell: (
+    <>
+      <path d="M6.5 10a5.5 5.5 0 0 1 11 0v3.2l1.7 3.1H4.8l1.7-3.1V10z" />
+      <path d="M9.5 19a2.7 2.7 0 0 0 5 0" />
+    </>
+  ),
+  helpCircle: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9.7 9.2a2.5 2.5 0 1 1 3.9 2.1c-.9.6-1.6 1.1-1.6 2.2" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+    </>
+  ),
   calendar: (
     <>
       <rect x="4" y="5" width="16" height="15" rx="2.5" />
@@ -65,6 +93,13 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M8.5 12.2l2.4 2.4 4.8-5" />
     </>
   ),
+  alertTriangle: (
+    <>
+      <path d="M12 4l9 16H3l9-16z" />
+      <path d="M12 9v4.2" />
+      <path d="M12 17h.01" />
+    </>
+  ),
   sparkles: (
     <>
       <path d="M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3z" />
@@ -78,6 +113,40 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M14 3.5V8h4" />
       <path d="M9 12h6" />
       <path d="M9 15.5h6" />
+    </>
+  ),
+  fileText: (
+    <>
+      <path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 20V5A1.5 1.5 0 0 1 7.5 3.5z" />
+      <path d="M14 3.5V8h4" />
+      <path d="M9 11.5h6" />
+      <path d="M9 15h6" />
+      <path d="M9 18.5h4" />
+    </>
+  ),
+  plus: (
+    <>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </>
+  ),
+  users: (
+    <>
+      <circle cx="9" cy="8.5" r="3.2" />
+      <path d="M3.8 20a5.2 5.2 0 0 1 10.4 0" />
+      <path d="M15.5 6.2a3 3 0 0 1 0 5.6" />
+      <path d="M16.5 15.2A5.2 5.2 0 0 1 20.2 20" />
+    </>
+  ),
+  messageCircle: (
+    <>
+      <path d="M4.5 6.8A8.2 8.2 0 0 1 12 3.5c4.7 0 8.5 3.2 8.5 7.3S16.7 18 12 18a10 10 0 0 1-2.4-.3L5 20.5l1-4A7 7 0 0 1 4.5 6.8z" />
+    </>
+  ),
+  trendingUp: (
+    <>
+      <path d="M4 16l5-5 4 4 7-8" />
+      <path d="M15 7h5v5" />
     </>
   ),
   arrowRight: <path d="M5 12h13M13 6l6 6-6 6" />,

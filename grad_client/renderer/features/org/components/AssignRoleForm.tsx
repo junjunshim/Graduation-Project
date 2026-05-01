@@ -1,13 +1,13 @@
 import type { FormEvent } from 'react'
+import { ROLE_OPTIONS } from '../../workspace/model/options'
 import type { RoleName, UserRecord } from '../../workspace/model/types'
-import styles from '../pages/OrgManagePage.module.css'
-
-const roleOptions: RoleName[] = ['ADMIN', 'MANAGER', 'MEMBER']
+import styles from '../styles/OrgManagePage.module.css'
 
 type AssignRoleFormProps = {
   assignRoleName: RoleName
   roleEmail: string
   users: UserRecord[]
+  disabled?: boolean
   onAssignRoleNameChange: (value: RoleName) => void
   onRoleEmailChange: (value: string) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -17,6 +17,7 @@ export function AssignRoleForm({
   assignRoleName,
   roleEmail,
   users,
+  disabled = false,
   onAssignRoleNameChange,
   onRoleEmailChange,
   onSubmit,
@@ -32,7 +33,12 @@ export function AssignRoleForm({
 
       <label className={styles.field}>
         <span className={styles.label}>사용자</span>
-        <select className={styles.input} value={roleEmail} onChange={(event) => onRoleEmailChange(event.target.value)}>
+        <select
+          className={styles.input}
+          value={roleEmail}
+          disabled={disabled}
+          onChange={(event) => onRoleEmailChange(event.target.value)}
+        >
           {users.map((member) => (
             <option key={member.userId} value={member.email}>
               {member.name} ({member.userId})
@@ -46,9 +52,10 @@ export function AssignRoleForm({
         <select
           className={styles.input}
           value={assignRoleName}
+          disabled={disabled}
           onChange={(event) => onAssignRoleNameChange(event.target.value as RoleName)}
         >
-          {roleOptions.map((role) => (
+          {ROLE_OPTIONS.map((role) => (
             <option key={role} value={role}>
               {role}
             </option>
@@ -56,7 +63,7 @@ export function AssignRoleForm({
         </select>
       </label>
 
-      <button type="submit" className={styles.submitButton}>
+      <button type="submit" className={styles.submitButton} disabled={disabled}>
         권한 추가
       </button>
     </form>

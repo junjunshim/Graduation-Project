@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { formatWorkspaceDate } from '../../workspace/model/formatters'
 import { getNodeTypeLabel, getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
 import type { SelectedNodeDetail, WorkItemRecord } from '../../workspace/model/types'
-import styles from '../pages/OrgManagePage.module.css'
+import styles from '../styles/OrgManagePage.module.css'
 
 function WorkItemBadge({ item }: { item: WorkItemRecord }) {
   const tone = getWorkItemStatusTone(item.status)
@@ -37,12 +37,17 @@ export function OrgDetailPanel({ selectedDetail }: OrgDetailPanelProps) {
       <section className={styles.summaryPanel}>
         <p className={styles.panelEyebrow}>Selected Node</p>
         <strong className={styles.summaryTitle}>{selectedDetail.node.name}</strong>
-        <p className={styles.summaryPath}>{selectedDetail.pathLabel}</p>
+        <div className={styles.breadcrumb} aria-label="조직 경로">
+          {selectedDetail.pathLabel.split(' / ').map((label, index) => (
+            <span key={`${label}-${index}`}>{label}</span>
+          ))}
+        </div>
         <div className={styles.summaryFacts}>
           <span>{getNodeTypeLabel(selectedDetail.node.nodeType)}</span>
           <span>직속 권한 {selectedDetail.directRoles.length}</span>
           <span>직속 업무 {selectedDetail.directWorkItems.length}</span>
           <span>하위 조직 {selectedDetail.childNodes.length}</span>
+          <span>{selectedDetail.canManage ? '관리 가능' : '읽기 전용'}</span>
         </div>
       </section>
 

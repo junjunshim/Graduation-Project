@@ -1,5 +1,5 @@
 import type { WorkItemComposerContext } from '../../workspace/model/types'
-import styles from '../pages/WorkItemCreatePage.module.css'
+import styles from '../styles/WorkItemCreatePage.module.css'
 
 type WorkItemCreateSidebarProps = {
   composer: WorkItemComposerContext

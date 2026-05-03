@@ -106,7 +106,6 @@ CREATE OR REPLACE FUNCTION create_sub_node(
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
-    v_requester_role role_assignments.role%TYPE;
     v_new_node_id organization_nodes.node_id%TYPE;
     v_parent_path organization_nodes.path%TYPE;
 BEGIN
@@ -127,17 +126,13 @@ BEGIN
     END IF;
 
     -- 2. 요청자 권한 확인
-    SELECT role INTO v_requester_role
-    FROM role_assignments
-    WHERE user_id = v_requester_id AND node_id = p_parent_node_id;
-
-    IF NOT check_authority_with_override(v_requester_id, p_parent_node_id, B'01000000') THEN
+    IF NOT check_authority_with_override(v_requester_id, p_parent_node_id, 'NODE_SUB_CREATE') THEN
         RAISE EXCEPTION '[P0006]Insufficient permissions. (sub node creation) for user: %', p_requester_email
         USING ERRCODE = 'P0006';
     END IF;
 
     -- 3. 소유자 권한 확인 (소유자는 최소 MEMBER 권한 필요)
-    IF NOT check_authority_with_override(v_owner_user_id, p_parent_node_id, B'00010000') THEN
+    IF NOT check_authority_with_override(v_owner_user_id, p_parent_node_id, 'WI_PERSONAL_CHANGE') THEN
         RAISE EXCEPTION '[P0006]Insufficient permissions. (owner user must have at least MEMBER role) for user: %', p_owner_user_email
         USING ERRCODE = 'P0006';
     END IF;

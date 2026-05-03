@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../design-system/theme/ThemeToggle'
-import { hasCustomWindowControls } from './windowControls'
+import { getWindowControls } from './windowControls'
 import styles from './WindowTitleBar.module.css'
 
 type AuthWindowTitleBarProps = {
@@ -23,23 +23,23 @@ type WorkspaceWindowTitleBarProps = {
 type WindowTitleBarProps = AuthWindowTitleBarProps | WorkspaceWindowTitleBarProps
 
 export function WindowTitleBar(props: WindowTitleBarProps) {
-  const hasWindowControls = hasCustomWindowControls()
+  const windowControls = getWindowControls()
   const [isMaximized, setIsMaximized] = useState(false)
 
   useEffect(() => {
-    if (!hasWindowControls || !window.windowControls) {
+    if (!windowControls) {
       return
     }
 
     let isMounted = true
 
-    void window.windowControls.isMaximized().then((nextState) => {
+    void windowControls.isMaximized().then((nextState) => {
       if (isMounted) {
         setIsMaximized(nextState)
       }
     })
 
-    const unsubscribe = window.windowControls.onMaximizeChange((nextState) => {
+    const unsubscribe = windowControls.onMaximizeChange((nextState) => {
       setIsMaximized(nextState)
     })
 
@@ -47,9 +47,9 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
       isMounted = false
       unsubscribe()
     }
-  }, [hasWindowControls])
+  }, [windowControls])
 
-  if (!hasWindowControls || !window.windowControls) {
+  if (!windowControls) {
     return null
   }
 
@@ -58,7 +58,7 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
       <div className={styles.left}>
         <div className={styles.brand}>
           <span className={styles.brandMark}>GP</span>
-          <span className={styles.brandTitle}>Grad Client</span>
+          <span className={styles.brandTitle}>Grad Workflow</span>
         </div>
         <span className={styles.divider} aria-hidden="true" />
         {props.variant === 'workspace' ? (
@@ -95,7 +95,7 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
             className={styles.controlButton}
             aria-label="Minimize window"
             title="Minimize"
-            onClick={() => window.windowControls?.minimize()}
+            onClick={() => windowControls.minimize()}
           >
             <Icon name="minimize" size={14} />
           </button>
@@ -105,7 +105,7 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
             className={styles.controlButton}
             aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
             title={isMaximized ? 'Restore' : 'Maximize'}
-            onClick={() => window.windowControls?.toggleMaximize()}
+            onClick={() => windowControls.toggleMaximize()}
           >
             <Icon name={isMaximized ? 'restore' : 'maximize'} size={14} />
           </button>
@@ -115,7 +115,7 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
             className={[styles.controlButton, styles.controlClose].join(' ')}
             aria-label="Close window"
             title="Close"
-            onClick={() => window.windowControls?.close()}
+            onClick={() => windowControls.close()}
           >
             <Icon name="close" size={14} />
           </button>

@@ -104,6 +104,18 @@ export type AssignRoleRequest = {
   roleName: RoleName
 }
 
+export type UpdateNodeRequest = {
+  nodeId: number
+  name?: string
+  nodeType?: Exclude<NodeType, 'USER'>
+}
+
+export type UpdateRoleRequest = {
+  email: string
+  nodeId: number
+  roleName: RoleName
+}
+
 export type CreateWorkItemRequest = {
   workItemId: string
   ownerNodeId: number
@@ -119,6 +131,23 @@ export type CreateWorkItemRequest = {
   dueDate?: string
 }
 
+export type UpdateWorkItemRequest = {
+  workItemId: string
+  title?: string
+  description?: string
+  status?: WorkItemStatus
+  priority?: number
+  weight?: number
+  progress?: number
+  startDate?: string
+  dueDate?: string
+}
+
+export type ClaimWorkItemRequest = {
+  workItemId: string
+  ownerUserId: string
+}
+
 export type WorkspaceSummary = {
   nodeCount: number
   workItemCount: number
@@ -129,6 +158,9 @@ export type WorkspaceSummary = {
   rootWorkItemCount: number
   childWorkItemCount: number
   averageProgress: number
+  myWorkItemCount: number
+  teamPoolWorkItemCount: number
+  dueSoonWorkItemCount: number
 }
 
 export type WorkspaceNodeView = {
@@ -165,6 +197,9 @@ export type WorkspaceOverview = {
   roots: WorkspaceNodeView[]
   urgentWorkItems: WorkItemRecord[]
   recentWorkItems: WorkItemRecord[]
+  myWorkItems: WorkItemRecord[]
+  teamPoolWorkItems: WorkItemRecord[]
+  dueSoonWorkItems: WorkItemRecord[]
   rootNode?: OrganizationNodeRecord
   rootRoleMembers: RoleMember[]
   onboardingSteps: OnboardingStep[]
@@ -177,6 +212,7 @@ export type SelectedNodeDetail = {
   directRoles: RoleMember[]
   directWorkItems: WorkItemRecord[]
   inheritedManagers: UserRecord[]
+  canManage: boolean
   nextActions: Array<{
     label: string
     description: string

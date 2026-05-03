@@ -11,8 +11,12 @@ import {
   TEAM_404_SEED_VERSION,
 } from './seed'
 import { ensureSessionUserExists } from './session'
+import { isServerDataSource } from './workspaceMode'
 
 const DB_STORAGE_KEY = 'grad-client-mvp-db'
+const SERVER_DB_STORAGE_KEY = 'grad-client-server-db'
+const SERVER_DATASET_ID = 'server-workspace'
+const SERVER_SEED_VERSION = 1
 
 function hasStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
@@ -72,17 +76,37 @@ function computePath(nodeId: number, nodes: OrganizationNodeRecord[], trail = ne
   return [...computePath(node.parentNodeId, nodes, trail), node.id]
 }
 
-function normalizeDb(raw: unknown): WorkspaceDatabase {
+function createEmptyServerWorkspace(): WorkspaceDatabase {
+  return {
+    datasetId: SERVER_DATASET_ID,
+    seedVersion: SERVER_SEED_VERSION,
+    users: [],
+    nodes: [],
+    roles: [],
+    workItems: [],
+    counters: {
+      node: 1,
+      role: 1,
+    },
+  }
+}
+
+function normalizeDb(
+  raw: unknown,
+  options: { allowExternalDataset?: boolean; fallback?: () => WorkspaceDatabase } = {},
+): WorkspaceDatabase {
+  const createFallback = options.fallback ?? createTeam404WorkspaceSeed
+
   if (!raw || typeof raw !== 'object') {
-    return createTeam404WorkspaceSeed()
+    return createFallback()
   }
 
   const rawDb = raw as Record<string, unknown>
   const datasetId = String(rawDb.datasetId ?? '')
   const seedVersion = Number(rawDb.seedVersion)
 
-  if (datasetId !== TEAM_404_DATASET_ID || seedVersion !== TEAM_404_SEED_VERSION) {
-    return createTeam404WorkspaceSeed()
+  if (!options.allowExternalDataset && (datasetId !== TEAM_404_DATASET_ID || seedVersion !== TEAM_404_SEED_VERSION)) {
+    return createFallback()
   }
 
   if (
@@ -91,7 +115,7 @@ function normalizeDb(raw: unknown): WorkspaceDatabase {
     !Array.isArray(rawDb.roles) ||
     !Array.isArray(rawDb.workItems)
   ) {
-    return createTeam404WorkspaceSeed()
+    return createFallback()
   }
 
   const users: UserRecord[] = []
@@ -257,8 +281,12 @@ function normalizeDb(raw: unknown): WorkspaceDatabase {
   })
 
   return {
-    datasetId: TEAM_404_DATASET_ID,
-    seedVersion: TEAM_404_SEED_VERSION,
+    datasetId: options.allowExternalDataset ? datasetId || SERVER_DATASET_ID : TEAM_404_DATASET_ID,
+    seedVersion: options.allowExternalDataset
+      ? Number.isFinite(seedVersion)
+        ? seedVersion
+        : SERVER_SEED_VERSION
+      : TEAM_404_SEED_VERSION,
     users,
     nodes,
     roles,
@@ -271,6 +299,10 @@ function normalizeDb(raw: unknown): WorkspaceDatabase {
 }
 
 export function readWorkspaceDb(): WorkspaceDatabase {
+  if (isServerDataSource()) {
+    return readServerWorkspaceDb()
+  }
+
   if (!hasStorage()) {
     return createTeam404WorkspaceSeed()
   }
@@ -308,7 +340,51 @@ export function writeWorkspaceDb(db: WorkspaceDatabase) {
     return
   }
 
-  window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(db))
+  window.localStorage.setItem(isServerDataSource() ? SERVER_DB_STORAGE_KEY : DB_STORAGE_KEY, JSON.stringify(db))
+}
+
+export function readServerWorkspaceDb(): WorkspaceDatabase {
+  if (!hasStorage()) {
+    return createEmptyServerWorkspace()
+  }
+
+  const raw = window.localStorage.getItem(SERVER_DB_STORAGE_KEY)
+
+  if (!raw) {
+    return createEmptyServerWorkspace()
+  }
+
+  try {
+    const normalized = normalizeDb(JSON.parse(raw), {
+      allowExternalDataset: true,
+      fallback: createEmptyServerWorkspace,
+    })
+    const normalizedRaw = JSON.stringify(normalized)
+
+    if (normalizedRaw !== raw) {
+      window.localStorage.setItem(SERVER_DB_STORAGE_KEY, normalizedRaw)
+    }
+
+    return normalized
+  } catch {
+    return createEmptyServerWorkspace()
+  }
+}
+
+export function writeServerWorkspaceDb(db: WorkspaceDatabase) {
+  if (!hasStorage()) {
+    return
+  }
+
+  window.localStorage.setItem(SERVER_DB_STORAGE_KEY, JSON.stringify(db))
+}
+
+export function clearServerWorkspaceDb() {
+  if (!hasStorage()) {
+    return
+  }
+
+  window.localStorage.removeItem(SERVER_DB_STORAGE_KEY)
 }
 
 function ensureSeedData(db: WorkspaceDatabase) {

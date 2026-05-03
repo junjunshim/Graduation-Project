@@ -1,9 +1,16 @@
 import path from 'node:path'
-import { app, BrowserWindow, ipcMain, Menu } from 'electron'
+import { createRequire } from 'node:module'
+import type { BrowserWindow as BrowserWindowType } from 'electron'
 import { fileURLToPath } from 'node:url'
-import { WINDOW_CONTROL_CHANNELS } from '../ipc/windowControls'
+import {
+  registerWindowControlHandlers,
+  sendWindowMaximizeState,
+  watchWindowMaximizeState,
+} from './windowControls'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const require = createRequire(import.meta.url)
+const { app, BrowserWindow, Menu } = require('electron') as typeof import('electron')
 
 // The built directory structure
 //
@@ -23,47 +30,10 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
-let win: BrowserWindow | null
+let win: BrowserWindowType | null
 const isWindows = process.platform === 'win32'
 
-function getSenderWindow(sender: Electron.WebContents) {
-  return BrowserWindow.fromWebContents(sender)
-}
-
-function sendMaximizeState(targetWindow: BrowserWindow | null) {
-  if (!targetWindow || targetWindow.isDestroyed()) {
-    return
-  }
-
-  targetWindow.webContents.send(WINDOW_CONTROL_CHANNELS.maximizeChanged, targetWindow.isMaximized())
-}
-
-ipcMain.on(WINDOW_CONTROL_CHANNELS.minimize, (event) => {
-  getSenderWindow(event.sender)?.minimize()
-})
-
-ipcMain.on(WINDOW_CONTROL_CHANNELS.toggleMaximize, (event) => {
-  const senderWindow = getSenderWindow(event.sender)
-
-  if (!senderWindow) {
-    return
-  }
-
-  if (senderWindow.isMaximized()) {
-    senderWindow.unmaximize()
-    return
-  }
-
-  senderWindow.maximize()
-})
-
-ipcMain.on(WINDOW_CONTROL_CHANNELS.close, (event) => {
-  getSenderWindow(event.sender)?.close()
-})
-
-ipcMain.handle(WINDOW_CONTROL_CHANNELS.isMaximized, (event) => {
-  return getSenderWindow(event.sender)?.isMaximized() ?? false
-})
+registerWindowControlHandlers()
 
 function createWindow() {
   win = new BrowserWindow({
@@ -77,14 +47,11 @@ function createWindow() {
   Menu.setApplicationMenu(null)
 
   if (isWindows) {
-    const syncMaximizeState = () => sendMaximizeState(win)
-
-    win.on('maximize', syncMaximizeState)
-    win.on('unmaximize', syncMaximizeState)
+    watchWindowMaximizeState(win)
   }
 
   win.webContents.on('did-finish-load', () => {
-    sendMaximizeState(win)
+    sendWindowMaximizeState(win)
   })
 
   if (VITE_DEV_SERVER_URL) {

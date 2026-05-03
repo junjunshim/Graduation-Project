@@ -1,10 +1,9 @@
 import type { FormEvent } from 'react'
 import { getWorkItemStatusLabel } from '../../workspace/model/labels'
+import { WORK_ITEM_STATUS_OPTIONS } from '../../workspace/model/options'
 import type { WorkItemComposerContext, WorkItemStatus } from '../../workspace/model/types'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
-import styles from '../pages/WorkItemCreatePage.module.css'
-
-const statusOptions: WorkItemStatus[] = ['todo', 'in-progress', 'done']
+import styles from '../styles/WorkItemCreatePage.module.css'
 
 type WorkItemCreateFormProps = {
   composer: WorkItemComposerContext
@@ -124,7 +123,7 @@ export function WorkItemCreateForm({
               value={form.status}
               onChange={(event) => onFieldChange('status', event.target.value as WorkItemStatus)}
             >
-              {statusOptions.map((status) => (
+              {WORK_ITEM_STATUS_OPTIONS.map((status) => (
                 <option key={status} value={status}>
                   {getWorkItemStatusLabel(status)}
                 </option>

@@ -49,8 +49,8 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean): Shel
     return hasOrgContext
       ? {
           section: 'Workspace',
-          title: '운영 현황',
-          description: '조직 구조와 우선순위 업무를 한 화면에서 정리합니다.',
+          title: '내 업무',
+          description: '내가 맡은 업무와 마감 임박 항목만 빠르게 확인합니다.',
           actionLabel: '업무 등록',
           actionTo: '/work-items/new',
         }

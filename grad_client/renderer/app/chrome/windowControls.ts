@@ -1,5 +1,15 @@
-export type { WindowControlsApi } from '../../../electron/ipc/windowControls'
+import type { WindowControlsApi } from '../../../shared/ipc/windowControls'
+
+export type { WindowControlsApi }
+
+export function getWindowControls(): WindowControlsApi | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  return window.windowControls ?? null
+}
 
 export function hasCustomWindowControls() {
-  return typeof window !== 'undefined' && typeof window.windowControls !== 'undefined'
+  return getWindowControls() !== null
 }

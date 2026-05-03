@@ -74,7 +74,7 @@ export function ShellSidebar({
             <strong className={styles.workspaceTitle}>{workspaceLabel}</strong>
             <p className={styles.workspaceText}>
               {hasOrgContext
-                ? '공유 공간과 하위 조직을 포함한 작업 현황을 한곳에서 확인할 수 있습니다.'
+                ? '공유 공간과 조직별 업무 현황을 확인합니다.'
                 : '개인 공간이 준비되어 있으며 첫 공유 공간을 기다리고 있습니다.'}
             </p>
             <div className={styles.workspaceMeta}>

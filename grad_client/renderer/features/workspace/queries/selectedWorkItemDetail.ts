@@ -1,19 +1,6 @@
-import type { SelectedWorkItemDetail, WorkItemRecord } from '../model/types'
+import type { SelectedWorkItemDetail } from '../model/types'
 import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService'
-
-function compareByDate(left?: string, right?: string) {
-  return (left ?? '9999-12-31').localeCompare(right ?? '9999-12-31')
-}
-
-function sortWorkItems(workItems: WorkItemRecord[]) {
-  return [...workItems].sort((left, right) => {
-    return (
-      compareByDate(left.dueDate, right.dueDate) ||
-      right.priority - left.priority ||
-      left.title.localeCompare(right.title, 'ko')
-    )
-  })
-}
+import { sortWorkspaceWorkItems } from '../model/sorters'
 
 export function getSelectedWorkItemDetail(workItemId: string, userId?: string): SelectedWorkItemDetail | null {
   const snapshot = getOrgSnapshot()
@@ -38,7 +25,7 @@ export function getSelectedWorkItemDetail(workItemId: string, userId?: string): 
       ? visibleWorkItems.find((candidate) => candidate.workItemId === item.parentWorkItemId) ?? null
       : null
 
-  const childWorkItems = sortWorkItems(
+  const childWorkItems = sortWorkspaceWorkItems(
     visibleWorkItems.filter((candidate) => candidate.parentWorkItemId === item.workItemId),
   )
 

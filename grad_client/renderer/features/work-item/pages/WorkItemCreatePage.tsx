@@ -6,7 +6,7 @@ import { createWorkItem } from '../../workspace/data/workItemService'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import { WorkItemCreateSidebar } from '../components/WorkItemCreateSidebar'
 import { useWorkItemCreateForm } from '../hooks/useWorkItemCreateForm'
-import styles from './WorkItemCreatePage.module.css'
+import styles from '../styles/WorkItemCreatePage.module.css'
 
 export function WorkItemCreatePage() {
   const navigate = useNavigate()
@@ -50,7 +50,7 @@ export function WorkItemCreatePage() {
     setSubmitting(false)
 
     if (response.status === 'error') {
-      setFeedback({ tone: 'error', message: '업무 정보를 다시 확인해 주세요.' })
+      setFeedback({ tone: 'error', message: response.message })
       return
     }
 

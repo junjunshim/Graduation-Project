@@ -10,25 +10,18 @@ import type {
 } from '../model/types'
 import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService'
 import { getCurrentUser } from '../data/userService'
+import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 
-function compareByDate(left?: string, right?: string) {
-  return (left ?? '9999-12-31').localeCompare(right ?? '9999-12-31')
-}
+function isDueSoon(item: WorkItemRecord) {
+  if (!item.dueDate || item.status === 'done') {
+    return false
+  }
 
-function sortNodes(nodes: OrganizationNodeRecord[]) {
-  return [...nodes].sort((left, right) => {
-    return left.path.length - right.path.length || left.name.localeCompare(right.name, 'ko')
-  })
-}
+  const dueDate = new Date(item.dueDate)
+  const threshold = new Date()
+  threshold.setDate(threshold.getDate() + 7)
 
-function sortWorkItems(workItems: WorkItemRecord[]) {
-  return [...workItems].sort((left, right) => {
-    return (
-      compareByDate(left.dueDate, right.dueDate) ||
-      right.priority - left.priority ||
-      left.title.localeCompare(right.title, 'ko')
-    )
-  })
+  return !Number.isNaN(dueDate.getTime()) && dueDate <= threshold
 }
 
 function buildOnboardingSteps({
@@ -144,11 +137,29 @@ export function getWorkspaceOverview(userId = getCurrentUser()?.userId): Workspa
   const snapshot = getOrgSnapshot()
   const summary = getWorkspaceSummary(userId)
   const accessibleNodeIds = userId ? getAccessibleNodeIdsForUser(userId) : []
-  const visibleNodes = sortNodes(snapshot.nodes.filter((node) => accessibleNodeIds.includes(node.id)))
-  const visibleWorkItems = sortWorkItems(
+  const visibleNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIds.includes(node.id)))
+  const visibleWorkItems = sortWorkspaceWorkItems(
     snapshot.workItems.filter((item) => accessibleNodeIds.includes(item.ownerNodeId)),
   )
   const roots = buildWorkspaceTree(visibleNodes, visibleWorkItems)
+  const myWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter((item) => item.ownerUserId === userId))
+  const teamPoolWorkItems = sortWorkspaceWorkItems(
+    visibleWorkItems.filter((item) => item.ownerUserId !== userId && item.status !== 'done'),
+  )
+  const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isDueSoon))
+  const urgentWorkItemIds = new Set<string>()
+  const urgentWorkItems = sortWorkspaceWorkItems(
+    [...dueSoonWorkItems, ...visibleWorkItems.filter((item) => item.priority <= 2 && item.status !== 'done')].filter(
+      (item) => {
+        if (urgentWorkItemIds.has(item.workItemId)) {
+          return false
+        }
+
+        urgentWorkItemIds.add(item.workItemId)
+        return true
+      },
+    ),
+  )
   const rootNode =
     visibleNodes.find((node) => node.nodeType !== 'USER' && node.path.length === 1) ??
     visibleNodes.find((node) => node.nodeType !== 'USER')
@@ -171,10 +182,13 @@ export function getWorkspaceOverview(userId = getCurrentUser()?.userId): Workspa
     visibleNodes,
     visibleWorkItems,
     roots,
-    urgentWorkItems: [...visibleWorkItems],
+    urgentWorkItems,
     recentWorkItems: [...visibleWorkItems]
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
       .slice(0, 4),
+    myWorkItems,
+    teamPoolWorkItems,
+    dueSoonWorkItems,
     rootNode,
     rootRoleMembers,
     onboardingSteps: buildOnboardingSteps({

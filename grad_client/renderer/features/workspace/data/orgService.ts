@@ -3,10 +3,20 @@ import type {
   CreateSubNodeRequest,
   CreateTopNodeRequest,
   OrganizationNodeRecord,
+  UpdateNodeRequest,
+  UpdateRoleRequest,
   WorkspaceSnapshot,
   WorkspaceSummary,
 } from '../model/types'
 import { delay, getUserByEmail, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
+import {
+  assignRoleOnServer,
+  createSubNodeOnServer,
+  createTopNodeOnServer,
+  updateNodeOnServer,
+  updateRoleOnServer,
+} from './serverWorkspace'
+import { isServerDataSource } from './workspaceMode'
 
 function getDescendantNodeIds(rootIds: number[], nodes: OrganizationNodeRecord[]) {
   const visited = new Set<number>()
@@ -78,6 +88,9 @@ export function getWorkspaceSummary(userId?: string): WorkspaceSummary {
       rootWorkItemCount: 0,
       childWorkItemCount: 0,
       averageProgress: 0,
+      myWorkItemCount: 0,
+      teamPoolWorkItemCount: 0,
+      dueSoonWorkItemCount: 0,
     }
   }
 
@@ -85,6 +98,9 @@ export function getWorkspaceSummary(userId?: string): WorkspaceSummary {
   const visibleNodeIds = getAccessibleNodeIdsForUser(userId)
   const visibleWorkItems = db.workItems.filter((item) => visibleNodeIds.includes(item.ownerNodeId))
   const visibleNodes = db.nodes.filter((node) => visibleNodeIds.includes(node.id))
+  const now = new Date()
+  const dueSoonThreshold = new Date(now)
+  dueSoonThreshold.setDate(now.getDate() + 7)
 
   return {
     nodeCount: visibleNodes.length,
@@ -101,10 +117,24 @@ export function getWorkspaceSummary(userId?: string): WorkspaceSummary {
             visibleWorkItems.reduce((total, item) => total + item.progress, 0) / visibleWorkItems.length,
           )
         : 0,
+    myWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId === userId).length,
+    teamPoolWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId !== userId).length,
+    dueSoonWorkItemCount: visibleWorkItems.filter((item) => {
+      if (!item.dueDate || item.status === 'done') {
+        return false
+      }
+
+      const dueDate = new Date(item.dueDate)
+      return !Number.isNaN(dueDate.getTime()) && dueDate <= dueSoonThreshold
+    }).length,
   }
 }
 
 export async function createTopNode(payload: CreateTopNodeRequest) {
+  if (isServerDataSource()) {
+    return createTopNodeOnServer(payload)
+  }
+
   await delay()
 
   const db = readWorkspaceDb()
@@ -155,6 +185,10 @@ export async function createTopNode(payload: CreateTopNodeRequest) {
 }
 
 export async function createSubNode(payload: CreateSubNodeRequest) {
+  if (isServerDataSource()) {
+    return createSubNodeOnServer(payload)
+  }
+
   await delay()
 
   const db = readWorkspaceDb()
@@ -214,6 +248,10 @@ export async function createSubNode(payload: CreateSubNodeRequest) {
 }
 
 export async function assignRoleToNode(payload: AssignRoleRequest) {
+  if (isServerDataSource()) {
+    return assignRoleOnServer(payload)
+  }
+
   await delay()
 
   const db = readWorkspaceDb()
@@ -259,5 +297,87 @@ export async function assignRoleToNode(payload: AssignRoleRequest) {
   return {
     status: 'success' as const,
     newRoleId: db.counters.role - 1,
+  }
+}
+
+export async function updateNode(payload: UpdateNodeRequest) {
+  if (isServerDataSource()) {
+    return updateNodeOnServer(payload)
+  }
+
+  await delay()
+
+  const db = readWorkspaceDb()
+  const node = db.nodes.find((candidate) => candidate.id === payload.nodeId)
+  const name = payload.name?.trim()
+
+  if (!node) {
+    return {
+      status: 'error' as const,
+      message: '수정할 조직을 찾을 수 없습니다.',
+    }
+  }
+
+  if (name !== undefined && !name) {
+    return {
+      status: 'error' as const,
+      message: '조직 이름은 비워둘 수 없습니다.',
+    }
+  }
+
+  if (name) {
+    node.name = name
+  }
+
+  if (payload.nodeType) {
+    node.nodeType = payload.nodeType
+  }
+
+  writeWorkspaceDb(db)
+
+  return {
+    status: 'success' as const,
+  }
+}
+
+export async function updateRole(payload: UpdateRoleRequest) {
+  if (isServerDataSource()) {
+    return updateRoleOnServer(payload)
+  }
+
+  await delay()
+
+  const db = readWorkspaceDb()
+  const user = getUserByEmail(payload.email, db.users)
+  const node = db.nodes.find((candidate) => candidate.id === payload.nodeId)
+
+  if (!user) {
+    return {
+      status: 'error' as const,
+      message: '권한을 변경할 사용자를 찾을 수 없습니다.',
+    }
+  }
+
+  if (!node) {
+    return {
+      status: 'error' as const,
+      message: '대상 조직을 찾을 수 없습니다.',
+    }
+  }
+
+  const role = db.roles.find((candidate) => candidate.userId === user.userId && candidate.nodeId === payload.nodeId)
+
+  if (!role) {
+    return {
+      status: 'error' as const,
+      message: '변경할 권한이 없습니다. 먼저 권한을 추가해 주세요.',
+    }
+  }
+
+  role.roleName = payload.roleName
+  writeWorkspaceDb(db)
+
+  return {
+    status: 'success' as const,
   }
 }

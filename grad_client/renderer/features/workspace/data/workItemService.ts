@@ -1,11 +1,17 @@
-import type { CreateWorkItemRequest } from '../model/types'
+import type { ClaimWorkItemRequest, CreateWorkItemRequest, UpdateWorkItemRequest } from '../model/types'
 import { delay, generateWorkItemId, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
+import { createWorkItemOnServer, updateWorkItemOnServer } from './serverWorkspace'
+import { isServerDataSource } from './workspaceMode'
 
 export function getNextGeneratedWorkItemId() {
   return generateWorkItemId(readWorkspaceDb())
 }
 
 export async function createWorkItem(payload: CreateWorkItemRequest) {
+  if (isServerDataSource()) {
+    return createWorkItemOnServer(payload)
+  }
+
   await delay()
 
   const db = readWorkspaceDb()
@@ -101,5 +107,133 @@ export async function createWorkItem(payload: CreateWorkItemRequest) {
   return {
     status: 'success' as const,
     workItemId,
+  }
+}
+
+export async function updateWorkItem(payload: UpdateWorkItemRequest) {
+  if (isServerDataSource()) {
+    return updateWorkItemOnServer(payload)
+  }
+
+  await delay()
+
+  const db = readWorkspaceDb()
+  const item = db.workItems.find((candidate) => candidate.workItemId === payload.workItemId)
+
+  if (!item) {
+    return {
+      status: 'error' as const,
+      message: '수정할 업무를 찾을 수 없습니다.',
+    }
+  }
+
+  const title = payload.title?.trim()
+  const description = payload.description?.trim()
+  const priority = payload.priority ?? item.priority
+  const weight = payload.weight ?? item.weight
+  const progress = payload.progress ?? item.progress
+
+  if (title !== undefined && !title) {
+    return {
+      status: 'error' as const,
+      message: '업무 제목은 필수입니다.',
+    }
+  }
+
+  if (priority < 1 || priority > 5) {
+    return {
+      status: 'error' as const,
+      message: 'priority는 1에서 5 사이여야 합니다.',
+    }
+  }
+
+  if (weight < 0) {
+    return {
+      status: 'error' as const,
+      message: 'weight는 0 이상이어야 합니다.',
+    }
+  }
+
+  if (progress < 0 || progress > 100) {
+    return {
+      status: 'error' as const,
+      message: 'progress는 0에서 100 사이여야 합니다.',
+    }
+  }
+
+  if (payload.startDate && payload.dueDate && payload.dueDate < payload.startDate) {
+    return {
+      status: 'error' as const,
+      message: '마감일은 시작일보다 빠를 수 없습니다.',
+    }
+  }
+
+  if (title !== undefined) {
+    item.title = title
+  }
+
+  if (description !== undefined) {
+    item.description = description
+  }
+
+  if (payload.status) {
+    item.status = payload.status
+  }
+
+  item.priority = priority
+  item.weight = weight
+  item.progress = progress
+
+  if (payload.startDate !== undefined) {
+    if (payload.startDate) {
+      item.startDate = payload.startDate
+    } else {
+      delete item.startDate
+    }
+  }
+
+  if (payload.dueDate !== undefined) {
+    if (payload.dueDate) {
+      item.dueDate = payload.dueDate
+    } else {
+      delete item.dueDate
+    }
+  }
+
+  writeWorkspaceDb(db)
+
+  return {
+    status: 'success' as const,
+    workItemId: item.workItemId,
+  }
+}
+
+export async function claimWorkItem(payload: ClaimWorkItemRequest) {
+  if (isServerDataSource()) {
+    return {
+      status: 'error' as const,
+      message: '서버 API에는 아직 업무 소유권 변경 엔드포인트가 없습니다.',
+    }
+  }
+
+  await delay()
+
+  const db = readWorkspaceDb()
+  const item = db.workItems.find((candidate) => candidate.workItemId === payload.workItemId)
+  const owner = db.users.find((user) => user.userId === payload.ownerUserId)
+
+  if (!item || !owner) {
+    return {
+      status: 'error' as const,
+      message: '가져올 업무나 사용자를 찾을 수 없습니다.',
+    }
+  }
+
+  item.ownerUserId = owner.userId
+  writeWorkspaceDb(db)
+
+  return {
+    status: 'success' as const,
+    workItemId: item.workItemId,
   }
 }

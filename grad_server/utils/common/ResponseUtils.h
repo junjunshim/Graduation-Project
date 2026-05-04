@@ -15,6 +15,8 @@ enum class DbErrorCode {
     InsufficientPermissions,    // P0006 권한 부족
     InvalidAuthority,           // P0007 찾을 수 없는 권한 
     AuthorityCheckFailed,       // P0008 권한 체크 실패
+    RoleAlreadyExists,          // P0009 사용자 역할 이미 존재
+    AddRoleFailed,              // P0010 사용자 역할 부여 실패
     Unknown                     // 알 수 없는 에러
 };
 

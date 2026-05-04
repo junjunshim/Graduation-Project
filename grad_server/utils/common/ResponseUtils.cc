@@ -65,6 +65,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0006") != std::string::npos) return DbErrorCode::InsufficientPermissions;
     else if (errMsg.find("P0007") != std::string::npos) return DbErrorCode::InvalidAuthority;
     else if (errMsg.find("P0008") != std::string::npos) return DbErrorCode::AuthorityCheckFailed;
+    else if (errMsg.find("P0009") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
+    else if (errMsg.find("P0010") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -123,6 +125,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::AuthorityCheckFailed:{
             ret["message"] = "권한 체크에 실패했습니다.";
             ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RoleAlreadyExists:{
+            ret["message"] = "사용자 역할이 이미 존재합니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::AddRoleFailed:{
+            ret["message"] = "사용자 역할 부여에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
         default:{

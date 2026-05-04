@@ -6,18 +6,16 @@ using namespace drogon;
 
 namespace api
 {
-namespace v1
-{
 class UserController : public drogon::HttpController<UserController>
 {
   public:
     METHOD_LIST_BEGIN
     // use METHOD_ADD to add your custom processing function here;
-    // METHOD_ADD(UserController::get, "/{2}/{1}", Get); // path is /api/v1/UserController/{arg2}/{arg1}
-    // METHOD_ADD(UserController::your_method_name, "/{1}/{2}/list", Get); // path is /api/v1/UserController/{arg1}/{arg2}/list
+    // METHOD_ADD(UserController::get, "/{2}/{1}", Get); // path is /api/UserController/{arg2}/{arg1}
+    // METHOD_ADD(UserController::your_method_name, "/{1}/{2}/list", Get); // path is /api/UserController/{arg1}/{arg2}/list
     // ADD_METHOD_TO(UserController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
-    ADD_METHOD_TO(UserController::createUser, "/api/v1/users", Post);
+    ADD_METHOD_TO(UserController::createUser, "/api/users", Post);
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -26,5 +24,4 @@ class UserController : public drogon::HttpController<UserController>
 
     void createUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
-}
 }

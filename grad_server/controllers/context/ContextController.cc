@@ -1,8 +1,8 @@
-#include "api_v1_ContextController.h"
+#include "ContextController.h"
 #include "ResponseUtils.h"
 #include <json/json.h>
 
-using namespace api::v1;
+using namespace api;
 using namespace app_utils;
 
 // Add definition of your processing function here

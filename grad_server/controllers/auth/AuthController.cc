@@ -1,11 +1,11 @@
-#include "api_v1_AuthController.h"
+#include "AuthController.h"
 #include <json/json.h>
 #include <jwt-cpp/jwt.h>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 
-using namespace api::v1;
+using namespace api;
 
 // Add definition of your processing function here
 Json::Value AuthController::generateToken(const std::string &user_email){

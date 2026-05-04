@@ -6,19 +6,17 @@ using namespace drogon;
 
 namespace api
 {
-namespace v1
-{
 class WorkItemController : public drogon::HttpController<WorkItemController>
 {
   public:
     METHOD_LIST_BEGIN
     // use METHOD_ADD to add your custom processing function here;
-    // METHOD_ADD(WorkItemController::get, "/{2}/{1}", Get); // path is /api/v1/WorkItemController/{arg2}/{arg1}
-    // METHOD_ADD(WorkItemController::your_method_name, "/{1}/{2}/list", Get); // path is /api/v1/WorkItemController/{arg1}/{arg2}/list
+    // METHOD_ADD(WorkItemController::get, "/{2}/{1}", Get); // path is /api/WorkItemController/{arg2}/{arg1}
+    // METHOD_ADD(WorkItemController::your_method_name, "/{1}/{2}/list", Get); // path is /api/WorkItemController/{arg1}/{arg2}/list
     // ADD_METHOD_TO(WorkItemController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
-    ADD_METHOD_TO(WorkItemController::createWorkItem, "/api/v1/workItems", Post, "JwtFilter");
-    ADD_METHOD_TO(WorkItemController::updateWorkItem, "/api/v1/workItems", Patch, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::createWorkItem, "/api/workItems", Post, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::updateWorkItem, "/api/workItems", Patch, "JwtFilter");
     
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -28,5 +26,4 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
     void createWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void updateWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 };
-}
 }

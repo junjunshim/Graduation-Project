@@ -1,8 +1,8 @@
-#include "api_v1_UserController.h"
+#include "UserController.h"
 #include "Users.h"
 #include <json/json.h>
 
-using namespace api::v1;
+using namespace api;
 
 // 모델 사용을 위한 네임스페이스
 using namespace drogon_model::grad_project;

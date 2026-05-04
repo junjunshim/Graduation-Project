@@ -1,8 +1,8 @@
-#include "api_v1_RoleController.h"
+#include "RoleController.h"
 #include "RoleAssignments.h"
 #include <json/json.h>
 
-using namespace api::v1;
+using namespace api;
 
 // Add definition of your processing function here
 void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){

@@ -1,9 +1,9 @@
-#include "api_v1_OrgController.h"
+#include "OrgController.h"
 #include "OrganizationNodes.h"
 #include "ResponseUtils.h"
 #include <json/json.h>
 
-using namespace api::v1;
+using namespace api;
 using namespace app_utils;
 
 // 모델 사용을 위한 네임스페이스

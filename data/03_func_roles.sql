@@ -6,70 +6,39 @@ CREATE OR REPLACE FUNCTION add_role(
     p_target_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
     p_role_name role_assignments.role%TYPE
-) RETURNS SETOF action_result AS $$
+) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_target_id users.user_id%TYPE;
     v_requester_role role_assignments.role%TYPE;
     v_new_id role_assignments.assignment_id%TYPE;
 BEGIN
-    -- 1. 요청자와 대상자의 user_id 가져오기
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 타켓 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_target_id FROM users WHERE email = p_target_email;
 
     IF v_target_id IS NULL THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '대상 사용자를 찾을 수 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+        RAISE EXCEPTION '[P0001]Target user does not exist : %', p_target_email
+        USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 요청자의 현재 노드 권한 확인
-    SELECT role INTO v_requester_role 
-    FROM role_assignments 
-    WHERE user_id = v_requester_id AND node_id = p_node_id;
-
-    -- 3. 권한 체크 (ADMIN 또는 MANAGER만 타인에게 권한 부여 가능)
-    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    -- 3. 요청자 권한 체크 (NODE_ADD_ROLE 권한 필요)
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
+        RAISE EXCEPTION '[P0006]Requester does not have authority to add role on this node : %', p_requester_email
+        USING ERRCODE = 'P0006';
     END IF;
 
-    -- 4. 이미 권한이 있는지 확인 (중복 방지)
+    -- 4. 이미 역할이 있는지 확인 (중복 방지)
     IF EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id) THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '해당 사용자는 이미 이 노드에 권한이 있습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+        RAISE EXCEPTION '[P0009]Target user already has a role on this node : %', p_target_email
+        USING ERRCODE = 'P0009';
     END IF;
 
     -- 5. 권한 부여 실행
@@ -78,8 +47,6 @@ BEGIN
     RETURNING assignment_id INTO v_new_id;
 
     RETURN QUERY SELECT 
-        TRUE, 
-        '성공적으로 권한이 부여되었습니다.'::TEXT, 
         'ROLE'::TEXT,
         p_node_id::TEXT,
         NULL::TEXT,
@@ -91,6 +58,17 @@ BEGIN
         r.updated_at::TEXT
     FROM role_assignments r
     WHERE assignment_id = v_new_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0006' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0009' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0010]Failed to assign role to user : %', p_target_email
+        USING ERRCODE = 'P0010';
 END;
 $$ LANGUAGE plpgsql;
 

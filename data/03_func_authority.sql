@@ -23,8 +23,8 @@ BEGIN
     WHERE name = p_authority_name;
 
     IF v_required_bit IS NULL THEN
-        RAISE EXCEPTION '[P0007]Invalid authority name: %', p_authority_name
-        USING ERRCODE = 'P0007';
+        RAISE EXCEPTION '[P0101]Invalid authority name: %', p_authority_name
+        USING ERRCODE = 'P0101';
     END IF;
 
     RETURN v_required_bit;
@@ -89,8 +89,8 @@ BEGIN
     WHERE name IN (p_required_authority_name, 'DENY');
 
     IF v_required_bit IS NULL THEN
-        RAISE EXCEPTION '[P0007]Invalid authority name: %', p_required_authority_name
-        USING ERRCODE = 'P0007';
+        RAISE EXCEPTION '[P0101]Invalid authority name: %', p_required_authority_name
+        USING ERRCODE = 'P0101';
     END IF;
 
     -- 1단계: 유효 권한 가져오기 (Override 정책 적용)
@@ -109,10 +109,10 @@ BEGIN
     RETURN (v_final_auth & v_required_bit) = v_required_bit;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0007' THEN
+        WHEN SQLSTATE 'P0101' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0008]Error checking authority: (REASON : %)', SQLERRM
-        USING ERRCODE = 'P0008';
+        RAISE EXCEPTION '[P0102]Error checking authority: (REASON : %)', SQLERRM
+        USING ERRCODE = 'P0102';
 END;
 $$ LANGUAGE plpgsql;

@@ -57,16 +57,17 @@ Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &resu
 // 문자열 에러 메시지에서 Enum으로 변환하는 헬퍼 함수
 DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     // 에러 메시지에서 PostgreSQL의 사용자 정의 예외 코드(P0001, P0002 등)를 찾아서 DbErrorCode로 변환
-    if (errMsg.find("P0001") != std::string::npos) return DbErrorCode::UserNotFound;
-    else if (errMsg.find("P0002") != std::string::npos) return DbErrorCode::InitialContextError;
-    else if (errMsg.find("P0003") != std::string::npos) return DbErrorCode::SyncContextError;
-    else if (errMsg.find("P0004") != std::string::npos) return DbErrorCode::CreateTopNodeError;
-    else if (errMsg.find("P0005") != std::string::npos) return DbErrorCode::CreateSubNodeError;
-    else if (errMsg.find("P0006") != std::string::npos) return DbErrorCode::InsufficientPermissions;
-    else if (errMsg.find("P0007") != std::string::npos) return DbErrorCode::InvalidAuthority;
-    else if (errMsg.find("P0008") != std::string::npos) return DbErrorCode::AuthorityCheckFailed;
-    else if (errMsg.find("P0009") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
-    else if (errMsg.find("P0010") != std::string::npos) return DbErrorCode::AddRoleFailed;
+    if (errMsg.find("P0001") != std::string::npos) return DbErrorCode::RequesterNotFound;
+    else if (errMsg.find("P0002") != std::string::npos) return DbErrorCode::TargetNotFound;
+    else if (errMsg.find("P0101") != std::string::npos) return DbErrorCode::AuthorityNotFound;
+    else if (errMsg.find("P0102") != std::string::npos) return DbErrorCode::AuthorityCheckFailed;
+    else if (errMsg.find("P0103") != std::string::npos) return DbErrorCode::InsufficientAuthority;
+    else if (errMsg.find("P0201") != std::string::npos) return DbErrorCode::InitialContextError;
+    else if (errMsg.find("P0202") != std::string::npos) return DbErrorCode::SyncContextError;
+    else if (errMsg.find("P0301") != std::string::npos) return DbErrorCode::CreateTopNodeError;
+    else if (errMsg.find("P0302") != std::string::npos) return DbErrorCode::CreateSubNodeError;
+    else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
+    else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
     else return DbErrorCode::Unknown;
 }
 
@@ -87,9 +88,29 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
 
     // Enum 값에 따라 프론트엔드에 반환할 메시지와 HTTP 상태 코드 설정
     switch (errorCode) {
-        case DbErrorCode::UserNotFound:{
-            ret["message"] = "사용자를 찾을 수 없습니다.";
+        case DbErrorCode::RequesterNotFound:{
+            ret["message"] = "요청자를 찾을 수 없습니다.";
             ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::TargetNotFound:{
+            ret["message"] = "대상을 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::AuthorityNotFound:{
+            ret["message"] = "찾을 수 없는 권한입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::AuthorityCheckFailed:{
+            ret["message"] = "권한 체크에 실패했습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::InsufficientAuthority:{
+            ret["message"] = "권한이 부족합니다.";
+            ret["http_code"] = drogon::k403Forbidden;
             break;
         }
         case DbErrorCode::InitialContextError:{
@@ -112,29 +133,14 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
-        case DbErrorCode::InsufficientPermissions:{
-            ret["message"] = "권한이 부족합니다.";
-            ret["http_code"] = drogon::k403Forbidden;
-            break;
-        }
-        case DbErrorCode::InvalidAuthority:{
-            ret["message"] = "찾을 수 없는 권한입니다.";
-            ret["http_code"] = drogon::k400BadRequest;
-            break;
-        }
-        case DbErrorCode::AuthorityCheckFailed:{
-            ret["message"] = "권한 체크에 실패했습니다.";
-            ret["http_code"] = drogon::k400BadRequest;
+        case DbErrorCode::AddRoleFailed:{
+            ret["message"] = "사용자 역할 부여에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
         case DbErrorCode::RoleAlreadyExists:{
             ret["message"] = "사용자 역할이 이미 존재합니다.";
             ret["http_code"] = drogon::k400BadRequest;
-            break;
-        }
-        case DbErrorCode::AddRoleFailed:{
-            ret["message"] = "사용자 역할 부여에 실패했습니다.";
-            ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
         default:{

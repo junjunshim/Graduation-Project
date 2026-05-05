@@ -89,8 +89,8 @@ BEGIN
         WHEN SQLSTATE 'P0001' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0004]Error creating top-node: %, requester: %  (REASON: %)', p_name, p_email, SQLERRM
-        USING ERRCODE = 'P0004';
+        RAISE EXCEPTION '[P0301]Error creating top-node: %, requester: %  (REASON: %)', p_name, p_email, SQLERRM
+        USING ERRCODE = 'P0301';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -121,20 +121,20 @@ BEGIN
     SELECT user_id INTO v_owner_user_id FROM users WHERE email = p_owner_user_email;
 
     IF v_owner_user_id IS NULL THEN
-        RAISE EXCEPTION '[P0001]Owner user does not exist : %', p_owner_user_email
-        USING ERRCODE = 'P0001';
+        RAISE EXCEPTION '[P0002]Owner user does not exist : %', p_owner_user_email
+        USING ERRCODE = 'P0002';
     END IF;
 
     -- 2. 요청자 권한 확인
     IF NOT check_authority_with_override(v_requester_id, p_parent_node_id, 'NODE_SUB_CREATE') THEN
-        RAISE EXCEPTION '[P0006]Insufficient permissions. (sub node creation) for user: %', p_requester_email
-        USING ERRCODE = 'P0006';
+        RAISE EXCEPTION '[P0103]Insufficient permissions. (sub node creation) for user: %', p_requester_email
+        USING ERRCODE = 'P0103';
     END IF;
 
     -- 3. 소유자 권한 확인 (소유자는 최소 MEMBER 권한 필요)
     IF NOT check_authority_with_override(v_owner_user_id, p_parent_node_id, 'WI_PERSONAL_CHANGE') THEN
-        RAISE EXCEPTION '[P0006]Insufficient permissions. (owner user must have at least MEMBER role) for user: %', p_owner_user_email
-        USING ERRCODE = 'P0006';
+        RAISE EXCEPTION '[P0103]Insufficient permissions. (owner user must have at least MEMBER role) for user: %', p_owner_user_email
+        USING ERRCODE = 'P0103';
     END IF;
 
     -- 3. 하위 노드 생성
@@ -207,13 +207,13 @@ BEGIN
     WHERE a.node_id = v_new_node_id;
 
     EXCEPTION 
-        WHEN SQLSTATE 'P0001' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
         RAISE;
-        WHEN SQLSTATE 'P0006' THEN
+        WHEN SQLSTATE 'P0103' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0005]Error creating sub-node: %, requester: %  (REASON: %)', p_name, p_requester_email, SQLERRM
-        USING ERRCODE = 'P0005';
+        RAISE EXCEPTION '[P0302]Error creating sub-node: %, requester: %  (REASON: %)', p_name, p_requester_email, SQLERRM
+        USING ERRCODE = 'P0302';
 END;
 $$ LANGUAGE plpgsql;
 

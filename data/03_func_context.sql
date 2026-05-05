@@ -168,8 +168,8 @@ BEGIN
         WHEN SQLSTATE 'P0001' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0002]Error fetching initial context for user: % (REASON: %)', p_user_email, SQLERRM
-        USING ERRCODE = 'P0002';
+        RAISE EXCEPTION '[P0201]Error fetching initial context for user: % (REASON: %)', p_user_email, SQLERRM
+        USING ERRCODE = 'P0201';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -346,7 +346,7 @@ BEGIN
         WHEN SQLSTATE 'P0001' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0003]Error fetching sync context for user: % (REASON: %)', p_user_email, SQLERRM
-        USING ERRCODE = 'P0003';
+        RAISE EXCEPTION '[P0202]Error fetching sync context for user: % (REASON: %)', p_user_email, SQLERRM
+        USING ERRCODE = 'P0202';
 END;
 $$ LANGUAGE plpgsql;

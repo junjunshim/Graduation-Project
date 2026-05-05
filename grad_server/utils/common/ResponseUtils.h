@@ -7,16 +7,17 @@
 
 // DB 에러 코드를 나타내는 Enum 클래스
 enum class DbErrorCode {
-    UserNotFound,               // P0001 사용자 없음
-    InitialContextError,        // P0002 사용자 전체 데이터 로드 실패
-    SyncContextError,           // P0003 사용자 변경 데이터 로드 실패
-    CreateTopNodeError,         // P0004 최상위 노드 생성 실패
-    CreateSubNodeError,         // P0005 하위 노드 생성 실패
-    InsufficientPermissions,    // P0006 권한 부족
-    InvalidAuthority,           // P0007 찾을 수 없는 권한 
-    AuthorityCheckFailed,       // P0008 권한 체크 실패
-    RoleAlreadyExists,          // P0009 사용자 역할 이미 존재
-    AddRoleFailed,              // P0010 사용자 역할 부여 실패
+    RequesterNotFound,          // P0001 요청자 없음
+    TargetNotFound,             // P0002 대상 없음
+    AuthorityNotFound,          // P0101 찾을 수 없는 권한
+    AuthorityCheckFailed,       // P0102 권한 체크 실패
+    InsufficientAuthority,      // P0103 권한 부족
+    InitialContextError,        // P0201 사용자 전체 데이터 로드 실패
+    SyncContextError,           // P0202 사용자 변경 데이터 로드 실패
+    CreateTopNodeError,         // P0301 최상위 노드 생성 실패
+    CreateSubNodeError,         // P0302 하위 노드 생성 실패
+    AddRoleFailed,              // P0401 사용자 역할 부여 실패
+    RoleAlreadyExists,          // P0402 사용자 역할 이미 존재
     Unknown                     // 알 수 없는 에러
 };
 

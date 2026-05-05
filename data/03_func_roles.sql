@@ -25,20 +25,20 @@ BEGIN
     SELECT user_id INTO v_target_id FROM users WHERE email = p_target_email;
 
     IF v_target_id IS NULL THEN
-        RAISE EXCEPTION '[P0001]Target user does not exist : %', p_target_email
-        USING ERRCODE = 'P0001';
+        RAISE EXCEPTION '[P0002]Target user does not exist : %', p_target_email
+        USING ERRCODE = 'P0002';
     END IF;
 
     -- 3. 요청자 권한 체크 (NODE_ADD_ROLE 권한 필요)
     IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
-        RAISE EXCEPTION '[P0006]Requester does not have authority to add role on this node : %', p_requester_email
-        USING ERRCODE = 'P0006';
+        RAISE EXCEPTION '[P0103]Requester does not have authority to add role on this node : %', p_requester_email
+        USING ERRCODE = 'P0103';
     END IF;
 
     -- 4. 이미 역할이 있는지 확인 (중복 방지)
     IF EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id) THEN
-        RAISE EXCEPTION '[P0009]Target user already has a role on this node : %', p_target_email
-        USING ERRCODE = 'P0009';
+        RAISE EXCEPTION '[P0402]Target user already has a role on this node : %', p_target_email
+        USING ERRCODE = 'P0402';
     END IF;
 
     -- 5. 권한 부여 실행
@@ -60,15 +60,15 @@ BEGIN
     WHERE assignment_id = v_new_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
         RAISE;
-        WHEN SQLSTATE 'P0006' THEN
+        WHEN SQLSTATE 'P0103' THEN
         RAISE;
-        WHEN SQLSTATE 'P0009' THEN
+        WHEN SQLSTATE 'P0402' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0010]Failed to assign role to user : %', p_target_email
-        USING ERRCODE = 'P0010';
+        RAISE EXCEPTION '[P0401]Failed to assign role to user : %', p_target_email
+        USING ERRCODE = 'P0401';
 END;
 $$ LANGUAGE plpgsql;
 

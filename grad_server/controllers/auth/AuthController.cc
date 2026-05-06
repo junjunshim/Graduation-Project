@@ -1,4 +1,5 @@
 #include "AuthController.h"
+#include "ResponseUtils.h"
 #include <json/json.h>
 #include <jwt-cpp/jwt.h>
 #include <chrono>
@@ -6,6 +7,7 @@
 #include <sstream>
 
 using namespace api;
+using namespace app_utils;
 
 // Add definition of your processing function here
 Json::Value AuthController::generateToken(const std::string &user_email){
@@ -47,9 +49,13 @@ std::string AuthController::timePointToString(const std::chrono::system_clock::t
 }
 
 void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    // 요청 바디에서 JSON 데이터 파싱
     auto jsonPtr = req->getJsonObject();
-
-    // 1. 유효성 검사
+    std::string email = (*jsonPtr)["email"].asString();
+    std::string password = (*jsonPtr)["password"].asString();
+    
+    // 필수 파라미터 유효성 검사
     if(!jsonPtr || (*jsonPtr)["email"].isNull() || (*jsonPtr)["password"].isNull()){
         Json::Value ret;
         ret["status"] = "error";
@@ -61,57 +67,64 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
         callback(resp);
         return;
     }
-
     
     // 2. 비즈니스 로직
+    // 데이터베이스 클라이언트 객체를 가져오기
     auto dbClient = drogon::app().getDbClient();
     
-    std::string email = (*jsonPtr)["email"].asString();
-    std::string password = (*jsonPtr)["password"].asString();
-    
+    // JWT 토큰 생성
     Json::Value tokens = generateToken(email);
 
+    // JWT 토큰에서 필요한 정보 추출
     std::string access_token = tokens["access_token"].asString();
     std::string refresh_token = tokens["refresh_token"].asString();
     std::string refresh_token_expiry = tokens["refresh_token_expiry"].asString();
 
+    // DB 함수 호출 SQL
     std::string sql = "SELECT * from login_user($1, $2, $3, $4::TIMESTAMP)";
 
+    // DB 함수 비동기 실행
     dbClient->execSqlAsync(
         sql,
+        // [성공 콜백]
         [callback, access_token, refresh_token](const orm::Result &result){
-            Json::Value ret;
-            auto row = result[0];
-
-            bool success = row["status"].as<bool>();
-
-            if(success){
-                ret["status"] = "success";
-                ret["message"] = row["message"].as<std::string>();
-                ret["access_token"] = access_token;
-                ret["refresh_token"] = refresh_token;
-
-                auto resp = HttpResponse::newHttpJsonResponse(ret);
-                resp->setStatusCode(k200OK);
-                callback(resp);
-            }
-            else{
+            // DB 결과 검사
+            if(result.empty() || !result[0][0].as<bool>()){
+                // 실패 응답 생성 및 반환
+                Json::Value ret;
                 ret["status"] = "error";
-                ret["message"] = row["message"].as<std::string>();
-                
+                ret["message"] = "Invalid email or password.";
                 auto resp = HttpResponse::newHttpJsonResponse(ret);
                 resp->setStatusCode(k401Unauthorized);
                 callback(resp);
+                return;
             }
-        },
-        [callback](const orm::DrogonDbException &e){
+            // 성공 응답 생성 및 반환
             Json::Value ret;
-            ret["status"] = "error";
-            ret["message"] = e.base().what();
+            ret["status"] = "success";
+            ret["access_token"] = access_token;
+            ret["refresh_token"] = refresh_token;
             auto resp = HttpResponse::newHttpJsonResponse(ret);
-            resp->setStatusCode(k500InternalServerError);
+            resp->setStatusCode(k200OK);
             callback(resp);
         },
+        // [실패 콜백]
+        [callback](const orm::DrogonDbException &e){
+            // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
+            Json::Value ret = parseDbError(e);
+
+            // HTTP 상태 코드 추출
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+
+            // JSON 응답에서 http_code 필드를 제거
+            ret.removeMember("http_code");
+
+            // HTTP 응답 생성 및 반환
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        // DB 함수에 전달할 매개변수 (이메일, 비밀번호, 리프레시 토큰, 리프레시 토큰 만료 시간)
         email, password, refresh_token, refresh_token_expiry
     );
 }

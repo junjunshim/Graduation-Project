@@ -11,7 +11,7 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 -- WI Change Bits (8-11)
 ('WI_PERSONAL_CHANGE', 8, '개인 work-item 생성 및 변경 가능'),
 ('WI_HIDDEN_CHANGE', 9, '숨김 속성 work-itme 생성 및 변경 가능'),
--- (bit 10 reserved)
+('WI_ASSIGN', 10, '다른 사용자에게 work-item 배정 가능'),
 ('WI_OTHERS_CHANGE', 11, '다른 사용자 work-item 변경 및 삭제 가능'),
 -- Node Change Bits (12-15)
 ('NODE_INFO_CHANGE', 12, '노드 정보 변경 가능'),
@@ -36,6 +36,6 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 
 INSERT INTO role_defaults (role, default_authority) VALUES
 ('ADMIN',   B'011111111111111111111111'),
-('MANAGER', B'001100000110101101111111'),
+('MANAGER', B'001100000110111101111111'),
 ('MEMBER',  B'000100000000001101011111'), -- Using member_high for MEMBER enum
 ('VIEWER',  B'000000000000000000010001');

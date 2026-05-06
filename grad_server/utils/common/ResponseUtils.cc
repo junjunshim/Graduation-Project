@@ -68,6 +68,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0302") != std::string::npos) return DbErrorCode::CreateSubNodeError;
     else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
+    else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
+    else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -141,6 +143,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::RoleAlreadyExists:{
             ret["message"] = "사용자 역할이 이미 존재합니다.";
             ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::EmailAlreadyExists:{
+            ret["message"] = "이미 존재하는 이메일입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::UserRegistrationFailed:{
+            ret["message"] = "사용자 등록에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
         default:{

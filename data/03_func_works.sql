@@ -20,97 +20,81 @@ CREATE OR REPLACE FUNCTION create_work_item(
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
-    v_requester_role role_assignments.role%TYPE;
-    v_owner_user_role role_assignments.role%TYPE;
-    v_requester_parent_role role_assignments.role%TYPE;
+    v_parent_work_item_owner_node_id organization_nodes.node_id%TYPE;
+    v_parent_work_item_hidden work_items.hidden%TYPE;
 BEGIN
-    -- 1. 요청자와 대상자의 user_id 가져오기
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 소유자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_owner_user_id FROM users WHERE email = p_owner_user_email;
-
-    IF v_requester_id IS NULL OR v_owner_user_id IS NULL THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '사용자를 찾을 수 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    IF v_owner_user_id IS NULL THEN
+        RAISE EXCEPTION '[P0002]Owner user does not exist: %', p_owner_user_email
+        USING ERRCODE = 'P0002';
     END IF;
 
-    -- 2. 요청자의 work_itme이 생성될 노드의 권한 확인
-    SELECT role INTO v_requester_role 
-    FROM role_assignments 
-    WHERE user_id = v_requester_id AND node_id = p_owner_node_id;
-
-    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER', 'MEMBER') THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '요청자의 권한이 부족합니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
-    END IF;
-
-    -- 3. 대상자의 노드에 대한 권한 확인
-    SELECT role INTO v_owner_user_role 
-    FROM role_assignments 
-    WHERE user_id = v_owner_user_id AND node_id = p_owner_node_id;
-    
-    IF v_owner_user_role IS NULL OR v_owner_user_role NOT IN ('ADMIN', 'MANAGER', 'MEMBER') THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '대상자가 해당 노드의 멤버가 아닙니다. (ADMIN, MANAGER, MEMBER 권한 필요)'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
-    END IF;
-
-    -- 4. 부모 work_item이 있을 경우 권한 확인
-    IF p_parent_work_item_id IS NOT NULL AND p_parent_work_item_id <> '' THEN
-        SELECT role INTO v_requester_parent_role 
-        FROM role_assignments 
-        WHERE node_id = (SELECT owner_node_id FROM work_items WHERE work_item_id = p_parent_work_item_id) 
-          AND user_id = v_requester_id;
-          
-        IF v_requester_parent_role IS NULL THEN
-            RETURN QUERY SELECT 
-                FALSE, 
-                '부모 업무에 대한 권한이 없습니다.'::TEXT, 
-                NULL::TEXT,
-                NULL::TEXT,
-                NULL::TEXT,
-                NULL::TEXT,
-                NULL::TEXT,
-                NULL::TEXT,
-                NULL::INTEGER,
-                NULL::TEXT,
-                NULL::TEXT;
-            RETURN;
+    -- 3. 요청자와 소유자 work_item이 속한 노드에 대한 권한 확인
+    IF v_requester_id = v_owner_user_id THEN
+        -- 본인 업무 생성 권한 확인
+        IF NOT check_authority_with_override(v_requester_id, p_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', p_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+    ELSE
+        -- 타인에게 업무 배정 권한 확인
+        IF NOT check_authority_with_override(v_requester_id, p_owner_node_id, 'WI_ASSIGN') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_ASSIGN permission on node: %', p_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+        -- 소유자의 업무 수락 권한 확인
+        IF NOT check_authority_with_override(v_owner_user_id, p_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Owner does not have WI_PERSONAL_CHANGE permission on node: %', p_owner_node_id
+            USING ERRCODE = 'P0103';
         END IF;
     END IF;
 
-    -- 5. work_item 생성
+    -- 4. work_item이 hidden 속성이 있는 경우 권한 확인
+    IF p_hidden THEN
+        IF NOT check_authority_with_override(v_requester_id, p_owner_node_id, 'WI_HIDDEN_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_HIDDEN_CHANGE permission on node: %', p_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+        IF NOT check_authority_with_override(v_owner_user_id, p_owner_node_id, 'WI_HIDDEN_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Owner does not have WI_HIDDEN_CHANGE permission on node: %', p_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 5. 부모 work_item이 있을 경우 권한 확인
+    IF p_parent_work_item_id IS NOT NULL AND p_parent_work_item_id <> '' THEN
+        SELECT owner_node_id, hidden INTO v_parent_work_item_owner_node_id, v_parent_work_item_hidden 
+        FROM work_items WHERE work_item_id = p_parent_work_item_id;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION '[P0601]Parent work item does not exist: %', p_parent_work_item_id
+            USING ERRCODE = 'P0601';
+        END IF;
+
+        -- 부모 업무가 hidden일 경우 조회 권한 확인
+        IF v_parent_work_item_hidden THEN
+            IF NOT check_authority_with_override(v_requester_id, v_parent_work_item_owner_node_id, 'WI_HIDDEN_VIEW') THEN
+                RAISE EXCEPTION '[P0103]Requester does not have WI_HIDDEN_VIEW permission on parent node: %', v_parent_work_item_owner_node_id
+                USING ERRCODE = 'P0103';
+            END IF;
+        END IF;
+
+        -- 부모 업무 노드에서 하위 업무 생성 권한 확인
+        IF NOT check_authority_with_override(v_requester_id, v_parent_work_item_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on parent node: %', v_parent_work_item_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 6. work_item 생성
     INSERT INTO work_items (
         work_item_id, 
         owner_node_id, 
@@ -141,7 +125,7 @@ BEGIN
         NULLIF(p_due_date, '')::DATE
     );
 
-    -- 6. 생성된 work_item 반환
+    -- 7. 생성된 work_item 반환
     RETURN QUERY
     SELECT
         TRUE,
@@ -157,6 +141,17 @@ BEGIN
         w.updated_at::TEXT
     FROM work_items w
     WHERE w.work_item_id = p_work_item_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0103' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0601' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0602]Failed to create work item: %', SQLERRM
+        USING ERRCODE = 'P0602';
 END;
 $$ LANGUAGE plpgsql;
 

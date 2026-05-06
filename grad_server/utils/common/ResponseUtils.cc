@@ -70,6 +70,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
+    else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
+    else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -152,6 +154,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::UserRegistrationFailed:{
             ret["message"] = "사용자 등록에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::ParentWorkItemNotFound:{
+            ret["message"] = "부모 work item을 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::CreateWorkItemFailed:{
+            ret["message"] = "work item 생성에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

@@ -20,6 +20,8 @@ enum class DbErrorCode {
     RoleAlreadyExists,          // P0402 사용자 역할 이미 존재
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
+    ParentWorkItemNotFound,     // P0601 부모 work item 없음
+    CreateWorkItemFailed,       // P0602 work item 생성 실패
     Unknown                     // 알 수 없는 에러
 };
 

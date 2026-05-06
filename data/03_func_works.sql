@@ -16,7 +16,7 @@ CREATE OR REPLACE FUNCTION create_work_item(
     p_progress work_items.progress%TYPE DEFAULT 0,
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL
-) RETURNS SETOF action_result AS $$
+) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
@@ -128,11 +128,9 @@ BEGIN
     -- 7. 생성된 work_item 반환
     RETURN QUERY
     SELECT
-        TRUE,
-        'Work Item이 생성되었습니다.'::TEXT,
         'WORK_ITEM'::TEXT,
         w.work_item_id::TEXT,
-        NULL::TEXT,
+        w.hidden::TEXT,
         w.owner_node_id::TEXT,
         w.title::TEXT,
         w.status::TEXT,

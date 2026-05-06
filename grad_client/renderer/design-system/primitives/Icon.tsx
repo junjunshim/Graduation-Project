@@ -3,6 +3,7 @@ import type { ReactNode, SVGProps } from 'react'
 export type IconName =
   | 'home'
   | 'database'
+  | 'folder'
   | 'search'
   | 'bell'
   | 'helpCircle'
@@ -10,6 +11,7 @@ export type IconName =
   | 'calendar'
   | 'clock'
   | 'checkCircle'
+  | 'checkSquare'
   | 'alertTriangle'
   | 'sparkles'
   | 'page'
@@ -21,7 +23,9 @@ export type IconName =
   | 'arrowRight'
   | 'chevronLeft'
   | 'chevronRight'
+  | 'chevronDown'
   | 'logOut'
+  | 'gear'
   | 'minimize'
   | 'maximize'
   | 'restore'
@@ -46,6 +50,12 @@ const iconPaths: Record<IconName, ReactNode> = {
       <ellipse cx="12" cy="5.5" rx="7.5" ry="3.5" />
       <path d="M4.5 5.5v6c0 1.93 3.36 3.5 7.5 3.5s7.5-1.57 7.5-3.5v-6" />
       <path d="M4.5 11.5v6c0 1.93 3.36 3.5 7.5 3.5s7.5-1.57 7.5-3.5v-6" />
+    </>
+  ),
+  folder: (
+    <>
+      <path d="M4 6.5h6l2 2h8v9.5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+      <path d="M4 8.5V7a2 2 0 0 1 2-2h3.2l2 2H18a2 2 0 0 1 2 2v1" />
     </>
   ),
   search: (
@@ -91,6 +101,12 @@ const iconPaths: Record<IconName, ReactNode> = {
     <>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M8.5 12.2l2.4 2.4 4.8-5" />
+    </>
+  ),
+  checkSquare: (
+    <>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="1.8" />
+      <path d="M8.2 12.1l2.4 2.4 5.2-5.4" />
     </>
   ),
   alertTriangle: (
@@ -152,11 +168,18 @@ const iconPaths: Record<IconName, ReactNode> = {
   arrowRight: <path d="M5 12h13M13 6l6 6-6 6" />,
   chevronLeft: <path d="M15 6l-6 6 6 6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
+  chevronDown: <path d="M6 9l6 6 6-6" />,
   logOut: (
     <>
       <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
       <path d="M13 8l4 4-4 4" />
       <path d="M8 12h9" />
+    </>
+  ),
+  gear: (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l2-1.5-2-3.5-2.4 1a8.2 8.2 0 0 0-2.6-1.5L14 2.5h-4L9.6 5a8.2 8.2 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.8 7.8 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a8.2 8.2 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a8.2 8.2 0 0 0 2.6-1.5l2.4 1 2-3.5z" />
     </>
   ),
   minimize: <path d="M5 12.5h14" />,

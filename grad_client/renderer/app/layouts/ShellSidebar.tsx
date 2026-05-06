@@ -1,87 +1,37 @@
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
-import type { WorkspaceOverview, WorkspaceSummary } from '../../features/workspace/model/types'
+import type { WorkspaceOverview } from '../../features/workspace/model/types'
 import { navigationItems } from '../navigation'
 import styles from './AppShell.module.css'
 
 type ShellSidebarProps = {
-  currentUser: {
-    userId: string
-    name: string
-    email: string
-  }
-  summary: WorkspaceSummary
   overview: WorkspaceOverview
   isCollapsed: boolean
   onToggleCollapsed: () => void
   onSignOut: () => void
 }
 
-export function ShellSidebar({
-  currentUser,
-  summary,
-  overview,
-  isCollapsed,
-  onToggleCollapsed,
-  onSignOut,
-}: ShellSidebarProps) {
-  const hasOrgContext = summary.orgNodeCount > 0
+export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignOut }: ShellSidebarProps) {
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
   const expandSidebarLabel = '사이드바 펼치기'
-  const collapseSidebarLabel = '사이드바 축소'
+  const collapseSidebarLabel = '사이드바 접기'
   const signOutLabel = '로그아웃'
+  const recentWorkItems = overview.recentWorkItems.slice(0, 4)
 
   return (
     <aside className={styles.sidebar}>
       <div className={styles.sidebarInner}>
         <div className={styles.sidebarTop}>
-          <div className={styles.brandHeader}>
-            {isCollapsed ? (
-              <button
-                type="button"
-                className={[styles.brandMark, styles.brandMarkButton, styles.tooltipAnchor].join(' ')}
-                onClick={onToggleCollapsed}
-                aria-label={expandSidebarLabel}
-                data-tooltip={expandSidebarLabel}
-              >
-                <span className={styles.brandMarkText}>GP</span>
-                <span className={styles.brandMarkExpandIcon}>
-                  <Icon name="chevronRight" size={14} />
-                </span>
-              </button>
-            ) : (
-              <>
-                <div className={styles.brandBlock}>
-                  <div className={styles.brandMark}>GP</div>
-                </div>
-
-                <button
-                  type="button"
-                  className={[styles.sidebarToggle, styles.tooltipAnchor].join(' ')}
-                  onClick={onToggleCollapsed}
-                  aria-label={collapseSidebarLabel}
-                  aria-expanded={!isCollapsed}
-                  data-tooltip={collapseSidebarLabel}
-                >
-                  <Icon name="chevronLeft" size={16} />
-                </button>
-              </>
-            )}
-          </div>
-
-          <section className={styles.workspaceCard}>
-            <p className={styles.cardEyebrow}>현재 워크스페이스</p>
-            <strong className={styles.workspaceTitle}>{workspaceLabel}</strong>
-            <p className={styles.workspaceText}>
-              {hasOrgContext
-                ? '공유 공간과 조직별 업무 현황을 확인합니다.'
-                : '개인 공간이 준비되어 있으며 첫 공유 공간을 기다리고 있습니다.'}
-            </p>
-            <div className={styles.workspaceMeta}>
-              <span>{currentUser.name}</span>
-              <span>{currentUser.userId}</span>
-            </div>
-          </section>
+          {!isCollapsed ? (
+            <button
+              type="button"
+              className={styles.workspaceSelect}
+              aria-label={`현재 워크스페이스: ${workspaceLabel}`}
+            >
+              <span className={styles.workspaceSelectText}>{workspaceLabel}</span>
+              <Icon name="chevronDown" size={16} />
+            </button>
+          ) : null}
 
           <nav className={styles.navigation} aria-label="주요 메뉴">
             {navigationItems.map((item) => (
@@ -103,46 +53,61 @@ export function ShellSidebar({
                 <span className={styles.navIcon}>
                   <Icon name={item.icon} size={16} />
                 </span>
-                <span className={styles.navCopy}>
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
-                </span>
+                <span className={styles.navCopy}>{item.label}</span>
               </NavLink>
             ))}
           </nav>
         </div>
 
-        <div className={styles.sidebarBottom}>
-          <section className={styles.statsPanel}>
-            <div className={styles.statRow}>
-              <span>조직</span>
-              <strong>{summary.nodeCount}</strong>
-            </div>
-            <div className={styles.statRow}>
-              <span>업무</span>
-              <strong>{summary.workItemCount}</strong>
-            </div>
-            <div className={styles.statRow}>
-              <span>권한</span>
-              <strong>{summary.roleCount}</strong>
-            </div>
-            <div className={styles.statRow}>
-              <span>평균 진행률</span>
-              <strong>{summary.averageProgress}%</strong>
-            </div>
-          </section>
+        <section className={styles.workspaceList} aria-label="내 워크 스페이스">
+          <div className={styles.workspaceListHeader}>
+            <h2>내 워크 스페이스</h2>
+            <Link
+              to="/work-items/new"
+              className={[styles.workspaceListAdd, styles.tooltipAnchor].join(' ')}
+              data-tooltip="업무 등록"
+            >
+              <Icon name="plus" size={14} />
+              <span className={styles.srOnly}>업무 등록</span>
+            </Link>
+          </div>
 
+          <div className={styles.recentWorkItems}>
+            {recentWorkItems.length > 0 ? (
+              recentWorkItems.map((item) => (
+                <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.recentWorkItem}>
+                  <span>#</span>
+                  <strong>{item.title}</strong>
+                </Link>
+              ))
+            ) : (
+              <p className={styles.recentWorkItemEmpty}>최근 업무가 없습니다.</p>
+            )}
+          </div>
+        </section>
+
+        <div className={styles.sidebarBottom}>
           <button
             type="button"
-            className={[styles.signOutButton, isCollapsed ? styles.tooltipAnchor : ''].filter(Boolean).join(' ')}
+            className={[styles.sidebarActionButton, isCollapsed ? styles.tooltipAnchor : ''].filter(Boolean).join(' ')}
             onClick={onSignOut}
             aria-label={signOutLabel}
             data-tooltip={isCollapsed ? signOutLabel : undefined}
           >
-            <span className={styles.signOutIcon}>
-              <Icon name="logOut" size={16} />
-            </span>
-            <span className={styles.signOutLabel}>로그아웃</span>
+            <Icon name="logOut" size={16} />
+            <span>로그아웃</span>
+          </button>
+
+          <button
+            type="button"
+            className={[styles.sidebarActionButton, styles.sidebarCollapseButton, styles.tooltipAnchor].join(' ')}
+            onClick={onToggleCollapsed}
+            aria-label={isCollapsed ? expandSidebarLabel : collapseSidebarLabel}
+            aria-expanded={!isCollapsed}
+            data-tooltip={isCollapsed ? expandSidebarLabel : undefined}
+          >
+            <Icon name={isCollapsed ? 'chevronRight' : 'chevronLeft'} size={16} />
+            <span>{isCollapsed ? '열기' : '접기'}</span>
           </button>
         </div>
       </div>

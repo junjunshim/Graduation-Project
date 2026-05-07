@@ -223,61 +223,35 @@ CREATE OR REPLACE FUNCTION update_node(
     p_node_id organization_nodes.node_id%TYPE,
     p_name organization_nodes.name%TYPE,
     p_node_type organization_nodes.node_type%TYPE
-) RETURNS SETOF action_result AS $$
+) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_requester_role role_assignments.role%TYPE;
 BEGIN
-    -- 1. 사용자 id 가져오기
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
 
     IF v_requester_id IS NULL THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '사용자를 찾을 수 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
     END IF;
 
     -- 2. 요청자 권한 확인
-    SELECT role INTO v_requester_role
-    FROM role_assignments
-    WHERE user_id = v_requester_id AND node_id = p_node_id;
-
-    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '권한이 부족합니다. (ADMIN 또는 MANAGER 권한 필요)'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_INFO_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions. (node update) for user: %', p_requester_email
+        USING ERRCODE = 'P0103';
     END IF;
 
-    -- 3. 노드 업데이트
+    -- 3. 노드 업데이트 (naem, node_type 빈 문자열 전달 시 업데이트 안함)
     UPDATE organization_nodes
-    SET name = p_name, node_type = p_node_type
+    SET 
+        name = CASE WHEN p_name = '' THEN name ELSE p_name END,
+        node_type = CASE WHEN p_node_type = '' THEN node_type ELSE p_node_type END
     WHERE node_id = p_node_id;
 
     -- 4. 업데이트된 노드 정보 즉시 반환
     RETURN QUERY
     SELECT 
-        TRUE,
-        '노드가 성공적으로 업데이트되었습니다.'::TEXT,
         'NODE'::TEXT,
         n.node_id::TEXT,
         n.node_type::TEXT,
@@ -289,5 +263,14 @@ BEGIN
         n.updated_at::TEXT
     FROM organization_nodes n
     WHERE n.node_id = p_node_id;
+
+    EXCEPTION
+    WHEN SQLSTATE 'P0001' THEN
+        RAISE;
+    WHEN SQLSTATE 'P0103' THEN
+        RAISE;
+    WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0303]Error updating node: %, requester: %  (REASON: %)', p_node_id, p_requester_email, SQLERRM
+        USING ERRCODE = 'P0303';
 END;
 $$ LANGUAGE plpgsql;

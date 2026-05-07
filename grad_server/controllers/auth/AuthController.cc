@@ -10,13 +10,17 @@ using namespace api;
 using namespace app_utils;
 
 // Add definition of your processing function here
+// 토큰 생성 함수(access token, refresh token)
 Json::Value AuthController::generateToken(const std::string &user_email){
+    // JWT 토큰 생성을 위한 시크릿 키와 만료 시간 설정
     auto secret = drogon::app().getCustomConfig()["app"]["jwt_secret"].asString();
     auto access_exp = drogon::app().getCustomConfig()["access_token_expiry"].asInt();
     auto refresh_exp = drogon::app().getCustomConfig()["refresh_token_expiry"].asInt();
 
+    // 현재 시간과 만료 시간 계산
     auto now = std::chrono::system_clock::now();
 
+    // Access Token 생성
     auto access_token = jwt::create()
         .set_issuer("grad_server")
         .set_type("JWS")
@@ -25,6 +29,7 @@ Json::Value AuthController::generateToken(const std::string &user_email){
         .set_expires_at(now + std::chrono::seconds{access_exp})
         .sign(jwt::algorithm::hs256{secret});
 
+    // Refresh Token 생성
     auto refresh_token = jwt::create()
         .set_issuer("grad_server")
         .set_payload_claim("user_email", jwt::claim(user_email))
@@ -32,22 +37,29 @@ Json::Value AuthController::generateToken(const std::string &user_email){
         .set_expires_at(now + std::chrono::seconds{refresh_exp})
         .sign(jwt::algorithm::hs256{secret});
 
+    // 생성된 토큰과 리프레시 토큰 만료 시간을 JSON 객체로 반환
     Json::Value ret;
     ret["access_token"] = access_token;
     ret["refresh_token"] = refresh_token;
+    // 리프레시 토큰 만료 시간을 문자열로 변환하여 반환
     ret["refresh_token_expiry"] = timePointToString(now + std::chrono::seconds{refresh_exp});
     return ret;
 }
 
+// 시간 포맷 변환 함수
 std::string AuthController::timePointToString(const std::chrono::system_clock::time_point& tp) {
+    // std::chrono::system_clock::time_point를 std::tm 구조체로 변환
     std::time_t t = std::chrono::system_clock::to_time_t(tp);
     std::tm tm = *std::localtime(&t); // 또는 gmtime(&t) (UTC 기준 시)
     
+    // std::tm 구조체를 원하는 문자열 포맷으로 변환
     std::stringstream ss;
+    // "YYYY-MM-DD HH:MM:SS"
     ss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
     return ss.str();
 }
 
+// 로그인 처리 함수
 void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
     // 요청 바디에서 JSON 데이터 파싱

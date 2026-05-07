@@ -55,6 +55,7 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
             resp->setStatusCode(k201Created);
             callback(resp);
         },
+        // [실패 콜백]
         [callback](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
             Json::Value ret = parseDbError(e);
@@ -121,9 +122,8 @@ void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(
             resp->setStatusCode(k201Created);
             callback(resp);
         },
+        // [실패 콜백]
         [callback](const orm::DrogonDbException &e) {
-            // 디버그
-            LOG_INFO << "Database error in createSubNode: " << e.base().what();
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
             Json::Value ret = parseDbError(e);
 
@@ -143,10 +143,24 @@ void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(
     );
 }
 
+// 노드 업데이트 api
 void OrgController::updateNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    // JWT 필터에서 설정한 사용자 이메일을 가져오기
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    
+    // 요청 바디에서 JSON 데이터 파싱
     auto jsonPtr = req->getJsonObject();
-
-    // 1. 유효성 검사
+    
+    // 필수 파라미터
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    
+    // 선택 파라미터
+    auto getStrOrNull = [&](const std::string &key) {
+        return (*jsonPtr)[key].isNull() ? "" : (*jsonPtr)[key].asString();
+    };
+    
+    // 필수 파라미터 유효성 검사
     if(!jsonPtr || (*jsonPtr)["node_id"].isNull()){
         Json::Value ret;
         ret["status"] = "error";
@@ -160,74 +174,42 @@ void OrgController::updateNode(const HttpRequestPtr &req, std::function<void(con
     }
 
     // 2. 비지니스 로직
+    // 데이터베이스 클라이언트 객체를 가져오기
     auto dbClient = drogon::app().getDbClient();
-
+    
+    // DB 함수 호출 SQL
     std::string sql = "SELECT * FROM update_node($1, $2, $3,$4)";
 
-    std::string requester_email = req->attributes()->get<std::string>("user_email");
-    int node_id = (*jsonPtr)["node_id"].asInt();
-
-    auto getStrOrNull = [&](const std::string &key) {
-        return (*jsonPtr)[key].isNull() ? "" : (*jsonPtr)[key].asString();
-    };
-
+    // DB 함수 비동기 실행
     dbClient->execSqlAsync(
         sql,
+        // [성공 콜백]
         [callback](const orm::Result &result) {
-            if (result.empty()) {
-                Json::Value ret;
-                ret["status"] = "error";
-                ret["message"] = "노드 업데이트에 실패했습니다.";
-                auto resp = HttpResponse::newHttpJsonResponse(ret);
-                resp->setStatusCode(k500InternalServerError);
-                callback(resp);
-                return;
-            }
-            Json::Value ret;
-            Json::Value item;
+            // DB 결과를 프론트엔드 응답용 JSON으로 변환
+            Json::Value ret = parseIntegratedDataResult(result);
 
-            auto row = result[0];
-
-            bool success = row["out_res_status"].as<bool>();
-
-            if(success){
-                ret["status"] = "success";
-                ret["message"] = row["out_message"].as<std::string>();
-                auto resp = HttpResponse::newHttpJsonResponse(ret);
-
-                item["type"] = row["out_type"].as<std::string>();
-                item["id"] = row["out_id"].as<std::string>();
-                item["node_type"] = row["out_node_type"].as<std::string>();
-
-                if(!row["out_parent_id"].isNull() && !row["out_parent_id"].as<std::string>().empty()){
-                    item["parent_id"] = row["out_parent_id"].as<std::string>();
-                }
-
-                item["title"] = row["out_title"].as<std::string>();
-                item["etra_info"] = row["out_extra_info"].as<std::string>();
-                item["updated_at"] = row["out_updated_at"].as<std::string>();
-
-                ret["data"] = item;
-                
-                resp->setStatusCode(k200OK);
-                callback(resp);
-            }
-            else{
-                ret["status"] = "error";
-                ret["message"] = row["out_message"].as<std::string>();
-                auto resp = HttpResponse::newHttpJsonResponse(ret);
-                resp->setStatusCode(k403Forbidden);
-                callback(resp);
-            }
-        },
-        [callback](const orm::DrogonDbException &e){
-            Json::Value ret;
-            ret["status"] = "error";
-            ret["message"] = e.base().what();
+            // HTTP 응답 생성 및 반환
             auto resp = HttpResponse::newHttpJsonResponse(ret);
-            resp->setStatusCode(k500InternalServerError);
+            resp->setStatusCode(k200OK);
             callback(resp);
         },
+        // [실패 콜백]
+        [callback](const orm::DrogonDbException &e){
+            // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
+            Json::Value ret = parseDbError(e);
+
+            // HTTP 상태 코드 추출
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+
+            // JSON 응답에서 http_code 필드를 제거
+            ret.removeMember("http_code");
+
+            // HTTP 응답 생성 및 반환
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        // DB 함수에 전달할 매개변수 (요청자 이메일, 노드 id, 노드 이름, 노드 타입)
         requester_email, 
         node_id, 
         getStrOrNull("name"), 

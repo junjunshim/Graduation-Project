@@ -66,6 +66,7 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0202") != std::string::npos) return DbErrorCode::SyncContextError;
     else if (errMsg.find("P0301") != std::string::npos) return DbErrorCode::CreateTopNodeError;
     else if (errMsg.find("P0302") != std::string::npos) return DbErrorCode::CreateSubNodeError;
+    else if (errMsg.find("P0303") != std::string::npos) return DbErrorCode::UpdateNodeError;
     else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
@@ -134,6 +135,11 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::CreateSubNodeError:{
             ret["message"] = "하위 노드 생성에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::UpdateNodeError:{
+            ret["message"] = "노드 업데이트에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

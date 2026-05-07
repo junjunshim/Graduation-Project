@@ -16,6 +16,7 @@ enum class DbErrorCode {
     SyncContextError,           // P0202 사용자 변경 데이터 로드 실패
     CreateTopNodeError,         // P0301 최상위 노드 생성 실패
     CreateSubNodeError,         // P0302 하위 노드 생성 실패
+    UpdateNodeError,            // P0303 노드 업데이트 실패
     AddRoleFailed,              // P0401 사용자 역할 부여 실패
     RoleAlreadyExists,          // P0402 사용자 역할 이미 존재
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일

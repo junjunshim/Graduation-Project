@@ -48,14 +48,14 @@
   border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.66rem;
+  font-size: 0.91rem;
   font-weight: 700;
   letter-spacing: 0;
 }
 
 .brandTitle {
   color: var(--text-primary);
-  font-size: 0.78rem;
+  font-size: 0.91rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -73,22 +73,6 @@
   color: var(--text-secondary);
   font-size: 0.72rem;
   font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pageCopy {
-  display: grid;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.pageTitle {
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 0.88rem;
-  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -161,7 +145,6 @@
 .controls {
   display: flex;
   align-items: stretch;
-  border-left: 1px solid var(--line-default);
 }
 
 .controlButton {
@@ -197,8 +180,7 @@
     display: none;
   }
 
-  .context,
-  .pageTitle {
+  .context {
     font-size: 0.76rem;
   }
 

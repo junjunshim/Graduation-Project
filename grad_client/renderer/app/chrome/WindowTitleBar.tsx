@@ -12,12 +12,6 @@ type AuthWindowTitleBarProps = {
 
 type WorkspaceWindowTitleBarProps = {
   variant: 'workspace'
-  contextLabel: string
-  pageTitle: string
-  actionLabel: string
-  actionTo: string
-  userName: string
-  userEmail: string
 }
 
 type WindowTitleBarProps = AuthWindowTitleBarProps | WorkspaceWindowTitleBarProps
@@ -57,31 +51,21 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
     <div className={[styles.bar, props.variant === 'workspace' ? styles.workspace : styles.auth].join(' ')}>
       <div className={styles.left}>
         <div className={styles.brand}>
-          <span className={styles.brandMark}>GP</span>
-          <span className={styles.brandTitle}>Grad Workflow</span>
+          <span className={styles.brandMark}>A</span>
+          <span className={styles.brandTitle}>Axis</span>
         </div>
-        <span className={styles.divider} aria-hidden="true" />
-        {props.variant === 'workspace' ? (
-          <div className={styles.pageCopy}>
+        {props.variant === 'auth' && (
+          <>
+            <span className={styles.divider} aria-hidden="true" />
             <span className={styles.context}>{props.contextLabel}</span>
-            <strong className={styles.pageTitle}>{props.pageTitle}</strong>
-          </div>
-        ) : (
-          <span className={styles.context}>{props.contextLabel}</span>
+          </>
         )}
       </div>
 
       <div className={styles.right}>
         {props.variant === 'workspace' ? (
           <div className={styles.workspaceActions}>
-            <NavLink to={props.actionTo} className={styles.actionLink}>
-              {props.actionLabel}
-            </NavLink>
-
-            <div className={styles.userChip} title={props.userEmail}>
-              <span className={styles.userName}>{props.userName}</span>
-              <span className={styles.userSubtext}>{props.userEmail}</span>
-            </div>
+            
           </div>
         ) : null}
 

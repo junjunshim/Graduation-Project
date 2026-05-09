@@ -7,6 +7,16 @@ export type ShellPageMeta = {
 }
 
 export function getShellPageMeta(pathname: string, hasOrgContext: boolean): ShellPageMeta {
+  if (pathname === '/work-items') {
+    return {
+      section: 'Work Items',
+      title: '업무',
+      description: '등록된 업무를 모아 보는 화면을 준비 중입니다.',
+      actionLabel: '업무 등록',
+      actionTo: '/work-items/new',
+    }
+  }
+
   if (pathname === '/work-items/new') {
     return {
       section: 'Work Item',
@@ -75,11 +85,51 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean): Shel
 
   if (pathname === '/org/manage') {
     return {
-      section: 'Database',
-      title: '조직과 권한',
+      section: 'Workspace',
+      title: '워크 스페이스',
       description: '조직 트리, 역할, 연결된 업무를 문서처럼 관리합니다.',
       actionLabel: '업무 등록',
       actionTo: '/work-items/new',
+    }
+  }
+
+  if (pathname === '/calendar') {
+    return {
+      section: 'Calendar',
+      title: '캘린더',
+      description: '마감 일정과 업무 일정을 한 화면에서 볼 수 있도록 준비 중입니다.',
+      actionLabel: '업무 등록',
+      actionTo: '/work-items/new',
+    }
+  }
+
+  if (pathname === '/documents') {
+    return {
+      section: 'Documents',
+      title: '문서',
+      description: '회의록과 업무 문서를 연결하는 공간을 준비 중입니다.',
+      actionLabel: '업무 등록',
+      actionTo: '/work-items/new',
+    }
+  }
+
+  if (pathname === '/files') {
+    return {
+      section: 'Files',
+      title: '파일',
+      description: '업무별 첨부 파일과 자료를 정리하는 화면을 준비 중입니다.',
+      actionLabel: '업무 등록',
+      actionTo: '/work-items/new',
+    }
+  }
+
+  if (pathname === '/settings') {
+    return {
+      section: 'Settings',
+      title: '설정',
+      description: '워크스페이스 환경과 계정 옵션을 관리하는 화면을 준비 중입니다.',
+      actionLabel: '대시보드',
+      actionTo: '/dashboard',
     }
   }
 

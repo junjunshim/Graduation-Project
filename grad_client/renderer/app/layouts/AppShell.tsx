@@ -66,12 +66,6 @@ export function AppShell() {
         <div className={styles.titleBarSlot}>
           <WindowTitleBar
             variant="workspace"
-            contextLabel={`${workspaceLabel} / ${pageMeta.section}`}
-            pageTitle={pageMeta.title}
-            actionLabel={pageMeta.actionLabel}
-            actionTo={pageMeta.actionTo}
-            userName={currentUser.name}
-            userEmail={currentUser.email}
           />
         </div>
       ) : null}
@@ -90,9 +84,7 @@ export function AppShell() {
           .filter(Boolean)
           .join(' ')}
       >
-        {!hasCustomTitleBar ? (
-          <WorkspacePageHeader currentUser={currentUser} workspaceLabel={workspaceLabel} pageMeta={pageMeta} />
-        ) : null}
+        {!hasCustomTitleBar ? <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} /> : null}
 
         <main className={styles.main}>
           <Outlet />

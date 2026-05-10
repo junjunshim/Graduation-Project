@@ -1,3 +1,4 @@
+{/* 변경된 구조 상 현재는 사용하지 않는 파일 */}
 import { Icon } from '../../../design-system/primitives/Icon'
 import styles from '../pages/DashboardPage.module.css'
 
@@ -13,7 +14,6 @@ type DashboardToolbarProps = {
 
 export function DashboardToolbar({
   searchQuery,
-  dueSoonOpenCount,
   currentUser,
   onSearchQueryChange,
 }: DashboardToolbarProps) {

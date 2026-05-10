@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../design-system/theme/ThemeToggle'
 import { getWindowControls } from './windowControls'

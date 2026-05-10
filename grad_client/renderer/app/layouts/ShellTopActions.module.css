@@ -13,8 +13,8 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.42rem;
-  width: min(100%, 9rem);
-  min-height: 1.9rem;
+  width: min(100%, 11rem);
+  min-height: 2.25rem;
   padding: 0 0.8rem;
   border: 2px solid var(--text-primary);
   border-radius: 999px;
@@ -64,6 +64,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line-default);
+  border-color: var(--text-primary);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
   color: var(--text-secondary);
@@ -74,8 +75,8 @@
 }
 
 .shellIconButton {
-  width: 1.95rem;
-  height: 1.95rem;
+  width: 2.95rem;
+  height: 2.95rem;
   flex-shrink: 0;
   border-color: transparent;
   background: transparent;
@@ -83,8 +84,8 @@
 }
 
 .shellProfileButton {
-  width: 2.05rem;
-  height: 2.05rem;
+  width: 2.55rem;
+  height: 2.55rem;
   flex-shrink: 0;
   border-radius: 999px;
   background: transparent;

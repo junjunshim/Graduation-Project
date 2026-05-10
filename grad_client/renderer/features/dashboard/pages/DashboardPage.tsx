@@ -33,6 +33,14 @@ export function DashboardPage() {
 
   return (
     <section className={styles.page}>
+      {/*
+      <DashboardToolbar
+        searchQuery={searchQuery}
+        dueSoonOpenCount={dueSoonOpenWorkItems.length}
+        currentUser={currentUser}
+        onSearchQueryChange={setSearchQuery}
+      />
+      */}
       <DashboardKpiGrid metrics={metrics} />
 
       <div className={styles.dashboardGrid}>

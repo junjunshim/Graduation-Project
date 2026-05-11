@@ -1,0 +1,133 @@
+.shellTopActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.6rem;
+  min-width: 0;
+  padding: var(--space-page-top) var(--space-page-x) 0;
+  background: var(--surface-page);
+}
+
+.shellSearchBox {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.42rem;
+  width: min(100%, 11rem);
+  min-height: 2.25rem;
+  padding: 0 0.8rem;
+  border: 2px solid var(--text-primary);
+  border-radius: 999px;
+  background: var(--surface-input);
+  color: var(--text-primary);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.shellSearchBox:focus-within {
+  border-color: var(--line-selected);
+  background: var(--surface-panel);
+}
+
+.shellSearchBox input {
+  min-width: 0;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.shellSearchBox input::placeholder {
+  color: var(--text-muted);
+}
+
+.shellSearchIcon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.shellActionButtons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.6rem;
+  min-width: 0;
+}
+
+.shellIconButton,
+.shellProfileButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-default);
+  border-color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.shellIconButton {
+  width: 2.95rem;
+  height: 2.95rem;
+  flex-shrink: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.shellProfileButton {
+  width: 2.55rem;
+  height: 2.55rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.shellIconButton:hover,
+.shellProfileButton:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1080px) {
+  .shellTopActions {
+    padding-inline: 1rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .shellTopActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .shellSearchBox {
+    width: 100%;
+  }
+
+  .shellActionButtons {
+    justify-content: flex-end;
+  }
+}

@@ -7,6 +7,7 @@ import { getCurrentUser, signOut } from '../../features/auth/api'
 import { getWorkspaceSummary } from '../../features/workspace/data/orgService'
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
 import { ShellSidebar } from './ShellSidebar'
+import { ShellTopActions } from './ShellTopActions'
 import { WorkspacePageHeader } from './WorkspacePageHeader'
 import { getShellPageMeta } from './shellPageMeta'
 import styles from './AppShell.module.css'
@@ -84,9 +85,13 @@ export function AppShell() {
       >
         {!hasCustomTitleBar ? <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} /> : null}
 
-        <main className={styles.main}>
-          <Outlet />
-        </main>
+        <div className={styles.workspaceBody}>
+          <ShellTopActions currentUser={currentUser} />
+
+          <main className={styles.main}>
+            <Outlet />
+          </main>
+        </div>
       </div>
     </div>
   )

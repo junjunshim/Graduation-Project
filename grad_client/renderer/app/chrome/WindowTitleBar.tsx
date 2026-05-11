@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { NavLink } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../design-system/theme/ThemeToggle'
 import { getWindowControls } from './windowControls'
@@ -7,7 +6,6 @@ import styles from './WindowTitleBar.module.css'
 
 type AuthWindowTitleBarProps = {
   variant: 'auth'
-  contextLabel: string
 }
 
 type WorkspaceWindowTitleBarProps = {
@@ -54,20 +52,10 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
           <span className={styles.brandMark}>A</span>
           <span className={styles.brandTitle}>Axis</span>
         </div>
-        {props.variant === 'auth' && (
-          <>
-            <span className={styles.divider} aria-hidden="true" />
-            <span className={styles.context}>{props.contextLabel}</span>
-          </>
-        )}
       </div>
 
       <div className={styles.right}>
-        {props.variant === 'workspace' ? (
-          <div className={styles.workspaceActions}>
-            
-          </div>
-        ) : null}
+        
 
         <div className={styles.themeToggle}>
           <ThemeToggle compact />

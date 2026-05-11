@@ -7,6 +7,7 @@ using namespace api;
 using namespace app_utils;
 
 // Add definition of your processing function here
+// 사용자에게 역할 부여 api
 void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
     // JWT 필터에서 설정한 사용자 이메일을 가져오기
@@ -85,10 +86,25 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
     );
 }
 
+// 사용자 역할 변경 api
 void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    // JWT 필터에서 설정한 사용자 이메일을 가져오기
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    
+    // 요청 바디에서 JSON 데이터 파싱
     auto jsonPtr = req->getJsonObject();
+    
+    // 필수 파라미터
+    std::string target_email = (*jsonPtr)["email"].asString();
+    int node_id = (*jsonPtr)["node_id"].asInt();
 
-    // 1. 유효성 검사
+    // 선택 파라미터
+    auto getStrOrNull = [&](const std::string &key) {
+        return (*jsonPtr)[key].isNull() ? "" : (*jsonPtr)[key].asString();
+    };
+    
+    // 필수 파라미터 유효성 검사
     if(!jsonPtr || (*jsonPtr)["email"].isNull() || (*jsonPtr)["node_id"].isNull()){
         Json::Value ret;
         ret["status"] = "error";
@@ -100,74 +116,47 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
         callback(resp);
         return;
     }
-
+    
     // 2. 비지니스 로직
+    // 데이터베이스 클라이언트 객체를 가져오기
     auto dbClient = drogon::app().getDbClient();
     
+    // DB 함수 호출 SQL
     std::string sql = "SELECT * FROM update_role($1, $2, $3, $4)";
-
-    std::string requester_email = req->attributes()->get<std::string>("user_email");
-    std::string target_email = (*jsonPtr)["email"].asString();
-    int node_id = (*jsonPtr)["node_id"].asInt();
-
-    auto getStringOrNull = [](const Json::Value &value) -> std::string {
-        return value.isNull() ? "" : value.asString();
-    };
-
+    
+    // DB 함수 비동기 실행
     dbClient->execSqlAsync(
         sql,
+        // [성공 콜백]
         [callback](const orm::Result &result) {
-            if (result.empty()) {
-                Json::Value ret;
-                ret["status"] = "error";
-                ret["message"] = "권한 변경에 실패했습니다.";
-                auto resp = HttpResponse::newHttpJsonResponse(ret);
-                resp->setStatusCode(k500InternalServerError);
-                callback(resp);
-                return;
-            }
-            Json::Value ret;
-            Json::Value item;
-            
-            auto row = result[0];
+            // DB 결과를 프론트엔드 응답용 JSON으로 변환
+            Json::Value ret = parseIntegratedDataResult(result);
 
-            bool success = row["out_res_status"].as<bool>();
-
-            if(success){
-                ret["status"] = "success";
-                ret["message"] = row["out_message"].as<std::string>();
-
-                item["type"] = row["out_type"].as<std::string>();
-                item["node_id"] = row["out_id"].as<std::string>();
-                item["user_email"] = row["out_title"].as<std::string>();
-                item["role_name"] = row["out_status"].as<std::string>();
-                item["updated_at"] = row["out_updated_at"].as<std::string>();
-
-                ret["data"] = item;
-
-                auto resp = HttpResponse::newHttpJsonResponse(ret);
-                resp->setStatusCode(k200OK);
-                callback(resp);
-            }
-            else{
-                ret["status"] = "error";
-                ret["message"] = row["out_message"].as<std::string>();
-                auto resp = HttpResponse::newHttpJsonResponse(ret);
-                resp->setStatusCode(k403Forbidden);
-                callback(resp);
-            }
-        },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret;
-            ret["status"] = "error";
-            ret["message"] = e.base().what();
+            // HTTP 응답 생성 및 반환
             auto resp = HttpResponse::newHttpJsonResponse(ret);
-            resp->setStatusCode(k500InternalServerError);
+            resp->setStatusCode(k200OK);
             callback(resp);
         },
+        // [실패 콜백]
+        [callback](const orm::DrogonDbException &e) {
+            // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
+            Json::Value ret = parseDbError(e);
+
+            // HTTP 상태 코드 추출
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            
+            // JSON 응답에서 http_code 필드를 제거
+            ret.removeMember("http_code");
+
+            // HTTP 응답 생성 및 반환
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        // DB 함수에 전달할 매개변수 (요청자 이메일, 대상 이메일, 노드 id, 역할 이름)
         requester_email, 
         target_email, 
         node_id, 
-        getStringOrNull((*jsonPtr)["role_name"])
+        getStrOrNull("role_name")
     );
 }

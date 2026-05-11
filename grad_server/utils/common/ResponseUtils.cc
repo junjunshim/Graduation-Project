@@ -69,6 +69,10 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0303") != std::string::npos) return DbErrorCode::UpdateNodeError;
     else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
+    else if (errMsg.find("P0403") != std::string::npos) return DbErrorCode::TargetHasNoRole;
+    else if (errMsg.find("P0404") != std::string::npos) return DbErrorCode::TargetIsAdmin;
+    else if (errMsg.find("P0405") != std::string::npos) return DbErrorCode::InvalidRoleChange;
+    else if (errMsg.find("P0406") != std::string::npos) return DbErrorCode::RoleChangeFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
@@ -151,6 +155,26 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::RoleAlreadyExists:{
             ret["message"] = "사용자 역할이 이미 존재합니다.";
             ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::TargetHasNoRole:{
+            ret["message"] = "변경할 타켓이 노드에 역할이 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::TargetIsAdmin:{
+            ret["message"] = "변경할 타켓이 ADMIN입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::InvalidRoleChange:{
+            ret["message"] = "변경할 역할이 부적절합니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RoleChangeFailed:{
+            ret["message"] = "사용자 역할 변경에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
         case DbErrorCode::EmailAlreadyExists:{

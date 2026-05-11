@@ -19,6 +19,10 @@ enum class DbErrorCode {
     UpdateNodeError,            // P0303 노드 업데이트 실패
     AddRoleFailed,              // P0401 사용자 역할 부여 실패
     RoleAlreadyExists,          // P0402 사용자 역할 이미 존재
+    TargetHasNoRole,            // P0403 변경할 타켓이 노드에 역할 없음
+    TargetIsAdmin,              // P0404 변경할 타켓이 ADMIN
+    InvalidRoleChange,          // P0405 변경할 역할이 부적절함
+    RoleChangeFailed,           // P0406 사용자 역할 변경 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     ParentWorkItemNotFound,     // P0601 부모 work item 없음

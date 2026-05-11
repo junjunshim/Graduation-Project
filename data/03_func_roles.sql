@@ -67,74 +67,73 @@ BEGIN
         WHEN SQLSTATE 'P0402' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0401]Failed to assign role to user : %', p_target_email
+        RAISE EXCEPTION '[P0401]Failed to assign role to user : %, (REASON: %)', p_target_email, SQLERRM
         USING ERRCODE = 'P0401';
 END;
 $$ LANGUAGE plpgsql;
 
--- RoleController::udpate_role
+-- RoleController::update_role
 CREATE OR REPLACE FUNCTION update_role(
     p_requester_email users.email%TYPE,
     p_target_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
     p_change_role_name role_assignments.role%TYPE
-) RETURNS SETOF action_result AS $$
+) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_target_id users.user_id%TYPE;
-    v_requester_role role_assignments.role%TYPE;
 BEGIN
-    -- 1. 요청자와 대상자의 user_id 가져오기
+    -- 0. 입력 값 검증 (NULL and admin은 변경 불가)
+    IF 
+        p_change_role_name IS NULL
+        OR
+        p_change_role_name = 'ADMIN'
+    THEN
+        RAISE EXCEPTION '[P0405]Invalid role provided for update : %', p_change_role_name
+        USING ERRCODE = 'P0405';
+    END IF;
+
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 타켓 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_target_id FROM users WHERE email = p_target_email;
 
-    -- 2. 요청자의 현재 노드 권한 확인
-    SELECT role INTO v_requester_role 
-    FROM role_assignments 
-    WHERE user_id = v_requester_id AND node_id = p_node_id;
-
-    IF v_requester_role IS NULL OR v_requester_role NOT IN ('ADMIN', 'MANAGER') THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '요청자가 해당 노드에 권한이 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    IF v_target_id IS NULL THEN
+        RAISE EXCEPTION '[P0002]Target user does not exist : %', p_target_email
+        USING ERRCODE = 'P0002';
     END IF;
 
-    -- 3. 대상자의 현재 권한 확인
+    -- 3. 요청자 권한 체크 (NODE_ADD_ROLE 권한 필요)
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have authority to add role on this node : %', p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 타켓 사용자가 해당 노드에 권한이 있는지 확인
     IF NOT EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id) THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '대상자가 해당 노드에 권한이 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+        RAISE EXCEPTION '[P0403]Target user does not have a role on this node : %', p_target_email
+        USING ERRCODE = 'P0403';
     END IF;
 
-    -- 4. 새로운 권한 부여
+    -- 5. 타켓 사용자가 ADMIN 권한인 경우 변경 불가
+    IF EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id AND role = 'ADMIN') THEN
+        RAISE EXCEPTION '[P0404]Cannot change role of an ADMIN user : %', p_target_email
+        USING ERRCODE = 'P0404';
+    END IF;
+
+    -- 6. 새로운 권한 부여
     UPDATE role_assignments
-    SET role = COALESCE(NULLIF(p_change_role_name, ''), role)
+    SET role = p_change_role_name
     WHERE user_id = v_target_id AND node_id = p_node_id;
 
-    -- 5. 결과 반환
+    -- 7. 결과 반환
     RETURN QUERY SELECT 
-        TRUE, 
-        '성공적으로 권한이 변경되었습니다.'::TEXT, 
         'ROLE'::TEXT,
         p_node_id::TEXT,
         NULL::TEXT,
@@ -146,5 +145,16 @@ BEGIN
         r.updated_at::TEXT
     FROM role_assignments r
     WHERE user_id = v_target_id AND node_id = p_node_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0103' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0403' OR SQLSTATE 'P0404' OR SQLSTATE 'P0405' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0406]Failed to update role of user : %, (REASON: %)', p_target_email, SQLERRM
+        USING ERRCODE = 'P0406';
 END;
 $$ LANGUAGE plpgsql;

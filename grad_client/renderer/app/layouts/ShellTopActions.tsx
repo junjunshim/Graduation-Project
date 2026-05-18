@@ -18,7 +18,14 @@ export function ShellTopActions({ currentUser }: ShellTopActionsProps) {
 
   return (
     <header className={styles.shellTopActions}>
-      {shouldShowGreeting ? <p className={styles.shellGreeting}>안녕, {currentUser.name}님</p> : null}
+      {shouldShowGreeting ? (
+        <p className={styles.shellGreeting}>
+          안녕, {currentUser.name}님
+          <span className={styles.shellGreetingIcon}>
+            <Icon name="hand" size={30} />
+          </span>
+        </p>
+      ) : null}
 
       <div className={styles.shellRightActions}>
         <label className={styles.shellSearchBox}>
@@ -46,7 +53,11 @@ export function ShellTopActions({ currentUser }: ShellTopActionsProps) {
             aria-label="User menu"
             title={`${currentUser.name} (${currentUser.userId})`}
           >
-            <Icon name="user" size={28} />
+            <span className={styles.shellProfileIcon}>
+              <Icon name="user" size={28} />
+            </span>
+            <span className={styles.shellProfileName}>{currentUser.name}</span>
+            <Icon name="chevronDown" size={18} />
           </button>
         </div>
       </div>

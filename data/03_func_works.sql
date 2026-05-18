@@ -159,82 +159,75 @@ CREATE OR REPLACE FUNCTION update_work_item(
     p_work_item_id work_items.work_item_id%TYPE,
     p_title work_items.title%TYPE DEFAULT NULL,
     p_description work_items.description%TYPE DEFAULT NULL,
+    p_hidden work_items.hidden%TYPE DEFAULT NULL,
     p_status work_items.status%TYPE DEFAULT NULL,
     p_priority work_items.priority%TYPE DEFAULT -1,
     p_weight work_items.weight%TYPE DEFAULT -1,
     p_progress work_items.progress%TYPE DEFAULT -1,
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL
-) RETURNS SETOF action_result AS $$
+) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id  users.user_id%TYPE;
     v_owner_node_id organization_nodes.node_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
+    v_owner_user_email users.email%TYPE;
+    v_current_hidden work_items.hidden%TYPE;
 BEGIN
-    -- 1. 요청자의 user_id 가져오기
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
 
     IF v_requester_id IS NULL THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '사용자를 찾을 수 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. work_item 존재 여부 확인
-    IF NOT EXISTS (SELECT 1 FROM work_items WHERE work_item_id = p_work_item_id) THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '업무를 찾을 수 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    -- 2. work_item 정보 한 번에 가져오기 (성능 최적화)
+    SELECT owner_node_id, owner_user_id, hidden 
+    INTO v_owner_node_id, v_owner_user_id, v_current_hidden 
+    FROM work_items 
+    WHERE work_item_id = p_work_item_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0603]Work item does not exist: %', p_work_item_id
+        USING ERRCODE = 'P0603';
     END IF;
 
-    -- 3. 요청자의 권한 확인 (업무의 owner_user_id와 일치하거나, 업무가 속한 노드에 대한 ADMIN/ MANAGER 권한 필요)
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM work_items w
-        JOIN role_assignments ra ON ra.node_id = w.owner_node_id
-        WHERE w.work_item_id = p_work_item_id                              
-          AND (w.owner_user_id = v_requester_id OR ra.user_id = v_requester_id AND ra.role IN ('ADMIN', 'MANAGER'))
-    ) THEN
-        RETURN QUERY SELECT 
-            FALSE, 
-            '업무를 수정할 권한이 없습니다.'::TEXT, 
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::TEXT,
-            NULL::INTEGER,
-            NULL::TEXT,
-            NULL::TEXT;
-        RETURN;
+    -- 3. 요청자의 권한 확인
+    IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %, requester: %', v_owner_node_id, p_requester_email
+        USING ERRCODE = 'P0103';
     END IF;
 
-    -- 4. work_item 업데이트
+    -- 4. 다른 사용자의 work_item 변경 권한 확인 (소유자가 다를 경우)
+    IF v_owner_user_id != v_requester_id THEN
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_OTHERS_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_OTHERS_CHANGE permission on node: %, requester: %', v_owner_node_id, p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 5. 숨김 속성 변경 권한 확인
+    IF v_current_hidden THEN
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_HIDDEN_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_HIDDEN_CHANGE permission on node: %, requester: %', v_owner_node_id, p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 6. owner_user_id가 숨김 속성 권한이 없을때, 숨김 속성 true 변경 불가
+    IF p_hidden = TRUE AND NOT check_authority_with_override(v_owner_user_id, v_owner_node_id, 'WI_HIDDEN_CHANGE') THEN
+        SELECT email INTO v_owner_user_email FROM users WHERE user_id = v_owner_user_id;
+        RAISE EXCEPTION '[P0103]Owner does not have WI_HIDDEN_CHANGE permission on node: %, requester: %', v_owner_user_email, p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 7. work_item 업데이트
     UPDATE work_items
     SET
         title = COALESCE(NULLIF(p_title, ''), title),
         description = COALESCE(NULLIF(p_description, ''), description),
+        hidden = COALESCE(p_hidden, hidden),
         status = COALESCE(NULLIF(p_status, ''), status),
         priority = CASE WHEN p_priority >= 1 AND p_priority <= 5 THEN p_priority ELSE priority END,
         weight = CASE WHEN p_weight >= 0 THEN p_weight ELSE weight END,
@@ -243,14 +236,12 @@ BEGIN
         due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date)
     WHERE work_item_id = p_work_item_id;
 
-    -- 5. 업데이트된 work_item 반환
+    -- 8. 업데이트된 work_item 반환
     RETURN QUERY
     SELECT
-        TRUE,
-        'Work Item이 업데이트되었습니다.'::TEXT,
         'WORK_ITEM'::TEXT,
         w.work_item_id::TEXT,
-        NULL::TEXT,
+        w.hidden::TEXT,
         w.owner_node_id::TEXT,
         w.title::TEXT,
         w.status::TEXT,
@@ -259,5 +250,16 @@ BEGIN
         w.updated_at::TEXT
     FROM work_items w
     WHERE w.work_item_id = p_work_item_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0103' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0603' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0604]Failed to update work item: %', SQLERRM
+        USING ERRCODE = 'P0604';
 END;
 $$ LANGUAGE plpgsql;

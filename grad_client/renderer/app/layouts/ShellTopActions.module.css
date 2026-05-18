@@ -1,11 +1,29 @@
 .shellTopActions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 1.6rem;
   min-width: 0;
   padding: var(--space-page-top) var(--space-page-x) 0;
   background: var(--surface-page);
+}
+
+.shellGreeting {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.shellRightActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.6rem;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .shellSearchBox {
@@ -13,7 +31,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.42rem;
-  width: min(100%, 11rem);
+  width: min(100%, 15rem);
   min-height: 2.25rem;
   padding: 0 0.8rem;
   border: 2px solid var(--text-primary);
@@ -121,6 +139,15 @@
   .shellTopActions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .shellGreeting {
+    white-space: normal;
+  }
+
+  .shellRightActions {
+    justify-content: space-between;
+    margin-left: 0;
   }
 
   .shellSearchBox {

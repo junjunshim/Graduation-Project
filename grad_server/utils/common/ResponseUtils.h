@@ -27,6 +27,8 @@ enum class DbErrorCode {
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     ParentWorkItemNotFound,     // P0601 부모 work item 없음
     CreateWorkItemFailed,       // P0602 work item 생성 실패
+    UpdateWorkItemNotFound,     // P0603 업데이트할 work item 없음
+    UpdateWorkItemFailed,       // P0604 work item 업데이트 실패
     Unknown                     // 알 수 없는 에러
 };
 

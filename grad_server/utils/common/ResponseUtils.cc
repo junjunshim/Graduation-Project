@@ -77,6 +77,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
+    else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
+    else if (errMsg.find("P0604") != std::string::npos) return DbErrorCode::UpdateWorkItemFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -194,6 +196,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::CreateWorkItemFailed:{
             ret["message"] = "work item 생성에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::UpdateWorkItemNotFound:{
+            ret["message"] = "업데이트할 work item을 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::UpdateWorkItemFailed:{
+            ret["message"] = "work item 업데이트에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

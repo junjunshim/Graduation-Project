@@ -136,14 +136,46 @@
   color: var(--text-primary);
 }
 
+.kpiTopBar {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-top: 1rem;
+  margin-bottom: -0.25rem;
+}
+
+.newTaskButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0.55rem 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 25%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.newTaskButton:hover {
+  background: var(--surface-hover);
+  transform: translateY(-1px);
+}
+
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.85rem;
+  gap: 0.75rem;
   min-width: 0;
 }
 
-.kpiCard,
 .panel {
   min-width: 0;
   border: 1px solid var(--line-default);
@@ -154,18 +186,25 @@
 
 .kpiCard {
   display: grid;
-  gap: 0.72rem;
-  align-content: start;
-  padding: 0.95rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-content: center;
+  min-width: 0;
+  min-height: 5rem;
+  padding: 0.72rem 0.9rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+  background: var(--surface-panel);
+  color: var(--text-primary);
   overflow: hidden;
 }
 
-.kpiHeader,
 .kpiValueRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.9rem;
   min-width: 0;
 }
 
@@ -173,17 +212,37 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.3rem;
+  height: 2.3rem;
   flex-shrink: 0;
   border-radius: var(--radius-sm);
 }
 
+.kpiBlue .kpiIcon {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.kpiAmber .kpiIcon {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.kpiGreen .kpiIcon {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.kpiNeutral .kpiIcon {
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
 .kpiLabel {
   min-width: 0;
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -191,7 +250,8 @@
 
 .kpiValueRow strong {
   color: var(--text-primary);
-  font-size: clamp(1.65rem, 2.6vw, 2.15rem);
+  font-size: 1.75rem;
+  font-weight: 700;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -202,58 +262,6 @@
   font-size: 0.82rem;
   line-height: 1.45;
   overflow-wrap: anywhere;
-}
-
-.kpiSparkline {
-  display: inline-flex;
-  align-items: end;
-  gap: 0.16rem;
-  height: 1.45rem;
-  color: currentColor;
-}
-
-.kpiSparkline i {
-  display: block;
-  width: 0.28rem;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.62;
-}
-
-.kpiSparkline i:nth-child(1) {
-  height: 0.55rem;
-}
-
-.kpiSparkline i:nth-child(2) {
-  height: 0.92rem;
-}
-
-.kpiSparkline i:nth-child(3) {
-  height: 1.28rem;
-}
-
-.kpiBlue .kpiIcon,
-.kpiBlue .kpiSparkline {
-  background: var(--accent-blue-soft);
-  color: var(--accent-blue);
-}
-
-.kpiAmber .kpiIcon,
-.kpiAmber .kpiSparkline {
-  background: var(--accent-amber-soft);
-  color: var(--accent-amber);
-}
-
-.kpiGreen .kpiIcon,
-.kpiGreen .kpiSparkline {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
-}
-
-.kpiNeutral .kpiIcon,
-.kpiNeutral .kpiSparkline {
-  background: var(--surface-panel-muted);
-  color: var(--text-secondary);
 }
 
 .dashboardGrid {

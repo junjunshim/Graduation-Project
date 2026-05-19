@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
 import { DashboardActivityPanel } from '../components/DashboardActivityPanel'
@@ -41,6 +43,12 @@ export function DashboardPage() {
         onSearchQueryChange={setSearchQuery}
       />
       */}
+      <div className={styles.kpiTopBar}>
+        <Link to="/work-items/new" className={styles.newTaskButton}>
+          <Icon name="plus" size={18} />
+          새 작업
+        </Link>
+      </div>
       <DashboardKpiGrid metrics={metrics} />
 
       <div className={styles.dashboardGrid}>

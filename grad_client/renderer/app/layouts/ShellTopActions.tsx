@@ -22,7 +22,7 @@ export function ShellTopActions({ currentUser }: ShellTopActionsProps) {
         <p className={styles.shellGreeting}>
           안녕, {currentUser.name}님
           <span className={styles.shellGreetingIcon}>
-            <Icon name="hand" size={30} />
+            <Icon name="hand" size={32} />
           </span>
         </p>
       ) : null}

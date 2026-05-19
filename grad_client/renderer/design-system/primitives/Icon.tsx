@@ -21,6 +21,7 @@ export type IconName =
   | 'users'
   | 'messageCircle'
   | 'trendingUp'
+  | 'lineChart'
   | 'arrowRight'
   | 'chevronLeft'
   | 'chevronRight'
@@ -173,6 +174,13 @@ const iconPaths: Record<IconName, ReactNode> = {
   trendingUp: (
     <>
       <path d="M4 16l5-5 4 4 7-8" />
+      <path d="M15 7h5v5" />
+    </>
+  ),
+  lineChart: (
+    <>
+      <path d="M4 19h16" />
+      <path d="M5 14l5-5 4 4 6-6" />
       <path d="M15 7h5v5" />
     </>
   ),

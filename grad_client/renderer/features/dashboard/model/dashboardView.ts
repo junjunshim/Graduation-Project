@@ -151,10 +151,11 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
   const activeWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'in-progress')
   const completedWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'done')
   const dueSoonOpenWorkItems = getDueSoonOpenWorkItems(overview)
+  const teamMemberCount = overview.rootRoleMembers.length || overview.summary.roleCount
 
   return [
     {
-      label: '진행 중인 업무',
+      label: '진행중인 워크스페이스',
       value: String(activeWorkItems.length),
       description: '현재 실행 중인 항목',
       icon: 'trendingUp',
@@ -168,17 +169,17 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       tone: 'amber',
     },
     {
-      label: '완료 업무',
+      label: '완료한 업무',
       value: String(completedWorkItems.length),
       description: '완료 처리된 항목',
       icon: 'checkCircle',
       tone: 'green',
     },
     {
-      label: '평균 진행률',
-      value: `${overview.summary.averageProgress}%`,
-      description: '전체 업무 기준 평균',
-      icon: 'sparkles',
+      label: '팀원',
+      value: String(teamMemberCount),
+      description: '참여 중인 구성원',
+      icon: 'users',
       tone: 'neutral',
     },
   ]

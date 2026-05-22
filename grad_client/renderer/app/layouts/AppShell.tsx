@@ -86,7 +86,10 @@ export function AppShell() {
         {!hasCustomTitleBar ? <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} /> : null}
 
         <div className={styles.workspaceBody}>
-          <ShellTopActions currentUser={currentUser} />
+          <ShellTopActions
+            currentUser={currentUser}
+            variant={location.pathname === '/workspace' ? 'workspace' : 'default'}
+          />
 
           <main className={styles.main}>
             <Outlet />

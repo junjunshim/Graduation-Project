@@ -5,6 +5,7 @@ import { SignupPage } from '../features/auth/pages/SignupPage'
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
 import { OrgManagePage } from '../features/org/pages/OrgManagePage'
 import { TopNodeSetupPage } from '../features/org/pages/TopNodeSetupPage'
+import { WorkspacePage } from '../features/workspace/pages/WorkspacePage'
 import { WorkItemCreatePage } from '../features/work-item/pages/WorkItemCreatePage'
 import { WorkItemDetailPage } from '../features/work-item/pages/WorkItemDetailPage'
 import { WorkItemEditPage } from '../features/work-item/pages/WorkItemEditPage'
@@ -57,6 +58,7 @@ const router = createHashRouter([
         element: <AppShell />,
         children: [
           { path: '/dashboard', element: <DashboardPage /> },
+          { path: '/workspace', element: <WorkspacePage /> },
           { path: '/setup/top-node', element: <TopNodeSetupPage /> },
           { path: '/org/manage', element: <OrgManagePage /> },
           {

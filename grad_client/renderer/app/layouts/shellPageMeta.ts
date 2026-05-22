@@ -83,13 +83,23 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean): Shel
     }
   }
 
-  if (pathname === '/org/manage') {
+  if (pathname === '/workspace') {
     return {
       section: 'Workspace',
       title: '워크 스페이스',
-      description: '조직 트리, 역할, 연결된 업무를 문서처럼 관리합니다.',
-      actionLabel: '업무 등록',
+      description: '업무, 일정, 문서, 활동을 한 화면에서 정돈해 확인합니다.',
+      actionLabel: '새 업무',
       actionTo: '/work-items/new',
+    }
+  }
+
+  if (pathname === '/org/manage') {
+    return {
+      section: 'Workspace Admin',
+      title: '조직 관리',
+      description: '조직 트리, 역할, 연결된 업무를 문서처럼 관리합니다.',
+      actionLabel: '워크 스페이스',
+      actionTo: '/workspace',
     }
   }
 

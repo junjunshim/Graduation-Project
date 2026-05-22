@@ -8,13 +8,20 @@ type ShellTopActionsProps = {
     name: string
     userId: string
   }
+  variant?: 'default' | 'workspace'
 }
 
-export function ShellTopActions({ currentUser }: ShellTopActionsProps) {
+export function ShellTopActions({ currentUser, variant = 'default' }: ShellTopActionsProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const shellTopActionsClassName = [
+    styles.shellTopActions,
+    variant === 'workspace' ? styles.shellTopActionsWorkspace : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
-    <header className={styles.shellTopActions}>
+    <header className={shellTopActionsClassName}>
       <label className={styles.shellSearchBox}>
         <span className={styles.shellSearchIcon}>
           <Icon name="search" size={18} />

@@ -1,0 +1,1005 @@
+.page {
+  --workspace-ink: var(--text-primary);
+  --workspace-line: var(--line-default);
+  --workspace-soft-line: var(--line-default);
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.95rem var(--space-page-x) var(--space-page-bottom);
+  background: var(--surface-page);
+}
+
+.workspaceHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.headerCopy {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding-left: 1rem;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+  margin: 0;
+  color: var(--workspace-ink);
+  font-size: clamp(1.2rem, 1.8vw, 1.55rem);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.breadcrumb span,
+.breadcrumb strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceSubtitle {
+  margin: 0;
+  padding-left: 2.6rem;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.memberStack {
+  display: flex;
+  align-items: center;
+  margin-right: 0.35rem;
+}
+
+.memberStack span,
+.memberStack strong,
+.activityAvatar {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.05rem;
+  height: 2.05rem;
+  border: 1px solid var(--workspace-line);
+  border-radius: 999px;
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.memberStack span + span,
+.memberStack span + strong {
+  margin-left: -0.45rem;
+}
+
+.memberStack strong {
+  background: var(--surface-panel-muted);
+}
+
+.memberStack span::after,
+.memberStack strong::after {
+  content: attr(data-member-name);
+  position: absolute;
+  bottom: calc(100% + 0.48rem);
+  left: 50%;
+  z-index: 20;
+  width: max-content;
+  max-width: 12rem;
+  padding: 0.34rem 0.52rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.memberStack span:hover,
+.memberStack strong:hover {
+  z-index: 21;
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--workspace-ink);
+}
+
+.memberStack span:hover::after,
+.memberStack strong:hover::after {
+  opacity: 1;
+}
+
+.primaryAction,
+.secondaryAction,
+.iconAction,
+.roundAction,
+.textAction,
+.panelFooterLink,
+.filterButton,
+.tabLink,
+.addDocumentCard {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  min-width: 0;
+  border-radius: var(--radius-xs);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.primaryAction,
+.secondaryAction,
+.iconAction {
+  min-height: 2.28rem;
+  padding: 0.58rem 0.85rem;
+}
+
+.primaryAction {
+  border: 1px solid var(--workspace-ink);
+  background: var(--workspace-ink);
+  color: var(--text-inverse);
+}
+
+.secondaryAction,
+.iconAction,
+.roundAction {
+  border: 1px solid var(--workspace-line);
+  background: var(--surface-panel);
+  color: var(--workspace-ink);
+}
+
+.iconAction {
+  width: 2.28rem;
+  height: 2.28rem;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.moreDots {
+  display: inline-block;
+  width: 0.2rem;
+  height: 0.2rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow:
+    -0.42rem 0 0 currentColor,
+    0.42rem 0 0 currentColor;
+}
+
+.primaryAction:hover,
+.secondaryAction:hover,
+.iconAction:hover,
+.roundAction:hover,
+.tabLink:hover,
+.textAction:hover,
+.panelFooterLink:hover,
+.workRow:hover,
+.documentCard:hover,
+.addDocumentCard:hover,
+.activityItem:hover,
+.timelineItem:hover {
+  background: var(--surface-hover);
+  color: var(--workspace-ink);
+  border-color: var(--line-strong);
+  opacity: 0.96;
+}
+
+.workspaceTabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  min-width: 0;
+  margin-top: 0.15rem;
+  overflow: visible;
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.tabLink {
+  position: relative;
+  min-height: 2rem;
+  flex: 0 0 auto;
+  padding: 0 0.42rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--workspace-ink);
+  font-size: 0.86rem;
+}
+
+.tabLink::after {
+  content: '';
+  position: absolute;
+  right: 0.42rem;
+  bottom: -1px;
+  left: 0.42rem;
+  height: 2px;
+  border-radius: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.tabLinkActive::after {
+  background: var(--workspace-ink);
+}
+
+.tabLink:hover {
+  border-color: transparent;
+  background: var(--surface-hover);
+  opacity: 1;
+}
+
+.tabLinkActive:hover::after {
+  background: var(--workspace-ink);
+}
+
+.emptyPanel,
+.metricCard,
+.panel {
+  min-width: 0;
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: none;
+}
+
+.emptyPanel {
+  display: grid;
+  justify-items: start;
+  gap: 0.55rem;
+  max-width: 42rem;
+  padding: 1rem;
+}
+
+.emptyPanel h3 {
+  margin: 0;
+  color: var(--workspace-ink);
+  font-size: 1.15rem;
+}
+
+.emptyPanel p,
+.metricCard p,
+.activityItem p,
+.emptyCopy {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.72rem;
+  min-width: 0;
+}
+
+.metricCard {
+  display: grid;
+  gap: 0.45rem;
+  align-content: start;
+  min-height: 7.2rem;
+  padding: 0.9rem 1rem;
+}
+
+.metricHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.metricHeader span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metricCard strong {
+  color: var(--workspace-ink);
+  font-size: clamp(1.6rem, 2.4vw, 2.05rem);
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.metricCard p,
+.emptyCopy {
+  font-size: 0.82rem;
+}
+
+.sketchProgress {
+  width: 100%;
+  height: 0.42rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+}
+
+.sketchProgress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-blue);
+}
+
+.workspaceGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.32fr) minmax(19rem, 0.96fr);
+  gap: 0.9rem;
+  align-items: start;
+  min-width: 0;
+}
+
+.leftColumn,
+.rightColumn {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.panel {
+  display: grid;
+  gap: 0.86rem;
+  align-content: start;
+  padding: 1rem;
+}
+
+.boardPanel {
+  min-height: 27.4rem;
+}
+
+.timelinePanel {
+  min-height: 16.2rem;
+}
+
+.documentsPanel {
+  min-height: 7.9rem;
+}
+
+.activityPanel {
+  min-height: 18rem;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.panelHeader > div {
+  display: grid;
+  gap: 0.58rem;
+  min-width: 0;
+}
+
+.panelEyebrow {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.panelTitle {
+  margin: 0;
+  color: var(--workspace-ink);
+  font-size: 1.02rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.roundAction {
+  flex: 0 0 auto;
+  min-height: 2rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+
+.statusFilters {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  color: var(--workspace-ink);
+}
+
+.filterButton {
+  min-height: 1.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.filterButton::after {
+  content: '|';
+  margin-left: 0.55rem;
+  color: var(--text-muted);
+}
+
+.filterButton:last-child::after {
+  content: '';
+  margin-left: 0;
+}
+
+.filterButtonLabel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  padding: 0 0.18rem;
+  margin: 0 -0.18rem;
+  border-radius: var(--radius-xs);
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.filterButtonActive {
+  color: var(--workspace-ink);
+}
+
+.filterButtonActive .filterButtonLabel {
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.filterButton:not(:disabled):hover .filterButtonLabel {
+  background: var(--surface-hover);
+  color: var(--workspace-ink);
+}
+
+.filterButton:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.workTable {
+  display: grid;
+  min-width: 0;
+}
+
+.workTableHeader,
+.workRow {
+  display: grid;
+  grid-template-columns: 1.65rem minmax(13rem, 1fr) minmax(6.5rem, 0.4fr) minmax(5.5rem, 0.34fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.workTableHeader {
+  padding: 0 0 0.62rem;
+  border-bottom: 1px solid var(--workspace-line);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.workTableHeader span:first-child {
+  grid-column: 2;
+}
+
+.workRow {
+  padding: 0.58rem 0;
+  border-bottom: 1px solid var(--workspace-line);
+  color: var(--text-secondary);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.checkCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.checkCellActive {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-soft);
+}
+
+.checkCellDone {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.workTitleCell {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.workTitleCell strong,
+.documentCard strong,
+.activityItem strong,
+.timelineItem span {
+  min-width: 0;
+  color: var(--workspace-ink);
+  overflow-wrap: anywhere;
+}
+
+.workTitleCell strong {
+  flex: 1 1 auto;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.assigneeCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.assigneeAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--workspace-line);
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.assigneeCell > span:last-child {
+  min-width: 0;
+  color: var(--text-muted);
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.2rem;
+  padding: 0.24rem 0.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.statusTodo {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.statusInProgress {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.statusDone {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.panelFooterLink,
+.textAction {
+  justify-self: end;
+  min-height: 1.8rem;
+  color: var(--workspace-ink);
+  font-size: 0.82rem;
+}
+
+.panelFooterLink {
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  background: transparent;
+}
+
+.textAction {
+  min-height: 1.9rem;
+  padding: 0.3rem 0.52rem;
+  border: 0;
+  background: transparent;
+}
+
+.timelineMonthHeader {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
+  gap: 0.5rem;
+  padding-left: 5.8rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.timelineMonthHeader strong {
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.timelineScale {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0;
+  padding-left: 5.8rem;
+  border-bottom: 1px solid var(--workspace-line);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.timelineScale span {
+  position: relative;
+  padding-bottom: 0.35rem;
+}
+
+.timelineScale span::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -0.2rem;
+  width: 1px;
+  height: 0.35rem;
+  background: var(--workspace-line);
+}
+
+.timelineList {
+  position: relative;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+  padding-top: 0.25rem;
+}
+
+.todayLine {
+  position: absolute;
+  top: -0.75rem;
+  bottom: 0.4rem;
+  z-index: 1;
+  display: inline-flex;
+  justify-content: center;
+  width: max-content;
+  min-width: 1.7rem;
+  background: transparent;
+  color: var(--accent-amber);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.todayLine::before {
+  content: '';
+  position: absolute;
+  top: 0.9rem;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--accent-red);
+  transform: translateX(-50%);
+}
+
+.timelineItem {
+  display: grid;
+  grid-template-columns: minmax(5rem, 0.32fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.8rem;
+  min-width: 0;
+  padding: 0.44rem 0;
+  color: inherit;
+  transition: background 140ms ease;
+}
+
+.timelineItem span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.timelineTrack {
+  position: relative;
+  height: 1.5rem;
+  min-width: 0;
+}
+
+.timelineTrack::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--workspace-soft-line);
+}
+
+.timelineTrack i {
+  position: absolute;
+  top: 50%;
+  height: 0.64rem;
+  min-width: 0.9rem;
+  border: 1px solid var(--accent-blue);
+  border-radius: 999px;
+  background: var(--accent-blue-soft);
+  transform: translateY(-50%);
+}
+
+.documentCards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.documentCard,
+.addDocumentCard {
+  min-width: 0;
+  min-height: 4.8rem;
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+}
+
+.documentCard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.3rem 0.55rem;
+  align-items: start;
+  padding: 0.7rem;
+}
+
+.documentIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.documentCard strong {
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.documentCard small {
+  grid-column: 2;
+  justify-self: end;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.addDocumentCard {
+  border-style: dashed;
+  padding: 0.7rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.activityList {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.activityItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.42rem 0;
+  color: inherit;
+  transition: background 140ms ease;
+}
+
+.activityAvatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 1.75rem;
+  border-width: 1px;
+  background: var(--surface-panel-muted);
+}
+
+.activityItem p {
+  font-size: 0.82rem;
+}
+
+.activityItem small {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 1240px) {
+  .metricGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workspaceGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .workspaceHeader,
+  .panelHeader {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .workspaceHeader,
+  .panelHeader,
+  .headerActions {
+    display: grid;
+  }
+
+  .headerActions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .memberStack {
+    grid-column: 1 / -1;
+  }
+
+  .primaryAction,
+  .secondaryAction,
+  .iconAction {
+    width: 100%;
+  }
+
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .statusFilters {
+    overflow-x: auto;
+  }
+
+  .workTableHeader {
+    display: none;
+  }
+
+  .workRow {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0.45rem 0.7rem;
+  }
+
+  .workRow > span:not(.checkCell):not(.statusBadge) {
+    grid-column: 2;
+  }
+
+  .statusBadge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .workTitleCell {
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .timelineMonthHeader,
+  .timelineScale {
+    padding-left: 0;
+  }
+
+  .timelineItem {
+    grid-template-columns: 1fr;
+  }
+
+  .todayLine {
+    display: none;
+  }
+
+  .documentCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .activityItem {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .activityItem small {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+  }
+
+  .headerCopy {
+    padding-left: 0;
+  }
+
+  .workspaceSubtitle {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .headerActions,
+  .metricGrid,
+  .documentCards {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceTabs {
+    gap: 0.55rem 0.7rem;
+  }
+
+  .tabLink {
+    padding-inline: 0.34rem;
+  }
+
+  .tabLink::after {
+    right: 0.34rem;
+    left: 0.34rem;
+  }
+}

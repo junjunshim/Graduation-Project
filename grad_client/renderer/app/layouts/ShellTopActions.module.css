@@ -8,6 +8,11 @@
   background: var(--surface-page);
 }
 
+.shellTopActionsWorkspace {
+  gap: 0.9rem;
+  padding: 1rem var(--space-page-x) 0;
+}
+
 .shellSearchBox {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -25,6 +30,14 @@
     background 160ms ease;
 }
 
+.shellTopActionsWorkspace .shellSearchBox {
+  width: min(100%, 9.2rem);
+  min-height: 1.55rem;
+  padding: 0 0.62rem;
+  border-width: 1px;
+  border-color: var(--line-default);
+}
+
 .shellSearchBox:focus-within {
   border-color: var(--line-selected);
   background: var(--surface-panel);
@@ -39,6 +52,11 @@
   background: transparent;
   color: var(--text-primary);
   font-size: 0.82rem;
+}
+
+.shellTopActionsWorkspace .shellSearchBox input {
+  height: 1.35rem;
+  font-size: 0.76rem;
 }
 
 .shellSearchBox input::placeholder {
@@ -58,6 +76,10 @@
   min-width: 0;
 }
 
+.shellTopActionsWorkspace .shellActionButtons {
+  gap: 0.62rem;
+}
+
 .shellIconButton,
 .shellProfileButton {
   display: inline-flex;
@@ -74,6 +96,14 @@
     color 160ms ease;
 }
 
+.shellTopActionsWorkspace .shellIconButton,
+.shellTopActionsWorkspace .shellProfileButton {
+  border-width: 1px;
+  border-color: var(--line-default);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+}
+
 .shellIconButton {
   width: 2.95rem;
   height: 2.95rem;
@@ -83,17 +113,46 @@
   color: var(--text-primary);
 }
 
+.shellTopActionsWorkspace .shellIconButton {
+  width: 2rem;
+  height: 2rem;
+  border-color: transparent;
+  background: transparent;
+}
+
 .shellProfileButton {
   width: 2.55rem;
   height: 2.55rem;
   flex-shrink: 0;
+  border-color: var(--line-default);
   border-radius: 999px;
   background: transparent;
   color: var(--text-primary);
+  transition: none;
+}
+
+.shellTopActionsWorkspace .shellProfileButton {
+  width: 2.15rem;
+  height: 2.15rem;
+  border-color: var(--line-default);
+  background: transparent;
+  color: var(--text-primary);
+  transition: none;
+}
+
+.shellTopActionsWorkspace svg {
+  width: 19px;
+  height: 19px;
 }
 
 .shellIconButton:hover,
 .shellProfileButton:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.shellTopActionsWorkspace .shellProfileButton:hover {
   border-color: var(--line-strong);
   background: var(--surface-hover);
   color: var(--text-primary);

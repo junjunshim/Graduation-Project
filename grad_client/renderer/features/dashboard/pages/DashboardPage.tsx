@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
@@ -17,6 +18,10 @@ import styles from './DashboardPage.module.css'
 
 export function DashboardPage() {
   const currentUser = getCurrentUser()
+  const [boardPreviewHeight, setBoardPreviewHeight] = useState<number>()
+  const handleBoardPreviewHeightChange = useCallback((height: number) => {
+    setBoardPreviewHeight((currentHeight) => (currentHeight === height ? currentHeight : height))
+  }, [])
 
   if (!currentUser) {
     return null
@@ -52,8 +57,11 @@ export function DashboardPage() {
       <DashboardKpiGrid metrics={metrics} />
 
       <div className={styles.dashboardGrid}>
-        <DashboardBoard workItems={overview.visibleWorkItems} />
-        <DashboardCalendarPanel calendar={calendar} />
+        <DashboardBoard
+          workItems={overview.visibleWorkItems}
+          onPreviewHeightChange={handleBoardPreviewHeightChange}
+        />
+        <DashboardCalendarPanel calendar={calendar} previewHeight={boardPreviewHeight} />
         <DashboardDocumentsPanel recentDocuments={overview.recentWorkItems} />
         <DashboardActivityPanel activityItems={activityItems} />
       </div>

@@ -1,12 +1,19 @@
-import { Link } from 'react-router-dom'
-import { formatWorkspaceDate } from '../../workspace/model/formatters'
+import type { CSSProperties } from 'react'
 import { WEEKDAY_LABELS, type DashboardCalendar } from '../model/dashboardView'
-import { DashboardEmptyState } from './DashboardEmptyState'
 import styles from '../pages/DashboardPage.module.css'
 
-export function DashboardCalendarPanel({ calendar }: { calendar: DashboardCalendar }) {
+type DashboardCalendarPanelProps = {
+  calendar: DashboardCalendar
+  previewHeight?: number
+}
+
+export function DashboardCalendarPanel({ calendar, previewHeight }: DashboardCalendarPanelProps) {
+  const panelStyle = previewHeight
+    ? ({ '--dashboard-preview-panel-height': `${previewHeight}px` } as CSSProperties)
+    : undefined
+
   return (
-    <section className={[styles.panel, styles.calendarPanel].join(' ')}>
+    <section className={[styles.panel, styles.calendarPanel].join(' ')} style={panelStyle}>
       <div className={styles.sectionHeader}>
         <div>
           <p className={styles.sectionEyebrow}>Calendar</p>
@@ -41,16 +48,6 @@ export function DashboardCalendarPanel({ calendar }: { calendar: DashboardCalend
             </span>
           ),
         )}
-      </div>
-
-      <div className={styles.calendarAgenda}>
-        {calendar.dueItems.slice(0, 4).map((item) => (
-          <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.agendaItem}>
-            <span>{formatWorkspaceDate(item.dueDate)}</span>
-            <strong>{item.title}</strong>
-          </Link>
-        ))}
-        {calendar.dueItems.length === 0 ? <DashboardEmptyState>등록된 마감 일정이 없습니다.</DashboardEmptyState> : null}
       </div>
     </section>
   )

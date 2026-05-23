@@ -6,11 +6,10 @@ import { getWorkItemStatusLabel } from '../../workspace/model/labels'
 export const BOARD_COLUMNS: Array<{
   id: WorkItemStatus
   title: string
-  description: string
 }> = [
-  { id: 'in-progress', title: '진행 중', description: '오늘 이어서 볼 업무' },
-  { id: 'todo', title: '대기', description: '착수 전 확인 항목' },
-  { id: 'done', title: '완료', description: '최근 완료된 업무' },
+  { id: 'in-progress', title: 'Doing'},
+  { id: 'todo', title: 'To Do'},
+  { id: 'done', title: 'Done'},
 ]
 
 export const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']

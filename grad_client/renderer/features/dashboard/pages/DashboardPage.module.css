@@ -293,6 +293,17 @@
 .documentsPanel,
 .activityPanel {
   grid-column: span 6;
+  align-self: stretch;
+}
+
+.documentsPanel,
+.activityPanel {
+  gap: 1.2rem;
+}
+
+.documentsPanel {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
 }
 
 .sectionHeader {
@@ -360,6 +371,49 @@
 .inlineLink:hover {
   background: var(--surface-hover);
   border-color: var(--line-strong);
+}
+
+.panelViewAllLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  min-height: 1.8rem;
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color 160ms ease;
+}
+
+.panelViewAllLink:hover {
+  color: var(--line-selected);
+}
+
+.documentAddLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  justify-self: start;
+  align-self: end;
+  border: 1px solid var(--line-default);
+  border-radius: 999px;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.documentAddLink:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--line-selected);
 }
 
 .boardViewLink {
@@ -668,16 +722,22 @@
 }
 
 .documentRow {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) minmax(4rem, auto) auto;
+  gap: 0.5rem;
+  padding: 0.46rem 0;
+  border-top: 0;
 }
 
 .activityItem {
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.72rem;
+  padding: 0.46rem 0;
+  border-top: 0;
 }
 
 .documentRow:hover,
 .activityItem:hover {
-  background: var(--surface-hover);
+  background: transparent;
 }
 
 .documentIcon,
@@ -693,7 +753,17 @@
   color: var(--text-secondary);
 }
 
+.documentIcon {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--line-default);
+  border-radius: 999px;
+}
+
 .activityAvatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--line-default);
   border-radius: 999px;
 }
 
@@ -704,36 +774,55 @@
   min-width: 0;
 }
 
-.documentCopy strong,
+.documentTitle,
+.documentOwner,
 .documentDate,
 .activityCopy p,
-.activityCopy span {
+.activityDate {
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.documentCopy strong {
-  color: var(--text-primary);
-  font-size: 0.9rem;
-}
-
 .documentCopy p,
-.activityCopy p,
-.activityCopy span {
+.activityCopy p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.86rem;
   line-height: 1.45;
 }
 
+.documentTitle,
 .activityCopy strong {
   color: var(--text-primary);
-  font-weight: 800;
+  font-weight: 600;
+}
+
+.documentTitle {
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.documentOwner {
+  justify-self: end;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: nowrap;
 }
 
 .documentDate {
-  color: var(--text-muted);
+  justify-self: end;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.activityDate {
+  justify-self: end;
+  color: var(--text-secondary);
   font-size: 0.78rem;
   font-weight: 700;
   white-space: nowrap;
@@ -879,6 +968,13 @@
     gap: 1.6rem;
   }
 
+  .documentsPanel .sectionHeader,
+  .activityPanel .sectionHeader {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
   .searchBox {
     width: 100%;
     margin-left: 0;
@@ -930,12 +1026,11 @@
   }
 
   .documentRow {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
   }
 
-  .documentDate {
-    grid-column: 2;
-    justify-self: start;
+  .activityItem {
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .onboardingItem {

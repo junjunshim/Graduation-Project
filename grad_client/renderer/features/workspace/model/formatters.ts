@@ -122,6 +122,10 @@ function formatDateTokens(tokens: DateTokens) {
   return `${tokens.year}.${tokens.month}.${tokens.day}`
 }
 
+function formatShortDateTokens(tokens: DateTokens) {
+  return `${Number(tokens.month)}/${Number(tokens.day)}`
+}
+
 function formatTimestampTokens(tokens: TimestampTokens) {
   return `${formatDateTokens(tokens)} ${tokens.hour}:${tokens.minute}`
 }
@@ -152,6 +156,17 @@ export function formatWorkspaceDate(value?: string) {
 
   const tokens = resolveDateTokens(normalizedValue)
   return tokens ? formatDateTokens(tokens) : normalizedValue
+}
+
+export function formatWorkspaceShortDate(value?: string) {
+  const normalizedValue = normalizeWorkspaceValue(value)
+
+  if (!normalizedValue) {
+    return EMPTY_WORKSPACE_DATE_LABEL
+  }
+
+  const tokens = resolveDateTokens(normalizedValue)
+  return tokens ? formatShortDateTokens(tokens) : normalizedValue
 }
 
 export function formatWorkspaceTimestamp(value: string) {

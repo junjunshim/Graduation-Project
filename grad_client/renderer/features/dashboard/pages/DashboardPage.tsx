@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
 import { DashboardActivityPanel } from '../components/DashboardActivityPanel'
 import { DashboardBoard } from '../components/DashboardBoard'
@@ -28,6 +29,7 @@ export function DashboardPage() {
   }
 
   const overview = getWorkspaceOverview(currentUser.userId)
+  const users = getOrgSnapshot().users
   const activityItems = [...overview.visibleWorkItems]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, 5)
@@ -62,8 +64,8 @@ export function DashboardPage() {
           onPreviewHeightChange={handleBoardPreviewHeightChange}
         />
         <DashboardCalendarPanel calendar={calendar} previewHeight={boardPreviewHeight} />
-        <DashboardDocumentsPanel recentDocuments={overview.recentWorkItems} />
-        <DashboardActivityPanel activityItems={activityItems} />
+        <DashboardDocumentsPanel recentDocuments={overview.recentWorkItems} users={users} />
+        <DashboardActivityPanel activityItems={activityItems} users={users} />
       </div>
 
       <DashboardQuickDock />

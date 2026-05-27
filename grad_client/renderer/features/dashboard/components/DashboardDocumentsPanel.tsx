@@ -1,11 +1,21 @@
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
-import type { WorkItemRecord } from '../../workspace/model/types'
+import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
 import { DashboardEmptyState } from './DashboardEmptyState'
 import styles from '../pages/DashboardPage.module.css'
 
-export function DashboardDocumentsPanel({ recentDocuments }: { recentDocuments: WorkItemRecord[] }) {
+function getOwnerName(ownerUserId: string, users: UserRecord[]) {
+  return users.find((user) => user.userId === ownerUserId)?.name ?? ownerUserId
+}
+
+export function DashboardDocumentsPanel({
+  recentDocuments,
+  users,
+}: {
+  recentDocuments: WorkItemRecord[]
+  users: UserRecord[]
+}) {
   return (
     <section className={[styles.panel, styles.documentsPanel].join(' ')}>
       <div className={styles.sectionHeader}>
@@ -26,7 +36,7 @@ export function DashboardDocumentsPanel({ recentDocuments }: { recentDocuments: 
                 <Icon name="fileText" size={15} />
               </span>
               <strong className={styles.documentTitle}>{item.title}</strong>
-              <span className={styles.documentOwner}>{item.ownerUserId} ·</span>
+              <span className={styles.documentOwner}>{getOwnerName(item.ownerUserId, users)} ·</span>
               <time className={styles.documentDate} dateTime={item.createdAt}>
                 {formatWorkspaceShortDate(item.createdAt)}
               </time>

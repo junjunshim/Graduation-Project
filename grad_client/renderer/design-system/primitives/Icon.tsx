@@ -25,6 +25,7 @@ export type IconName =
   | 'arrowRight'
   | 'chevronLeft'
   | 'chevronRight'
+  | 'chevronUp'
   | 'chevronDown'
   | 'logOut'
   | 'gear'
@@ -187,6 +188,7 @@ const iconPaths: Record<IconName, ReactNode> = {
   arrowRight: <path d="M5 12h13M13 6l6 6-6 6" />,
   chevronLeft: <path d="M15 6l-6 6 6 6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
+  chevronUp: <path d="M6 15l6-6 6 6" />,
   chevronDown: <path d="M6 9l6 6 6-6" />,
   logOut: (
     <>

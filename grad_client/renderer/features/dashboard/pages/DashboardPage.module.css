@@ -283,6 +283,15 @@
   grid-column: span 8;
 }
 
+.boardPanel .sectionHeader {
+  align-items: center;
+}
+
+.boardPanel .sectionTitle {
+  margin: 0;
+  line-height: 1.4;
+}
+
 .calendarPanel {
   grid-column: span 4;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -638,11 +647,62 @@
 }
 
 .monthLabel {
-  flex-shrink: 0;
+  display: block;
   color: var(--text-secondary);
   font-size: 0.86rem;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.calendarHeaderContent {
+  width: 100%;
+  min-width: 0;
+}
+
+.calendarMonthRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  margin-top: 1.5rem;
+}
+
+.calendarMonthControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.calendarMonthButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.calendarMonthButton:hover,
+.calendarMonthButton:focus-visible {
+  border-color: var(--line-default);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.calendarMonthButton:focus-visible {
+  outline: 2px solid var(--line-selected);
+  outline-offset: 2px;
 }
 
 .weekdayGrid,
@@ -652,9 +712,13 @@
   gap: 0.28rem;
 }
 
+.weekdayGrid {
+  margin-top: 1.25rem;
+}
+
 .calendarGrid {
-  grid-auto-rows: minmax(3.75rem, 1fr);
-  height: 100%;
+  grid-auto-rows: auto;
+  align-content: start;
 }
 
 .weekdayGrid span {
@@ -666,8 +730,8 @@
 
 .calendarEmpty,
 .calendarDay {
+  aspect-ratio: 1 / 1;
   min-width: 0;
-  min-height: 3.75rem;
 }
 
 .calendarDay {
@@ -687,8 +751,16 @@
   color: var(--text-primary);
 }
 
+.calendarDayMuted {
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+
 .calendarToday {
   border-color: var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel-muted);
+  color: var(--text-primary);
 }
 
 .calendarDay strong {
@@ -715,6 +787,7 @@
   min-width: 0;
   padding: 0.68rem 0;
   border-top: 1px solid var(--line-default);
+  border-radius: var(--radius-xs);
   color: inherit;
   transition:
     background 160ms ease,
@@ -724,20 +797,29 @@
 .documentRow {
   grid-template-columns: auto minmax(0, 1fr) minmax(4rem, auto) auto;
   gap: 0.5rem;
-  padding: 0.46rem 0;
+  padding: 0.46rem 0.72rem;
   border-top: 0;
 }
 
 .activityItem {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0.72rem;
-  padding: 0.46rem 0;
+  padding: 0.46rem 0.72rem;
   border-top: 0;
 }
 
 .documentRow:hover,
-.activityItem:hover {
-  background: transparent;
+.documentRow:focus-visible,
+.activityItem:hover,
+.activityItem:focus-visible {
+  background: var(--surface-hover);
+}
+
+.documentRow:focus-visible,
+.activityItem:focus-visible,
+.taskCard:focus-visible {
+  outline: 2px solid var(--line-selected);
+  outline-offset: 2px;
 }
 
 .documentIcon,

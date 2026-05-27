@@ -23,9 +23,9 @@ export function DashboardActivityPanel({
         <div>
           <h3 className={styles.sectionTitle}>최근 활동</h3>
         </div>
-        <Link to="/org/manage" className={styles.panelViewAllLink}>
+        <Link to="/org/manage" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
           전체 보기
-          <Icon name="arrowRight" size={15} />
+          <Icon name="chevronRight" size={15} />
         </Link>
       </div>
 

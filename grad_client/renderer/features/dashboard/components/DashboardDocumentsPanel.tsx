@@ -22,9 +22,9 @@ export function DashboardDocumentsPanel({
         <div>
           <h3 className={styles.sectionTitle}>최근 문서</h3>
         </div>
-        <Link to="/documents" className={styles.panelViewAllLink}>
+        <Link to="/documents" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
           전체 보기
-          <Icon name="arrowRight" size={15} />
+          <Icon name="chevronRight" size={15} />
         </Link>
       </div>
 

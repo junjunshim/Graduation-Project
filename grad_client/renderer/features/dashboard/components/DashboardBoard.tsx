@@ -60,7 +60,6 @@ export function DashboardBoard({ workItems, onPreviewHeightChange }: DashboardBo
     <section ref={panelRef} className={[styles.panel, styles.boardPanel].join(' ')}>
       <div className={styles.sectionHeader}>
         <div>
-          <p className={styles.sectionEyebrow}>WorkSpace Board</p>
           <h3 className={styles.sectionTitle}>진행 중인 워크스페이스</h3>
         </div>
         <Link to="/org/manage" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>

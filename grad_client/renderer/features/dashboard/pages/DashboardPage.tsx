@@ -20,8 +20,12 @@ import styles from './DashboardPage.module.css'
 export function DashboardPage() {
   const currentUser = getCurrentUser()
   const [boardPreviewHeight, setBoardPreviewHeight] = useState<number>()
+  const [calendarMonthOffset, setCalendarMonthOffset] = useState(0)
   const handleBoardPreviewHeightChange = useCallback((height: number) => {
     setBoardPreviewHeight((currentHeight) => (currentHeight === height ? currentHeight : height))
+  }, [])
+  const handleCalendarMonthChange = useCallback((offset: number) => {
+    setCalendarMonthOffset((currentOffset) => currentOffset + offset)
   }, [])
 
   if (!currentUser) {
@@ -33,7 +37,7 @@ export function DashboardPage() {
   const activityItems = [...overview.visibleWorkItems]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, 5)
-  const calendar = buildDashboardCalendar(overview.visibleWorkItems)
+  const calendar = buildDashboardCalendar(overview.visibleWorkItems, calendarMonthOffset)
   const metrics = getDashboardMetrics(overview)
 
   if (overview.summary.orgNodeCount === 0) {
@@ -63,7 +67,11 @@ export function DashboardPage() {
           workItems={overview.visibleWorkItems}
           onPreviewHeightChange={handleBoardPreviewHeightChange}
         />
-        <DashboardCalendarPanel calendar={calendar} previewHeight={boardPreviewHeight} />
+        <DashboardCalendarPanel
+          calendar={calendar}
+          previewHeight={boardPreviewHeight}
+          onMonthChange={handleCalendarMonthChange}
+        />
         <DashboardDocumentsPanel recentDocuments={overview.recentWorkItems} users={users} />
         <DashboardActivityPanel activityItems={activityItems} users={users} />
       </div>

@@ -9,9 +9,14 @@ type ShellTopActionsProps = {
     userId: string
   }
   variant?: 'default' | 'workspace'
+  workspaceHeading?: {
+    label: string
+    title: string
+    subtitle: string
+  }
 }
 
-export function ShellTopActions({ currentUser, variant = 'default' }: ShellTopActionsProps) {
+export function ShellTopActions({ currentUser, variant = 'default', workspaceHeading }: ShellTopActionsProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const shellTopActionsClassName = [
     styles.shellTopActions,
@@ -22,30 +27,43 @@ export function ShellTopActions({ currentUser, variant = 'default' }: ShellTopAc
 
   return (
     <header className={shellTopActionsClassName}>
-      <label className={styles.shellSearchBox}>
-        <span className={styles.shellSearchIcon}>
-          <Icon name="search" size={18} />
-        </span>
-        <span className={styles.srOnly}>Search</span>
-        <input
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search"
-        />
-      </label>
+      {workspaceHeading ? (
+        <div className={styles.shellWorkspaceHeading}>
+          <p className={styles.shellWorkspaceBreadcrumb}>
+            <span>{workspaceHeading.label}</span>
+            <Icon name="chevronRight" size={14} />
+            <strong>{workspaceHeading.title}</strong>
+          </p>
+          <p className={styles.shellWorkspaceSubtitle}>{workspaceHeading.subtitle}</p>
+        </div>
+      ) : null}
 
-      <div className={styles.shellActionButtons}>
-        <button type="button" className={styles.shellIconButton} aria-label="Notifications">
-          <Icon name="bell" size={30} />
-        </button>
-        <button
-          type="button"
-          className={styles.shellProfileButton}
-          aria-label="User menu"
-          title={`${currentUser.name} (${currentUser.userId})`}
-        >
-          <Icon name="user" size={28} />
-        </button>
+      <div className={styles.shellTopActionControls}>
+        <label className={styles.shellSearchBox}>
+          <span className={styles.shellSearchIcon}>
+            <Icon name="search" size={18} />
+          </span>
+          <span className={styles.srOnly}>Search</span>
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search"
+          />
+        </label>
+
+        <div className={styles.shellActionButtons}>
+          <button type="button" className={styles.shellIconButton} aria-label="Notifications">
+            <Icon name="bell" size={30} />
+          </button>
+          <button
+            type="button"
+            className={styles.shellProfileButton}
+            aria-label="User menu"
+            title={`${currentUser.name} (${currentUser.userId})`}
+          >
+            <Icon name="user" size={28} />
+          </button>
+        </div>
       </div>
     </header>
   )

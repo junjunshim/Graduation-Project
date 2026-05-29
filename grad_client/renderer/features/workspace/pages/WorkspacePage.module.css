@@ -3,54 +3,20 @@
   --workspace-line: var(--line-default);
   --workspace-soft-line: var(--line-default);
   display: grid;
-  gap: 1rem;
+  gap: clamp(0.85rem, 1.55vh, 1.35rem);
   min-width: 0;
-  padding: 0.95rem var(--space-page-x) var(--space-page-bottom);
+  padding: clamp(1.35rem, 4vh, 3rem) var(--space-page-x) var(--space-page-bottom);
   background: var(--surface-page);
 }
 
-.workspaceHeader {
+.workspaceNavBar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: start;
-  min-width: 0;
-}
-
-.headerCopy {
-  display: grid;
-  gap: 0.5rem;
-  min-width: 0;
-  padding-left: 1rem;
-}
-
-.breadcrumb {
-  display: flex;
   align-items: center;
-  gap: 0.42rem;
+  gap: 1rem;
   min-width: 0;
-  margin: 0;
-  color: var(--workspace-ink);
-  font-size: clamp(1.2rem, 1.8vw, 1.55rem);
-  font-weight: 800;
-  line-height: 1.15;
-}
-
-.breadcrumb span,
-.breadcrumb strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.workspaceSubtitle {
-  margin: 0;
-  padding-left: 2.6rem;
-  color: var(--text-secondary);
-  font-size: 0.86rem;
-  font-weight: 600;
-  line-height: 1.35;
+  padding-bottom: clamp(0.36rem, 0.75vh, 0.7rem);
+  border-bottom: 1px solid var(--workspace-line);
 }
 
 .headerActions {
@@ -58,7 +24,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   min-width: 0;
 }
 
@@ -219,14 +185,12 @@
   flex-wrap: wrap;
   gap: 1.25rem;
   min-width: 0;
-  margin-top: 0.15rem;
   overflow: visible;
-  border-bottom: 1px solid var(--workspace-line);
 }
 
 .tabLink {
   position: relative;
-  min-height: 2rem;
+  min-height: 2.45rem;
   flex: 0 0 auto;
   padding: 0 0.42rem;
   border: 0;
@@ -299,16 +263,16 @@
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.72rem;
+  gap: clamp(0.62rem, 1vh, 1rem);
   min-width: 0;
 }
 
 .metricCard {
   display: grid;
-  gap: 0.45rem;
+  gap: clamp(0.38rem, 0.75vh, 0.56rem);
   align-content: start;
-  min-height: 7.2rem;
-  padding: 0.9rem 1rem;
+  min-height: clamp(6.6rem, 11vh, 8.6rem);
+  padding: clamp(0.75rem, 1.25vh, 1rem) 1rem;
 }
 
 .metricHeader {
@@ -361,7 +325,7 @@
 .workspaceGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.32fr) minmax(19rem, 0.96fr);
-  gap: 0.9rem;
+  gap: clamp(0.75rem, 1.2vh, 1.2rem);
   align-items: start;
   min-width: 0;
 }
@@ -369,32 +333,32 @@
 .leftColumn,
 .rightColumn {
   display: grid;
-  gap: 0.9rem;
+  gap: clamp(0.75rem, 1.2vh, 1.2rem);
   align-content: start;
   min-width: 0;
 }
 
 .panel {
   display: grid;
-  gap: 0.86rem;
+  gap: clamp(0.68rem, 1.1vh, 1rem);
   align-content: start;
-  padding: 1rem;
+  padding: clamp(0.85rem, 1.3vh, 1.15rem);
 }
 
 .boardPanel {
-  min-height: 27.4rem;
+  min-height: clamp(23rem, 42vh, 38rem);
 }
 
 .timelinePanel {
-  min-height: 16.2rem;
+  min-height: clamp(14.5rem, 24vh, 23rem);
 }
 
 .documentsPanel {
-  min-height: 7.9rem;
+  min-height: clamp(7.2rem, 13vh, 10rem);
 }
 
 .activityPanel {
-  min-height: 18rem;
+  min-height: clamp(16rem, 31vh, 28rem);
 }
 
 .panelHeader {
@@ -883,16 +847,63 @@
   }
 }
 
+@media (min-width: 1081px) and (min-height: 980px) {
+  .workspaceGrid {
+    align-items: stretch;
+  }
+
+  .leftColumn,
+  .rightColumn {
+    height: 100%;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 861px) {
+  .page {
+    gap: 0.75rem;
+    padding-top: 1.1rem;
+  }
+
+  .metricCard {
+    min-height: 6.25rem;
+    padding-block: 0.72rem;
+  }
+
+  .panel {
+    gap: 0.64rem;
+    padding: 0.82rem;
+  }
+
+  .boardPanel {
+    min-height: 22rem;
+  }
+
+  .timelinePanel {
+    min-height: 13.6rem;
+  }
+
+  .documentsPanel {
+    min-height: 6.8rem;
+  }
+
+  .activityPanel {
+    min-height: 15rem;
+  }
+}
+
 @media (max-width: 860px) {
-  .workspaceHeader,
+  .workspaceNavBar,
   .panelHeader {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
 
-  .workspaceHeader,
   .panelHeader,
   .headerActions {
+    display: grid;
+  }
+
+  .workspaceNavBar {
     display: grid;
   }
 
@@ -971,15 +982,7 @@
 
 @media (max-width: 760px) {
   .page {
-    padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
-  }
-
-  .headerCopy {
-    padding-left: 0;
-  }
-
-  .workspaceSubtitle {
-    padding-left: 0;
+    padding: clamp(1rem, 3vh, 1.7rem) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
   }
 }
 

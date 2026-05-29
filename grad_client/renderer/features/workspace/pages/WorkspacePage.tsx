@@ -242,7 +242,6 @@ export function WorkspacePage() {
   }
 
   const overview = getWorkspaceOverview(currentUser.userId)
-  const workspaceName = overview.rootNode?.name ?? '개인 워크스페이스'
   const counts = getWorkItemCounts(overview.visibleWorkItems)
   const metrics = getWorkspaceMetrics(overview)
   const filteredWorkItems = filterWorkItems(overview.visibleWorkItems, statusFilter).slice(0, BOARD_ITEM_LIMIT)
@@ -266,15 +265,24 @@ export function WorkspacePage() {
 
   return (
     <section className={styles.page}>
-      <header className={styles.workspaceHeader}>
-        <div className={styles.headerCopy}>
-          <p className={styles.breadcrumb}>
-            <span>워크 스페이스</span>
-            <Icon name="chevronRight" size={14} />
-            <strong>{workspaceName}</strong>
-          </p>
-          <p className={styles.workspaceSubtitle}>공동작업을 위한 워크스페이스</p>
-        </div>
+      <div className={styles.workspaceNavBar}>
+        <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
+          {workspaceTabs.map((tab) =>
+            tab.to ? (
+              <Link
+                key={tab.label}
+                to={tab.to}
+                className={[styles.tabLink, tab.to === '/workspace' ? styles.tabLinkActive : ''].join(' ')}
+              >
+                {tab.label}
+              </Link>
+            ) : (
+              <a key={tab.label} href={tab.href} className={styles.tabLink}>
+                {tab.label}
+              </a>
+            ),
+          )}
+        </nav>
 
         <div className={styles.headerActions}>
           <div className={styles.memberStack} aria-label="워크스페이스 멤버">
@@ -297,25 +305,7 @@ export function WorkspacePage() {
             <span className={styles.moreDots} aria-hidden="true" />
           </button>
         </div>
-      </header>
-
-      <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
-        {workspaceTabs.map((tab) =>
-          tab.to ? (
-            <Link
-              key={tab.label}
-              to={tab.to}
-              className={[styles.tabLink, tab.to === '/workspace' ? styles.tabLinkActive : ''].join(' ')}
-            >
-              {tab.label}
-            </Link>
-          ) : (
-            <a key={tab.label} href={tab.href} className={styles.tabLink}>
-              {tab.label}
-            </a>
-          ),
-        )}
-      </nav>
+      </div>
 
       {overview.summary.orgNodeCount === 0 ? (
         <section className={styles.emptyPanel}>

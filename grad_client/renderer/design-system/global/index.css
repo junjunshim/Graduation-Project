@@ -35,8 +35,18 @@ body {
   background: var(--surface-app);
 }
 
+html[data-scroll-surface='workspace'],
 body[data-scroll-surface='workspace'] {
   background: var(--surface-shell);
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html[data-scroll-surface='workspace'] *,
+body[data-scroll-surface='workspace'] * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 body[data-scroll-surface='auth'] {
@@ -97,9 +107,20 @@ svg {
   background: transparent;
 }
 
+html[data-scroll-surface='workspace']::-webkit-scrollbar-track,
+html[data-scroll-surface='workspace']::-webkit-scrollbar-corner,
 body[data-scroll-surface='workspace']::-webkit-scrollbar-track,
 body[data-scroll-surface='workspace']::-webkit-scrollbar-corner {
   background: var(--surface-shell);
+}
+
+html[data-scroll-surface='workspace']::-webkit-scrollbar,
+html[data-scroll-surface='workspace'] *::-webkit-scrollbar,
+body[data-scroll-surface='workspace']::-webkit-scrollbar,
+body[data-scroll-surface='workspace'] *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 body[data-scroll-surface='auth']::-webkit-scrollbar-track,

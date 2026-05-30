@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import type { WorkItemRecord } from '../../workspace/model/types'
+import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
 import { BOARD_COLUMNS } from '../model/dashboardView'
 import { DashboardEmptyState } from './DashboardEmptyState'
 import { DashboardWorkItemCard } from './DashboardWorkItemCard'
@@ -23,10 +23,11 @@ function getColumnHeaderToneClassName(columnId: string) {
 
 type DashboardBoardProps = {
   workItems: WorkItemRecord[]
+  users: UserRecord[]
   onPreviewHeightChange?: (height: number) => void
 }
 
-export function DashboardBoard({ workItems, onPreviewHeightChange }: DashboardBoardProps) {
+export function DashboardBoard({ workItems, users, onPreviewHeightChange }: DashboardBoardProps) {
   const [expandedColumns, setExpandedColumns] = useState<Record<string, boolean>>({})
   const panelRef = useRef<HTMLElement>(null)
   const hasExpandedColumn = Object.values(expandedColumns).some(Boolean)
@@ -94,14 +95,14 @@ export function DashboardBoard({ workItems, onPreviewHeightChange }: DashboardBo
                 {columnItems.length > 0 ? (
                   <>
                     {previewItems.map((item) => (
-                      <DashboardWorkItemCard key={item.workItemId} item={item} />
+                      <DashboardWorkItemCard key={item.workItemId} item={item} users={users} />
                     ))}
                     {hasHiddenItems ? (
                       <>
                         {isExpanded ? (
                           <div className={styles.moreItemsDropdown}>
                             {hiddenItems.map((item) => (
-                              <DashboardWorkItemCard key={item.workItemId} item={item} />
+                              <DashboardWorkItemCard key={item.workItemId} item={item} users={users} />
                             ))}
                           </div>
                         ) : null}

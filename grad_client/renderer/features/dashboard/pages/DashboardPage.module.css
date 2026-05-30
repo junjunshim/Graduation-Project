@@ -4,7 +4,7 @@
   gap: 1rem;
   align-content: start;
   min-width: 0;
-  padding: var(--space-page-top) var(--space-page-x) var(--space-page-bottom);
+  padding: var(--space-page-top) 2.5rem var(--space-page-bottom);
   background: var(--surface-page);
 }
 
@@ -455,10 +455,10 @@
   align-content: start;
   min-width: 0;
   min-height: 0;
-  padding: 0.72rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel-muted);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .columnHeader {
@@ -613,12 +613,54 @@
 }
 
 .taskMeta {
-  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
   color: var(--text-secondary);
   font-size: 0.78rem;
+  font-weight: 700;
   line-height: 1.45;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+}
+
+.taskOwner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  line-height: 1;
+}
+
+.taskOwnerIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border: 1px solid var(--line-default);
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.taskOwnerIcon svg {
+  flex-shrink: 0;
+}
+
+.taskOwnerName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.taskDueDate {
+  justify-self: end;
+  color: var(--text-primary);
+  white-space: nowrap;
 }
 
 .progressBlock {
@@ -686,7 +728,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-primary);
   cursor: pointer;
   transition:
     background 160ms ease,
@@ -760,9 +802,14 @@
 }
 
 .calendarToday {
-  border-color: var(--line-strong);
+  border-color: var(--text-primary);
   border-radius: var(--radius-sm);
-  background: var(--surface-panel-muted);
+  background: var(--text-primary);
+  color: var(--surface-page);
+}
+
+.calendarToday strong {
+  background: var(--surface-page);
   color: var(--text-primary);
 }
 
@@ -773,13 +820,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 0.85rem;
-  height: 0.85rem;
+  width: 0.95rem;
+  height: 0.95rem;
   border-radius: 999px;
   background: var(--accent-blue);
   color: var(--text-inverse);
   font-size: 0.58rem;
   line-height: 1;
+}
+
+.calendarDay.calendarToday strong {
+  width: 0.95rem;
+  height: 0.95rem;
+  background: var(--surface-page);
+  color: var(--text-primary);
 }
 
 .documentRow,

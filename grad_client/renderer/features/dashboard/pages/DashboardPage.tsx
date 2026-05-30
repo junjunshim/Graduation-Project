@@ -65,6 +65,7 @@ export function DashboardPage() {
       <div className={styles.dashboardGrid}>
         <DashboardBoard
           workItems={overview.visibleWorkItems}
+          users={users}
           onPreviewHeightChange={handleBoardPreviewHeightChange}
         />
         <DashboardCalendarPanel

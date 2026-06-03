@@ -735,7 +735,7 @@
 .timelineTrack i {
   position: absolute;
   top: 50%;
-  height: 0.64rem;
+  height: 0.92rem;
   min-width: 0.9rem;
   border: 1px solid var(--accent-blue);
   border-radius: 999px;

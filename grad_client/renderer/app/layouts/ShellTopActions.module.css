@@ -1,10 +1,10 @@
 .shellTopActions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 1.6rem;
   min-width: 0;
-  padding: var(--space-page-top) var(--space-page-x) 0;
+  padding: var(--space-page-top) 2.5rem 0;
   background: var(--surface-page);
 }
 
@@ -66,6 +66,31 @@
   font-size: 0.86rem;
   font-weight: 600;
   line-height: 1.35;
+.shellGreeting {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1.2;
+  transform: translateY(0.2rem);
+}
+
+.shellGreetingIcon {
+  display: inline-flex;
+  color: var(--text-primary);
+}
+
+.shellRightActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2.65rem;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .shellSearchBox {
@@ -73,7 +98,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.42rem;
-  width: min(100%, 11rem);
+  width: min(100%, 15rem);
   min-height: 2.25rem;
   padding: 0 0.8rem;
   border: 2px solid var(--text-primary);
@@ -176,11 +201,14 @@
 }
 
 .shellProfileButton {
-  width: 2.55rem;
+  min-width: 0;
   height: 2.55rem;
+  gap: 0.45rem;
+  padding: 0 0.15rem 0 0;
   flex-shrink: 0;
   border-color: var(--line-default);
   border-radius: 999px;
+  border-color: transparent;
   background: transparent;
   color: var(--text-primary);
   transition: none;
@@ -198,6 +226,28 @@
 .shellTopActionsWorkspace .shellTopActionControls svg {
   width: 19px;
   height: 19px;
+}
+
+.shellProfileIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.55rem;
+  height: 2.55rem;
+  flex: 0 0 auto;
+  border: 1px solid var(--text-primary);
+  border-radius: 999px;
+}
+
+.shellProfileName {
+  max-width: 6.5rem;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shellIconButton:hover,
@@ -253,6 +303,13 @@
 
   .shellWorkspaceSubtitle {
     padding-left: 0;
+  .shellGreeting {
+    white-space: normal;
+  }
+
+  .shellRightActions {
+    justify-content: space-between;
+    margin-left: 0;
   }
 
   .shellSearchBox {
@@ -261,5 +318,10 @@
 
   .shellActionButtons {
     justify-content: flex-end;
+    gap: 0.8rem;
+  }
+
+  .shellProfileName {
+    max-width: 4.5rem;
   }
 }

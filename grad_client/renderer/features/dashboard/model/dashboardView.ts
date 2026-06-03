@@ -6,11 +6,10 @@ import { getWorkItemStatusLabel } from '../../workspace/model/labels'
 export const BOARD_COLUMNS: Array<{
   id: WorkItemStatus
   title: string
-  description: string
 }> = [
-  { id: 'in-progress', title: '진행 중', description: '오늘 이어서 볼 업무' },
-  { id: 'todo', title: '대기', description: '착수 전 확인 항목' },
-  { id: 'done', title: '완료', description: '최근 완료된 업무' },
+  { id: 'in-progress', title: 'Doing'},
+  { id: 'todo', title: 'To Do'},
+  { id: 'done', title: 'Done'},
 ]
 
 export const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
@@ -31,18 +30,13 @@ type ParsedDate = {
   day: number
 }
 
-export type CalendarCell =
-  | {
-      type: 'empty'
-      key: string
-    }
-  | {
-      type: 'day'
-      key: string
-      day: number
-      isToday: boolean
-      items: WorkItemRecord[]
-    }
+export type CalendarCell = {
+  key: string
+  day: number
+  isCurrentMonth: boolean
+  isToday: boolean
+  items: WorkItemRecord[]
+}
 
 export type DashboardCalendar = {
   monthLabel: string
@@ -93,45 +87,54 @@ export function matchesWorkItemSearch(item: WorkItemRecord, query: string) {
   )
 }
 
-export function buildDashboardCalendar(workItems: WorkItemRecord[]): DashboardCalendar {
+export function buildDashboardCalendar(workItems: WorkItemRecord[], monthOffset = 0): DashboardCalendar {
   const datedWorkItems = sortWorkspaceWorkItems(workItems.filter((item) => parseWorkspaceDate(item.dueDate)))
   const selectedDateParts = parseWorkspaceDate(datedWorkItems[0]?.dueDate)
   const fallbackDate = new Date()
-  const year = selectedDateParts?.year ?? fallbackDate.getFullYear()
-  const monthIndex = selectedDateParts?.monthIndex ?? fallbackDate.getMonth()
+  const baseDate = new Date(
+    selectedDateParts?.year ?? fallbackDate.getFullYear(),
+    selectedDateParts?.monthIndex ?? fallbackDate.getMonth(),
+    1,
+  )
+  const visibleDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + monthOffset, 1)
+  const year = visibleDate.getFullYear()
+  const monthIndex = visibleDate.getMonth()
   const today = new Date()
   const firstDay = new Date(year, monthIndex, 1)
-  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
   const monthItems = datedWorkItems.filter((item) => {
     const dueDateParts = parseWorkspaceDate(item.dueDate)
     return dueDateParts?.year === year && dueDateParts.monthIndex === monthIndex
   })
-  const itemsByDay = new Map<number, WorkItemRecord[]>()
+  const itemsByDate = new Map<string, WorkItemRecord[]>()
 
-  monthItems.forEach((item) => {
+  datedWorkItems.forEach((item) => {
     const dueDateParts = parseWorkspaceDate(item.dueDate)
 
     if (!dueDateParts) {
       return
     }
 
-    itemsByDay.set(dueDateParts.day, [...(itemsByDay.get(dueDateParts.day) ?? []), item])
+    const dateKey = `${dueDateParts.year}-${dueDateParts.monthIndex}-${dueDateParts.day}`
+    itemsByDate.set(dateKey, [...(itemsByDate.get(dateKey) ?? []), item])
   })
 
-  const cells: CalendarCell[] = Array.from({ length: firstDay.getDay() }, (_, index) => ({
-    type: 'empty',
-    key: `empty-${index}`,
-  }))
+  const visibleStartDate = new Date(year, monthIndex, 1 - firstDay.getDay())
+  const cells: CalendarCell[] = Array.from({ length: 42 }, (_, index) => {
+    const cellDate = new Date(visibleStartDate)
+    cellDate.setDate(visibleStartDate.getDate() + index)
+    const cellYear = cellDate.getFullYear()
+    const cellMonthIndex = cellDate.getMonth()
+    const day = cellDate.getDate()
+    const dateKey = `${cellYear}-${cellMonthIndex}-${day}`
 
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push({
-      type: 'day',
-      key: `day-${day}`,
+    return {
+      key: `day-${cellYear}-${cellMonthIndex}-${day}`,
       day,
-      isToday: today.getFullYear() === year && today.getMonth() === monthIndex && today.getDate() === day,
-      items: itemsByDay.get(day) ?? [],
-    })
-  }
+      isCurrentMonth: cellYear === year && cellMonthIndex === monthIndex,
+      isToday: today.getFullYear() === cellYear && today.getMonth() === cellMonthIndex && today.getDate() === day,
+      items: itemsByDate.get(dateKey) ?? [],
+    }
+  })
 
   return {
     monthLabel: new Intl.DateTimeFormat('ko-KR', {
@@ -151,10 +154,11 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
   const activeWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'in-progress')
   const completedWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'done')
   const dueSoonOpenWorkItems = getDueSoonOpenWorkItems(overview)
+  const teamMemberCount = overview.rootRoleMembers.length || overview.summary.roleCount
 
   return [
     {
-      label: '진행 중인 업무',
+      label: '진행중인 워크스페이스',
       value: String(activeWorkItems.length),
       description: '현재 실행 중인 항목',
       icon: 'trendingUp',
@@ -168,17 +172,17 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       tone: 'amber',
     },
     {
-      label: '완료 업무',
+      label: '완료한 업무',
       value: String(completedWorkItems.length),
       description: '완료 처리된 항목',
       icon: 'checkCircle',
       tone: 'green',
     },
     {
-      label: '평균 진행률',
-      value: `${overview.summary.averageProgress}%`,
-      description: '전체 업무 기준 평균',
-      icon: 'sparkles',
+      label: '팀원',
+      value: String(teamMemberCount),
+      description: '참여 중인 구성원',
+      icon: 'users',
       tone: 'neutral',
     },
   ]

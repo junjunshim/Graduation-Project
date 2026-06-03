@@ -1,7 +1,7 @@
 const WORKSPACE_LOCALE = 'ko-KR'
 const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
-const EMPTY_WORKSPACE_DATE_LABEL = '\uC77C\uC815 \uBBF8\uC815'
-const EMPTY_WORKSPACE_TIMESTAMP_LABEL = '\uC2DC\uAC04 \uBBF8\uC815'
+const EMPTY_WORKSPACE_DATE_LABEL = '일정 미정'
+const EMPTY_WORKSPACE_TIMESTAMP_LABEL = '시간 미정'
 
 const DATE_ONLY_PATTERN = /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})$/
 const LOCAL_TIMESTAMP_PATTERN =
@@ -130,6 +130,10 @@ function formatMonthDayTokens(tokens: DateTokens) {
   return `${Number.isFinite(month) ? month : tokens.month}/${dayLabel}`
 }
 
+function formatShortDateTokens(tokens: DateTokens) {
+  return `${Number(tokens.month)}/${Number(tokens.day)}`
+}
+
 function formatTimestampTokens(tokens: TimestampTokens) {
   return `${formatDateTokens(tokens)} ${tokens.hour}:${tokens.minute}`
 }
@@ -171,6 +175,17 @@ export function formatWorkspaceMonthDay(value?: string) {
 
   const tokens = resolveDateTokens(normalizedValue)
   return tokens ? formatMonthDayTokens(tokens) : normalizedValue
+}
+
+export function formatWorkspaceShortDate(value?: string) {
+  const normalizedValue = normalizeWorkspaceValue(value)
+
+  if (!normalizedValue) {
+    return EMPTY_WORKSPACE_DATE_LABEL
+  }
+
+  const tokens = resolveDateTokens(normalizedValue)
+  return tokens ? formatShortDateTokens(tokens) : normalizedValue
 }
 
 export function formatWorkspaceTimestamp(value: string) {

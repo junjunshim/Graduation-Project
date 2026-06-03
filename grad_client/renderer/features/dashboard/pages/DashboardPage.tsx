@@ -1,4 +1,8 @@
+import { useCallback, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
 import { DashboardActivityPanel } from '../components/DashboardActivityPanel'
 import { DashboardBoard } from '../components/DashboardBoard'
@@ -15,16 +19,25 @@ import styles from './DashboardPage.module.css'
 
 export function DashboardPage() {
   const currentUser = getCurrentUser()
+  const [boardPreviewHeight, setBoardPreviewHeight] = useState<number>()
+  const [calendarMonthOffset, setCalendarMonthOffset] = useState(0)
+  const handleBoardPreviewHeightChange = useCallback((height: number) => {
+    setBoardPreviewHeight((currentHeight) => (currentHeight === height ? currentHeight : height))
+  }, [])
+  const handleCalendarMonthChange = useCallback((offset: number) => {
+    setCalendarMonthOffset((currentOffset) => currentOffset + offset)
+  }, [])
 
   if (!currentUser) {
     return null
   }
 
   const overview = getWorkspaceOverview(currentUser.userId)
+  const users = getOrgSnapshot().users
   const activityItems = [...overview.visibleWorkItems]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, 5)
-  const calendar = buildDashboardCalendar(overview.visibleWorkItems)
+  const calendar = buildDashboardCalendar(overview.visibleWorkItems, calendarMonthOffset)
   const metrics = getDashboardMetrics(overview)
 
   if (overview.summary.orgNodeCount === 0) {
@@ -41,13 +54,27 @@ export function DashboardPage() {
         onSearchQueryChange={setSearchQuery}
       />
       */}
+      <div className={styles.kpiTopBar}>
+        <Link to="/work-items/new" className={styles.newTaskButton}>
+          <Icon name="plus" size={18} />
+          새 작업
+        </Link>
+      </div>
       <DashboardKpiGrid metrics={metrics} />
 
       <div className={styles.dashboardGrid}>
-        <DashboardBoard workItems={overview.visibleWorkItems} />
-        <DashboardCalendarPanel calendar={calendar} />
-        <DashboardDocumentsPanel recentDocuments={overview.recentWorkItems} />
-        <DashboardActivityPanel activityItems={activityItems} />
+        <DashboardBoard
+          workItems={overview.visibleWorkItems}
+          users={users}
+          onPreviewHeightChange={handleBoardPreviewHeightChange}
+        />
+        <DashboardCalendarPanel
+          calendar={calendar}
+          previewHeight={boardPreviewHeight}
+          onMonthChange={handleCalendarMonthChange}
+        />
+        <DashboardDocumentsPanel recentDocuments={overview.recentWorkItems} users={users} />
+        <DashboardActivityPanel activityItems={activityItems} users={users} />
       </div>
 
       <DashboardQuickDock />

@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
-import { formatWorkspaceDate } from '../../workspace/model/formatters'
+import { Icon } from '../../../design-system/primitives/Icon'
+import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
-import type { WorkItemRecord } from '../../workspace/model/types'
+import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
 import { clampProgress } from '../model/dashboardView'
 import styles from '../pages/DashboardPage.module.css'
 
@@ -14,8 +15,13 @@ function getStatusBadgeClassName(item: WorkItemRecord) {
   ].join(' ')
 }
 
-export function DashboardWorkItemCard({ item }: { item: WorkItemRecord }) {
+function getOwnerName(ownerUserId: string, users: UserRecord[]) {
+  return users.find((user) => user.userId === ownerUserId)?.name ?? ownerUserId
+}
+
+export function DashboardWorkItemCard({ item, users }: { item: WorkItemRecord; users: UserRecord[] }) {
   const progress = clampProgress(item.progress)
+  const ownerName = getOwnerName(item.ownerUserId, users)
 
   return (
     <Link to={`/work-items/${item.workItemId}`} className={styles.taskCard}>
@@ -24,10 +30,18 @@ export function DashboardWorkItemCard({ item }: { item: WorkItemRecord }) {
         <span className={getStatusBadgeClassName(item)}>{getWorkItemStatusLabel(item.status)}</span>
       </div>
       <strong className={styles.taskTitle}>{item.title}</strong>
-      <p className={styles.taskMeta}>
-        담당 {item.ownerUserId} · 마감 {formatWorkspaceDate(item.dueDate)}
-      </p>
-      <div className={styles.progressBlock} aria-label={`진행률 ${progress}%`}>
+      <div className={styles.taskMeta}>
+        <span className={styles.taskOwner}>
+          <span className={styles.taskOwnerIcon}>
+            <Icon name="user" size={14} />
+          </span>
+          <span className={styles.taskOwnerName}>{ownerName}</span>
+        </span>
+        <time className={styles.taskDueDate} dateTime={item.dueDate}>
+          {formatWorkspaceShortDate(item.dueDate)}
+        </time>
+      </div>
+      <div className={styles.progressBlock} aria-label={`progress ${progress}%`}>
         <div className={styles.progressTrack}>
           <span className={styles.progressValue} style={{ width: `${progress}%` }} />
         </div>

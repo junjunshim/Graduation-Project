@@ -66,6 +66,8 @@
   font-size: 0.86rem;
   font-weight: 600;
   line-height: 1.35;
+}
+
 .shellGreeting {
   display: inline-flex;
   align-items: center;
@@ -303,6 +305,8 @@
 
   .shellWorkspaceSubtitle {
     padding-left: 0;
+  }
+
   .shellGreeting {
     white-space: normal;
   }

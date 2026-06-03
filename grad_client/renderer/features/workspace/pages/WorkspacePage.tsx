@@ -53,7 +53,7 @@ const workspaceTabs: WorkspaceTab[] = [
 ]
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
-const BOARD_ITEM_LIMIT = 6
+const BOARD_ITEM_LIMIT = 5
 const TIMELINE_ITEM_LIMIT = 5
 const DOCUMENT_LIMIT = 3
 
@@ -411,33 +411,6 @@ export function WorkspacePage() {
             </Link>
           </section>
 
-          <section className={[styles.panel, styles.documentsPanel].join(' ')}>
-            <div className={styles.panelHeader}>
-              <h3 className={styles.panelTitle}>주요 문서</h3>
-              <Link to="/documents" className={styles.textAction}>
-                전체 보기
-                <Icon name="arrowRight" size={14} />
-              </Link>
-            </div>
-
-            <div className={styles.documentCards}>
-              {recentDocuments.map((item) => (
-                <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.documentCard}>
-                  <span className={styles.documentIcon}>
-                    <Icon name="fileText" size={16} />
-                  </span>
-                  <strong>{item.title}</strong>
-                  <small>{formatWorkspaceMonthDay(item.createdAt)}</small>
-                </Link>
-              ))}
-              <Link to="/documents" className={styles.addDocumentCard}>
-                + 새 문서 추가
-              </Link>
-            </div>
-          </section>
-        </div>
-
-        <div className={styles.rightColumn}>
           <section id="workspace-timeline" className={[styles.panel, styles.timelinePanel].join(' ')}>
             <div className={styles.panelHeader}>
               <h3 className={styles.panelTitle}>타임라인</h3>
@@ -478,6 +451,44 @@ export function WorkspacePage() {
               ) : (
                 <p className={styles.emptyCopy}>일정이 등록된 업무가 없습니다.</p>
               )}
+            </div>
+          </section>
+        </div>
+
+        <div className={styles.rightColumn}>
+          <section className={[styles.panel, styles.documentsPanel].join(' ')}>
+            <div className={styles.panelHeader}>
+              <h3 className={styles.panelTitle}>주요 문서</h3>
+              <Link to="/documents" className={styles.textAction}>
+                전체 보기
+                <Icon name="arrowRight" size={14} />
+              </Link>
+            </div>
+
+            <div className={styles.documentList}>
+              {recentDocuments.map((item) => (
+                <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.documentItem}>
+                  <span className={styles.documentIcon}>
+                    <Icon name="fileText" size={15} />
+                  </span>
+                  <span className={styles.documentCopy}>
+                    <strong>{item.title}</strong>
+                    <small>
+                      {getMemberName(item.ownerUserId, overview.rootRoleMembers)} · {formatWorkspaceMonthDay(item.createdAt)}
+                    </small>
+                  </span>
+                  <Icon name="arrowRight" size={14} />
+                </Link>
+              ))}
+              <Link to="/documents" className={styles.addDocumentItem}>
+                <span className={styles.documentIcon}>
+                  <Icon name="plus" size={15} />
+                </span>
+                <span className={styles.documentCopy}>
+                  <strong>새 문서 추가</strong>
+                  <small>문서 탭으로 이동</small>
+                </span>
+              </Link>
             </div>
           </section>
 

@@ -5,7 +5,7 @@
   display: grid;
   gap: clamp(0.85rem, 1.55vh, 1.35rem);
   min-width: 0;
-  padding: clamp(1.35rem, 4vh, 3rem) var(--space-page-x) var(--space-page-bottom);
+  padding: 0.5rem var(--space-page-x) var(--space-page-bottom);
   background: var(--surface-page);
 }
 
@@ -15,7 +15,7 @@
   align-items: center;
   gap: 1rem;
   min-width: 0;
-  padding-bottom: clamp(0.36rem, 0.75vh, 0.7rem);
+  padding-bottom: 0.25rem;
   border-bottom: 1px solid var(--workspace-line);
 }
 
@@ -41,8 +41,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.05rem;
-  height: 2.05rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border: 1px solid var(--workspace-line);
   border-radius: 999px;
   background: var(--surface-panel);
@@ -53,11 +53,20 @@
 
 .memberStack span + span,
 .memberStack span + strong {
-  margin-left: -0.45rem;
+  margin-left: -0.34rem;
+}
+
+.memberStack span + strong {
+  margin-left: 0.22rem;
 }
 
 .memberStack strong {
-  background: var(--surface-panel-muted);
+  width: auto;
+  min-width: 1.45rem;
+  padding-inline: 0.18rem;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-blue);
 }
 
 .memberStack span::after,
@@ -103,8 +112,7 @@
 .textAction,
 .panelFooterLink,
 .filterButton,
-.tabLink,
-.addDocumentCard {
+.tabLink {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -169,8 +177,8 @@
 .textAction:hover,
 .panelFooterLink:hover,
 .workRow:hover,
-.documentCard:hover,
-.addDocumentCard:hover,
+.documentItem:hover,
+.addDocumentItem:hover,
 .activityItem:hover,
 .timelineItem:hover {
   background: var(--surface-hover);
@@ -190,7 +198,7 @@
 
 .tabLink {
   position: relative;
-  min-height: 2.45rem;
+  min-height: 2.25rem;
   flex: 0 0 auto;
   padding: 0 0.42rem;
   border: 0;
@@ -346,15 +354,17 @@
 }
 
 .boardPanel {
-  min-height: clamp(23rem, 42vh, 38rem);
+  min-height: clamp(20.5rem, 36vh, 31rem);
 }
 
 .timelinePanel {
-  min-height: clamp(14.5rem, 24vh, 23rem);
+  min-height: clamp(12.8rem, 20vh, 18rem);
 }
 
 .documentsPanel {
-  min-height: clamp(7.2rem, 13vh, 10rem);
+  gap: 0.56rem;
+  min-height: 0;
+  padding: clamp(0.72rem, 1vh, 0.92rem);
 }
 
 .activityPanel {
@@ -525,7 +535,8 @@
 }
 
 .workTitleCell strong,
-.documentCard strong,
+.documentItem strong,
+.addDocumentItem strong,
 .activityItem strong,
 .timelineItem span {
   min-width: 0;
@@ -743,61 +754,71 @@
   transform: translateY(-50%);
 }
 
-.documentCards {
+.documentList {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.7rem;
+  gap: 0.18rem;
   min-width: 0;
 }
 
-.documentCard,
-.addDocumentCard {
+.documentItem,
+.addDocumentItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.62rem;
   min-width: 0;
-  min-height: 4.8rem;
-  border: 1px solid var(--workspace-line);
+  min-height: 2.75rem;
+  padding: 0.5rem 0.58rem;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--surface-panel);
-  color: var(--text-primary);
-}
-
-.documentCard {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 0.3rem 0.55rem;
-  align-items: start;
-  padding: 0.7rem;
+  color: inherit;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .documentIcon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 1.72rem;
+  height: 1.72rem;
+  flex: 0 0 auto;
   border: 1px solid var(--workspace-line);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: var(--surface-panel-muted);
   color: var(--text-secondary);
 }
 
-.documentCard strong {
+.documentCopy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.documentItem strong,
+.addDocumentItem strong {
   font-size: 0.8rem;
   line-height: 1.3;
 }
 
-.documentCard small {
-  grid-column: 2;
-  justify-self: end;
+.documentCopy small {
   color: var(--text-secondary);
   font-size: 0.72rem;
   font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
-.addDocumentCard {
+.documentItem > svg {
+  color: var(--text-muted);
+}
+
+.addDocumentItem {
+  grid-template-columns: auto minmax(0, 1fr);
   border-style: dashed;
-  padding: 0.7rem;
-  text-align: center;
+  border-color: var(--workspace-line);
   color: var(--text-secondary);
 }
 
@@ -849,19 +870,14 @@
 
 @media (min-width: 1081px) and (min-height: 980px) {
   .workspaceGrid {
-    align-items: stretch;
-  }
-
-  .leftColumn,
-  .rightColumn {
-    height: 100%;
+    align-items: start;
   }
 }
 
 @media (max-height: 760px) and (min-width: 861px) {
   .page {
     gap: 0.75rem;
-    padding-top: 1.1rem;
+    padding-top: 0.5rem;
   }
 
   .metricCard {
@@ -875,15 +891,15 @@
   }
 
   .boardPanel {
-    min-height: 22rem;
+    min-height: 19.75rem;
   }
 
   .timelinePanel {
-    min-height: 13.6rem;
+    min-height: 12rem;
   }
 
   .documentsPanel {
-    min-height: 6.8rem;
+    min-height: 0;
   }
 
   .activityPanel {
@@ -967,10 +983,6 @@
     display: none;
   }
 
-  .documentCards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .activityItem {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -982,14 +994,13 @@
 
 @media (max-width: 760px) {
   .page {
-    padding: clamp(1rem, 3vh, 1.7rem) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+    padding: 0.65rem var(--space-page-x-mobile) var(--space-page-bottom-mobile);
   }
 }
 
 @media (max-width: 560px) {
   .headerActions,
-  .metricGrid,
-  .documentCards {
+  .metricGrid {
     grid-template-columns: 1fr;
   }
 

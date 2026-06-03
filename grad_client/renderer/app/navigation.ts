@@ -13,7 +13,7 @@ export const navigationItems: NavigationItem[] = [
     icon: 'home',
   },
   {
-    to: '/org/manage',
+    to: '/workspace',
     label: '워크 스페이스',
     icon: 'folder',
   },

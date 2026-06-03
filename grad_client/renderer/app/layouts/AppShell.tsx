@@ -29,7 +29,7 @@ export function AppShell() {
   const hasCustomTitleBar = hasCustomWindowControls()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
 
-  useBodyScrollSurface(hasCustomTitleBar ? 'workspace' : undefined)
+  useBodyScrollSurface('workspace')
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -48,6 +48,7 @@ export function AppShell() {
   const hasOrgContext = summary.orgNodeCount > 0
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext)
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
+  const isWorkspaceRoute = location.pathname === '/workspace'
   const shellClassName = [
     styles.shell,
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
@@ -86,7 +87,19 @@ export function AppShell() {
         {!hasCustomTitleBar ? <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} /> : null}
 
         <div className={styles.workspaceBody}>
-          <ShellTopActions currentUser={currentUser} />
+          <ShellTopActions
+            currentUser={currentUser}
+            variant={isWorkspaceRoute ? 'workspace' : 'default'}
+            workspaceHeading={
+              isWorkspaceRoute
+                ? {
+                    label: '워크 스페이스',
+                    title: workspaceLabel,
+                    subtitle: '공동작업을 위한 워크스페이스',
+                  }
+                : undefined
+            }
+          />
 
           <main className={styles.main}>
             <Outlet />

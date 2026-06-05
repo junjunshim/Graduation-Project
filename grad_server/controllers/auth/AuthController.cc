@@ -1,5 +1,6 @@
 #include "AuthController.h"
 #include "ResponseUtils.h"
+#include "ValidationUtils.h"
 #include <json/json.h>
 #include <jwt-cpp/jwt.h>
 #include <chrono>
@@ -62,13 +63,9 @@ std::string AuthController::timePointToString(const std::chrono::system_clock::t
 // 로그인 처리 함수
 void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
-    // 요청 바디에서 JSON 데이터 파싱
-    auto jsonPtr = req->getJsonObject();
-    std::string email = (*jsonPtr)["email"].asString();
-    std::string password = (*jsonPtr)["password"].asString();
-    
     // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["email"].isNull() || (*jsonPtr)["password"].isNull()){
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "email", "password")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
@@ -79,6 +76,11 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
         callback(resp);
         return;
     }
+    
+    // 요청 바디에서 JSON 데이터 파싱
+    std::string email = (*jsonPtr)["email"].asString();
+    std::string password = (*jsonPtr)["password"].asString();
+    
     
     // 2. 비즈니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기

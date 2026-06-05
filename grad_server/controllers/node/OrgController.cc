@@ -1,6 +1,7 @@
 #include "OrgController.h"
 #include "OrganizationNodes.h"
 #include "ResponseUtils.h"
+#include "ValidationUtils.h"
 #include <json/json.h>
 
 using namespace api;
@@ -14,16 +15,9 @@ using namespace drogon_model::grad_project;
 // 최상위 노드 생성 api
 void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
-    // JWT 필터에서 설정한 사용자 이메일을 가져오기
-    std::string user_email = req->attributes()->get<std::string>("user_email");
-    
-    // 요청 바디에서 JSON 데이터 파싱
-    auto jsonPtr = req->getJsonObject();
-    std::string node_type = (*jsonPtr)["node_type"].asString();
-    std::string name = (*jsonPtr)["name"].asString();
-
     // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["node_type"].isNull() || (*jsonPtr)["name"].isNull()){
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "node_type", "name")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
@@ -34,6 +28,13 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
         callback(resp);
         return;
     }
+
+    // JWT 필터에서 설정한 사용자 이메일을 가져오기
+    std::string user_email = req->attributes()->get<std::string>("user_email");
+    
+    // 요청 바디에서 JSON 데이터 파싱
+    std::string node_type = (*jsonPtr)["node_type"].asString();
+    std::string name = (*jsonPtr)["name"].asString();
 
     // 2. 비지니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기
@@ -79,28 +80,28 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
 // 하위 노드 생성 api
 void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
-    // JWT 필터에서 설정한 사용자 이메일을 가져오기
-    std::string requester_email = req->attributes()->get<std::string>("user_email");
-    
-    // 요청 바디에서 JSON 데이터 파싱
-    auto jsonPtr = req->getJsonObject();
-    std::string node_type = (*jsonPtr)["node_type"].asString();
-    std::string name = (*jsonPtr)["name"].asString();
-    std::string owner_user_email = (*jsonPtr)["email"].asString();
-    int parent_node_id = (*jsonPtr)["parent_node_id"].asInt();
-
     // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["node_type"].isNull() || (*jsonPtr)["parent_node_id"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["email"].isNull()){
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "node_type", "name", "email") || !validateInts(jsonPtr, "parent_node_id")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(node_type, parent_node_id, name, email)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(node_type, name, email, parent_node_id)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
         callback(resp);
         return;
     }
+
+    // JWT 필터에서 설정한 사용자 이메일을 가져오기
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    
+    // 요청 바디에서 JSON 데이터 파싱
+    std::string node_type = (*jsonPtr)["node_type"].asString();
+    std::string name = (*jsonPtr)["name"].asString();
+    std::string owner_user_email = (*jsonPtr)["email"].asString();
+    int parent_node_id = (*jsonPtr)["parent_node_id"].asInt();
 
     // 2. 비지니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기

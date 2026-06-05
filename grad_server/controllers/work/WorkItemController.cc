@@ -1,5 +1,6 @@
 #include "WorkItemController.h"
 #include "ResponseUtils.h"
+#include "ValidationUtils.h"
 #include "WorkItems.h"
 #include <json/json.h>
 #include <optional>
@@ -14,11 +15,22 @@ using namespace drogon_model::grad_project;
 // work item 생성 API
 void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
+    // 필수 파라미터 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "work_item_id", "owner_user_email", "title") || !validateInts(jsonPtr, "owner_node_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(work_item_id, owner_node_id, owner_user_email, title)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
     // JWT 필터에서 설정한 사용자 이메일을 가져오기
     std::string requester_email = req->attributes()->get<std::string>("user_email");
-    
-    // 요청 바디에서 JSON 데이터 파싱
-    auto jsonPtr = req->getJsonObject();
 
     // 필수 파라미터 
     std::string work_item_id = (*jsonPtr)["work_item_id"].asString();
@@ -37,18 +49,6 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
         return (*jsonPtr)[key].isNull() ? defaultVal : (*jsonPtr)[key].asBool();
     };
 
-    // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["work_item_id"].isNull() || (*jsonPtr)["owner_node_id"].isNull() || (*jsonPtr)["owner_user_email"].isNull() || (*jsonPtr)["title"].isNull()){
-        Json::Value ret;
-        ret["status"] = "error";
-        ret["code"] = "400";
-        ret["message"] = "필수 파라미터(work_item_id, owner_node_id, owner_user_email, title)가 누락되었습니다.";
-
-        auto resp = HttpResponse::newHttpJsonResponse(ret);
-        resp->setStatusCode(k400BadRequest);
-        callback(resp);
-        return;
-    }
 
     // 2. 비지니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기
@@ -103,11 +103,22 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
 // work item 업데이트 API
 void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
+    // 필수 파라미터 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "work_item_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(work_item_id)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
     // JWT 필터에서 설정한 사용자 이메일을 가져오기
     std::string requester_email = req->attributes()->get<std::string>("user_email");
-    
-    // 요청 바디에서 JSON 데이터 파싱
-    auto jsonPtr = req->getJsonObject();
     
     // 필수 파라미터
     std::string work_item_id = (*jsonPtr)["work_item_id"].asString();
@@ -124,18 +135,6 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         return (*jsonPtr)[key].asBool();
     };
     
-    // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["work_item_id"].isNull()){
-        Json::Value ret;
-        ret["status"] = "error";
-        ret["code"] = "400";
-        ret["message"] = "필수 파라미터(work_item_id)가 누락되었습니다.";
-
-        auto resp = HttpResponse::newHttpJsonResponse(ret);
-        resp->setStatusCode(k400BadRequest);
-        callback(resp);
-        return;
-    }
 
     // 2. 비지니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기

@@ -1,6 +1,7 @@
 #include "RoleController.h"
 #include "RoleAssignments.h"
 #include "ResponseUtils.h"
+#include "ValidationUtils.h"
 #include <json/json.h>
 
 using namespace api;
@@ -10,17 +11,9 @@ using namespace app_utils;
 // 사용자에게 역할 부여 api
 void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
-    // JWT 필터에서 설정한 사용자 이메일을 가져오기
-    std::string requester_email = req->attributes()->get<std::string>("user_email");
-    
-    // 요청 바디에서 JSON 데이터 파싱
-    auto jsonPtr = req->getJsonObject();
-    std::string target_email = (*jsonPtr)["email"].asString();
-    int node_id = (*jsonPtr)["node_id"].asInt();
-    std::string role_name = (*jsonPtr)["role_name"].asString();
-
     // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["email"].isNull() || (*jsonPtr)["node_id"].isNull() || (*jsonPtr)["role_name"].isNull()){
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "email", "role_name") || !validateInts(jsonPtr, "node_id")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
@@ -31,7 +24,15 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
         callback(resp);
         return;
     }
-
+    
+    // JWT 필터에서 설정한 사용자 이메일을 가져오기
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    
+    // 요청 바디에서 JSON 데이터 파싱
+    std::string target_email = (*jsonPtr)["email"].asString();
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    std::string role_name = (*jsonPtr)["role_name"].asString();
+    
     // role_name 유효성 검사
     if(role_name != "ADMIN" && role_name != "MANAGER" && role_name != "MEMBER" && role_name != "VIEWER"){
         Json::Value ret;

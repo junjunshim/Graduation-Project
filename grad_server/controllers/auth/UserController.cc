@@ -1,5 +1,6 @@
 #include "UserController.h"
 #include "ResponseUtils.h"
+#include "ValidationUtils.h"
 #include "Users.h"
 #include <json/json.h>
 
@@ -12,16 +13,9 @@ using namespace drogon_model::grad_project;
 // Add definition of your processing function here
 void UserController::createUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
-    // 요청 바디에서 JSON 데이터 파싱
-    auto jsonPtr = req->getJsonObject();
-
-    std::string user_id = (*jsonPtr)["user_id"].asString();
-    std::string email = (*jsonPtr)["email"].asString();
-    std::string name = (*jsonPtr)["name"].asString();
-    std::string password_hash = (*jsonPtr)["password"].asString();
-
     // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["user_id"].isNull() || (*jsonPtr)["email"].isNull() || (*jsonPtr)["name"].isNull() || (*jsonPtr)["password"].isNull()){
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "user_id", "email", "name", "password")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
@@ -32,6 +26,12 @@ void UserController::createUser(const HttpRequestPtr &req, std::function<void(co
         callback(resp);
         return;
     }
+
+    // 요청 바디에서 JSON 데이터 파싱
+    std::string user_id = (*jsonPtr)["user_id"].asString();
+    std::string email = (*jsonPtr)["email"].asString();
+    std::string name = (*jsonPtr)["name"].asString();
+    std::string password_hash = (*jsonPtr)["password"].asString();
 
     // 2. 비지니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기

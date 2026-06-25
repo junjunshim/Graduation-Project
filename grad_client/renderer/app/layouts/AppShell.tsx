@@ -7,12 +7,19 @@ import { getCurrentUser, signOut } from '../../features/auth/api'
 import { getWorkspaceSummary } from '../../features/workspace/data/orgService'
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
 import { ShellSidebar } from './ShellSidebar'
-import { ShellTopActions } from './ShellTopActions'
+import { ShellTopActions, type ShellTopActionsHeading } from './ShellTopActions'
 import { WorkspacePageHeader } from './WorkspacePageHeader'
 import { getShellPageMeta } from './shellPageMeta'
 import styles from './AppShell.module.css'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'grad-client-sidebar-collapsed'
+const SECTION_HEADING_ROUTES = new Set([
+  '/work-items',
+  '/calendar',
+  '/documents',
+  '/files',
+  '/settings',
+])
 
 function readInitialSidebarCollapsed() {
   if (typeof window === 'undefined') {
@@ -49,6 +56,23 @@ export function AppShell() {
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext)
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
   const isWorkspaceRoute = location.pathname === '/workspace'
+  const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname)
+  const shellHeading: ShellTopActionsHeading = isWorkspaceRoute
+    ? {
+        type: 'breadcrumb',
+        label: '워크 스페이스',
+        title: workspaceLabel,
+        subtitle: '공동작업을 위한 워크스페이스',
+      }
+    : location.pathname === '/dashboard'
+      ? { type: 'greeting' }
+      : hasSectionHeading
+        ? {
+            type: 'page',
+            title: pageMeta.title,
+            subtitle: pageMeta.description,
+          }
+        : { type: 'none' }
   const shellClassName = [
     styles.shell,
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
@@ -89,16 +113,8 @@ export function AppShell() {
         <div className={styles.workspaceBody}>
           <ShellTopActions
             currentUser={currentUser}
-            variant={isWorkspaceRoute ? 'workspace' : 'default'}
-            workspaceHeading={
-              isWorkspaceRoute
-                ? {
-                    label: '워크 스페이스',
-                    title: workspaceLabel,
-                    subtitle: '공동작업을 위한 워크스페이스',
-                  }
-                : undefined
-            }
+            heading={shellHeading}
+            inset="standard"
           />
 
           <main className={styles.main}>

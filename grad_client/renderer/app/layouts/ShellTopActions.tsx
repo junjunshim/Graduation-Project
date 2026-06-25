@@ -1,64 +1,77 @@
 // 각 페이지의 상단 액션(알림, 프로필 등) 관리
 import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
 import styles from './ShellTopActions.module.css'
+
+export type ShellTopActionsHeading =
+  | {
+      type: 'greeting'
+    }
+  | {
+      type: 'breadcrumb'
+      label: string
+      title: string
+      subtitle: string
+    }
+  | {
+      type: 'page'
+      title: string
+      subtitle: string
+    }
+  | {
+      type: 'none'
+    }
 
 type ShellTopActionsProps = {
   currentUser: {
     name: string
     userId: string
   }
-  variant?: 'default' | 'workspace'
-  workspaceHeading?: {
-    label: string
-    title: string
-    subtitle: string
-  }
+  heading: ShellTopActionsHeading
+  inset?: 'standard' | 'wide'
 }
 
-export function ShellTopActions({ currentUser, variant = 'default', workspaceHeading }: ShellTopActionsProps) {
+export function ShellTopActions({
+  currentUser,
+  heading,
+  inset = 'standard',
+}: ShellTopActionsProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const { pathname } = useLocation()
-
-  const isWorkspace = variant === 'workspace'
-  const shouldShowGreeting = !isWorkspace && pathname === '/dashboard'
 
   const shellTopActionsClassName = [
     styles.shellTopActions,
-    isWorkspace ? styles.shellTopActionsWorkspace : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  const actionControlsClassName = isWorkspace
-    ? styles.shellTopActionControls
-    : styles.shellRightActions
+    inset === 'wide' ? styles.shellTopActionsWide : styles.shellTopActionsStandard,
+  ].join(' ')
 
   return (
     <header className={shellTopActionsClassName}>
-  {isWorkspace && workspaceHeading ? (
-    <div className={styles.shellWorkspaceHeading}>
-      <p className={styles.shellWorkspaceBreadcrumb}>
-        <span>{workspaceHeading.label}</span>
-        <Icon name="chevronRight" size={14} />
-        <strong>{workspaceHeading.title}</strong>
-      </p>
-      <p className={styles.shellWorkspaceSubtitle}>{workspaceHeading.subtitle}</p>
-    </div>
-  ) : shouldShowGreeting ? (
-    <p className={styles.shellGreeting}>
-      안녕, {currentUser.name}님
-      <span className={styles.shellGreetingIcon}>
-        <Icon name="hand" size={32} />
-      </span>
-    </p>
-  ) : null}
+      {heading.type === 'breadcrumb' ? (
+        <div className={styles.shellHeading}>
+          <p className={styles.shellBreadcrumb}>
+            <span>{heading.label}</span>
+            <Icon name="chevronRight" size={14} />
+            <strong>{heading.title}</strong>
+          </p>
+          <p className={styles.shellSubtitle}>{heading.subtitle}</p>
+        </div>
+      ) : heading.type === 'page' ? (
+        <div className={styles.shellHeading}>
+          <h1 className={styles.shellPageTitle}>{heading.title}</h1>
+          <p className={styles.shellSubtitle}>{heading.subtitle}</p>
+        </div>
+      ) : heading.type === 'greeting' ? (
+        <p className={styles.shellGreeting}>
+          안녕, {currentUser.name}님
+          <span className={styles.shellGreetingIcon}>
+            <Icon name="hand" size={32} />
+          </span>
+        </p>
+      ) : null}
 
-      <div className={actionControlsClassName}>
+      <div className={styles.shellTopActionControls}>
         <label className={styles.shellSearchBox}>
           <span className={styles.shellSearchIcon}>
-            <Icon name="search" size={18} />
+            <Icon name="search" size={20} />
           </span>
           <span className={styles.srOnly}>Search</span>
           <input
@@ -70,14 +83,8 @@ export function ShellTopActions({ currentUser, variant = 'default', workspaceHea
 
         <div className={styles.shellActionButtons}>
           <button type="button" className={styles.shellIconButton} aria-label="Notifications">
-            <Icon name="bell" size={30} />
+            <Icon name="bell" size={20} />
           </button>
-
-          {!isWorkspace ? (
-            <button type="button" className={styles.shellIconButton} aria-label="Help">
-              <Icon name="helpCircle" size={34} />
-            </button>
-          ) : null}
 
           <button
             type="button"
@@ -85,17 +92,7 @@ export function ShellTopActions({ currentUser, variant = 'default', workspaceHea
             aria-label="User menu"
             title={`${currentUser.name} (${currentUser.userId})`}
           >
-            {isWorkspace ? (
-              <Icon name="user" size={28} />
-            ) : (
-              <>
-                <span className={styles.shellProfileIcon}>
-                  <Icon name="user" size={28} />
-                </span>
-                <span className={styles.shellProfileName}>{currentUser.name}</span>
-                <Icon name="chevronDown" size={18} />
-              </>
-            )}
+            <Icon name="user" size={20} />
           </button>
         </div>
       </div>

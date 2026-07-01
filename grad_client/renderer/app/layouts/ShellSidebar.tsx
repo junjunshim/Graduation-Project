@@ -12,7 +12,6 @@ type ShellSidebarProps = {
 }
 
 export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignOut }: ShellSidebarProps) {
-  const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
   const expandSidebarLabel = '사이드바 펼치기'
   const collapseSidebarLabel = '사이드바 접기'
   const signOutLabel = '로그아웃'
@@ -22,17 +21,6 @@ export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignO
     <aside className={styles.sidebar}>
       <div className={styles.sidebarInner}>
         <div className={styles.sidebarTop}>
-          {!isCollapsed ? (
-            <button
-              type="button"
-              className={styles.workspaceSelect}
-              aria-label={`현재 워크스페이스: ${workspaceLabel}`}
-            >
-              <span className={styles.workspaceSelectText}>{workspaceLabel}</span>
-              <Icon name="chevronDown" size={16} />
-            </button>
-          ) : null}
-
           <nav className={styles.navigation} aria-label="주요 메뉴">
             {navigationItems.map((item) => (
               <NavLink

@@ -9,7 +9,7 @@ CREATE TYPE history_status AS ENUM ('inserted', 'updated', 'deleted');
 CREATE TABLE IF NOT EXISTS organization_nodes (
     node_id SERIAL PRIMARY KEY,
     node_type VARCHAR(20) NOT NULL,
-    parent_node_id INTEGER REFERENCES organization_nodes(node_id),
+    parent_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE SET NULL,
     name VARCHAR(100) NOT NULL,
     path INTEGER[] NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(100) NOT NULL,
     password_hash TEXT NOT NULL,
-    personal_node_id INTEGER REFERENCES organization_nodes(node_id),
+    personal_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -136,6 +136,7 @@ CREATE INDEX idx_node_history_node_id ON organization_node_histories(node_id);
 
 CREATE TABLE role_assignment_histories (
     history_id SERIAL PRIMARY KEY,
+    assignment_id INTEGER NOT NULL,
     user_id VARCHAR(50) NOT NULL,
     node_id INTEGER NOT NULL,
     role role_name NOT NULL,
@@ -144,12 +145,14 @@ CREATE TABLE role_assignment_histories (
     change_status history_status NOT NULL,
     history_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_assignment_history_assignment_id ON role_assignment_histories(assignment_id);
 CREATE INDEX idx_assignment_history_user_id ON role_assignment_histories(user_id);
 CREATE INDEX idx_assignment_history_node_id ON role_assignment_histories(node_id);
 
 
 CREATE TABLE role_authority_histories (
     history_id SERIAL PRIMARY KEY,
+    authority_id INTEGER NOT NULL,
     node_id INTEGER NOT NULL,
     role role_name NOT NULL,
     authority BIT(24) NOT NULL,
@@ -158,6 +161,7 @@ CREATE TABLE role_authority_histories (
     change_status history_status NOT NULL,
     history_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_authority_history_authority_id ON role_authority_histories(authority_id);
 CREATE INDEX idx_authority_history_node_id ON role_authority_histories(node_id);
 
 

@@ -12,7 +12,6 @@ DECLARE
     v_node_sub_view BIT(24);
     v_node_parent_view BIT(24);
     v_wi_public_view BIT(24);
-    v_wi_private_view BIT(24);
     v_wi_hidden_view BIT(24);
     v_deny BIT(24);
 BEGIN
@@ -23,16 +22,15 @@ BEGIN
         BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_PRIVATE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view, v_node_sub_view, v_node_parent_view,
-        v_wi_public_view, v_wi_private_view, v_wi_hidden_view, v_deny
+        v_wi_public_view, v_wi_hidden_view, v_deny
     FROM authority_constants
     WHERE name IN (
         'NODE_INFO_VIEW', 'NODE_MEMBERS_VIEW', 'NODE_SUB_VIEW', 'NODE_PARENT_VIEW',
-        'WI_PUBLIC_VIEW', 'WI_PRIVATE_VIEW', 'WI_HIDDEN_VIEW', 'DENY'
+        'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'DENY'
     );
 
     -- 1. 유저 존재 여부 확인 및 id 가져오기
@@ -187,7 +185,6 @@ DECLARE
     v_node_sub_view BIT(24);
     v_node_parent_view BIT(24);
     v_wi_public_view BIT(24);
-    v_wi_private_view BIT(24);
     v_wi_hidden_view BIT(24);
     v_deny BIT(24);
 BEGIN
@@ -198,16 +195,15 @@ BEGIN
         BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_PRIVATE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view, v_node_sub_view, v_node_parent_view,
-        v_wi_public_view, v_wi_private_view, v_wi_hidden_view, v_deny
+        v_wi_public_view, v_wi_hidden_view, v_deny
     FROM authority_constants
     WHERE name IN (
         'NODE_INFO_VIEW', 'NODE_MEMBERS_VIEW', 'NODE_SUB_VIEW', 'NODE_PARENT_VIEW',
-        'WI_PUBLIC_VIEW', 'WI_PRIVATE_VIEW', 'WI_HIDDEN_VIEW', 'DENY'
+        'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'DENY'
     );
 
     -- 1. 유저 존재 여부 확인 및 id 가져오기

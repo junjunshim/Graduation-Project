@@ -8,42 +8,15 @@ Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &resu
 
     // DB 결과를 순회하며 items 배열에 추가
     for(auto const &row : result){
-        // item 객체 초기화
+        std::string jsonStr = row["out_data"].as<std::string>();
+        
         Json::Value item;
-
-        // DB 결과의 각 행에서 필요한 필드를 추출하여 JSON 객체에 추가
-        // 필수 필드: type, id, title, updated_at
-        // 선택적 필드: node_type, parent_id, status, priority, extra_info
-
-        item["type"] = row["out_type"].as<std::string>();
-        item["id"] = row["out_id"].as<std::string>();
-
-        if(!row["out_node_type"].isNull() && !row["out_node_type"].as<std::string>().empty()){
-            item["node_type"] = row["out_node_type"].as<std::string>();
+        Json::Reader reader;
+        if(reader.parse(jsonStr, item)){
+            items.append(item);
+        } else {
+            LOG_ERROR << "Failed to parse integrated JSON data: " << jsonStr;
         }
-
-        if(!row["out_parent_id"].isNull() && !row["out_parent_id"].as<std::string>().empty()){
-            item["parent_id"] = row["out_parent_id"].as<std::string>();
-        }
-
-        item["title"] = row["out_title"].as<std::string>();
-
-        if(!row["out_status"].isNull() && !row["out_status"].as<std::string>().empty()){
-            item["status"] = row["out_status"].as<std::string>();
-        }
-
-        if(!row["out_priority"].isNull() && row["out_priority"].as<int>() != 0){
-            item["priority"] = row["out_priority"].as<int>();
-        }
-
-        if (!row["out_extra_info"].isNull() && !row["out_extra_info"].as<std::string>().empty()) {
-            item["extra_info"] = row["out_extra_info"].as<std::string>();
-        }
-
-        item["updated_at"] = row["out_updated_at"].as<std::string>();
-
-        // 완성된 item 객체를 items 배열에 추가
-        items.append(item);
     }
 
     // 최종 응답 JSON 객체에 status와 data 필드 추가

@@ -89,32 +89,38 @@ BEGIN
     )
 
     -- NODE 데이터 반환
-    SELECT 
-        'NODE'::TEXT,
-        n.node_id::TEXT,
-        n.node_type::TEXT,
-        n.parent_node_id::TEXT,
-        n.name::TEXT,
-        NULL::TEXT,
-        NULL::INTEGER,
-        n.path::TEXT,
-        n.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'updated_at', n.updated_at
+    )
     FROM organization_nodes n
     WHERE n.node_id IN (SELECT node_id FROM filtered_nodes)
 
     UNION ALL
 
     -- WORK_ITEM 데이터 반환
-    SELECT 
-        'WORK_ITEM'::TEXT,
-        w.work_item_id::TEXT,
-        NULL::TEXT,
-        w.owner_node_id::TEXT,
-        w.title::TEXT,
-        w.status::TEXT,
-        w.priority::INTEGER,
-        w.parent_work_item_id::TEXT,
-        w.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', w.work_item_id,
+        'parent_id', w.parent_work_item_id,
+        'owner_node_id', w.owner_node_id,
+        'owner_user_id', w.owner_user_id,
+        'title', w.title,
+        'description', w.description,
+        'status', w.status,
+        'priority', w.priority,
+        'hidden', w.hidden,
+        'weight', w.weight,
+        'progress', w.progress,
+        'start_date', w.start_date,
+        'due_date', w.due_date,
+        'updated_at', w.updated_at
+    )
     FROM work_items w
     JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
     WHERE 
@@ -130,16 +136,14 @@ BEGIN
     UNION ALL
 
     -- ROLE 데이터 반환
-    SELECT 
-        'ROLE'::TEXT,
-        ra.assignment_id::TEXT,
-        NULL::TEXT,
-        ra.node_id::TEXT,
-        u.email::TEXT,
-        ra.role::TEXT,
-        NULL::INTEGER,
-        NULL::TEXT,
-        ra.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', ra.assignment_id,
+        'node_id', ra.node_id,
+        'email', u.email,
+        'role', ra.role,
+        'updated_at', ra.updated_at
+    )
     FROM role_assignments ra
     JOIN users u ON ra.user_id = u.user_id
     JOIN filtered_nodes fn ON ra.node_id = fn.node_id
@@ -148,16 +152,14 @@ BEGIN
     UNION ALL
 
     -- AUTHORITY 데이터 반환
-    SELECT 
-        'AUTHORITY'::TEXT,
-        auth.authority_id::TEXT,
-        NULL::TEXT,
-        auth.node_id::TEXT,
-        auth.role::TEXT,
-        NULL::TEXT,
-        NULL::INTEGER,
-        auth.authority::TEXT,
-        auth.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', auth.authority_id,
+        'node_id', auth.node_id,
+        'role', auth.role,
+        'authority', auth.authority::TEXT,
+        'updated_at', auth.updated_at
+    )
     FROM role_authorities auth
     JOIN filtered_nodes fn ON auth.node_id = fn.node_id
     WHERE (fn.effective_authority & v_node_members_view) = v_node_members_view; -- Bit 1: NODE_MEMBERS_VIEW
@@ -259,34 +261,57 @@ BEGIN
            OR effective_authority IS NULL
     )
 
-    -- NODE 데이터 반환
-    SELECT 
-        'NODE'::TEXT,
-        n.node_id::TEXT,
-        n.node_type::TEXT,
-        n.parent_node_id::TEXT,
-        n.name::TEXT,
-        NULL::TEXT,
-        NULL::INTEGER,
-        n.path::TEXT,
-        n.updated_at::TEXT
+    -- 1. 신규/수정 NODE 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'updated_at', n.updated_at
+    )
     FROM organization_nodes n
     WHERE n.node_id IN (SELECT node_id FROM filtered_nodes)
         AND n.updated_at > p_last_synced_at
 
     UNION ALL
 
-    -- WORK_ITEM 데이터 반환
-    SELECT 
-        'WORK_ITEM'::TEXT,
-        w.work_item_id::TEXT,
-        NULL::TEXT,
-        w.owner_node_id::TEXT,
-        w.title::TEXT,
-        w.status::TEXT,
-        w.priority::INTEGER,
-        w.parent_work_item_id::TEXT,
-        w.updated_at::TEXT
+    -- 2. 삭제된 NODE 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', h.node_id,
+        'status', 'deleted',
+        'updated_at', h.history_created_at
+    )
+    FROM organization_node_histories h
+    WHERE h.change_status = 'deleted'
+        AND h.history_created_at > p_last_synced_at
+        AND (
+            h.node_id IN (SELECT node_id FROM filtered_nodes)
+            OR h.parent_node_id IN (SELECT node_id FROM filtered_nodes)
+        )
+
+    UNION ALL
+
+    -- 3. 신규/수정 WORK_ITEM 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', w.work_item_id,
+        'parent_id', w.parent_work_item_id,
+        'owner_node_id', w.owner_node_id,
+        'owner_user_id', w.owner_user_id,
+        'title', w.title,
+        'description', w.description,
+        'status', w.status,
+        'priority', w.priority,
+        'hidden', w.hidden,
+        'weight', w.weight,
+        'progress', w.progress,
+        'start_date', w.start_date,
+        'due_date', w.due_date,
+        'updated_at', w.updated_at
+    )
     FROM work_items w
     JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
     WHERE w.updated_at > p_last_synced_at
@@ -303,17 +328,29 @@ BEGIN
 
     UNION ALL
 
-    -- ROLE 데이터 반환
-    SELECT 
-        'ROLE'::TEXT,
-        ra.assignment_id::TEXT,
-        NULL::TEXT,
-        ra.node_id::TEXT,
-        u.email::TEXT,
-        ra.role::TEXT,
-        NULL::INTEGER,
-        NULL::TEXT,
-        ra.updated_at::TEXT
+    -- 4. 삭제된 WORK_ITEM 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', h.work_item_id,
+        'status', 'deleted',
+        'updated_at', h.history_created_at
+    )
+    FROM work_item_histories h
+    WHERE h.change_status = 'deleted'
+        AND h.history_created_at > p_last_synced_at
+        AND h.owner_node_id IN (SELECT node_id FROM filtered_nodes)
+
+    UNION ALL
+
+    -- 5. 신규/수정 ROLE 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', ra.assignment_id,
+        'node_id', ra.node_id,
+        'email', u.email,
+        'role', ra.role,
+        'updated_at', ra.updated_at
+    )
     FROM role_assignments ra
     JOIN users u ON ra.user_id = u.user_id
     JOIN filtered_nodes fn ON ra.node_id = fn.node_id
@@ -322,21 +359,47 @@ BEGIN
 
     UNION ALL
 
-    -- AUTHORITY 데이터 반환
-    SELECT 
-        'AUTHORITY'::TEXT,
-        auth.authority_id::TEXT,
-        NULL::TEXT,
-        auth.node_id::TEXT,
-        auth.role::TEXT,
-        NULL::TEXT,
-        NULL::INTEGER,
-        auth.authority::TEXT,
-        auth.updated_at::TEXT
+    -- 6. 삭제된 ROLE 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', h.assignment_id,
+        'status', 'deleted',
+        'updated_at', h.history_created_at
+    )
+    FROM role_assignment_histories h
+    WHERE h.change_status = 'deleted'
+        AND h.history_created_at > p_last_synced_at
+        AND h.node_id IN (SELECT node_id FROM filtered_nodes)
+
+    UNION ALL
+
+    -- 7. 신규/수정 AUTHORITY 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', auth.authority_id,
+        'node_id', auth.node_id,
+        'role', auth.role,
+        'authority', auth.authority::TEXT,
+        'updated_at', auth.updated_at
+    )
     FROM role_authorities auth
     JOIN filtered_nodes fn ON auth.node_id = fn.node_id
     WHERE auth.updated_at > p_last_synced_at
-        AND (fn.effective_authority & v_node_members_view) = v_node_members_view; -- Bit 1: NODE_MEMBERS_VIEW
+        AND (fn.effective_authority & v_node_members_view) = v_node_members_view -- Bit 1: NODE_MEMBERS_VIEW
+
+    UNION ALL
+
+    -- 8. 삭제된 AUTHORITY 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', h.authority_id,
+        'status', 'deleted',
+        'updated_at', h.history_created_at
+    )
+    FROM role_authority_histories h
+    WHERE h.change_status = 'deleted'
+        AND h.history_created_at > p_last_synced_at
+        AND h.node_id IN (SELECT node_id FROM filtered_nodes);
 
     EXCEPTION 
         WHEN SQLSTATE 'P0001' THEN

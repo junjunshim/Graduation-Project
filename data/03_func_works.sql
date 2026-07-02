@@ -127,16 +127,23 @@ BEGIN
 
     -- 7. 생성된 work_item 반환
     RETURN QUERY
-    SELECT
-        'WORK_ITEM'::TEXT,
-        w.work_item_id::TEXT,
-        w.hidden::TEXT,
-        w.owner_node_id::TEXT,
-        w.title::TEXT,
-        w.status::TEXT,
-        w.priority::INTEGER,
-        w.parent_work_item_id::TEXT,
-        w.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', w.work_item_id,
+        'parent_id', w.parent_work_item_id,
+        'owner_node_id', w.owner_node_id,
+        'owner_user_id', w.owner_user_id,
+        'title', w.title,
+        'description', w.description,
+        'status', w.status,
+        'priority', w.priority,
+        'hidden', w.hidden,
+        'weight', w.weight,
+        'progress', w.progress,
+        'start_date', w.start_date,
+        'due_date', w.due_date,
+        'updated_at', w.updated_at
+    )
     FROM work_items w
     WHERE w.work_item_id = p_work_item_id;
 
@@ -238,16 +245,23 @@ BEGIN
 
     -- 8. 업데이트된 work_item 반환
     RETURN QUERY
-    SELECT
-        'WORK_ITEM'::TEXT,
-        w.work_item_id::TEXT,
-        w.hidden::TEXT,
-        w.owner_node_id::TEXT,
-        w.title::TEXT,
-        w.status::TEXT,
-        w.priority::INTEGER,
-        w.parent_work_item_id::TEXT,
-        w.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', w.work_item_id,
+        'parent_id', w.parent_work_item_id,
+        'owner_node_id', w.owner_node_id,
+        'owner_user_id', w.owner_user_id,
+        'title', w.title,
+        'description', w.description,
+        'status', w.status,
+        'priority', w.priority,
+        'hidden', w.hidden,
+        'weight', w.weight,
+        'progress', w.progress,
+        'start_date', w.start_date,
+        'due_date', w.due_date,
+        'updated_at', w.updated_at
+    )
     FROM work_items w
     WHERE w.work_item_id = p_work_item_id;
 

@@ -46,16 +46,14 @@ BEGIN
     VALUES (v_target_id, p_node_id, p_role_name)
     RETURNING assignment_id INTO v_new_id;
 
-    RETURN QUERY SELECT 
-        'ROLE'::TEXT,
-        p_node_id::TEXT,
-        NULL::TEXT,
-        NULL::TEXT,
-        p_target_email::TEXT,
-        p_role_name::TEXT,
-        NULL::INTEGER,
-        NULL::TEXT,
-        r.updated_at::TEXT
+    RETURN QUERY SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', r.assignment_id,
+        'node_id', r.node_id,
+        'email', p_target_email,
+        'role', r.role,
+        'updated_at', r.updated_at
+    )
     FROM role_assignments r
     WHERE assignment_id = v_new_id;
 
@@ -133,16 +131,14 @@ BEGIN
     WHERE user_id = v_target_id AND node_id = p_node_id;
 
     -- 7. 결과 반환
-    RETURN QUERY SELECT 
-        'ROLE'::TEXT,
-        p_node_id::TEXT,
-        NULL::TEXT,
-        NULL::TEXT,
-        p_target_email::TEXT,
-        r.role::TEXT,
-        NULL::INTEGER,
-        NULL::TEXT,
-        r.updated_at::TEXT
+    RETURN QUERY SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', r.assignment_id,
+        'node_id', r.node_id,
+        'email', p_target_email,
+        'role', r.role,
+        'updated_at', r.updated_at
+    )
     FROM role_assignments r
     WHERE user_id = v_target_id AND node_id = p_node_id;
 

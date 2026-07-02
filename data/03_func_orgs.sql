@@ -41,47 +41,42 @@ BEGIN
 
     -- 5. 생성된 노드관련 정보 즉시 반환
     RETURN QUERY
-    SELECT 
-        'NODE'::TEXT,
-        n.node_id::TEXT,
-        n.node_type::TEXT,
-        n.parent_node_id::TEXT,
-        n.name::TEXT,
-        NULL::TEXT,
-        NULL::INTEGER,
-        n.path::TEXT,
-        n.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'updated_at', n.updated_at
+    )
     FROM organization_nodes n
     WHERE n.node_id = v_new_node_id
 
     UNION ALL 
 
-    SELECT 
-        'ROLE'::TEXT,
-        ra.assignment_id::TEXT,
-        NULL::TEXT,
-        ra.node_id::TEXT,
-        u.email::TEXT,
-        ra.role::TEXT,
-        NULL::INTEGER,
-        NULL::TEXT,
-        ra.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', ra.assignment_id,
+        'node_id', ra.node_id,
+        'email', u.email,
+        'role', ra.role,
+        'updated_at', ra.updated_at
+    )
     FROM role_assignments ra
     JOIN users u ON ra.user_id = u.user_id
     WHERE ra.node_id = v_new_node_id
 
     UNION ALL
 
-    SELECT 
-        'AUTHORITY'::TEXT,
-        a.authority_id::TEXT,
-        NULL::TEXT,
-        a.node_id::TEXT,
-        NULL::TEXT,
-        a.role::TEXT,
-        a.authority::INTEGER,
-        NULL::TEXT,
-        a.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', a.authority_id,
+        'node_id', a.node_id,
+        'role', a.role,
+        'authority', a.authority::TEXT,
+        'updated_at', a.updated_at
+    )
     FROM role_authorities a
     WHERE a.node_id = v_new_node_id;
 
@@ -162,47 +157,42 @@ BEGIN
 
     -- 7. 생성된 노드 정보 즉시 반환
     RETURN QUERY
-    SELECT 
-        'NODE'::TEXT,
-        n.node_id::TEXT,
-        n.node_type::TEXT,
-        n.parent_node_id::TEXT,
-        n.name::TEXT,
-        NULL::TEXT,
-        NULL::INTEGER,
-        n.path::TEXT,
-        n.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'updated_at', n.updated_at
+    )
     FROM organization_nodes n
     WHERE n.node_id = v_new_node_id
 
     UNION ALL
 
-    SELECT 
-        'ROLE'::TEXT,
-        ra.assignment_id::TEXT,
-        NULL::TEXT,
-        ra.node_id::TEXT,
-        u.email::TEXT,
-        ra.role::TEXT,
-        NULL::INTEGER,
-        NULL::TEXT,
-        ra.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', ra.assignment_id,
+        'node_id', ra.node_id,
+        'email', u.email,
+        'role', ra.role,
+        'updated_at', ra.updated_at
+    )
     FROM role_assignments ra
     JOIN users u ON ra.user_id = u.user_id
     WHERE ra.node_id = v_new_node_id
 
     UNION ALL
 
-    SELECT 
-        'AUTHORITY'::TEXT,
-        a.authority_id::TEXT,
-        NULL::TEXT,
-        a.node_id::TEXT,
-        NULL::TEXT,
-        a.role::TEXT,
-        a.authority::INTEGER,
-        NULL::TEXT,
-        a.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', a.authority_id,
+        'node_id', a.node_id,
+        'role', a.role,
+        'authority', a.authority::TEXT,
+        'updated_at', a.updated_at
+    )
     FROM role_authorities a
     WHERE a.node_id = v_new_node_id;
 
@@ -251,16 +241,15 @@ BEGIN
 
     -- 4. 업데이트된 노드 정보 즉시 반환
     RETURN QUERY
-    SELECT 
-        'NODE'::TEXT,
-        n.node_id::TEXT,
-        n.node_type::TEXT,
-        n.parent_node_id::TEXT,
-        n.name::TEXT,
-        NULL::TEXT,
-        NULL::INTEGER,
-        n.path::TEXT,
-        n.updated_at::TEXT
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'updated_at', n.updated_at
+    )
     FROM organization_nodes n
     WHERE n.node_id = p_node_id;
 

@@ -172,7 +172,7 @@
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 2.55rem;
   min-width: 0;
 }
 
@@ -267,9 +267,9 @@
 .dashboardGrid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 0.9rem;
+  gap: 1.7rem;
   min-width: 0;
-  align-items: start;
+  align-items: stretch;
 }
 
 .panel {
@@ -281,6 +281,10 @@
 
 .boardPanel {
   grid-column: span 8;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
+  align-self: stretch;
+  min-height: 39rem;
 }
 
 .boardPanel .sectionHeader {
@@ -294,10 +298,11 @@
 
 .calendarPanel {
   grid-column: span 4;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto 21rem 7.4rem;
   align-content: stretch;
-  height: var(--dashboard-preview-panel-height, auto);
-  min-height: 0;
+  align-self: stretch;
+  height: auto;
+  min-height: 39rem;
 }
 
 .documentsPanel,
@@ -443,16 +448,18 @@
 .boardColumns {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: start;
+  align-items: stretch;
   gap: 0.75rem;
   min-width: 0;
   min-height: 0;
+  height: 100%;
 }
 
 .boardColumn {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.72rem;
-  align-content: start;
+  align-content: stretch;
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -528,6 +535,12 @@
   min-width: 0;
 }
 
+.taskStack {
+  grid-template-rows: repeat(3, minmax(0, 1fr)) auto;
+  align-content: stretch;
+  min-height: 0;
+}
+
 .moreItemsButton {
   display: inline-flex;
   align-items: center;
@@ -565,6 +578,8 @@
 
 .taskCard {
   display: grid;
+  grid-template-rows: auto auto auto auto;
+  align-content: space-between;
   gap: 0.48rem;
   min-width: 0;
   padding: 0.72rem;
@@ -636,8 +651,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
   flex-shrink: 0;
   border: 1px solid var(--line-default);
   border-radius: 999px;
@@ -761,6 +776,7 @@
 
 .calendarGrid {
   grid-template-rows: repeat(6, minmax(0, 1fr));
+  height: 21rem;
   min-height: 0;
   align-content: stretch;
 }
@@ -770,6 +786,14 @@
   font-size: 0.72rem;
   font-weight: 800;
   text-align: center;
+}
+
+.weekdaySunday {
+  color: var(--accent-red) !important;
+}
+
+.weekdaySaturday {
+  color: var(--accent-blue) !important;
 }
 
 .calendarEmpty,
@@ -788,6 +812,14 @@
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.calendarDaySunday {
+  color: var(--accent-red);
+}
+
+.calendarDaySaturday {
+  color: var(--accent-blue);
 }
 
 .calendarDayActive {
@@ -834,6 +866,89 @@
   height: 0.95rem;
   background: var(--surface-page);
   color: var(--text-primary);
+}
+
+.calendarPreview {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 1.2rem;
+}
+
+.calendarPreviewList {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.calendarPreviewItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.52rem;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: var(--radius-xs);
+  color: inherit;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.calendarPreviewItem:hover,
+.calendarPreviewItem:focus-visible {
+  background: var(--surface-hover);
+}
+
+.calendarPreviewItem:focus-visible {
+  outline: 2px solid var(--line-selected);
+  outline-offset: 2px;
+}
+
+.calendarPreviewItem time {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.calendarPreviewItem span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendarPreviewStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 4.8rem;
+  min-width: 0;
+  padding: 0.22rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendarPreviewEmpty {
+  margin: 0;
+  padding: 0.4rem 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .documentRow,
@@ -1139,10 +1254,16 @@
     height: auto;
   }
 
+  .calendarPanel {
+    grid-template-rows: auto;
+  }
+
   .calendarGrid {
     grid-template-rows: none;
     grid-auto-rows: auto;
+    height: auto;
     align-content: start;
+    min-height: 0;
   }
 
   .calendarDay {

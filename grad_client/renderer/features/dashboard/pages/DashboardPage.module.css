@@ -414,6 +414,7 @@
   justify-content: center;
   width: 1.85rem;
   height: 1.85rem;
+  margin-left: 0.72rem;
   justify-self: start;
   align-self: end;
   border: 1px solid var(--line-default);
@@ -706,7 +707,7 @@
 }
 
 .progressTrack {
-  height: 0.36rem;
+  height: 0.42rem;
   min-width: 0;
   overflow: hidden;
   border-radius: 999px;

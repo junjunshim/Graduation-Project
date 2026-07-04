@@ -172,7 +172,7 @@
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 2.55rem;
   min-width: 0;
 }
 
@@ -267,9 +267,9 @@
 .dashboardGrid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 0.9rem;
+  gap: 1.7rem;
   min-width: 0;
-  align-items: start;
+  align-items: stretch;
 }
 
 .panel {
@@ -281,6 +281,11 @@
 
 .boardPanel {
   grid-column: span 8;
+  grid-template-rows: auto auto;
+  align-content: stretch;
+  align-self: stretch;
+  padding-top: 0.2rem;
+  min-height: 0;
 }
 
 .boardPanel .sectionHeader {
@@ -294,10 +299,11 @@
 
 .calendarPanel {
   grid-column: span 4;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  align-content: stretch;
-  height: var(--dashboard-preview-panel-height, auto);
-  min-height: 0;
+  grid-template-rows: auto auto 21rem 7.4rem;
+  align-content: start;
+  align-self: start;
+  height: auto;
+  min-height: 39rem;
 }
 
 .documentsPanel,
@@ -408,6 +414,7 @@
   justify-content: center;
   width: 1.85rem;
   height: 1.85rem;
+  margin-left: 0.72rem;
   justify-self: start;
   align-self: end;
   border: 1px solid var(--line-default);
@@ -431,7 +438,7 @@
   padding: 0.15rem 0;
   border-color: transparent;
   background: transparent;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .boardViewLink:hover {
@@ -447,12 +454,15 @@
   gap: 0.75rem;
   min-width: 0;
   min-height: 0;
+  height: auto;
 }
 
 .boardColumn {
   display: grid;
+  grid-template-rows: auto auto;
   gap: 0.72rem;
   align-content: start;
+  align-self: start;
   min-width: 0;
   min-height: 0;
   padding: 0;
@@ -528,6 +538,14 @@
   min-width: 0;
 }
 
+.taskStack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 0;
+}
+
 .moreItemsButton {
   display: inline-flex;
   align-items: center;
@@ -557,16 +575,30 @@
 }
 
 .moreItemsDropdown {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  left: 0;
+  right: 0;
+  z-index: 3;
   display: grid;
   gap: 0.55rem;
   min-width: 0;
-  padding-top: 0.1rem;
+  max-height: 24rem;
+  overflow-y: auto;
+  padding: 0.55rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
 }
 
 .taskCard {
   display: grid;
+  grid-template-rows: auto auto auto auto;
+  align-content: space-between;
   gap: 0.48rem;
   min-width: 0;
+  min-height: 8.85rem;
   padding: 0.72rem;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-sm);
@@ -636,8 +668,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
   flex-shrink: 0;
   border: 1px solid var(--line-default);
   border-radius: 999px;
@@ -675,7 +707,7 @@
 }
 
 .progressTrack {
-  height: 0.36rem;
+  height: 0.42rem;
   min-width: 0;
   overflow: hidden;
   border-radius: 999px;
@@ -708,7 +740,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   min-width: 0;
-  margin-top: 1.5rem;
+  margin-top: 0.4rem;
 }
 
 .calendarMonthControls {
@@ -761,6 +793,7 @@
 
 .calendarGrid {
   grid-template-rows: repeat(6, minmax(0, 1fr));
+  height: 21rem;
   min-height: 0;
   align-content: stretch;
 }
@@ -770,6 +803,14 @@
   font-size: 0.72rem;
   font-weight: 800;
   text-align: center;
+}
+
+.weekdaySunday {
+  color: var(--accent-red) !important;
+}
+
+.weekdaySaturday {
+  color: var(--accent-blue) !important;
 }
 
 .calendarEmpty,
@@ -788,6 +829,14 @@
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.calendarDaySunday {
+  color: var(--accent-red);
+}
+
+.calendarDaySaturday {
+  color: var(--accent-blue);
 }
 
 .calendarDayActive {
@@ -834,6 +883,89 @@
   height: 0.95rem;
   background: var(--surface-page);
   color: var(--text-primary);
+}
+
+.calendarPreview {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 1.2rem;
+}
+
+.calendarPreviewList {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.calendarPreviewItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.52rem;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: var(--radius-xs);
+  color: inherit;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.calendarPreviewItem:hover,
+.calendarPreviewItem:focus-visible {
+  background: var(--surface-hover);
+}
+
+.calendarPreviewItem:focus-visible {
+  outline: 2px solid var(--line-selected);
+  outline-offset: 2px;
+}
+
+.calendarPreviewItem time {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.calendarPreviewItem span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendarPreviewStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 4.8rem;
+  min-width: 0;
+  padding: 0.22rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendarPreviewEmpty {
+  margin: 0;
+  padding: 0.4rem 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .documentRow,
@@ -1139,10 +1271,16 @@
     height: auto;
   }
 
+  .calendarPanel {
+    grid-template-rows: auto;
+  }
+
   .calendarGrid {
     grid-template-rows: none;
     grid-auto-rows: auto;
+    height: auto;
     align-content: start;
+    min-height: 0;
   }
 
   .calendarDay {

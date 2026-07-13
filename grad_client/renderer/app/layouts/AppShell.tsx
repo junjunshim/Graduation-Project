@@ -56,6 +56,8 @@ export function AppShell() {
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext)
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
   const isWorkspaceRoute = location.pathname === '/workspace'
+  const isWorkspaceTimelineRoute =
+    isWorkspaceRoute && new URLSearchParams(location.search).get('view') === 'timeline'
   const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname)
   const shellHeading: ShellTopActionsHeading = isWorkspaceRoute
     ? {
@@ -110,14 +112,18 @@ export function AppShell() {
       >
         {!hasCustomTitleBar ? <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} /> : null}
 
-        <div className={styles.workspaceBody}>
+        <div
+          className={[styles.workspaceBody, isWorkspaceTimelineRoute ? styles.workspaceBodyTimeline : '']
+            .filter(Boolean)
+            .join(' ')}
+        >
           <ShellTopActions
             currentUser={currentUser}
             heading={shellHeading}
             inset="standard"
           />
 
-          <main className={styles.main}>
+          <main className={[styles.main, isWorkspaceTimelineRoute ? styles.mainTimeline : ''].filter(Boolean).join(' ')}>
             <Outlet />
           </main>
         </div>

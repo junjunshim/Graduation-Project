@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
+import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { formatWorkspaceMonthDay } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { RoleMember, WorkItemRecord, WorkItemStatus, WorkspaceOverview } from '../model/types'
@@ -41,22 +42,18 @@ type TimelineView = {
   todayLeft: number
 }
 
-type WorkspaceTab =
-  | {
-      label: string
-      to: string
-      href?: never
-    }
-  | {
-      label: string
-      href: string
-      to?: never
-    }
+type WorkspaceView = 'overview' | 'timeline'
+
+type WorkspaceTab = {
+  label: string
+  to: string
+  view?: WorkspaceView
+}
 
 const workspaceTabs: WorkspaceTab[] = [
-  { label: '개요', to: '/workspace' },
+  { label: '개요', to: '/workspace', view: 'overview' },
   { label: '업무', to: '/work-items' },
-  { label: '타임라인', href: '#workspace-timeline' },
+  { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
   { label: '문서', to: '/documents' },
   { label: '파일', to: '/files' },
   { label: '설정', to: '/settings' },
@@ -399,7 +396,9 @@ function getActivityActionLabel(status: WorkItemStatus) {
 
 export function WorkspacePage() {
   const currentUser = getCurrentUser()
+  const [searchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState<WorkspaceStatusFilter>('all')
+  const activeView: WorkspaceView = searchParams.get('view') === 'timeline' ? 'timeline' : 'overview'
 
   if (!currentUser) {
     return null
@@ -428,24 +427,25 @@ export function WorkspacePage() {
   ]
 
   return (
-    <section className={styles.page}>
+    <section
+      className={[styles.page, activeView === 'timeline' ? styles.timelinePage : ''].filter(Boolean).join(' ')}
+    >
       <div className={styles.workspaceNavBar}>
         <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
-          {workspaceTabs.map((tab) =>
-            tab.to ? (
+          {workspaceTabs.map((tab) => {
+            const isActive = tab.view === activeView
+
+            return (
               <Link
                 key={tab.label}
                 to={tab.to}
-                className={[styles.tabLink, tab.to === '/workspace' ? styles.tabLinkActive : ''].join(' ')}
+                className={[styles.tabLink, isActive ? styles.tabLinkActive : ''].filter(Boolean).join(' ')}
+                aria-current={isActive ? 'page' : undefined}
               >
                 {tab.label}
               </Link>
-            ) : (
-              <a key={tab.label} href={tab.href} className={styles.tabLink}>
-                {tab.label}
-              </a>
-            ),
-          )}
+            )
+          })}
         </nav>
 
         <div className={styles.headerActions}>
@@ -471,6 +471,14 @@ export function WorkspacePage() {
         </div>
       </div>
 
+      {activeView === 'timeline' ? (
+        <WorkspaceTimelineTab
+          workItems={overview.visibleWorkItems}
+          nodes={overview.visibleNodes}
+          members={overview.rootRoleMembers}
+        />
+      ) : (
+        <>
       {overview.summary.orgNodeCount === 0 ? (
         <section className={styles.emptyPanel}>
           <p className={styles.panelEyebrow}>Workspace Setup</p>
@@ -728,6 +736,8 @@ export function WorkspacePage() {
           </section>
         </div>
       </div>
+        </>
+      )}
     </section>
   )
 }

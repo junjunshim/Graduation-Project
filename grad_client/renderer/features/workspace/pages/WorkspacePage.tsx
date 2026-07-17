@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
+import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { formatWorkspaceMonthDay } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
@@ -42,7 +43,7 @@ type TimelineView = {
   todayLeft: number
 }
 
-type WorkspaceView = 'overview' | 'timeline'
+type WorkspaceView = 'overview' | 'tasks' | 'timeline'
 
 type WorkspaceTab = {
   label: string
@@ -52,7 +53,7 @@ type WorkspaceTab = {
 
 const workspaceTabs: WorkspaceTab[] = [
   { label: '개요', to: '/workspace', view: 'overview' },
-  { label: '업무', to: '/work-items' },
+  { label: '업무', to: '/workspace?view=tasks', view: 'tasks' },
   { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
   { label: '문서', to: '/documents' },
   { label: '파일', to: '/files' },
@@ -398,7 +399,9 @@ export function WorkspacePage() {
   const currentUser = getCurrentUser()
   const [searchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState<WorkspaceStatusFilter>('all')
-  const activeView: WorkspaceView = searchParams.get('view') === 'timeline' ? 'timeline' : 'overview'
+  const requestedView = searchParams.get('view')
+  const activeView: WorkspaceView =
+    requestedView === 'tasks' || requestedView === 'timeline' ? requestedView : 'overview'
 
   if (!currentUser) {
     return null
@@ -475,6 +478,11 @@ export function WorkspacePage() {
         <WorkspaceTimelineTab
           workItems={overview.visibleWorkItems}
           nodes={overview.visibleNodes}
+          members={overview.rootRoleMembers}
+        />
+      ) : activeView === 'tasks' ? (
+        <WorkspaceTasksTab
+          workItems={overview.visibleWorkItems}
           members={overview.rootRoleMembers}
         />
       ) : (

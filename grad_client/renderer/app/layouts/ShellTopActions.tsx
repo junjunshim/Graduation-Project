@@ -61,10 +61,7 @@ export function ShellTopActions({
         </div>
       ) : heading.type === 'greeting' ? (
         <p className={styles.shellGreeting}>
-          안녕, {currentUser.name}님
-          <span className={styles.shellGreetingIcon}>
-            <Icon name="hand" size={32} />
-          </span>
+          안녕하세요.
         </p>
       ) : null}
 

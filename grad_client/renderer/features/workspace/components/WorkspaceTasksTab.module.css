@@ -99,7 +99,7 @@
   grid-template-columns:
     34px
     minmax(220px, 2fr)
-    minmax(112px, 1fr)
+    minmax(150px, 1.7fr)
     minmax(86px, 0.8fr)
     minmax(94px, 0.9fr)
     minmax(72px, 0.8fr)
@@ -172,10 +172,24 @@
 .ownerCell {
   display: flex;
   align-items: center;
+  justify-self: center;
+  width: min(100%, 112px);
   gap: 7px;
   min-width: 0;
   font-size: 0.78rem;
   font-weight: 600;
+}
+
+.ownerName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ownerHeader {
+  text-align: center;
+  transform: translateX(-8px);
 }
 
 .ownerIcon {

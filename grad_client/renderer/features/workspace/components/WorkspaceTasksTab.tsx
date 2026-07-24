@@ -18,6 +18,8 @@ type TagFilter = 'all' | WorkItemTagId
 
 const WORK_ITEM_STATUSES: WorkItemStatus[] = ['done', 'in-progress', 'todo']
 const PAGE_SIZE = 10
+const MAX_PAGE_COUNT = 5
+const MAX_VISIBLE_WORK_ITEMS = PAGE_SIZE * MAX_PAGE_COUNT
 const INITIAL_STATUS_FILTERS: Record<WorkItemStatus, boolean> = {
   done: true,
   'in-progress': true,
@@ -88,10 +90,11 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
     })
   }, [members, ownerFilter, priorityFilter, searchQuery, statusFilters, tagFilter, workItems])
 
-  const pageCount = Math.max(1, Math.ceil(filteredWorkItems.length / PAGE_SIZE))
+  const visibleWorkItems = filteredWorkItems.slice(0, MAX_VISIBLE_WORK_ITEMS)
+  const pageCount = Math.max(1, Math.ceil(visibleWorkItems.length / PAGE_SIZE))
   const activePage = Math.min(currentPage, pageCount)
   const pageStartIndex = (activePage - 1) * PAGE_SIZE
-  const pagedWorkItems = filteredWorkItems.slice(pageStartIndex, pageStartIndex + PAGE_SIZE)
+  const pagedWorkItems = visibleWorkItems.slice(pageStartIndex, pageStartIndex + PAGE_SIZE)
   const visiblePageNumbers = getVisiblePageNumbers(activePage, pageCount)
   const allVisibleSelected =
     pagedWorkItems.length > 0 && pagedWorkItems.every((item) => selectedIds.has(item.workItemId))
@@ -165,7 +168,7 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
                 />
               </span>
               <span role="columnheader">업무명</span>
-              <span role="columnheader">담당자</span>
+              <span role="columnheader" className={styles.ownerHeader}>담당자</span>
               <span role="columnheader" className={styles.statusCell}>상태</span>
               <span role="columnheader">우선순위</span>
               <span role="columnheader">마감일</span>
@@ -207,7 +210,9 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
                         <span className={styles.ownerIcon} aria-hidden="true">
                           <Icon name="user" size={13} />
                         </span>
-                        {getMemberName(item.ownerUserId, members)}
+                        <span className={styles.ownerName}>
+                          {getMemberName(item.ownerUserId, members)}
+                        </span>
                       </span>
                       <span role="cell" className={styles.statusCell}>
                         <span className={styles.statusBadge} data-tone={getWorkItemStatusTone(item.status)}>
@@ -271,8 +276,8 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
             {filteredWorkItems.length > 0 ? (
               <nav className={styles.pagination} aria-label="업무 목록 페이지">
                 <span className={styles.paginationSummary}>
-                  {pageStartIndex + 1}-{Math.min(pageStartIndex + PAGE_SIZE, filteredWorkItems.length)} /{' '}
-                  {filteredWorkItems.length}
+                  {pageStartIndex + 1}-{Math.min(pageStartIndex + PAGE_SIZE, visibleWorkItems.length)} /{' '}
+                  {visibleWorkItems.length}
                 </span>
                 <button
                   type="button"

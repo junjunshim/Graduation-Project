@@ -43,11 +43,25 @@ type TimelineSegment = {
   width: number
 }
 
+type TimelineMonthOption = {
+  start: number
+  end: number
+  month: number
+}
+
+type TimelineMonthGroup = {
+  year: number
+  months: TimelineMonthOption[]
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
 const DEFAULT_PIXELS_PER_DAY = 18
 const MIN_PIXELS_PER_DAY = 8
 const MAX_PIXELS_PER_DAY = 64
+const DEFAULT_VERTICAL_SCALE = 1
+const MIN_VERTICAL_SCALE = 0.6
+const MAX_VERTICAL_SCALE = 1.6
 const RANGE_PADDING_MONTHS = 6
 const TIMELINE_TONES: TimelineTone[] = ['purple', 'blue', 'green', 'yellow']
 
@@ -106,6 +120,11 @@ function formatMonthLabel(timestamp: number) {
     timeZone: 'UTC',
     year: 'numeric',
   }).format(new Date(timestamp))
+}
+
+function getMonthStart(timestamp: number) {
+  const date = new Date(timestamp)
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
 }
 
 function formatTimelineMonthDay(timestamp: number) {
@@ -167,13 +186,28 @@ function getTimelineRange(entries: TimelineEntry[], today: number) {
 export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTimelineTabProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const labelColumnRef = useRef<HTMLDivElement>(null)
+  const monthPickerRef = useRef<HTMLDivElement>(null)
+  const monthMenuRef = useRef<HTMLDivElement>(null)
+  const monthButtonRef = useRef<HTMLButtonElement>(null)
   const pixelsPerDayRef = useRef(DEFAULT_PIXELS_PER_DAY)
-  const pendingScrollRef = useRef<{ behavior: ScrollBehavior; left: number } | null>(null)
+  const verticalScaleRef = useRef(DEFAULT_VERTICAL_SCALE)
+  const pendingScrollRef = useRef<{
+    behavior: ScrollBehavior
+    left: number
+    top: number
+  } | null>(null)
   const virtualScrollLeftRef = useRef<number | null>(null)
+  const virtualScrollTopRef = useRef<number | null>(null)
   const initializedRangeRef = useRef<number | null>(null)
   const dragRef = useRef<{ pointerId: number; scrollLeft: number; startX: number } | null>(null)
   const [pixelsPerDay, setPixelsPerDay] = useState(DEFAULT_PIXELS_PER_DAY)
+  const [verticalScale, setVerticalScale] = useState(DEFAULT_VERTICAL_SCALE)
   const [isDragging, setIsDragging] = useState(false)
+  const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false)
+  const [hiddenGroupIds, setHiddenGroupIds] = useState<Set<number>>(() => new Set())
+  const [selectedMonthStart, setSelectedMonthStart] = useState(() =>
+    getMonthStart(getWorkspaceTodayTimestamp()),
+  )
   const today = getWorkspaceTodayTimestamp()
 
   const entries = useMemo(() => getTimelineEntries(workItems), [workItems])
@@ -207,6 +241,31 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
   const totalDays = Math.max(1, Math.ceil((range.end - range.start) / MS_PER_DAY))
   const timelineTrackWidth = totalDays * pixelsPerDay
   const tickStepDays = pixelsPerDay >= 42 ? 1 : pixelsPerDay >= 17 ? 7 : 14
+
+  const monthGroups = useMemo<TimelineMonthGroup[]>(() => {
+    const monthGroupList: TimelineMonthGroup[] = []
+
+    for (let cursor = range.start; cursor < range.end; ) {
+      const date = new Date(cursor)
+      const year = date.getUTCFullYear()
+      const month = date.getUTCMonth() + 1
+      const nextMonth = Date.UTC(year, date.getUTCMonth() + 1, 1)
+      const previousGroup = monthGroupList[monthGroupList.length - 1]
+
+      if (previousGroup?.year === year) {
+        previousGroup.months.push({ start: cursor, end: nextMonth, month })
+      } else {
+        monthGroupList.push({
+          year,
+          months: [{ start: cursor, end: nextMonth, month }],
+        })
+      }
+
+      cursor = nextMonth
+    }
+
+    return monthGroupList
+  }, [range.end, range.start])
 
   const tickSegments = useMemo<TimelineSegment[]>(() => {
     const segments: TimelineSegment[] = []
@@ -252,9 +311,16 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
   }, [pixelsPerDay, range.start, tickSegments])
 
   const getLabelColumnWidth = useCallback(() => labelColumnRef.current?.getBoundingClientRect().width ?? 0, [])
+  const getDateHeaderHeight = useCallback(() => labelColumnRef.current?.getBoundingClientRect().height ?? 0, [])
 
   const applyView = useCallback(
-    (nextPixelsPerDay: number, nextScrollLeft: number, behavior: ScrollBehavior) => {
+    (
+      nextPixelsPerDay: number,
+      nextScrollLeft: number,
+      nextVerticalScale: number,
+      nextScrollTop: number,
+      behavior: ScrollBehavior,
+    ) => {
       const viewport = viewportRef.current
 
       if (!viewport) {
@@ -262,18 +328,46 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       }
 
       const clampedPixelsPerDay = clamp(nextPixelsPerDay, MIN_PIXELS_PER_DAY, MAX_PIXELS_PER_DAY)
+      const clampedVerticalScale = clamp(
+        nextVerticalScale,
+        MIN_VERTICAL_SCALE,
+        MAX_VERTICAL_SCALE,
+      )
+      const hasHorizontalScaleChange =
+        Math.abs(clampedPixelsPerDay - pixelsPerDayRef.current) >= 0.01
+      const hasVerticalScaleChange =
+        Math.abs(clampedVerticalScale - verticalScaleRef.current) >= 0.001
 
-      if (Math.abs(clampedPixelsPerDay - pixelsPerDayRef.current) < 0.01) {
-        const maximumScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
-        viewport.scrollTo({ left: clamp(nextScrollLeft, 0, maximumScroll), behavior })
+      if (!hasHorizontalScaleChange && !hasVerticalScaleChange) {
+        const maximumScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+        const maximumScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+        viewport.scrollTo({
+          left: clamp(nextScrollLeft, 0, maximumScrollLeft),
+          top: clamp(nextScrollTop, 0, maximumScrollTop),
+          behavior,
+        })
         virtualScrollLeftRef.current = null
+        virtualScrollTopRef.current = null
         return
       }
 
       pixelsPerDayRef.current = clampedPixelsPerDay
-      pendingScrollRef.current = { behavior, left: nextScrollLeft }
+      verticalScaleRef.current = clampedVerticalScale
+      pendingScrollRef.current = {
+        behavior,
+        left: nextScrollLeft,
+        top: nextScrollTop,
+      }
       virtualScrollLeftRef.current = nextScrollLeft
-      setPixelsPerDay(clampedPixelsPerDay)
+      virtualScrollTopRef.current = nextScrollTop
+
+      if (hasHorizontalScaleChange) {
+        setPixelsPerDay(clampedPixelsPerDay)
+      }
+
+      if (hasVerticalScaleChange) {
+        setVerticalScale(clampedVerticalScale)
+      }
     },
     [],
   )
@@ -289,9 +383,29 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       const trackViewportWidth = Math.max(1, viewport.clientWidth - getLabelColumnWidth())
       const dayOffset = (timestamp - range.start) / MS_PER_DAY
       const nextScrollLeft = dayOffset * nextPixelsPerDay - trackViewportWidth / 2
-      applyView(nextPixelsPerDay, nextScrollLeft, behavior)
+      const dateHeaderHeight = getDateHeaderHeight()
+      const verticalAnchorOffset =
+        dateHeaderHeight + Math.max(0, viewport.clientHeight - dateHeaderHeight) / 2
+      const currentVerticalScale = verticalScaleRef.current
+      const currentScrollTop = virtualScrollTopRef.current ?? viewport.scrollTop
+      const verticalAnchorPosition = Math.max(
+        0,
+        currentScrollTop + verticalAnchorOffset - dateHeaderHeight,
+      )
+      const nextScrollTop =
+        dateHeaderHeight +
+        verticalAnchorPosition * (DEFAULT_VERTICAL_SCALE / currentVerticalScale) -
+        verticalAnchorOffset
+
+      applyView(
+        nextPixelsPerDay,
+        nextScrollLeft,
+        DEFAULT_VERTICAL_SCALE,
+        nextScrollTop,
+        behavior,
+      )
     },
-    [applyView, getLabelColumnWidth, range.start],
+    [applyView, getDateHeaderHeight, getLabelColumnWidth, range.start],
   )
 
   useLayoutEffect(() => {
@@ -302,14 +416,17 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       return
     }
 
-    const maximumScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+    const maximumScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+    const maximumScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
     viewport.scrollTo({
-      left: clamp(pendingScroll.left, 0, maximumScroll),
+      left: clamp(pendingScroll.left, 0, maximumScrollLeft),
+      top: clamp(pendingScroll.top, 0, maximumScrollTop),
       behavior: pendingScroll.behavior,
     })
     pendingScrollRef.current = null
     virtualScrollLeftRef.current = null
-  }, [pixelsPerDay, timelineTrackWidth])
+    virtualScrollTopRef.current = null
+  }, [pixelsPerDay, timelineTrackWidth, verticalScale])
 
   useLayoutEffect(() => {
     if (initializedRangeRef.current === range.start) {
@@ -319,6 +436,47 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
     initializedRangeRef.current = range.start
     centerDate(today + MS_PER_DAY / 2, DEFAULT_PIXELS_PER_DAY, 'auto')
   }, [centerDate, range.start, today])
+
+  useLayoutEffect(() => {
+    if (!isMonthMenuOpen) {
+      return
+    }
+
+    const selectedMonthButton =
+      monthMenuRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')
+
+    selectedMonthButton?.focus({ preventScroll: true })
+    selectedMonthButton?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [isMonthMenuOpen, selectedMonthStart])
+
+  useEffect(() => {
+    if (!isMonthMenuOpen) {
+      return undefined
+    }
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || !monthPickerRef.current?.contains(event.target)) {
+        setIsMonthMenuOpen(false)
+      }
+    }
+
+    const handleMenuKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      setIsMonthMenuOpen(false)
+      monthButtonRef.current?.focus()
+    }
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown)
+    document.addEventListener('keydown', handleMenuKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown)
+      document.removeEventListener('keydown', handleMenuKeyDown)
+    }
+  }, [isMonthMenuOpen])
 
   useEffect(() => {
     const viewport = viewportRef.current
@@ -336,48 +494,93 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
 
       const deltaMultiplier = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.clientHeight : 1
       const normalizedDelta = clamp(event.deltaY * deltaMultiplier, -120, 120)
+      const zoomFactor = Math.exp(-normalizedDelta * 0.0016)
       const currentPixelsPerDay = pixelsPerDayRef.current
+      const currentVerticalScale = verticalScaleRef.current
       const nextPixelsPerDay = clamp(
-        currentPixelsPerDay * Math.exp(-normalizedDelta * 0.0016),
+        currentPixelsPerDay * zoomFactor,
         MIN_PIXELS_PER_DAY,
         MAX_PIXELS_PER_DAY,
       )
+      const nextVerticalScale = clamp(
+        currentVerticalScale * zoomFactor,
+        MIN_VERTICAL_SCALE,
+        MAX_VERTICAL_SCALE,
+      )
 
-      if (Math.abs(nextPixelsPerDay - currentPixelsPerDay) < 0.01) {
+      if (
+        Math.abs(nextPixelsPerDay - currentPixelsPerDay) < 0.01 &&
+        Math.abs(nextVerticalScale - currentVerticalScale) < 0.001
+      ) {
         return
       }
 
       const viewportRect = viewport.getBoundingClientRect()
       const labelWidth = getLabelColumnWidth()
+      const dateHeaderHeight = getDateHeaderHeight()
       const trackViewportWidth = Math.max(1, viewport.clientWidth - labelWidth)
       const pointerX = event.clientX - viewportRect.left
-      const anchorOffset =
+      const horizontalAnchorOffset =
         pointerX > labelWidth ? clamp(pointerX - labelWidth, 0, trackViewportWidth) : trackViewportWidth / 2
       const currentScrollLeft = virtualScrollLeftRef.current ?? viewport.scrollLeft
-      const anchorDay = (currentScrollLeft + anchorOffset) / currentPixelsPerDay
-      const nextScrollLeft = anchorDay * nextPixelsPerDay - anchorOffset
+      const anchorDay = (currentScrollLeft + horizontalAnchorOffset) / currentPixelsPerDay
+      const nextScrollLeft = anchorDay * nextPixelsPerDay - horizontalAnchorOffset
+      const pointerY = event.clientY - viewportRect.top
+      const verticalAnchorOffset =
+        pointerY > dateHeaderHeight
+          ? clamp(pointerY, dateHeaderHeight, viewport.clientHeight)
+          : dateHeaderHeight + Math.max(0, viewport.clientHeight - dateHeaderHeight) / 2
+      const currentScrollTop = virtualScrollTopRef.current ?? viewport.scrollTop
+      const verticalAnchorPosition = Math.max(
+        0,
+        currentScrollTop + verticalAnchorOffset - dateHeaderHeight,
+      )
+      const nextScrollTop =
+        dateHeaderHeight +
+        verticalAnchorPosition * (nextVerticalScale / currentVerticalScale) -
+        verticalAnchorOffset
 
-      pixelsPerDayRef.current = nextPixelsPerDay
-      pendingScrollRef.current = { behavior: 'auto', left: nextScrollLeft }
-      virtualScrollLeftRef.current = nextScrollLeft
-      setPixelsPerDay(nextPixelsPerDay)
+      applyView(
+        nextPixelsPerDay,
+        nextScrollLeft,
+        nextVerticalScale,
+        nextScrollTop,
+        'auto',
+      )
     }
 
     viewport.addEventListener('wheel', handleWheel, { passive: false })
 
     return () => viewport.removeEventListener('wheel', handleWheel)
-  }, [getLabelColumnWidth])
+  }, [applyView, getDateHeaderHeight, getLabelColumnWidth])
 
   const handleTodayClick = () => {
-    centerDate(getWorkspaceTodayTimestamp() + MS_PER_DAY / 2, DEFAULT_PIXELS_PER_DAY, 'smooth')
+    const currentToday = getWorkspaceTodayTimestamp()
+
+    setSelectedMonthStart(getMonthStart(currentToday))
+    setIsMonthMenuOpen(false)
+    centerDate(currentToday + MS_PER_DAY / 2, DEFAULT_PIXELS_PER_DAY, 'smooth')
   }
 
-  const handleMonthClick = () => {
-    const currentDate = new Date(getWorkspaceTodayTimestamp())
-    const monthStart = Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), 1)
-    const nextMonth = Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth() + 1, 1)
+  const handleMonthSelect = (month: TimelineMonthOption) => {
+    setSelectedMonthStart(month.start)
+    setIsMonthMenuOpen(false)
+    centerDate(month.start + (month.end - month.start) / 2, DEFAULT_PIXELS_PER_DAY, 'smooth')
+    monthButtonRef.current?.focus()
+  }
 
-    centerDate(monthStart + (nextMonth - monthStart) / 2, DEFAULT_PIXELS_PER_DAY, 'smooth')
+  const handleGroupVisibilityChange = (nodeId: number, isVisible: boolean) => {
+    setHiddenGroupIds((currentHiddenGroupIds) => {
+      const nextHiddenGroupIds = new Set(currentHiddenGroupIds)
+
+      if (isVisible) {
+        nextHiddenGroupIds.delete(nodeId)
+      } else {
+        nextHiddenGroupIds.add(nodeId)
+      }
+
+      return nextHiddenGroupIds
+    })
   }
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -430,6 +633,11 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
   const canvasStyle = {
     '--timeline-grid-step': `${tickStepDays * pixelsPerDay}px`,
     '--timeline-track-width': `${timelineTrackWidth}px`,
+    '--timeline-group-row-height': `${(2.85 * verticalScale).toFixed(3)}rem`,
+    '--timeline-task-row-height': `${(2.45 * verticalScale).toFixed(3)}rem`,
+    '--timeline-group-padding-y': `${(0.68 * verticalScale).toFixed(3)}rem`,
+    '--timeline-task-padding-y': `${(0.34 * verticalScale).toFixed(3)}rem`,
+    '--timeline-bar-height': `${(1.72 * verticalScale).toFixed(3)}rem`,
   } as CSSProperties
   const todayLeft = ((today + MS_PER_DAY / 2 - range.start) / MS_PER_DAY) * pixelsPerDay
 
@@ -482,13 +690,14 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
                 <b>오늘</b>
               </span>
 
-              {groups.map((group, groupIndex) => (
-                <section
-                  key={group.nodeId}
-                  className={[styles.group, toneClassNames[group.tone]].join(' ')}
-                  style={{ flexGrow: group.entries.length + 1 }}
-                  aria-labelledby={`timeline-group-${group.nodeId}`}
-                >
+              {groups.map((group, groupIndex) =>
+                hiddenGroupIds.has(group.nodeId) ? null : (
+                  <section
+                    key={group.nodeId}
+                    className={[styles.group, toneClassNames[group.tone]].join(' ')}
+                    style={{ flexGrow: group.entries.length + 1 }}
+                    aria-labelledby={`timeline-group-${group.nodeId}`}
+                  >
                   <div className={styles.groupHeader}>
                     <div className={[styles.groupLabel, styles.stickyLabel].join(' ')}>
                       <span className={styles.groupChevron} aria-hidden="true">
@@ -525,32 +734,54 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
                             to={`/work-items/${entry.item.workItemId}`}
                             className={styles.timelineBar}
                             style={{ left, width }}
-                            aria-label={`${entry.item.title}, ${formatWorkspaceShortDate(entry.item.startDate)}부터 ${formatWorkspaceShortDate(entry.item.dueDate)}까지`}
+                            aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}`}
                           >
-                            <span>{`${formatWorkspaceShortDate(entry.item.startDate)} ~ ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>
+                            <span>{`${entry.item.title} · ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>
                           </Link>
                         </div>
                       </div>
                     )
                   })}
-                </section>
-              ))}
+                  </section>
+                ),
+              )}
             </div>
           </div>
         </div>
       )}
 
       <footer className={styles.footer}>
-        <div className={styles.legend} aria-label="타임라인 그룹 색상">
-          {groups.map((group) => (
-            <span key={group.nodeId} className={toneClassNames[group.tone]}>
-              <span className={styles.legendCheck} aria-hidden="true">
-                <Icon name="checkSquare" size={16} />
-              </span>
-              <i aria-hidden="true" />
-              <strong>{group.name}</strong>
-            </span>
-          ))}
+        <div className={styles.legend} aria-label="타임라인 카테고리 표시">
+          {groups.map((group) => {
+            const isVisible = !hiddenGroupIds.has(group.nodeId)
+
+            return (
+              <label
+                key={group.nodeId}
+                className={[styles.legendItem, toneClassNames[group.tone]].join(' ')}
+              >
+                <input
+                  type="checkbox"
+                  className={styles.legendCheckboxInput}
+                  checked={isVisible}
+                  onChange={(event) =>
+                    handleGroupVisibilityChange(group.nodeId, event.currentTarget.checked)
+                  }
+                />
+                <span
+                  className={[
+                    styles.legendCheck,
+                    isVisible ? styles.legendCheckSelected : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  aria-hidden="true"
+                />
+                <i aria-hidden="true" />
+                <strong>{group.name}</strong>
+              </label>
+            )
+          })}
         </div>
 
         <div className={styles.controls}>
@@ -562,15 +793,70 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
           >
             오늘
           </button>
-          <button
-            type="button"
-            className={styles.controlButton}
-            onClick={handleMonthClick}
-            disabled={entries.length === 0}
-          >
-            월
-            <Icon name="chevronDown" size={13} />
-          </button>
+          <div ref={monthPickerRef} className={styles.monthPicker}>
+            {isMonthMenuOpen && entries.length > 0 ? (
+              <div
+                id="workspace-timeline-month-menu"
+                ref={monthMenuRef}
+                className={styles.monthMenu}
+                role="dialog"
+                aria-label="이동할 월 선택"
+              >
+                {monthGroups.map((monthGroup) => (
+                  <section key={monthGroup.year} className={styles.monthYearGroup}>
+                    <strong className={styles.monthYearLabel}>{monthGroup.year}년</strong>
+                    <div className={styles.monthGrid}>
+                      {monthGroup.months.map((month) => {
+                        const isSelected = month.start === selectedMonthStart
+
+                        return (
+                          <button
+                            key={month.start}
+                            type="button"
+                            className={[
+                              styles.monthOption,
+                              isSelected ? styles.monthOptionSelected : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ')}
+                            aria-label={`${monthGroup.year}년 ${month.month}월로 이동`}
+                            aria-pressed={isSelected}
+                            onClick={() => handleMonthSelect(month)}
+                          >
+                            {month.month}월
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : null}
+
+            <button
+              ref={monthButtonRef}
+              type="button"
+              className={styles.controlButton}
+              aria-controls="workspace-timeline-month-menu"
+              aria-expanded={isMonthMenuOpen}
+              aria-haspopup="dialog"
+              onClick={() => setIsMonthMenuOpen((isOpen) => !isOpen)}
+              disabled={entries.length === 0}
+            >
+              월
+              <span
+                className={[
+                  styles.monthChevron,
+                  isMonthMenuOpen ? styles.monthChevronOpen : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                aria-hidden="true"
+              >
+                <Icon name="chevronDown" size={13} />
+              </span>
+            </button>
+          </div>
         </div>
       </footer>
     </section>

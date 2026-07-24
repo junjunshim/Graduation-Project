@@ -59,11 +59,87 @@
 }
 
 .controlButton:focus-visible,
+.monthOption:focus-visible,
 .viewport:focus-visible,
 .taskLabel:focus-visible,
 .timelineBar:focus-visible {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
+}
+
+.monthPicker {
+  position: relative;
+  display: inline-flex;
+}
+
+.monthMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.55rem);
+  z-index: 20;
+  width: min(15rem, calc(100vw - 2rem));
+  max-height: min(18rem, 45vh);
+  overflow-y: auto;
+  padding: 0.65rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
+  scrollbar-color: var(--line-strong) var(--surface-panel);
+  scrollbar-width: thin;
+}
+
+.monthYearGroup + .monthYearGroup {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line-default);
+}
+
+.monthYearLabel {
+  display: block;
+  margin-bottom: 0.45rem;
+  padding: 0 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.monthGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.monthOption {
+  min-height: 2rem;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.monthOption:hover {
+  border-color: var(--line-strong);
+  color: var(--text-primary);
+}
+
+.monthOptionSelected {
+  border-color: var(--line-selected);
+  color: var(--accent-blue);
+  font-weight: 800;
+}
+
+.monthChevron {
+  display: inline-flex;
+  transition: transform 140ms ease;
+}
+
+.monthChevronOpen {
+  transform: rotate(180deg);
 }
 
 .footer {
@@ -91,23 +167,59 @@
   display: none;
 }
 
-.legend > span {
+.legendItem {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.42rem;
   flex: 0 0 auto;
   font-size: 0.72rem;
   font-weight: 800;
+  cursor: pointer;
+  user-select: none;
+}
+
+.legendCheckboxInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .legendCheck {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  border: 1px solid var(--accent-purple);
+  border-radius: var(--radius-xs);
   color: var(--accent-purple);
 }
 
-.legend i,
+.legendCheckSelected {
+  position: relative;
+}
+
+.legendCheckSelected::after {
+  width: 0.24rem;
+  height: 0.48rem;
+  border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0;
+  content: '';
+  transform: translateY(-0.06rem) rotate(45deg);
+}
+
+.legendCheckboxInput:focus-visible + .legendCheck {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.legendItem i,
 .groupLabel > i {
   display: inline-block;
   width: 0.62rem;
@@ -118,7 +230,7 @@
   background: var(--timeline-bar-soft);
 }
 
-.legend strong {
+.legendItem strong {
   max-width: 9.5rem;
   overflow: hidden;
   color: var(--text-primary);
@@ -324,8 +436,8 @@
 }
 
 .groupHeader {
-  flex: 0 0 2.85rem;
-  min-height: 2.85rem;
+  flex: 0 0 var(--timeline-group-row-height);
+  min-height: var(--timeline-group-row-height);
   background: var(--surface-panel-subtle);
 }
 
@@ -333,7 +445,7 @@
   display: flex;
   align-items: center;
   gap: 0.52rem;
-  padding: 0.68rem 0.9rem;
+  padding: var(--timeline-group-padding-y) 0.9rem;
   background: var(--surface-panel-subtle);
 }
 
@@ -360,15 +472,15 @@
 }
 
 .taskRow {
-  flex: 1 1 2.45rem;
-  min-height: 2.45rem;
+  flex: 1 1 var(--timeline-task-row-height);
+  min-height: var(--timeline-task-row-height);
 }
 
 .taskLabel {
   display: flex;
   align-items: center;
   gap: 0.58rem;
-  padding: 0.34rem 0.9rem;
+  padding: var(--timeline-task-padding-y) 0.9rem;
   color: inherit;
   transition: background 140ms ease;
 }
@@ -414,7 +526,7 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  height: 1.72rem;
+  height: var(--timeline-bar-height);
   min-width: 1.15rem;
   overflow: hidden;
   padding: 0 0.55rem;

@@ -2,6 +2,8 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
+  max-height: 100%;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line-default);
@@ -23,7 +25,58 @@
   display: inline-flex;
   align-items: center;
   justify-self: end;
-  gap: clamp(1.25rem, 4.5vw, 4rem);
+  gap: clamp(0.6rem, 1.5vw, 1.25rem);
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.zoomControls {
+  display: inline-grid;
+  grid-template-columns: 2.35rem auto 2.35rem;
+  min-height: 2.5rem;
+  overflow: hidden;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+}
+
+.zoomButton,
+.zoomFitButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.4rem;
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.zoomButton {
+  font-size: 1rem;
+}
+
+.zoomFitButton {
+  min-width: 3.35rem;
+  padding-inline: 0.6rem;
+  border-right: 1px solid var(--line-default);
+  border-left: 1px solid var(--line-default);
+}
+
+.zoomButton:hover,
+.zoomFitButton:hover {
+  background: var(--surface-hover);
+}
+
+.zoomButton:disabled,
+.zoomFitButton:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .controlButton {
@@ -59,6 +112,8 @@
 }
 
 .controlButton:focus-visible,
+.zoomButton:focus-visible,
+.zoomFitButton:focus-visible,
 .monthOption:focus-visible,
 .viewport:focus-visible,
 .taskLabel:focus-visible,
@@ -143,11 +198,14 @@
 }
 
 .footer {
+  position: relative;
+  z-index: 10;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1.25rem;
   min-height: 4.85rem;
+  min-width: 0;
   padding: 0.8rem clamp(1rem, 5vw, 5rem) 0.8rem 1rem;
   border-top: 1px solid var(--line-default);
   background: var(--surface-panel);
@@ -243,20 +301,37 @@
   --timeline-label-width: clamp(12.5rem, 18vw, 14rem);
   position: relative;
   height: 100%;
+  max-height: 100%;
   min-height: 0;
   min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: auto;
   background: var(--surface-panel);
   cursor: grab;
   scrollbar-color: var(--line-strong) var(--surface-panel-muted);
-  scrollbar-width: thin;
+  scrollbar-width: none !important;
   touch-action: pan-y;
 }
 
 .viewport::-webkit-scrollbar {
-  width: 0.62rem;
-  height: 0.62rem;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.viewport::-webkit-scrollbar:vertical {
+  display: none !important;
+  width: 0 !important;
+}
+
+.viewport::-webkit-scrollbar:horizontal {
+  display: none !important;
+  height: 0 !important;
+}
+
+.viewport::-webkit-scrollbar-corner {
+  display: none !important;
 }
 
 .viewport::-webkit-scrollbar-track {
@@ -275,6 +350,17 @@
 }
 
 .canvas {
+  --timeline-date-header-height: 4.6rem;
+  --timeline-group-row-height: 2.85rem;
+  --timeline-task-row-height: 2.45rem;
+  --timeline-group-padding-y: 0.68rem;
+  --timeline-task-padding-y: 0.34rem;
+  --timeline-bar-height: 1.72rem;
+  --timeline-group-font-size: 0.8rem;
+  --timeline-task-font-size: 0.76rem;
+  --timeline-bar-font-size: 0.7rem;
+  --timeline-count-font-size: 0.67rem;
+  --timeline-count-height: 1.15rem;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -294,7 +380,7 @@
 .dateHeader {
   position: sticky;
   top: 0;
-  z-index: 8;
+  z-index: 20;
   display: grid;
   flex: 0 0 auto;
   grid-template-columns: var(--timeline-label-width) var(--timeline-track-width);
@@ -313,7 +399,7 @@
 }
 
 .headerLabel {
-  z-index: 10;
+  z-index: 21;
   display: flex;
   align-items: center;
   padding: 0 0.9rem;
@@ -399,7 +485,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  z-index: 3;
+  z-index: 7;
   width: 1px;
   background: repeating-linear-gradient(
     to bottom,
@@ -411,16 +497,25 @@
   pointer-events: none;
 }
 
-.todayLine b {
+.todayLabelTrack {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 7;
+  width: 1px;
+  pointer-events: none;
+}
+
+.todayLabelTrack b {
   position: sticky;
-  top: 0.35rem;
+  top: calc(var(--timeline-date-header-height) + 0.42rem);
   display: inline-flex;
   width: max-content;
-  padding: 0.18rem 0.35rem;
+  padding: 0.2rem 0.38rem;
   border-radius: var(--radius-xs);
   background: var(--text-primary);
   color: var(--text-inverse);
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   font-weight: 800;
   line-height: 1;
   transform: translateX(-50%);
@@ -436,17 +531,38 @@
 }
 
 .groupHeader {
+  position: sticky;
+  top: var(--timeline-date-header-height);
+  z-index: 8;
   flex: 0 0 var(--timeline-group-row-height);
   min-height: var(--timeline-group-row-height);
-  background: var(--surface-panel-subtle);
+  background: transparent;
 }
 
 .groupLabel {
   display: flex;
   align-items: center;
   gap: 0.52rem;
+  border-top: 0;
+  border-bottom: 0;
+  border-left: 0;
   padding: var(--timeline-group-padding-y) 0.9rem;
   background: var(--surface-panel-subtle);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.groupLabel:hover {
+  background: var(--surface-hover);
+}
+
+.groupLabel:focus-visible {
+  z-index: 7;
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
 }
 
 .groupChevron {
@@ -455,20 +571,53 @@
   justify-content: center;
   flex: 0 0 auto;
   color: var(--text-secondary);
+  transition: transform 140ms ease;
+}
+
+.groupChevronCollapsed {
+  transform: rotate(-90deg);
 }
 
 .groupLabel strong {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 0.8rem;
+  font-size: var(--timeline-group-font-size);
   font-weight: 800;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.groupCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  min-height: var(--timeline-count-height);
+  flex: 0 0 auto;
+  padding: 0 0.32rem;
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  color: var(--text-muted);
+  font-size: var(--timeline-count-font-size);
+  font-weight: 800;
+  line-height: 1;
+}
+
 .groupHeader .gridTrack {
-  background-color: var(--surface-panel-subtle);
+  background-color: transparent;
+}
+
+.groupEntries {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.groupEntries[hidden] {
+  display: none;
 }
 
 .taskRow {
@@ -477,9 +626,11 @@
 }
 
 .taskLabel {
+  z-index: 8;
   display: flex;
   align-items: center;
   gap: 0.58rem;
+  overflow: hidden;
   padding: var(--timeline-task-padding-y) 0.9rem;
   color: inherit;
   transition: background 140ms ease;
@@ -498,10 +649,15 @@
 }
 
 .taskCopy {
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
 }
 
 .taskCopy strong {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -510,8 +666,9 @@
 
 .taskCopy strong {
   color: var(--text-primary);
-  font-size: 0.76rem;
+  font-size: var(--timeline-task-font-size);
   font-weight: 750;
+  line-height: 1.15;
 }
 
 .taskRow .gridTrack {
@@ -548,8 +705,9 @@
 .timelineBar span {
   min-width: 0;
   overflow: hidden;
-  font-size: 0.7rem;
+  font-size: var(--timeline-bar-font-size);
   font-weight: 800;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -616,7 +774,10 @@
   }
 
   .controls {
+    width: 100%;
     gap: 0.6rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .viewport {

@@ -598,7 +598,7 @@ export function WorkspacePage() {
           <section id="workspace-timeline" className={[styles.panel, styles.timelinePanel].join(' ')}>
             <div className={styles.panelHeader}>
               <h3 className={styles.panelTitle}>타임라인</h3>
-              <Link to="/calendar" className={styles.textAction}>
+              <Link to="/workspace?view=timeline" className={styles.textAction}>
                 전체 보기
                 <Icon name="arrowRight" size={14} />
               </Link>

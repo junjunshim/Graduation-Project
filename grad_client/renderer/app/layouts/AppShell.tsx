@@ -79,6 +79,7 @@ export function AppShell() {
     styles.shell,
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
     isSidebarCollapsed ? styles.shellCollapsed : '',
+    isWorkspaceTimelineRoute ? styles.shellTimeline : '',
   ]
     .filter(Boolean)
     .join(' ')

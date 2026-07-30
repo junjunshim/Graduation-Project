@@ -14,6 +14,19 @@
   grid-template-columns: 3.75rem minmax(0, 1fr);
 }
 
+.shellTimeline {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.shellTimeline .workspace {
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
 .titleBarSlot {
   grid-column: 1 / -1;
 }
@@ -413,7 +426,9 @@
 .workspaceBodyTimeline {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  height: 100%;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pageBar {
@@ -530,6 +545,8 @@
 }
 
 .mainTimeline {
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -594,6 +611,20 @@
 }
 
 @media (max-width: 1080px) {
+  .shellTimeline {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .shellTimeline .workspace {
+    overflow: visible;
+  }
+
+  .workspaceBodyTimeline {
+    height: clamp(36rem, 78vh, 48rem);
+  }
+
   .shell,
   .shellCollapsed {
     grid-template-columns: 1fr;

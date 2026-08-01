@@ -283,6 +283,15 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
                   type="button"
                   className={styles.pageButton}
                   disabled={activePage === 1}
+                  onClick={() => setCurrentPage(1)}
+                  aria-label="첫 페이지"
+                >
+                  <Icon name="firstPage" size={14} />
+                </button>
+                <button
+                  type="button"
+                  className={styles.pageButton}
+                  disabled={activePage === 1}
                   onClick={() => setCurrentPage(activePage - 1)}
                   aria-label="이전 페이지"
                 >

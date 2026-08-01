@@ -23,6 +23,7 @@ export type IconName =
   | 'trendingUp'
   | 'lineChart'
   | 'arrowRight'
+  | 'firstPage'
   | 'chevronLeft'
   | 'chevronRight'
   | 'chevronUp'
@@ -186,6 +187,12 @@ const iconPaths: Record<IconName, ReactNode> = {
     </>
   ),
   arrowRight: <path d="M5 12h13M13 6l6 6-6 6" />,
+  firstPage: (
+    <>
+      <path d="M6 5v14" />
+      <path d="M17 6l-6 6 6 6" />
+    </>
+  ),
   chevronLeft: <path d="M15 6l-6 6 6 6" />,
   chevronRight: <path d="M9 6l6 6-6 6" />,
   chevronUp: <path d="M6 15l6-6 6 6" />,

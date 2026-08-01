@@ -68,6 +68,8 @@
 
   --accent-blue-soft: #edf4ff;
   --accent-blue: #2f5fb8;
+  --accent-purple-soft: #f1edff;
+  --accent-purple: #6e56cf;
   --accent-amber-soft: #fcf3d9;
   --accent-amber: #8b6415;
   --accent-green-soft: #edf7ee;
@@ -101,6 +103,8 @@
 
   --accent-blue-soft: rgba(88, 124, 194, 0.18);
   --accent-blue: #93afe8;
+  --accent-purple-soft: rgba(126, 105, 205, 0.22);
+  --accent-purple: #b9a7ff;
   --accent-amber-soft: rgba(138, 104, 24, 0.2);
   --accent-amber: #f0c266;
   --accent-green-soft: rgba(33, 115, 70, 0.22);

@@ -63,8 +63,16 @@ DECLARE
     v_target_user_id users.user_id%TYPE;
     v_personal_node_id organization_nodes.node_id%TYPE;
 BEGIN
+    -- 0. 입력값 널(NULL) 치환 보정
+    IF p_node_id = -1 THEN
+        p_node_id := NULL;
+    END IF;
+    IF p_target_email = '' THEN
+        p_target_email := NULL;
+    END IF;
+
     -- 0. 예외 처리: 둘 다 NULL인 경우 차단
-    IF p_node_id IS NULL AND (p_target_email IS NULL OR p_target_email = '') THEN
+    IF p_node_id IS NULL AND p_target_email IS NULL THEN
         RAISE EXCEPTION '[P0701]At least one query filter (node_id or target_email) must be provided.'
         USING ERRCODE = 'P0701';
     END IF;

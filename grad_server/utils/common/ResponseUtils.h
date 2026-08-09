@@ -35,6 +35,8 @@ enum class DbErrorCode {
     UpdateWorkItemFailed,       // P0604 work item 업데이트 실패
     DeleteWorkItemError,        // P0605 work item 삭제 실패
     DeleteNodeError,            // P0304 노드 삭제 실패
+    InvalidActivityFilter,      // P0701 활동 조회 필터 부적절
+    FetchActivitiesFailed,      // P0702 활동 조회 실패
     Unknown                     // 알 수 없는 에러
 };
 

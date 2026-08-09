@@ -58,6 +58,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
     else if (errMsg.find("P0604") != std::string::npos) return DbErrorCode::UpdateWorkItemFailed;
     else if (errMsg.find("P0605") != std::string::npos) return DbErrorCode::DeleteWorkItemError;
+    else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
+    else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -215,6 +217,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::DeleteWorkItemError:{
             ret["message"] = "work item 삭제에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::InvalidActivityFilter:{
+            ret["message"] = "활동 조회 필터가 유효하지 않습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::FetchActivitiesFailed:{
+            ret["message"] = "활동 조회에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

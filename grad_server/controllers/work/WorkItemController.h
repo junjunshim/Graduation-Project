@@ -17,6 +17,7 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
 
     ADD_METHOD_TO(WorkItemController::createWorkItem, "/api/workItems", Post, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::updateWorkItem, "/api/workItems", Patch, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::deleteWorkItem, "/api/workItems", Delete, "JwtFilter");
     
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -25,5 +26,6 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
 
     void createWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void updateWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void deleteWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 };
 }

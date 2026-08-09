@@ -29,6 +29,7 @@ enum class DbErrorCode {
     IncorrectPassword,          // P0504 비밀번호 틀림
     LoginFailed,                // P0505 로그인 실패
     DeleteUserError,            // P0506 사용자 삭제 실패
+    GetUserProfileFailed,       // P0507 사용자 프로필 조회 실패
     ParentWorkItemNotFound,     // P0601 부모 work item 없음
     CreateWorkItemFailed,       // P0602 work item 생성 실패
     UpdateWorkItemNotFound,     // P0603 업데이트할 work item 없음

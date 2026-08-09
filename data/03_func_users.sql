@@ -157,3 +157,59 @@ BEGIN
         USING ERRCODE = 'P0506';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- UserController::getUserProfile (JSONB dynamic filter)
+CREATE OR REPLACE FUNCTION get_user_profile(
+    p_requester_email users.email%TYPE,
+    p_target_email users.email%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_target_rec RECORD;
+BEGIN
+    -- 1. 요청자 식별
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001] Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 사용자 식별
+    SELECT * INTO v_target_rec FROM users WHERE email = p_target_email AND is_deleted = FALSE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002] Target user does not exist: %', p_target_email
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 본인 vs 타인 분기 반환
+    IF v_requester_id = v_target_rec.user_id THEN
+        -- [본인 조회]: 비밀번호를 제외한 유저의 모든 상세 정보 노출 (향후 테이블 속성이 늘어날 때 여기에만 추가해주면 끝)
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'USER',
+            'id', v_target_rec.user_id,
+            'email', v_target_rec.email,
+            'name', v_target_rec.name,
+            'personal_node_id', v_target_rec.personal_node_id,
+            'created_at', v_target_rec.created_at,
+            'updated_at', v_target_rec.updated_at
+        );
+    ELSE
+        -- [남의 정보 조회]: 개인 정보 보호를 위해 제한적으로 이메일과 이름만 반환
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'USER',
+            'email', v_target_rec.email,
+            'name', v_target_rec.name
+        );
+    END IF;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0507] Error occurred while fetching user profile: %', SQLERRM
+        USING ERRCODE = 'P0507';
+END;
+$$ LANGUAGE plpgsql;

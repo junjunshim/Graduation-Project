@@ -51,3 +51,75 @@ FOR EACH ROW EXECUTE FUNCTION log_role_authorities_history();
 CREATE TRIGGER trg_history_work_items
 AFTER INSERT OR UPDATE OR DELETE ON work_items
 FOR EACH ROW EXECUTE FUNCTION log_work_items_history();
+
+
+-- 4. work_items 소프트 딜리트 연쇄(Cascade) 트리거 정의
+CREATE OR REPLACE FUNCTION handle_work_item_soft_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- 1) 소프트 딜리트 연쇄 반응 (is_deleted: FALSE -> TRUE)
+    IF NEW.is_deleted = TRUE AND OLD.is_deleted = FALSE THEN
+        UPDATE work_items
+        SET is_deleted = TRUE
+        WHERE parent_work_item_id = NEW.work_item_id
+          AND is_deleted = FALSE;
+
+    -- 2) 복구 연쇄 반응 (is_deleted: TRUE -> FALSE)
+    ELSIF NEW.is_deleted = FALSE AND OLD.is_deleted = TRUE THEN
+        UPDATE work_items
+        SET is_deleted = FALSE
+        WHERE parent_work_item_id = NEW.work_item_id
+          AND is_deleted = TRUE;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_work_item_soft_delete ON work_items;
+CREATE TRIGGER trg_work_item_soft_delete
+AFTER UPDATE OF is_deleted ON work_items
+FOR EACH ROW EXECUTE FUNCTION handle_work_item_soft_delete();
+
+
+-- 5. organization_nodes 소프트 딜리트 연쇄(Cascade) 트리거 정의
+CREATE OR REPLACE FUNCTION handle_node_soft_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- 1) 소프트 딜리트 연쇄 반응 (is_deleted: FALSE -> TRUE)
+    IF NEW.is_deleted = TRUE AND OLD.is_deleted = FALSE THEN
+        -- 소속 업무들 연쇄 소프트 딜리트
+        UPDATE work_items
+        SET is_deleted = TRUE
+        WHERE owner_node_id = NEW.node_id
+          AND is_deleted = FALSE;
+
+        -- 하위 자식 노드들 연쇄 소프트 딜리트
+        UPDATE organization_nodes
+        SET is_deleted = TRUE
+        WHERE parent_node_id = NEW.node_id
+          AND is_deleted = FALSE;
+
+    -- 2) 복구 연쇄 반응 (is_deleted: TRUE -> FALSE)
+    ELSIF NEW.is_deleted = FALSE AND OLD.is_deleted = TRUE THEN
+        -- 소속 업무들 연쇄 복구
+        UPDATE work_items
+        SET is_deleted = FALSE
+        WHERE owner_node_id = NEW.node_id
+          AND is_deleted = TRUE;
+
+        -- 하위 자식 노드들 연쇄 복구
+        UPDATE organization_nodes
+        SET is_deleted = FALSE
+        WHERE parent_node_id = NEW.node_id
+          AND is_deleted = TRUE;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_node_soft_delete ON organization_nodes;
+CREATE TRIGGER trg_node_soft_delete
+AFTER UPDATE OF is_deleted ON organization_nodes
+FOR EACH ROW EXECUTE FUNCTION handle_node_soft_delete();

@@ -12,10 +12,12 @@ CREATE TABLE IF NOT EXISTS organization_nodes (
     parent_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE SET NULL,
     name VARCHAR(100) NOT NULL,
     path INTEGER[] NOT NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_nodes_path ON organization_nodes USING GIN (path);
+CREATE INDEX idx_nodes_is_deleted ON organization_nodes(is_deleted);
 
 
 -- 2. users - 서비스 이용자 정보
@@ -73,8 +75,8 @@ CREATE TABLE IF NOT EXISTS role_defaults (
 -- 5. 업무와 프로젝트 데이터
 CREATE TABLE IF NOT EXISTS work_items (
     work_item_id VARCHAR(50) PRIMARY KEY,
-    owner_node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
-    parent_work_item_id VARCHAR(50) REFERENCES work_items(work_item_id) ON DELETE CASCADE,
+    owner_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE SET NULL,
+    parent_work_item_id VARCHAR(50) REFERENCES work_items(work_item_id) ON DELETE SET NULL,
     owner_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     title VARCHAR(200) NOT NULL,
     description TEXT,
@@ -83,6 +85,7 @@ CREATE TABLE IF NOT EXISTS work_items (
     priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
     weight INTEGER NOT NULL DEFAULT 1 CHECK (weight >= 0),
     progress INTEGER NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     start_date DATE,
     due_date DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -92,6 +95,7 @@ CREATE TABLE IF NOT EXISTS work_items (
 CREATE INDEX idx_work_items_node_id ON work_items(owner_node_id);
 CREATE INDEX idx_work_items_user_id ON work_items(owner_user_id);
 CREATE INDEX idx_work_items_parent_id ON work_items(parent_work_item_id);
+CREATE INDEX idx_work_items_is_deleted ON work_items(is_deleted);
 
 
 -- 6. user의 refresh token
@@ -126,6 +130,7 @@ CREATE TABLE organization_node_histories (
     parent_node_id INTEGER,
     name VARCHAR(100) NOT NULL,
     path INTEGER[] NOT NULL,
+    is_deleted BOOLEAN NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     change_status history_status NOT NULL,
@@ -178,6 +183,7 @@ CREATE TABLE work_item_histories (
     priority INTEGER NOT NULL,
     weight INTEGER NOT NULL,
     progress INTEGER NOT NULL,
+    is_deleted BOOLEAN NOT NULL,
     start_date DATE,
     due_date DATE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -188,3 +194,22 @@ CREATE TABLE work_item_histories (
 CREATE INDEX idx_history_work_item_id ON work_item_histories(work_item_id);
 CREATE INDEX idx_history_owner_node_id ON work_item_histories(owner_node_id);
 CREATE INDEX idx_history_owner_user_id ON work_item_histories(owner_user_id);
+
+
+-- 8. 최근 활동 로그 테이블 (클라이언트 타임라인 피드용)
+CREATE TABLE IF NOT EXISTS activity_logs (
+    log_id SERIAL PRIMARY KEY,
+    node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
+    actor_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    actor_name VARCHAR(100) NOT NULL,    -- 수행자 이름 캐싱 (김철수 등)
+    entity_type VARCHAR(20) NOT NULL,     -- 'NODE', 'WORK_ITEM', 'ROLE', 'AUTHORITY', 'COMMENT'
+    entity_id VARCHAR(50) NOT NULL,       -- 객체 고유 ID
+    target_name VARCHAR(200) NOT NULL,    -- 대상 객체 대표 명칭 캐싱 (업무 제목, 노드 명 등)
+    action_type VARCHAR(20) NOT NULL,     -- 'inserted', 'updated', 'deleted', 'restored'
+    field_name VARCHAR(50),               -- 변경된 필드명 (예: 'status', 'title', 'role' 등)
+    old_value TEXT,                      -- 이전 값
+    new_value TEXT,                      -- 변경된 값
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_activity_logs_node_id ON activity_logs(node_id);
+CREATE INDEX idx_activity_logs_created_at ON activity_logs(created_at DESC);

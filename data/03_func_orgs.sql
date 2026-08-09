@@ -263,3 +263,63 @@ BEGIN
         USING ERRCODE = 'P0303';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- OrgController::deleteNode (Soft Delete)
+CREATE OR REPLACE FUNCTION delete_node(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_node_name organization_nodes.name%TYPE;
+BEGIN
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 노드 존재 여부 확인 및 정보 수집
+    SELECT name INTO v_node_name FROM organization_nodes WHERE node_id = p_node_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]Target node does not exist or already deleted: %', p_node_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 권한 체크: 요청자가 NODE_INFO_CHANGE 권한을 가졌는지 검증 (check_authority_with_override 헬퍼 함수 활용)
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_INFO_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions to delete node. NODE_INFO_CHANGE authority required. requester: %', p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 노드 소프트 딜리트 처리 (트리거 작동으로 하위 자식 노드 및 소속 업무 연쇄 삭제됨)
+    UPDATE organization_nodes
+    SET is_deleted = TRUE
+    WHERE node_id = p_node_id;
+
+    -- 5. 최근 활동 피드 로깅
+    PERFORM log_activity(p_node_id, p_requester_email, 'NODE', p_node_id::VARCHAR, v_node_name, 'deleted');
+
+    -- 6. 결과 반환 (클라이언트 싱크용)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'status', 'deleted',
+        'updated_at', n.updated_at
+    )
+    FROM organization_nodes n
+    WHERE n.node_id = p_node_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0304]Error deleting node: %, requester: % (REASON: %)', p_node_id, p_requester_email, SQLERRM
+        USING ERRCODE = 'P0304';
+END;
+$$ LANGUAGE plpgsql;

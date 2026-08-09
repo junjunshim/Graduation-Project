@@ -277,3 +277,85 @@ BEGIN
         USING ERRCODE = 'P0604';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- WorkItemController::deleteWorkItem (Soft Delete)
+CREATE OR REPLACE FUNCTION delete_work_item(
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_title work_items.title%TYPE;
+    v_hidden work_items.hidden%TYPE;
+BEGIN
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 업무 존재 여부 확인 및 정보 수집
+    SELECT owner_node_id, owner_user_id, title, hidden 
+    INTO v_owner_node_id, v_owner_user_id, v_title, v_hidden 
+    FROM work_items 
+    WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0603]Work item does not exist or already deleted: %', p_work_item_id
+        USING ERRCODE = 'P0603';
+    END IF;
+
+    -- 3. 권한 체크 (1) 숨김 속성인 경우 처리 권한 검증
+    IF v_hidden THEN
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_HIDDEN_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_HIDDEN_CHANGE permission on node: %', v_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 3. 권한 체크 (2) 타인의 업무인 경우 처리 권한 검증
+    IF v_owner_user_id <> v_requester_id THEN
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_OTHERS_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_OTHERS_CHANGE permission on node: %', v_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+    -- 3. 권한 체크 (3) 본인 업무인 경우 처리 권한 검증
+    ELSE
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', v_owner_node_id
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 4. 업무 소프트 딜리트 처리 (트리거가 동작하여 하위 모든 자식 업무들도 자동 소프트 딜리트됨)
+    UPDATE work_items
+    SET is_deleted = TRUE
+    WHERE work_item_id = p_work_item_id;
+
+    -- 5. 최근 활동 피드 로깅
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, v_title, 'deleted');
+
+    -- 6. 결과 반환 (클라이언트 싱크용)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', w.work_item_id,
+        'status', 'deleted',
+        'updated_at', w.updated_at
+    )
+    FROM work_items w
+    WHERE w.work_item_id = p_work_item_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0603' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0605]Failed to delete work item: %, (REASON: %)', p_work_item_id, SQLERRM
+        USING ERRCODE = 'P0605';
+END;
+$$ LANGUAGE plpgsql;

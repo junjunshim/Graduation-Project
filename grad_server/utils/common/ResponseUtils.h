@@ -38,6 +38,7 @@ enum class DbErrorCode {
     DeleteNodeError,            // P0304 노드 삭제 실패
     InvalidActivityFilter,      // P0701 활동 조회 필터 부적절
     FetchActivitiesFailed,      // P0702 활동 조회 실패
+    UpdateUserFailed,           // P0508 사용자 정보 수정 실패
     Unknown                     // 알 수 없는 에러
 };
 

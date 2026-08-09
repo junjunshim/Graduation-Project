@@ -54,6 +54,7 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0505") != std::string::npos) return DbErrorCode::LoginFailed;
     else if (errMsg.find("P0506") != std::string::npos) return DbErrorCode::DeleteUserError;
     else if (errMsg.find("P0507") != std::string::npos) return DbErrorCode::GetUserProfileFailed;
+    else if (errMsg.find("P0508") != std::string::npos) return DbErrorCode::UpdateUserFailed;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
@@ -218,6 +219,11 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::GetUserProfileFailed:{
             ret["message"] = "사용자 정보 조회에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::UpdateUserFailed:{
+            ret["message"] = "사용자 정보 수정에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

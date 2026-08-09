@@ -25,10 +25,16 @@ enum class DbErrorCode {
     RoleChangeFailed,           // P0406 사용자 역할 변경 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
+    EmailNotFound,              // P0503 이메일 찾을 수 없음
+    IncorrectPassword,          // P0504 비밀번호 틀림
+    LoginFailed,                // P0505 로그인 실패
+    DeleteUserError,            // P0506 사용자 삭제 실패
     ParentWorkItemNotFound,     // P0601 부모 work item 없음
     CreateWorkItemFailed,       // P0602 work item 생성 실패
     UpdateWorkItemNotFound,     // P0603 업데이트할 work item 없음
     UpdateWorkItemFailed,       // P0604 work item 업데이트 실패
+    DeleteWorkItemError,        // P0605 work item 삭제 실패
+    DeleteNodeError,            // P0304 노드 삭제 실패
     Unknown                     // 알 수 없는 에러
 };
 

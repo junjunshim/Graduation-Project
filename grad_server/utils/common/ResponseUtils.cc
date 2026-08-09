@@ -40,6 +40,7 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0301") != std::string::npos) return DbErrorCode::CreateTopNodeError;
     else if (errMsg.find("P0302") != std::string::npos) return DbErrorCode::CreateSubNodeError;
     else if (errMsg.find("P0303") != std::string::npos) return DbErrorCode::UpdateNodeError;
+    else if (errMsg.find("P0304") != std::string::npos) return DbErrorCode::DeleteNodeError;
     else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
     else if (errMsg.find("P0403") != std::string::npos) return DbErrorCode::TargetHasNoRole;
@@ -48,10 +49,15 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0406") != std::string::npos) return DbErrorCode::RoleChangeFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
+    else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
+    else if (errMsg.find("P0504") != std::string::npos) return DbErrorCode::IncorrectPassword;
+    else if (errMsg.find("P0505") != std::string::npos) return DbErrorCode::LoginFailed;
+    else if (errMsg.find("P0506") != std::string::npos) return DbErrorCode::DeleteUserError;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
     else if (errMsg.find("P0604") != std::string::npos) return DbErrorCode::UpdateWorkItemFailed;
+    else if (errMsg.find("P0605") != std::string::npos) return DbErrorCode::DeleteWorkItemError;
     else return DbErrorCode::Unknown;
 }
 
@@ -179,6 +185,36 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::UpdateWorkItemFailed:{
             ret["message"] = "work item 업데이트에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::DeleteNodeError:{
+            ret["message"] = "노드 삭제에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::EmailNotFound:{
+            ret["message"] = "이메일을 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::IncorrectPassword:{
+            ret["message"] = "비밀번호가 일치하지 않습니다.";
+            ret["http_code"] = drogon::k401Unauthorized;
+            break;
+        }
+        case DbErrorCode::LoginFailed:{
+            ret["message"] = "로그인 처리에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::DeleteUserError:{
+            ret["message"] = "사용자 삭제에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::DeleteWorkItemError:{
+            ret["message"] = "work item 삭제에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

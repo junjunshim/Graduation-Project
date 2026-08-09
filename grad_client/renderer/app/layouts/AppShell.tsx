@@ -4,7 +4,7 @@ import { WindowTitleBar } from '../chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../chrome/windowControls'
 import { useBodyScrollSurface } from '../chrome/useBodyScrollSurface'
 import { getCurrentUser, signOut } from '../../features/auth/api'
-import { getWorkspaceSummary } from '../../features/workspace/data/orgService'
+import { getOrgSnapshot } from '../../features/workspace/data/orgService'
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
 import { ShellSidebar } from './ShellSidebar'
 import { ShellTopActions, type ShellTopActionsHeading } from './ShellTopActions'
@@ -32,7 +32,8 @@ function readInitialSidebarCollapsed() {
 export function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
-  const currentUser = getCurrentUser()
+  const snapshot = getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
   const hasCustomTitleBar = hasCustomWindowControls()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
 
@@ -50,8 +51,8 @@ export function AppShell() {
     return null
   }
 
-  const summary = getWorkspaceSummary(currentUser.userId)
-  const overview = getWorkspaceOverview(currentUser.userId)
+  const overview = getWorkspaceOverview(currentUser.userId, snapshot)
+  const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext)
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'

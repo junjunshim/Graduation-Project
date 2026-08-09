@@ -19,7 +19,9 @@ export function useOrgManagement(currentUser: UserRecord | null) {
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
 
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
-  const [overview, setOverview] = useState(() => (currentUser ? getWorkspaceOverview(currentUser.userId) : null))
+  const [overview, setOverview] = useState(() =>
+    currentUser ? getWorkspaceOverview(currentUser.userId, snapshot) : null,
+  )
 
   const visibleOrgNodes = useMemo(() => {
     const orgNodes = overview?.visibleNodes.filter((node) => node.nodeType !== 'USER') ?? []
@@ -30,6 +32,7 @@ export function useOrgManagement(currentUser: UserRecord | null) {
     }
 
     const matchedIds = new Set<number>()
+    const orgNodeIds = new Set(orgNodes.map((node) => node.id))
 
     orgNodes.forEach((node) => {
       if (!node.name.toLowerCase().includes(query) && !node.nodeType.toLowerCase().includes(query)) {
@@ -37,7 +40,7 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       }
 
       node.path.forEach((pathNodeId) => {
-        if (orgNodes.some((candidate) => candidate.id === pathNodeId)) {
+        if (orgNodeIds.has(pathNodeId)) {
           matchedIds.add(pathNodeId)
         }
       })
@@ -83,8 +86,14 @@ export function useOrgManagement(currentUser: UserRecord | null) {
     return !visibleOrgNodes.some((candidate) => candidate.id === node.parentNodeId)
   })
 
-  const selectedDetail =
-    currentUser && selectedNodeId ? getSelectedNodeDetail(selectedNodeId, currentUser.userId) : null
+  const currentUserId = currentUser?.userId
+  const selectedDetail = useMemo(
+    () =>
+      currentUserId && selectedNodeId
+        ? getSelectedNodeDetail(selectedNodeId, currentUserId, snapshot)
+        : null,
+    [currentUserId, selectedNodeId, snapshot],
+  )
   const selectedDetailNodeId = selectedDetail?.node.id
   const selectedDetailNodeName = selectedDetail?.node.name ?? ''
   const selectedDetailNodeType = selectedDetail?.node.nodeType
@@ -119,8 +128,9 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       return
     }
 
-    setSnapshot(getOrgSnapshot())
-    setOverview(getWorkspaceOverview(currentUser.userId))
+    const nextSnapshot = getOrgSnapshot()
+    setSnapshot(nextSnapshot)
+    setOverview(getWorkspaceOverview(currentUser.userId, nextSnapshot))
   }
 
   async function handleSubNodeSubmit(event: FormEvent<HTMLFormElement>) {

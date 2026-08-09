@@ -2,6 +2,7 @@ import type {
   OrganizationNodeRecord,
   RoleMember,
   SelectedNodeDetail,
+  WorkspaceSnapshot,
 } from '../model/types'
 import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
@@ -40,9 +41,15 @@ function toRoleMembers(snapshot: ReturnType<typeof getOrgSnapshot>, nodeId: numb
     .sort((left, right) => left.name.localeCompare(right.name, 'ko'))
 }
 
-export function getSelectedNodeDetail(nodeId: number, userId?: string): SelectedNodeDetail | null {
-  const snapshot = getOrgSnapshot()
-  const accessibleNodeIds = userId ? getAccessibleNodeIdsForUser(userId) : snapshot.nodes.map((node) => node.id)
+export function getSelectedNodeDetail(
+  nodeId: number,
+  userId?: string,
+  providedSnapshot?: WorkspaceSnapshot,
+): SelectedNodeDetail | null {
+  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const accessibleNodeIds = userId
+    ? getAccessibleNodeIdsForUser(userId, snapshot)
+    : snapshot.nodes.map((node) => node.id)
 
   if (!accessibleNodeIds.includes(nodeId)) {
     return null

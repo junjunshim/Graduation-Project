@@ -18,7 +18,8 @@ import {
 import styles from './DashboardPage.module.css'
 
 export function DashboardPage() {
-  const currentUser = getCurrentUser()
+  const snapshot = getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
   const [boardPreviewHeight, setBoardPreviewHeight] = useState<number>()
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0)
   const handleBoardPreviewHeightChange = useCallback((height: number) => {
@@ -32,8 +33,8 @@ export function DashboardPage() {
     return null
   }
 
-  const overview = getWorkspaceOverview(currentUser.userId)
-  const users = getOrgSnapshot().users
+  const overview = getWorkspaceOverview(currentUser.userId, snapshot)
+  const users = snapshot.users
   const activityItems = [...overview.visibleWorkItems]
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .slice(0, 5)

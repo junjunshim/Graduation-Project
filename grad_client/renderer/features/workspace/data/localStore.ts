@@ -49,8 +49,8 @@ export function generateUserId(db: WorkspaceDatabase) {
   return `U-${getMaxNumericSuffix(db.users.map((user) => user.userId), 'U-') + 1}`
 }
 
-export function generateWorkItemId(db: WorkspaceDatabase) {
-  return `WI-${getMaxNumericSuffix(db.workItems.map((item) => item.workItemId), 'WI-') + 1}`
+export function generateWorkItemId(workspace: Pick<WorkspaceDatabase, 'workItems'>) {
+  return `WI-${getMaxNumericSuffix(workspace.workItems.map((item) => item.workItemId), 'WI-') + 1}`
 }
 
 function computePath(nodeId: number, nodes: OrganizationNodeRecord[], trail = new Set<number>()): number[] {

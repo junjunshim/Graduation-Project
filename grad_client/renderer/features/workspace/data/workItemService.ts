@@ -1,10 +1,15 @@
-import type { ClaimWorkItemRequest, CreateWorkItemRequest, UpdateWorkItemRequest } from '../model/types'
+import type {
+  ClaimWorkItemRequest,
+  CreateWorkItemRequest,
+  UpdateWorkItemRequest,
+  WorkspaceDatabase,
+} from '../model/types'
 import { delay, generateWorkItemId, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
 import { createWorkItemOnServer, updateWorkItemOnServer } from './serverWorkspace'
 import { isServerDataSource } from './workspaceMode'
 
-export function getNextGeneratedWorkItemId() {
-  return generateWorkItemId(readWorkspaceDb())
+export function getNextGeneratedWorkItemId(workspace?: Pick<WorkspaceDatabase, 'workItems'>) {
+  return generateWorkItemId(workspace ?? readWorkspaceDb())
 }
 
 export async function createWorkItem(payload: CreateWorkItemRequest) {

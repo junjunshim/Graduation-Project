@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import type { WorkItemStatus } from '../../workspace/model/types'
 
@@ -32,7 +32,11 @@ const initialForm: WorkItemCreateFormState = {
 
 export function useWorkItemCreateForm(userId?: string) {
   const [form, setForm] = useState<WorkItemCreateFormState>(initialForm)
-  const composer = getWorkItemComposerContext(userId, form.ownerNodeId ? Number(form.ownerNodeId) : undefined)
+  const selectedNodeId = form.ownerNodeId ? Number(form.ownerNodeId) : undefined
+  const composer = useMemo(
+    () => getWorkItemComposerContext(userId, selectedNodeId),
+    [selectedNodeId, userId],
+  )
 
   useEffect(() => {
     if (!composer) {

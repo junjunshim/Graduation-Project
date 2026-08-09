@@ -1,14 +1,22 @@
-import type { WorkItemComposerContext } from '../model/types'
+import type { WorkItemComposerContext, WorkspaceSnapshot } from '../model/types'
 import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService'
 import { getNextGeneratedWorkItemId } from '../data/workItemService'
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 
-export function getWorkItemComposerContext(userId = getCurrentUser()?.userId, nodeId?: number): WorkItemComposerContext {
-  const currentUser = getCurrentUser()
-  const snapshot = getOrgSnapshot()
-  const accessibleNodeIds = userId ? getAccessibleNodeIdsForUser(userId) : snapshot.nodes.map((node) => node.id)
-  const availableNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIds.includes(node.id)))
+export function getWorkItemComposerContext(
+  userId?: string,
+  nodeId?: number,
+  providedSnapshot?: WorkspaceSnapshot,
+): WorkItemComposerContext {
+  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
+  const resolvedUserId = userId ?? currentUser?.userId
+  const accessibleNodeIds = resolvedUserId
+    ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot)
+    : snapshot.nodes.map((node) => node.id)
+  const accessibleNodeIdSet = new Set(accessibleNodeIds)
+  const availableNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id)))
 
   const selectedNode =
     availableNodes.find((node) => node.id === nodeId) ??
@@ -44,7 +52,7 @@ export function getWorkItemComposerContext(userId = getCurrentUser()?.userId, no
     : []
 
   return {
-    suggestedWorkItemId: getNextGeneratedWorkItemId(),
+    suggestedWorkItemId: getNextGeneratedWorkItemId(snapshot),
     availableNodes,
     selectedNode,
     pathLabel: selectedNode ? getNodePathLabel(selectedNode.id, snapshot.nodes) : '경로 없음',

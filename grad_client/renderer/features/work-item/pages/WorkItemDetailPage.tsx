@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { formatWorkspaceDate, formatWorkspaceTimestamp } from '../../workspace/model/formatters'
 import { getNodeTypeLabel, getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
@@ -38,14 +39,17 @@ function RelatedWorkItemLink({ item, prefix }: { item: WorkItemRecord; prefix: s
 }
 
 export function WorkItemDetailPage() {
-  const currentUser = getCurrentUser()
+  const snapshot = getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
   const { workItemId } = useParams()
 
   if (!currentUser) {
     return null
   }
 
-  const detail = workItemId ? getSelectedWorkItemDetail(workItemId, currentUser.userId) : null
+  const detail = workItemId
+    ? getSelectedWorkItemDetail(workItemId, currentUser.userId, snapshot)
+    : null
 
   if (!detail) {
     return (

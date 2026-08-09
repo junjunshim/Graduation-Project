@@ -6,10 +6,10 @@ import {
   signOutUser,
   signUpUser,
 } from '../workspace/data/userService'
-import type { SignInRequest, SignUpRequest } from '../workspace/model/types'
+import type { SignInRequest, SignUpRequest, WorkspaceSnapshot } from '../workspace/model/types'
 
-export function getCurrentUser() {
-  return getCurrentUserWorkspace()
+export function getCurrentUser(workspace?: Pick<WorkspaceSnapshot, 'users'>) {
+  return getCurrentUserWorkspace(workspace)
 }
 
 export function signIn(payload: SignInRequest) {

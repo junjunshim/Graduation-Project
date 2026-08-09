@@ -1,4 +1,4 @@
-import type { SignInRequest, SignInResponse, SignUpRequest } from '../model/types'
+import type { SignInRequest, SignInResponse, SignUpRequest, WorkspaceDatabase } from '../model/types'
 import { delay, generateUserId, getUserByEmail, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
 import { getCurrentServerUser, signInServerUser, signOutServerUser, signUpServerUser } from './serverWorkspace'
 import { TEAM_404_DEMO_USER_ID } from './seed'
@@ -38,19 +38,19 @@ export function enterDemoWorkspace() {
   }
 }
 
-export function getCurrentUser() {
+export function getCurrentUser(workspace?: Pick<WorkspaceDatabase, 'users'>) {
   if (isServerDataSource()) {
-    return getCurrentServerUser()
+    return getCurrentServerUser(workspace)
   }
 
-  const db = readWorkspaceDb()
+  const users = workspace?.users ?? readWorkspaceDb().users
   const sessionUserId = getCurrentSessionUserId()
 
   if (!sessionUserId) {
     return null
   }
 
-  return db.users.find((user) => user.userId === sessionUserId) ?? null
+  return users.find((user) => user.userId === sessionUserId) ?? null
 }
 
 export async function signInUser(payload: SignInRequest): Promise<SignInResponse> {

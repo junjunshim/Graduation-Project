@@ -7,8 +7,9 @@ import type {
   WorkItemRecord,
   WorkspaceNodeView,
   WorkspaceOverview,
+  WorkspaceSnapshot,
 } from '../model/types'
-import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService'
+import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService'
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 
@@ -81,8 +82,13 @@ function buildOnboardingSteps({
   })
 }
 
-function toRoleMember(assignmentId: number, userId: string, roleName: RoleName, users: UserRecord[]): RoleMember {
-  const user = users.find((candidate) => candidate.userId === userId)
+function toRoleMember(
+  assignmentId: number,
+  userId: string,
+  roleName: RoleName,
+  usersById: ReadonlyMap<string, UserRecord>,
+): RoleMember {
+  const user = usersById.get(userId)
 
   return {
     assignmentId,
@@ -95,13 +101,14 @@ function toRoleMember(assignmentId: number, userId: string, roleName: RoleName, 
 
 function buildWorkspaceTree(nodes: OrganizationNodeRecord[], workItems: WorkItemRecord[]): WorkspaceNodeView[] {
   const nodeMap = new Map<number, WorkspaceNodeView>()
+  const nodeNamesById = new Map(nodes.map((node) => [node.id, node.name]))
 
   nodes.forEach((node) => {
     nodeMap.set(node.id, {
       id: node.id,
       title: node.name,
       nodeType: node.nodeType,
-      path: getNodePathLabel(node.id, nodes),
+      path: node.path.map((pathNodeId) => nodeNamesById.get(pathNodeId) ?? `Node ${pathNodeId}`).join(' / '),
       pathIds: [...node.path],
       children: [],
       workItems: [],
@@ -132,19 +139,23 @@ function buildWorkspaceTree(nodes: OrganizationNodeRecord[], workItems: WorkItem
   return roots
 }
 
-export function getWorkspaceOverview(userId = getCurrentUser()?.userId): WorkspaceOverview {
-  const currentUser = getCurrentUser()
-  const snapshot = getOrgSnapshot()
-  const summary = getWorkspaceSummary(userId)
-  const accessibleNodeIds = userId ? getAccessibleNodeIdsForUser(userId) : []
-  const visibleNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIds.includes(node.id)))
+export function getWorkspaceOverview(userId?: string, providedSnapshot?: WorkspaceSnapshot): WorkspaceOverview {
+  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
+  const resolvedUserId = userId ?? currentUser?.userId
+  const accessibleNodeIds = resolvedUserId ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot) : []
+  const accessibleNodeIdSet = new Set(accessibleNodeIds)
+  const summary = getWorkspaceSummary(resolvedUserId, snapshot)
+  const visibleNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id)))
   const visibleWorkItems = sortWorkspaceWorkItems(
-    snapshot.workItems.filter((item) => accessibleNodeIds.includes(item.ownerNodeId)),
+    snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId)),
   )
   const roots = buildWorkspaceTree(visibleNodes, visibleWorkItems)
-  const myWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter((item) => item.ownerUserId === userId))
+  const myWorkItems = sortWorkspaceWorkItems(
+    visibleWorkItems.filter((item) => item.ownerUserId === resolvedUserId),
+  )
   const teamPoolWorkItems = sortWorkspaceWorkItems(
-    visibleWorkItems.filter((item) => item.ownerUserId !== userId && item.status !== 'done'),
+    visibleWorkItems.filter((item) => item.ownerUserId !== resolvedUserId && item.status !== 'done'),
   )
   const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isDueSoon))
   const urgentWorkItemIds = new Set<string>()
@@ -164,15 +175,17 @@ export function getWorkspaceOverview(userId = getCurrentUser()?.userId): Workspa
     visibleNodes.find((node) => node.nodeType !== 'USER' && node.path.length === 1) ??
     visibleNodes.find((node) => node.nodeType !== 'USER')
 
+  const usersById = new Map(snapshot.users.map((user) => [user.userId, user]))
+  const nodesById = new Map(snapshot.nodes.map((node) => [node.id, node]))
   const rootRoleMembers = rootNode
     ? snapshot.roles
         .filter((role) => role.nodeId === rootNode.id)
-        .map((role) => toRoleMember(role.id, role.userId, role.roleName, snapshot.users))
+        .map((role) => toRoleMember(role.id, role.userId, role.roleName, usersById))
         .sort((left, right) => left.name.localeCompare(right.name, 'ko'))
     : []
 
   const orgRoles = snapshot.roles.filter((role) => {
-    const node = snapshot.nodes.find((candidate) => candidate.id === role.nodeId)
+    const node = nodesById.get(role.nodeId)
     return node?.nodeType !== 'USER'
   })
 
@@ -195,7 +208,7 @@ export function getWorkspaceOverview(userId = getCurrentUser()?.userId): Workspa
       hasPersonalSpace: Boolean(currentUser?.personalNodeId),
       hasTopNode: summary.orgNodeCount > 0,
       hasSubNodeOrRole:
-        summary.orgNodeCount > 1 || orgRoles.filter((role) => accessibleNodeIds.includes(role.nodeId)).length > 1,
+        summary.orgNodeCount > 1 || orgRoles.filter((role) => accessibleNodeIdSet.has(role.nodeId)).length > 1,
       hasWorkItem: summary.workItemCount > 0,
     }),
   }

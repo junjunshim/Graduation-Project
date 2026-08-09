@@ -86,7 +86,15 @@ export async function apiRequest<ResponseBody>(path: string, options: ApiRequest
   })
 
   const text = await response.text()
-  const payload = text ? (JSON.parse(text) as unknown) : null
+  let payload: unknown = null
+
+  if (text) {
+    try {
+      payload = JSON.parse(text) as unknown
+    } catch {
+      throw new Error('서버 요청을 처리하지 못했습니다.')
+    }
+  }
 
   if (!response.ok) {
     const message = isApiErrorPayload(payload) ? payload.message : '서버 요청을 처리하지 못했습니다.'

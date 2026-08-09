@@ -4,6 +4,7 @@ import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
+import { getOrgSnapshot } from '../data/orgService'
 import { formatWorkspaceMonthDay } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { RoleMember, WorkItemRecord, WorkItemStatus, WorkspaceOverview } from '../model/types'
@@ -396,7 +397,8 @@ function getActivityActionLabel(status: WorkItemStatus) {
 }
 
 export function WorkspacePage() {
-  const currentUser = getCurrentUser()
+  const snapshot = getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
   const [searchParams] = useSearchParams()
   const [statusFilter, setStatusFilter] = useState<WorkspaceStatusFilter>('all')
   const requestedView = searchParams.get('view')
@@ -407,7 +409,7 @@ export function WorkspacePage() {
     return null
   }
 
-  const overview = getWorkspaceOverview(currentUser.userId)
+  const overview = getWorkspaceOverview(currentUser.userId, snapshot)
   const counts = getWorkItemCounts(overview.visibleWorkItems)
   const metrics = getWorkspaceMetrics(overview)
   const filteredWorkItems = filterWorkItems(overview.visibleWorkItems, statusFilter).slice(0, BOARD_ITEM_LIMIT)

@@ -21,9 +21,20 @@ import { isServerDataSource } from './workspaceMode'
 function getDescendantNodeIds(rootIds: number[], nodes: OrganizationNodeRecord[]) {
   const visited = new Set<number>()
   const queue = [...rootIds]
+  const childIdsByParentId = new Map<number, number[]>()
 
-  while (queue.length > 0) {
-    const currentId = queue.shift()
+  nodes.forEach((node) => {
+    if (!node.parentNodeId) {
+      return
+    }
+
+    const childIds = childIdsByParentId.get(node.parentNodeId) ?? []
+    childIds.push(node.id)
+    childIdsByParentId.set(node.parentNodeId, childIds)
+  })
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const currentId = queue[index]
 
     if (!currentId || visited.has(currentId)) {
       continue
@@ -31,24 +42,22 @@ function getDescendantNodeIds(rootIds: number[], nodes: OrganizationNodeRecord[]
 
     visited.add(currentId)
 
-    nodes
-      .filter((node) => node.parentNodeId === currentId)
-      .forEach((node) => {
-        if (!visited.has(node.id)) {
-          queue.push(node.id)
-        }
-      })
+    childIdsByParentId.get(currentId)?.forEach((childId) => {
+      if (!visited.has(childId)) {
+        queue.push(childId)
+      }
+    })
   }
 
   return Array.from(visited)
 }
 
-export function getAccessibleNodeIdsForUser(userId: string) {
-  const db = readWorkspaceDb()
-  const directNodeIds = db.roles.filter((role) => role.userId === userId).map((role) => role.nodeId)
-  const personalNodeId = db.users.find((user) => user.userId === userId)?.personalNodeId
+export function getAccessibleNodeIdsForUser(userId: string, snapshot?: WorkspaceSnapshot) {
+  const workspace = snapshot ?? readWorkspaceDb()
+  const directNodeIds = workspace.roles.filter((role) => role.userId === userId).map((role) => role.nodeId)
+  const personalNodeId = workspace.users.find((user) => user.userId === userId)?.personalNodeId
   const rootIds = Array.from(new Set([...directNodeIds, ...(personalNodeId ? [personalNodeId] : [])]))
-  return getDescendantNodeIds(rootIds, db.nodes)
+  return getDescendantNodeIds(rootIds, workspace.nodes)
 }
 
 export function getNodePathLabel(nodeId: number, nodes?: OrganizationNodeRecord[]) {
@@ -76,7 +85,7 @@ export function getOrgSnapshot(): WorkspaceSnapshot {
   }
 }
 
-export function getWorkspaceSummary(userId?: string): WorkspaceSummary {
+export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapshot): WorkspaceSummary {
   if (!userId) {
     return {
       nodeCount: 0,
@@ -94,10 +103,11 @@ export function getWorkspaceSummary(userId?: string): WorkspaceSummary {
     }
   }
 
-  const db = readWorkspaceDb()
-  const visibleNodeIds = getAccessibleNodeIdsForUser(userId)
-  const visibleWorkItems = db.workItems.filter((item) => visibleNodeIds.includes(item.ownerNodeId))
-  const visibleNodes = db.nodes.filter((node) => visibleNodeIds.includes(node.id))
+  const workspace = snapshot ?? readWorkspaceDb()
+  const visibleNodeIds = getAccessibleNodeIdsForUser(userId, workspace)
+  const visibleNodeIdSet = new Set(visibleNodeIds)
+  const visibleWorkItems = workspace.workItems.filter((item) => visibleNodeIdSet.has(item.ownerNodeId))
+  const visibleNodes = workspace.nodes.filter((node) => visibleNodeIdSet.has(node.id))
   const now = new Date()
   const dueSoonThreshold = new Date(now)
   dueSoonThreshold.setDate(now.getDate() + 7)
@@ -105,7 +115,7 @@ export function getWorkspaceSummary(userId?: string): WorkspaceSummary {
   return {
     nodeCount: visibleNodes.length,
     workItemCount: visibleWorkItems.length,
-    roleCount: db.roles.filter((role) => role.userId === userId).length,
+    roleCount: workspace.roles.filter((role) => role.userId === userId).length,
     hasContext: visibleNodes.length > 0,
     personalNodeCount: visibleNodes.filter((node) => node.nodeType === 'USER').length,
     orgNodeCount: visibleNodes.filter((node) => node.nodeType !== 'USER').length,

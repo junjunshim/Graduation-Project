@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { updateWorkItem } from '../../workspace/data/workItemService'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { formatWorkspaceDate } from '../../workspace/model/formatters'
@@ -24,11 +25,15 @@ function createInitialForm(item?: WorkItemRecord) {
 
 export function WorkItemEditPage() {
   const navigate = useNavigate()
-  const currentUser = getCurrentUser()
+  const snapshot = getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
   const { workItemId } = useParams()
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
-  const detail = currentUser && workItemId ? getSelectedWorkItemDetail(workItemId, currentUser.userId) : null
+  const detail =
+    currentUser && workItemId
+      ? getSelectedWorkItemDetail(workItemId, currentUser.userId, snapshot)
+      : null
   const [form, setForm] = useState(() => createInitialForm(detail?.item))
 
   if (!currentUser) {

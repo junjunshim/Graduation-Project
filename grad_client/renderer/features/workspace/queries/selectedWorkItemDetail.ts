@@ -1,11 +1,18 @@
-import type { SelectedWorkItemDetail } from '../model/types'
+import type { SelectedWorkItemDetail, WorkspaceSnapshot } from '../model/types'
 import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService'
 import { sortWorkspaceWorkItems } from '../model/sorters'
 
-export function getSelectedWorkItemDetail(workItemId: string, userId?: string): SelectedWorkItemDetail | null {
-  const snapshot = getOrgSnapshot()
-  const accessibleNodeIds = userId ? getAccessibleNodeIdsForUser(userId) : snapshot.nodes.map((node) => node.id)
-  const visibleWorkItems = snapshot.workItems.filter((item) => accessibleNodeIds.includes(item.ownerNodeId))
+export function getSelectedWorkItemDetail(
+  workItemId: string,
+  userId?: string,
+  providedSnapshot?: WorkspaceSnapshot,
+): SelectedWorkItemDetail | null {
+  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const accessibleNodeIds = userId
+    ? getAccessibleNodeIdsForUser(userId, snapshot)
+    : snapshot.nodes.map((node) => node.id)
+  const accessibleNodeIdSet = new Set(accessibleNodeIds)
+  const visibleWorkItems = snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId))
   const visibleWorkItemIds = new Set(visibleWorkItems.map((item) => item.workItemId))
   const item = visibleWorkItems.find((candidate) => candidate.workItemId === workItemId)
 

@@ -1,14 +1,5 @@
 import { Navigate, Outlet, RouterProvider, createHashRouter } from 'react-router-dom'
 import { getCurrentUser } from '../features/auth/api'
-import { LoginPage } from '../features/auth/pages/LoginPage'
-import { SignupPage } from '../features/auth/pages/SignupPage'
-import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
-import { OrgManagePage } from '../features/org/pages/OrgManagePage'
-import { TopNodeSetupPage } from '../features/org/pages/TopNodeSetupPage'
-import { WorkspacePage } from '../features/workspace/pages/WorkspacePage'
-import { WorkItemCreatePage } from '../features/work-item/pages/WorkItemCreatePage'
-import { WorkItemDetailPage } from '../features/work-item/pages/WorkItemDetailPage'
-import { WorkItemEditPage } from '../features/work-item/pages/WorkItemEditPage'
 import { AppShell } from './layouts/AppShell'
 import { ShellPlaceholderPage } from './layouts/ShellPlaceholderPage'
 
@@ -38,6 +29,10 @@ function GuestOnly() {
   return <Outlet />
 }
 
+function RouteHydrationFallback() {
+  return null
+}
+
 const router = createHashRouter([
   {
     path: '/',
@@ -45,22 +40,60 @@ const router = createHashRouter([
   },
   {
     element: <GuestOnly />,
+    HydrateFallback: RouteHydrationFallback,
     children: [
-      { path: '/login', element: <LoginPage /> },
-      { path: '/signup', element: <SignupPage /> },
+      {
+        path: '/login',
+        lazy: async () => {
+          const { LoginPage } = await import('../features/auth/pages/LoginPage')
+          return { Component: LoginPage }
+        },
+      },
+      {
+        path: '/signup',
+        lazy: async () => {
+          const { SignupPage } = await import('../features/auth/pages/SignupPage')
+          return { Component: SignupPage }
+        },
+      },
     ],
   },
   {
     element: <RequireSession />,
+    HydrateFallback: RouteHydrationFallback,
     children: [
       {
         path: '/',
         element: <AppShell />,
         children: [
-          { path: '/dashboard', element: <DashboardPage /> },
-          { path: '/workspace', element: <WorkspacePage /> },
-          { path: '/setup/top-node', element: <TopNodeSetupPage /> },
-          { path: '/org/manage', element: <OrgManagePage /> },
+          {
+            path: '/dashboard',
+            lazy: async () => {
+              const { DashboardPage } = await import('../features/dashboard/pages/DashboardPage')
+              return { Component: DashboardPage }
+            },
+          },
+          {
+            path: '/workspace',
+            lazy: async () => {
+              const { WorkspacePage } = await import('../features/workspace/pages/WorkspacePage')
+              return { Component: WorkspacePage }
+            },
+          },
+          {
+            path: '/setup/top-node',
+            lazy: async () => {
+              const { TopNodeSetupPage } = await import('../features/org/pages/TopNodeSetupPage')
+              return { Component: TopNodeSetupPage }
+            },
+          },
+          {
+            path: '/org/manage',
+            lazy: async () => {
+              const { OrgManagePage } = await import('../features/org/pages/OrgManagePage')
+              return { Component: OrgManagePage }
+            },
+          },
           {
             path: '/work-items',
             element: (
@@ -70,9 +103,27 @@ const router = createHashRouter([
               />
             ),
           },
-          { path: '/work-items/new', element: <WorkItemCreatePage /> },
-          { path: '/work-items/:workItemId', element: <WorkItemDetailPage /> },
-          { path: '/work-items/:workItemId/edit', element: <WorkItemEditPage /> },
+          {
+            path: '/work-items/new',
+            lazy: async () => {
+              const { WorkItemCreatePage } = await import('../features/work-item/pages/WorkItemCreatePage')
+              return { Component: WorkItemCreatePage }
+            },
+          },
+          {
+            path: '/work-items/:workItemId',
+            lazy: async () => {
+              const { WorkItemDetailPage } = await import('../features/work-item/pages/WorkItemDetailPage')
+              return { Component: WorkItemDetailPage }
+            },
+          },
+          {
+            path: '/work-items/:workItemId/edit',
+            lazy: async () => {
+              const { WorkItemEditPage } = await import('../features/work-item/pages/WorkItemEditPage')
+              return { Component: WorkItemEditPage }
+            },
+          },
           {
             path: '/calendar',
             element: <ShellPlaceholderPage />,

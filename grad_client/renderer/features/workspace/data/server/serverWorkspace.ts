@@ -24,6 +24,11 @@ type ServerStatusResponse = {
   message?: string
 }
 
+type ServerOperationError = {
+  status: 'error'
+  message: string
+}
+
 type ServerLoginResponse = ServerStatusResponse & {
   access_token?: string
   refresh_token?: string
@@ -56,6 +61,20 @@ type ServerIntegratedItem = {
 const SERVER_DATASET_ID = 'server-workspace'
 const SERVER_SEED_VERSION = 1
 const DEFAULT_SERVER_PASSWORD = ''
+
+async function withServerOperationError<Result>(
+  operation: () => Promise<Result>,
+  fallbackMessage: string,
+): Promise<Result | ServerOperationError> {
+  try {
+    return await operation()
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error && error.message ? error.message : fallbackMessage,
+    }
+  }
+}
 
 function nowIso() {
   return new Date().toISOString()
@@ -278,14 +297,15 @@ export function normalizeServerContext(items: ServerIntegratedItem[], currentEma
   }
 }
 
-export function getCurrentServerUser() {
+export function getCurrentServerUser(snapshot?: Pick<WorkspaceDatabase, 'users'>) {
   const email = getCurrentServerEmail()
 
   if (!email) {
     return null
   }
 
-  return readWorkspaceDb().users.find((user) => user.userId === email || user.email === email) ?? null
+  const users = snapshot?.users ?? readWorkspaceDb().users
+  return users.find((user) => user.userId === email || user.email === email) ?? null
 }
 
 export async function loadServerWorkspace(email = getCurrentServerEmail()) {
@@ -316,6 +336,7 @@ export async function syncServerWorkspace(lastSyncedAt = '1970-01-01 00:00:00') 
 
 export async function signInServerUser(payload: SignInRequest): Promise<SignInResponse> {
   const email = normalizeEmail(payload.email)
+  let shouldRollbackSession = false
 
   if (!email || !payload.password.trim()) {
     return {
@@ -341,6 +362,7 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
       }
     }
 
+    shouldRollbackSession = true
     setServerSession({
       accessToken: response.access_token,
       refreshToken: response.refresh_token,
@@ -356,6 +378,12 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
       user,
     }
   } catch (error) {
+    if (shouldRollbackSession) {
+      clearServerSession()
+      clearServerWorkspaceDb()
+      setCurrentSessionUserId(null)
+    }
+
     return {
       status: 'error',
       message: error instanceof Error ? error.message : '서버 로그인에 실패했습니다.',
@@ -402,147 +430,161 @@ export function signOutServerUser() {
 }
 
 export async function createTopNodeOnServer(payload: CreateTopNodeRequest) {
-  const response = await apiRequest<ServerStatusResponse>('/org/topNodes', {
-    method: 'POST',
-    body: {
-      node_type: payload.nodeType,
-      name: payload.name,
-      role_name: payload.roleName,
-    },
-  })
+  return withServerOperationError(async () => {
+    const response = await apiRequest<ServerStatusResponse>('/org/topNodes', {
+      method: 'POST',
+      body: {
+        node_type: payload.nodeType,
+        name: payload.name,
+        role_name: payload.roleName,
+      },
+    })
 
-  if (response.status === 'error') {
-    return { status: 'error' as const, message: response.message ?? '공유 공간을 만들지 못했습니다.' }
-  }
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '공유 공간을 만들지 못했습니다.' }
+    }
 
-  await loadServerWorkspace()
-  return { status: 'success' as const, newNodeId: 0 }
+    await loadServerWorkspace()
+    return { status: 'success' as const, newNodeId: 0 }
+  }, '공유 공간을 만들지 못했습니다.')
 }
 
 export async function createSubNodeOnServer(payload: CreateSubNodeRequest) {
-  const response = await apiRequest<ServerStatusResponse>('/org/subNodes', {
-    method: 'POST',
-    body: {
-      node_type: payload.nodeType,
-      parent_node_id: payload.parentNodeId,
-      name: payload.name,
-      email: payload.email,
-      role_name: payload.roleName,
-    },
-  })
+  return withServerOperationError(async () => {
+    const response = await apiRequest<ServerStatusResponse>('/org/subNodes', {
+      method: 'POST',
+      body: {
+        node_type: payload.nodeType,
+        parent_node_id: payload.parentNodeId,
+        name: payload.name,
+        email: payload.email,
+        role_name: payload.roleName,
+      },
+    })
 
-  if (response.status === 'error') {
-    return { status: 'error' as const, message: response.message ?? '하위 조직을 추가하지 못했습니다.' }
-  }
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '하위 조직을 추가하지 못했습니다.' }
+    }
 
-  await loadServerWorkspace()
-  return { status: 'success' as const, newNodeId: 0 }
+    await loadServerWorkspace()
+    return { status: 'success' as const, newNodeId: 0 }
+  }, '하위 조직을 추가하지 못했습니다.')
 }
 
 export async function assignRoleOnServer(payload: AssignRoleRequest) {
-  const response = await apiRequest<ServerStatusResponse>('/roles', {
-    method: 'POST',
-    body: {
-      email: payload.email,
-      node_id: payload.nodeId,
-      role_name: payload.roleName,
-    },
-  })
+  return withServerOperationError(async () => {
+    const response = await apiRequest<ServerStatusResponse>('/roles', {
+      method: 'POST',
+      body: {
+        email: payload.email,
+        node_id: payload.nodeId,
+        role_name: payload.roleName,
+      },
+    })
 
-  if (response.status === 'error') {
-    return { status: 'error' as const, message: response.message ?? '권한을 추가하지 못했습니다.' }
-  }
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '권한을 추가하지 못했습니다.' }
+    }
 
-  await loadServerWorkspace()
-  return { status: 'success' as const, newRoleId: 0 }
+    await loadServerWorkspace()
+    return { status: 'success' as const, newRoleId: 0 }
+  }, '권한을 추가하지 못했습니다.')
 }
 
 export async function updateNodeOnServer(payload: UpdateNodeRequest) {
-  const response = await apiRequest<ServerStatusResponse>('/org/nodes', {
-    method: 'PATCH',
-    body: {
-      node_id: payload.nodeId,
-      ...(payload.name !== undefined ? { name: payload.name } : {}),
-      ...(payload.nodeType !== undefined ? { node_type: payload.nodeType } : {}),
-    },
-  })
+  return withServerOperationError(async () => {
+    const response = await apiRequest<ServerStatusResponse>('/org/nodes', {
+      method: 'PATCH',
+      body: {
+        node_id: payload.nodeId,
+        ...(payload.name !== undefined ? { name: payload.name } : {}),
+        ...(payload.nodeType !== undefined ? { node_type: payload.nodeType } : {}),
+      },
+    })
 
-  if (response.status === 'error') {
-    return { status: 'error' as const, message: response.message ?? '조직을 수정하지 못했습니다.' }
-  }
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '조직을 수정하지 못했습니다.' }
+    }
 
-  await loadServerWorkspace()
-  return { status: 'success' as const }
+    await loadServerWorkspace()
+    return { status: 'success' as const }
+  }, '조직을 수정하지 못했습니다.')
 }
 
 export async function updateRoleOnServer(payload: UpdateRoleRequest) {
-  const response = await apiRequest<ServerStatusResponse>('/roles', {
-    method: 'PATCH',
-    body: {
-      email: payload.email,
-      node_id: payload.nodeId,
-      role_name: payload.roleName,
-    },
-  })
+  return withServerOperationError(async () => {
+    const response = await apiRequest<ServerStatusResponse>('/roles', {
+      method: 'PATCH',
+      body: {
+        email: payload.email,
+        node_id: payload.nodeId,
+        role_name: payload.roleName,
+      },
+    })
 
-  if (response.status === 'error') {
-    return { status: 'error' as const, message: response.message ?? '권한을 변경하지 못했습니다.' }
-  }
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '권한을 변경하지 못했습니다.' }
+    }
 
-  await loadServerWorkspace()
-  return { status: 'success' as const }
+    await loadServerWorkspace()
+    return { status: 'success' as const }
+  }, '권한을 변경하지 못했습니다.')
 }
 
 export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
-  const ownerUser = readWorkspaceDb().users.find((user) => user.userId === payload.ownerUserId)
-  const ownerEmail = ownerUser?.email || payload.ownerUserId
+  return withServerOperationError(async () => {
+    const ownerUser = readWorkspaceDb().users.find((user) => user.userId === payload.ownerUserId)
+    const ownerEmail = ownerUser?.email || payload.ownerUserId
 
-  const response = await apiRequest<ServerStatusResponse>('/workItems', {
-    method: 'POST',
-    body: {
-      work_item_id: payload.workItemId,
-      owner_node_id: payload.ownerNodeId,
-      owner_user_email: ownerEmail,
-      title: payload.title,
-      parent_work_item_id: payload.parentWorkItemId ?? '',
-      description: payload.description ?? '',
-      status: payload.status ?? 'todo',
-      priority: payload.priority ?? 3,
-      weight: payload.weight ?? 1,
-      progress: payload.progress ?? 0,
-      start_date: payload.startDate ?? '',
-      due_date: payload.dueDate ?? '',
-    },
-  })
+    const response = await apiRequest<ServerStatusResponse>('/workItems', {
+      method: 'POST',
+      body: {
+        work_item_id: payload.workItemId,
+        owner_node_id: payload.ownerNodeId,
+        owner_user_email: ownerEmail,
+        title: payload.title,
+        parent_work_item_id: payload.parentWorkItemId ?? '',
+        description: payload.description ?? '',
+        status: payload.status ?? 'todo',
+        priority: payload.priority ?? 3,
+        weight: payload.weight ?? 1,
+        progress: payload.progress ?? 0,
+        start_date: payload.startDate ?? '',
+        due_date: payload.dueDate ?? '',
+      },
+    })
 
-  if (response.status === 'error') {
-    return { status: 'error' as const, message: response.message ?? '업무를 생성하지 못했습니다.' }
-  }
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '업무를 생성하지 못했습니다.' }
+    }
 
-  await loadServerWorkspace()
-  return { status: 'success' as const, workItemId: payload.workItemId }
+    await loadServerWorkspace()
+    return { status: 'success' as const, workItemId: payload.workItemId }
+  }, '업무를 생성하지 못했습니다.')
 }
 
 export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
-  const response = await apiRequest<ServerStatusResponse>('/workItems', {
-    method: 'PATCH',
-    body: {
-      work_item_id: payload.workItemId,
-      ...(payload.title !== undefined ? { title: payload.title } : {}),
-      ...(payload.description !== undefined ? { description: payload.description } : {}),
-      ...(payload.status !== undefined ? { status: payload.status } : {}),
-      ...(payload.priority !== undefined ? { priority: payload.priority } : {}),
-      ...(payload.weight !== undefined ? { weight: payload.weight } : {}),
-      ...(payload.progress !== undefined ? { progress: payload.progress } : {}),
-      ...(payload.startDate !== undefined ? { start_date: payload.startDate } : {}),
-      ...(payload.dueDate !== undefined ? { due_date: payload.dueDate } : {}),
-    },
-  })
+  return withServerOperationError(async () => {
+    const response = await apiRequest<ServerStatusResponse>('/workItems', {
+      method: 'PATCH',
+      body: {
+        work_item_id: payload.workItemId,
+        ...(payload.title !== undefined ? { title: payload.title } : {}),
+        ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.status !== undefined ? { status: payload.status } : {}),
+        ...(payload.priority !== undefined ? { priority: payload.priority } : {}),
+        ...(payload.weight !== undefined ? { weight: payload.weight } : {}),
+        ...(payload.progress !== undefined ? { progress: payload.progress } : {}),
+        ...(payload.startDate !== undefined ? { start_date: payload.startDate } : {}),
+        ...(payload.dueDate !== undefined ? { due_date: payload.dueDate } : {}),
+      },
+    })
 
-  if (response.status === 'error') {
-    return { status: 'error' as const, message: response.message ?? '업무를 수정하지 못했습니다.' }
-  }
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '업무를 수정하지 못했습니다.' }
+    }
 
-  await loadServerWorkspace()
-  return { status: 'success' as const, workItemId: payload.workItemId }
+    await loadServerWorkspace()
+    return { status: 'success' as const, workItemId: payload.workItemId }
+  }, '업무를 수정하지 못했습니다.')
 }

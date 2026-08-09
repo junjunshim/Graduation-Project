@@ -1,4 +1,4 @@
-# 로그인 및 토큰 발급 api (version 1)
+# 로그인 및 토큰 발급 api
 - email 과 password를 통하여 사용자 검증 후, 토큰을 발급하는 api
 ## Request
 - Request syntax
@@ -11,7 +11,7 @@
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/context/init |
+| Post | http://{서버 url}/api/users/login |
 
 ---
 - Request Header
@@ -59,8 +59,3 @@
 - 설명<br>
 1. access_token은 클라이언트에서 저장하여 서버요청 시, 헤더에 항상 포함할것<br>
 2. refresh_token은 access_token 만료 시, 사용되는 토큰 값
-
----
-## 업데이트
-### version 1 : 서버와 데이터베이스 연결 여부 확인용
-- 개선 사항 : password 해싱 기술이 필요함, 내부적으로 어떤 오류인지 구별이 필요함

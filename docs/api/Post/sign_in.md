@@ -1,4 +1,4 @@
-# 회원가입 api (version 1)
+# 회원가입 api
 - 회원생성 api
 ## Request
 - Request syntax
@@ -13,7 +13,7 @@
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/users |
+| Post | http://{서버 url}/api/users |
 
 ---
 - Request Header
@@ -55,10 +55,4 @@
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
 | message | String | 필수 | 요청 관련 메세지 |
-
----
-## 업데이트
-### version 1 : 서버와 데이터베이스 연결 여부 확인용
-- 개선 사항 : 유저 식별용 user_id에서 시리얼 번호로 변경 필요
-
 

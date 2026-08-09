@@ -1,4 +1,4 @@
-# 권한 수정 api (version 1.0.0)
+# 권한 수정 api
 - 사용자의 노드 권한을 수정하는 api
 ## Request
 - Request Syntax
@@ -37,12 +37,17 @@
 - Response Syntax
 ```json
 {
-    "type" : "ROLE",
-    "id" : "11",
-    "parent_id" : "2",
-    "title" : "test1234@gmail.com",
-    "status" : "변경된 role",
-    "updated_at" : "2026-03-19 12:29:24.745634+00"
+    "status" : "success",
+    "data" : [
+        {
+            "type" : "ROLE",
+            "id" : 24,
+            "node_id" : 2,
+            "email" : "test1232@gmail.com",
+            "role" : "ADMIN",
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
+        }
+    ]
 }
 ```
 ```json
@@ -65,14 +70,8 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 권한 식별 id|
-| parent_id | String | 필수 | 부모 노드 id |
-| title | String | 필수 | 사용자 email |
-| status | String | 선택 | 권한 이름 |
+| id | String | 필수 | 데이터 식별 id |
+| node_id | Integer | role | 소속 노드의 id |
+| email | String | role | 역할이 배정된 인원 |
+| role | String | role | 배정된 역할 이름 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
-
-
---- 
-## 업데이트
-### version 1.0.0 : 업데이트 초기 버전
-- 개선 사항 : 수정이 되지 않을 때 데이터 반환 x, 하위 권한자가 상위 권한 수정 불가능 필요

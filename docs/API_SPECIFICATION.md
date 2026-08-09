@@ -32,16 +32,20 @@
 
 | 구분 | Http Method | API Path | 개발현황 | MD링크 |
 | :--- | :--- | :--- | :--- | :--- |
-| 회원가입 | Post | /api/v1/users | 진행중 | [link](api/Post/sign_in.md) |
-| user 데이터 조회 | Get | /api/v1/users | 미진행 | -- |
-| user 데이터 수정 | Patch | /api/v1/users | 미진행 | -- |
-| Org 최상위 노드 | Post | /api/v1/org/topNodes | 완료 | [link](api/Post/top_nodes.md) |
-| Org 하위 노드 | Post | /api/v1/org/subNodes | 완료 | [link](api/Post/sub_nodes.md) |
-| Org 노드 수정 | Patch | /api/v1/org/nodes | 완료 | [link](api/Patch/node.md) |
-| Role 부여 | Post | /api/v1/roles | 완료 | [link](api/Post/role.md) |
-| Role 수정 | Patch | /api/v1/roles | 완료 | [link](api/Patch/role.md) |
-| work_item 생성 | Post | /api/v1/workItems | 완료 | [link](api/Post/work_item.md) |
-| work_item 수정 | Patch | /api/v1/workItems | 완료 | [link](api/Patch/work_item.md) |
-| 사용자 전체 정보 조회 | Get | /api/v1/context/init | 완료 | [link](api/Get/context_init.md) |
-| 사용자 데이터 동기화 | Get | /api/v1/context/sync | 완료 | [link](api/Get/sync_context.md) |
-| 로그인 / 토큰 발급 | Post | /api/v1/users/login | 완료 | [link](api/Post/login.md) |
+| 회원가입 | Post | /api/users | 완료 | [link](api/Post/sign_in.md) |
+| user 데이터 조회 | Get | /api/users | 진행중 | [link](api/Get/user.md) |
+| user 데이터 수정 | Patch | /api/users | 진행중 | [link](api/Patch/user.md) |
+| user 데이터 삭제 | Delete | /api/users | 진행중 | [link](api/Delete/user.md) |
+| Org 최상위 노드 | Post | /api/org/topNodes | 완료 | [link](api/Post/top_nodes.md) |
+| Org 하위 노드 | Post | /api/org/subNodes | 완료 | [link](api/Post/sub_nodes.md) |
+| Org 노드 수정 | Patch | /api/org/nodes | 완료 | [link](api/Patch/node.md) |
+| Org 노드 삭제 | Delete | /api/org/nodes | 진행중 | [link](api/Delete/node.md) |
+| Role 부여 | Post | /api/roles | 완료 | [link](api/Post/role.md) |
+| Role 수정 | Patch | /api/roles | 완료 | [link](api/Patch/role.md) |
+| work_item 생성 | Post | /api/workItems | 완료 | [link](api/Post/work_item.md) |
+| work_item 수정 | Patch | /api/workItems | 완료 | [link](api/Patch/work_item.md) |
+| work_item 삭제 | Delete | /api/workItems | 진행중 | [link](api/Delete/work_item.md) |
+| 사용자 전체 정보 조회 | Get | /api/context/init | 완료 | [link](api/Get/context_init.md) |
+| 사용자 데이터 동기화 | Get | /api/context/sync | 완료 | [link](api/Get/sync_context.md) |
+| 로그인 / 토큰 발급 | Post | /api/users/login | 완료 | [link](api/Post/login.md) |
+| 활동 기록 조회 | Get | /api/activities | 진행중 | [link](api/Get/activity.md) |

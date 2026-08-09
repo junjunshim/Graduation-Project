@@ -16,6 +16,9 @@ class UserController : public drogon::HttpController<UserController>
     // ADD_METHOD_TO(UserController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
     ADD_METHOD_TO(UserController::createUser, "/api/users", Post);
+    ADD_METHOD_TO(UserController::getUser, "/api/users", Get, "JwtFilter");
+    ADD_METHOD_TO(UserController::updateUser, "/api/users", Patch, "JwtFilter");
+    ADD_METHOD_TO(UserController::deleteUser, "/api/users", Delete, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -23,5 +26,8 @@ class UserController : public drogon::HttpController<UserController>
     // void your_method_name(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, double p1, int p2) const;
 
     void createUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void getUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void updateUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void deleteUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

@@ -3,14 +3,14 @@ CREATE OR REPLACE FUNCTION log_users_history()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (TG_OP = 'DELETE') THEN
-        INSERT INTO user_histories (user_id, email, name, password_hash, personal_node_id, created_at, updated_at, change_status)
-        VALUES (OLD.user_id, OLD.email, OLD.name, OLD.password_hash, OLD.personal_node_id, OLD.created_at, OLD.updated_at, 'deleted');
+        INSERT INTO user_histories (user_id, email, name, password_hash, personal_node_id, is_deleted, created_at, updated_at, change_status)
+        VALUES (OLD.user_id, OLD.email, OLD.name, OLD.password_hash, OLD.personal_node_id, OLD.is_deleted, OLD.created_at, OLD.updated_at, 'deleted');
     ELSIF (TG_OP = 'UPDATE') THEN
-        INSERT INTO user_histories (user_id, email, name, password_hash, personal_node_id, created_at, updated_at, change_status)
-        VALUES (NEW.user_id, NEW.email, NEW.name, NEW.password_hash, NEW.personal_node_id, NEW.created_at, NEW.updated_at, 'updated');
+        INSERT INTO user_histories (user_id, email, name, password_hash, personal_node_id, is_deleted, created_at, updated_at, change_status)
+        VALUES (NEW.user_id, NEW.email, NEW.name, NEW.password_hash, NEW.personal_node_id, NEW.is_deleted, NEW.created_at, NEW.updated_at, 'updated');
     ELSIF (TG_OP = 'INSERT') THEN
-        INSERT INTO user_histories (user_id, email, name, password_hash, personal_node_id, created_at, updated_at, change_status)
-        VALUES (NEW.user_id, NEW.email, NEW.name, NEW.password_hash, NEW.personal_node_id, NEW.created_at, NEW.updated_at, 'inserted');
+        INSERT INTO user_histories (user_id, email, name, password_hash, personal_node_id, is_deleted, created_at, updated_at, change_status)
+        VALUES (NEW.user_id, NEW.email, NEW.name, NEW.password_hash, NEW.personal_node_id, NEW.is_deleted, NEW.created_at, NEW.updated_at, 'inserted');
     END IF;
     RETURN NULL;
 END;

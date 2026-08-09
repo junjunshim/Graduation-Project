@@ -123,3 +123,50 @@ DROP TRIGGER IF EXISTS trg_node_soft_delete ON organization_nodes;
 CREATE TRIGGER trg_node_soft_delete
 AFTER UPDATE OF is_deleted ON organization_nodes
 FOR EACH ROW EXECUTE FUNCTION handle_node_soft_delete();
+
+
+-- 6. users 소프트 딜리트 연쇄(Cascade) 트리거 정의
+CREATE OR REPLACE FUNCTION handle_user_soft_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- 1) 소프트 딜리트 연쇄 반응 (is_deleted: FALSE -> TRUE)
+    IF NEW.is_deleted = TRUE AND OLD.is_deleted = FALSE THEN
+        -- 유저의 개인 전용 공간 노드 소프트 딜리트 (개인 노드 내 업무들은 노드 트리거에 의해 연쇄 딜리트됨)
+        IF NEW.personal_node_id IS NOT NULL THEN
+            UPDATE organization_nodes
+            SET is_deleted = TRUE
+            WHERE node_id = NEW.personal_node_id
+              AND is_deleted = FALSE;
+        END IF;
+
+        -- 탈퇴 유저가 담당하던 모든 업무들 소프트 딜리트
+        UPDATE work_items
+        SET is_deleted = TRUE
+        WHERE owner_user_id = NEW.user_id
+          AND is_deleted = FALSE;
+
+    -- 2) 복구 연쇄 반응 (is_deleted: TRUE -> FALSE)
+    ELSIF NEW.is_deleted = FALSE AND OLD.is_deleted = TRUE THEN
+        -- 유저의 개인 전용 공간 노드 복구
+        IF NEW.personal_node_id IS NOT NULL THEN
+            UPDATE organization_nodes
+            SET is_deleted = FALSE
+            WHERE node_id = NEW.personal_node_id
+              AND is_deleted = TRUE;
+        END IF;
+
+        -- 유저가 담당하던 업무 복구
+        UPDATE work_items
+        SET is_deleted = FALSE
+        WHERE owner_user_id = NEW.user_id
+          AND is_deleted = TRUE;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_user_soft_delete ON users;
+CREATE TRIGGER trg_user_soft_delete
+AFTER UPDATE OF is_deleted ON users
+FOR EACH ROW EXECUTE FUNCTION handle_user_soft_delete();

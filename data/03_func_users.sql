@@ -103,3 +103,57 @@ BEGIN
         USING ERRCODE = 'P0505';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- UserController::deleteUser (Soft Delete)
+CREATE OR REPLACE FUNCTION delete_user(
+    p_requester_email users.email%TYPE,
+    p_target_email users.email%TYPE
+) 
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_target_id users.user_id%TYPE;
+    v_personal_node_id users.personal_node_id%TYPE;
+    v_target_name users.name%TYPE;
+BEGIN
+    -- 1. 요청자 및 대상 유저 존재 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    SELECT user_id, personal_node_id, name INTO v_target_id, v_personal_node_id, v_target_name FROM users WHERE email = p_target_email AND is_deleted = FALSE;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001] Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    IF v_target_id IS NULL THEN
+        RAISE EXCEPTION '[P0002] Target user does not exist: %', p_target_email
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 2. 권한 검증: 본인 삭제(탈퇴)만 허용
+    IF v_requester_id <> v_target_id THEN
+        RAISE EXCEPTION '[P0103] Insufficient permissions. Only the user themselves can delete their account: %', p_target_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 3. 대상 유저 소프트 딜리트 처리 (트리거가 동작하여 개인 노드 및 소속 업무도 자동 삭제됨)
+    UPDATE users
+    SET is_deleted = TRUE
+    WHERE user_id = v_target_id;
+
+    -- 4. 활동 피드 기록 (개인 공간 노드가 있으면 활동 기록 남김)
+    IF v_personal_node_id IS NOT NULL THEN
+        PERFORM log_activity(v_personal_node_id, p_requester_email, 'USER', v_target_id, v_target_name, 'deleted');
+    END IF;
+
+    RETURN TRUE;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0506] Error occurred while deleting user: %', SQLERRM
+        USING ERRCODE = 'P0506';
+END;
+$$ LANGUAGE plpgsql;

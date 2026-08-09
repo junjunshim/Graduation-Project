@@ -27,9 +27,11 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(100) NOT NULL,
     password_hash TEXT NOT NULL,
     personal_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE SET NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_users_is_deleted ON users(is_deleted);
 
 
 -- 3. 유저와 노드 간이 권한 매핑
@@ -115,6 +117,7 @@ CREATE TABLE user_histories (
     name VARCHAR(100) NOT NULL,
     password_hash TEXT NOT NULL,
     personal_node_id INTEGER,
+    is_deleted BOOLEAN NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     change_status history_status NOT NULL,

@@ -125,6 +125,9 @@ BEGIN
         NULLIF(p_due_date, '')::DATE
     );
 
+    -- 6.5 최근 활동 피드 로깅
+    PERFORM log_activity(p_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, p_title, 'inserted');
+
     -- 7. 생성된 work_item 반환
     RETURN QUERY
     SELECT jsonb_build_object(
@@ -180,6 +183,9 @@ DECLARE
     v_owner_user_id users.user_id%TYPE;
     v_owner_user_email users.email%TYPE;
     v_current_hidden work_items.hidden%TYPE;
+    v_old_title work_items.title%TYPE;
+    v_old_status work_items.status%TYPE;
+    v_old_progress work_items.progress%TYPE;
 BEGIN
     -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
@@ -190,13 +196,13 @@ BEGIN
     END IF;
 
     -- 2. work_item 정보 한 번에 가져오기 (성능 최적화)
-    SELECT owner_node_id, owner_user_id, hidden 
-    INTO v_owner_node_id, v_owner_user_id, v_current_hidden 
+    SELECT owner_node_id, owner_user_id, hidden, title, status, progress
+    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_status, v_old_progress
     FROM work_items 
-    WHERE work_item_id = p_work_item_id;
+    WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0603]Work item does not exist: %', p_work_item_id
+        RAISE EXCEPTION '[P0603]Work item does not exist or already deleted: %', p_work_item_id
         USING ERRCODE = 'P0603';
     END IF;
 
@@ -243,6 +249,17 @@ BEGIN
         due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date)
     WHERE work_item_id = p_work_item_id;
 
+    -- 7.5 활동 로그 적재 (제목, 상태, 진행률 변경 시 기록)
+    IF p_title <> '' AND p_title <> v_old_title THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, p_title, 'updated', 'title', v_old_title, p_title);
+    END IF;
+    IF p_status <> '' AND p_status <> v_old_status THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'status', v_old_status, p_status);
+    END IF;
+    IF p_progress >= 0 AND p_progress <> v_old_progress THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, p_progress::VARCHAR);
+    END IF;
+
     -- 8. 업데이트된 work_item 반환
     RETURN QUERY
     SELECT jsonb_build_object(
@@ -266,7 +283,7 @@ BEGIN
     WHERE w.work_item_id = p_work_item_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
         RAISE;
         WHEN SQLSTATE 'P0103' THEN
         RAISE;

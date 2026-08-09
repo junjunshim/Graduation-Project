@@ -39,6 +39,9 @@ BEGIN
     -- 4. 노드에 대한 기본 권한 설정
     PERFORM default_node_authority(v_new_node_id);
 
+    -- 4.5 최근 활동 피드 로깅
+    PERFORM log_activity(v_new_node_id, p_email, 'NODE', v_new_node_id::VARCHAR, p_name, 'inserted');
+
     -- 5. 생성된 노드관련 정보 즉시 반환
     RETURN QUERY
     SELECT jsonb_build_object(
@@ -155,6 +158,9 @@ BEGIN
     -- 6. 노드에 대한 기본 권한 설정
     PERFORM default_node_authority(v_new_node_id);
 
+    -- 6.5 최근 활동 피드 로깅
+    PERFORM log_activity(v_new_node_id, p_requester_email, 'NODE', v_new_node_id::VARCHAR, p_name, 'inserted');
+
     -- 7. 생성된 노드 정보 즉시 반환
     RETURN QUERY
     SELECT jsonb_build_object(
@@ -217,6 +223,8 @@ CREATE OR REPLACE FUNCTION update_node(
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_requester_role role_assignments.role%TYPE;
+    v_old_name organization_nodes.name%TYPE;
+    v_old_type organization_nodes.node_type%TYPE;
 BEGIN
     -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
@@ -224,6 +232,16 @@ BEGIN
     IF v_requester_id IS NULL THEN
         RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
         USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 1.5 대상 노드 존재 여부 확인 및 변경전 정보 수집
+    SELECT name, node_type INTO v_old_name, v_old_type
+    FROM organization_nodes
+    WHERE node_id = p_node_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]Target node does not exist or already deleted: %', p_node_id
+        USING ERRCODE = 'P0002';
     END IF;
 
     -- 2. 요청자 권한 확인
@@ -238,6 +256,14 @@ BEGIN
         name = CASE WHEN p_name = '' THEN name ELSE p_name END,
         node_type = CASE WHEN p_node_type = '' THEN node_type ELSE p_node_type END
     WHERE node_id = p_node_id;
+
+    -- 3.5 활동 로그 적재 (이름이 변경되었거나 타입이 변경되었을 때 로그 남김)
+    IF p_name <> '' AND p_name <> v_old_name THEN
+        PERFORM log_activity(p_node_id, p_requester_email, 'NODE', p_node_id::VARCHAR, p_name, 'updated', 'name', v_old_name, p_name);
+    END IF;
+    IF p_node_type <> '' AND p_node_type <> v_old_type THEN
+        PERFORM log_activity(p_node_id, p_requester_email, 'NODE', p_node_id::VARCHAR, COALESCE(p_name, v_old_name), 'updated', 'node_type', v_old_type, p_node_type);
+    END IF;
 
     -- 4. 업데이트된 노드 정보 즉시 반환
     RETURN QUERY
@@ -254,7 +280,7 @@ BEGIN
     WHERE n.node_id = p_node_id;
 
     EXCEPTION
-    WHEN SQLSTATE 'P0001' THEN
+    WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
         RAISE;
     WHEN SQLSTATE 'P0103' THEN
         RAISE;

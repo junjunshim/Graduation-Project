@@ -46,6 +46,14 @@ BEGIN
     VALUES (v_target_id, p_node_id, p_role_name)
     RETURNING assignment_id INTO v_new_id;
 
+    -- 5.5 최근 활동 피드 로깅
+    DECLARE
+        v_target_name users.name%TYPE;
+    BEGIN
+        SELECT name INTO v_target_name FROM users WHERE user_id = v_target_id;
+        PERFORM log_activity(p_node_id, p_requester_email, 'ROLE', v_new_id::VARCHAR, v_target_name, 'inserted', 'role', NULL, p_role_name::TEXT);
+    END;
+
     RETURN QUERY SELECT jsonb_build_object(
         'type', 'ROLE',
         'id', r.assignment_id,
@@ -80,6 +88,8 @@ CREATE OR REPLACE FUNCTION update_role(
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_target_id users.user_id%TYPE;
+    v_old_role role_assignments.role%TYPE;
+    v_target_name users.name%TYPE;
 BEGIN
     -- 0. 입력 값 검증 (NULL and admin은 변경 불가)
     IF 
@@ -100,7 +110,7 @@ BEGIN
     END IF;
 
     -- 2. 타켓 id 가져오기 및 존재 여부 확인
-    SELECT user_id INTO v_target_id FROM users WHERE email = p_target_email;
+    SELECT user_id, name INTO v_target_id, v_target_name FROM users WHERE email = p_target_email;
 
     IF v_target_id IS NULL THEN
         RAISE EXCEPTION '[P0002]Target user does not exist : %', p_target_email
@@ -113,14 +123,15 @@ BEGIN
         USING ERRCODE = 'P0103';
     END IF;
 
-    -- 4. 타켓 사용자가 해당 노드에 권한이 있는지 확인
-    IF NOT EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id) THEN
+    -- 4. 타켓 사용자가 해당 노드에 권한이 있는지 확인 및 기존 권한 가져오기
+    SELECT role INTO v_old_role FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id;
+    IF NOT FOUND THEN
         RAISE EXCEPTION '[P0403]Target user does not have a role on this node : %', p_target_email
         USING ERRCODE = 'P0403';
     END IF;
 
     -- 5. 타켓 사용자가 ADMIN 권한인 경우 변경 불가
-    IF EXISTS (SELECT 1 FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id AND role = 'ADMIN') THEN
+    IF v_old_role = 'ADMIN' THEN
         RAISE EXCEPTION '[P0404]Cannot change role of an ADMIN user : %', p_target_email
         USING ERRCODE = 'P0404';
     END IF;
@@ -129,6 +140,14 @@ BEGIN
     UPDATE role_assignments
     SET role = p_change_role_name
     WHERE user_id = v_target_id AND node_id = p_node_id;
+
+    -- 6.5 최근 활동 피드 로깅
+    DECLARE
+        v_assignment_id INTEGER;
+    BEGIN
+        SELECT assignment_id INTO v_assignment_id FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id;
+        PERFORM log_activity(p_node_id, p_requester_email, 'ROLE', v_assignment_id::VARCHAR, v_target_name, 'updated', 'role', v_old_role::TEXT, p_change_role_name::TEXT);
+    END;
 
     -- 7. 결과 반환
     RETURN QUERY SELECT jsonb_build_object(

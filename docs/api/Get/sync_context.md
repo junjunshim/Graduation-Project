@@ -9,7 +9,7 @@
 
 | Method | URL |
 | :--- | :--- |
-| Get | http://{서버 url}/api/context/sync |
+| Get | http://{서버 url}/api/context/sync?last_synced_at= |
 
 ---
 - Request Header

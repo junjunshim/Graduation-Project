@@ -65,6 +65,10 @@
   flex-wrap: wrap;
 }
 
+.pageActions {
+  justify-content: flex-end;
+}
+
 .primaryAction,
 .secondaryAction {
   display: inline-flex;

@@ -3,18 +3,23 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
-import type { RoleMember, WorkItemRecord, WorkItemStatus } from '../model/types'
+import type { UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
 import styles from './WorkspaceTasksTab.module.css'
 
 type WorkspaceTasksTabProps = {
   workItems: WorkItemRecord[]
-  members: RoleMember[]
+  members: Array<Pick<UserRecord, 'userId' | 'name'>>
+  tableLabel?: string
+  createHref?: string
+  filterLayout?: 'sidebar' | 'toolbar'
+  showHeading?: boolean
 }
 
 type PriorityFilter = 'all' | 'high' | 'medium' | 'low'
 type TagFilter = 'all' | WorkItemTagId
+type StatusFilter = 'all' | WorkItemStatus
 
 const WORK_ITEM_STATUSES: WorkItemStatus[] = ['done', 'in-progress', 'todo']
 const PAGE_SIZE = 10
@@ -26,7 +31,7 @@ const INITIAL_STATUS_FILTERS: Record<WorkItemStatus, boolean> = {
   todo: true,
 }
 
-function getMemberName(userId: string, members: RoleMember[]) {
+function getMemberName(userId: string, members: Array<Pick<UserRecord, 'userId' | 'name'>>) {
   return members.find((member) => member.userId === userId)?.name ?? '미지정'
 }
 
@@ -49,12 +54,22 @@ function getVisiblePageNumbers(currentPage: number, pageCount: number) {
   return Array.from({ length: visibleCount }, (_, index) => startPage + index)
 }
 
-export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps) {
+export function WorkspaceTasksTab({
+  workItems,
+  members,
+  tableLabel = '워크스페이스 업무 목록',
+  createHref = '/work-items?view=create',
+  filterLayout = 'sidebar',
+  showHeading = true,
+}: WorkspaceTasksTabProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
   const [tagFilter, setTagFilter] = useState<TagFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [statusFilters, setStatusFilters] = useState(INITIAL_STATUS_FILTERS)
+  const [rangeStart, setRangeStart] = useState('')
+  const [rangeEnd, setRangeEnd] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [isFilterOpen, setIsFilterOpen] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -79,16 +94,40 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
       const matchesQuery =
         normalizedQuery.length === 0 ||
         item.title.toLocaleLowerCase('ko-KR').includes(normalizedQuery) ||
-        ownerName.toLocaleLowerCase('ko-KR').includes(normalizedQuery)
+        (filterLayout === 'sidebar' && ownerName.toLocaleLowerCase('ko-KR').includes(normalizedQuery))
       const matchesOwner = ownerFilter === 'all' || item.ownerUserId === ownerFilter
-      const matchesStatus = statusFilters[item.status]
+      const matchesStatus =
+        filterLayout === 'toolbar'
+          ? statusFilter === 'all' || item.status === statusFilter
+          : statusFilters[item.status]
       const matchesPriority =
         priorityFilter === 'all' || getPriorityMeta(item.priority).filter === priorityFilter
       const matchesTag = tagFilter === 'all' || getWorkItemTag(item)?.id === tagFilter
+      const itemStart = item.startDate ?? item.dueDate
+      const itemEnd = item.dueDate ?? item.startDate
+      const hasActiveDateRange = Boolean(rangeStart || rangeEnd)
+      const matchesDateRange =
+        !hasActiveDateRange ||
+        (itemStart !== undefined &&
+          itemEnd !== undefined &&
+          (!rangeStart || itemEnd >= rangeStart) &&
+          (!rangeEnd || itemStart <= rangeEnd))
 
-      return matchesQuery && matchesOwner && matchesStatus && matchesPriority && matchesTag
+      return matchesQuery && matchesOwner && matchesStatus && matchesPriority && matchesTag && matchesDateRange
     })
-  }, [members, ownerFilter, priorityFilter, searchQuery, statusFilters, tagFilter, workItems])
+  }, [
+    filterLayout,
+    members,
+    ownerFilter,
+    priorityFilter,
+    rangeEnd,
+    rangeStart,
+    searchQuery,
+    statusFilter,
+    statusFilters,
+    tagFilter,
+    workItems,
+  ])
 
   const visibleWorkItems = filteredWorkItems.slice(0, MAX_VISIBLE_WORK_ITEMS)
   const pageCount = Math.max(1, Math.ceil(visibleWorkItems.length / PAGE_SIZE))
@@ -134,30 +173,124 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
     setOwnerFilter('all')
     setPriorityFilter('all')
     setTagFilter('all')
+    setStatusFilter('all')
     setStatusFilters(INITIAL_STATUS_FILTERS)
+    setRangeStart('')
+    setRangeEnd('')
     setCurrentPage(1)
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="workspace-tasks-title">
-      <header className={styles.pageHeader}>
-        <div>
-          <h2 id="workspace-tasks-title">업무 목록</h2>
-        </div>
+    <section
+      className={styles.panel}
+      aria-labelledby={showHeading ? 'workspace-tasks-title' : undefined}
+      aria-label={showHeading ? undefined : tableLabel}
+    >
+      {showHeading ? (
+        <header className={styles.pageHeader}>
+          <div>
+            <h2 id="workspace-tasks-title">업무 목록</h2>
+          </div>
 
-        <div className={styles.headerActions}>
-          {!isFilterOpen ? (
-            <button type="button" className={styles.secondaryButton} onClick={() => setIsFilterOpen(true)}>
-              필터 열기
-            </button>
-          ) : null}
-          
-        </div>
-      </header>
+          <div className={styles.headerActions}>
+            {filterLayout === 'sidebar' && !isFilterOpen ? (
+              <button type="button" className={styles.secondaryButton} onClick={() => setIsFilterOpen(true)}>
+                필터 열기
+              </button>
+            ) : null}
+          </div>
+        </header>
+      ) : null}
 
-      <div className={[styles.contentGrid, !isFilterOpen ? styles.contentGridFull : ''].filter(Boolean).join(' ')}>
+      {filterLayout === 'toolbar' ? (
+        <div className={styles.listToolbar} aria-label="업무 목록 필터">
+          <label className={styles.toolbarField}>
+            <span className={styles.visuallyHidden}>카테고리</span>
+            <select
+              value={tagFilter}
+              onChange={(event) => {
+                setTagFilter(event.target.value as TagFilter)
+                setCurrentPage(1)
+              }}
+            >
+              <option value="all">전체 카테고리</option>
+              {Object.entries(WORK_ITEM_TAGS).map(([tagId, tag]) => (
+                <option key={tagId} value={tagId}>{tag.label}</option>
+              ))}
+            </select>
+            <Icon name="chevronDown" size={14} />
+          </label>
+
+          <label className={styles.toolbarField}>
+            <span className={styles.visuallyHidden}>상태</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value as StatusFilter)
+                setCurrentPage(1)
+              }}
+            >
+              <option value="all">전체 상태</option>
+              {WORK_ITEM_STATUSES.map((status) => (
+                <option key={status} value={status}>{getWorkItemStatusLabel(status)}</option>
+              ))}
+            </select>
+            <Icon name="chevronDown" size={14} />
+          </label>
+
+          <div className={[styles.toolbarField, styles.dateRangeField].join(' ')}>
+            <Icon name="calendar" size={15} />
+            <label>
+              <span className={styles.visuallyHidden}>검색 시작일</span>
+              <input
+                type="date"
+                value={rangeStart}
+                max={rangeEnd || undefined}
+                onChange={(event) => {
+                  setRangeStart(event.target.value)
+                  setCurrentPage(1)
+                }}
+              />
+            </label>
+            <span aria-hidden="true">~</span>
+            <label>
+              <span className={styles.visuallyHidden}>검색 종료일</span>
+              <input
+                type="date"
+                value={rangeEnd}
+                min={rangeStart || undefined}
+                onChange={(event) => {
+                  setRangeEnd(event.target.value)
+                  setCurrentPage(1)
+                }}
+              />
+            </label>
+          </div>
+
+          <label className={[styles.toolbarField, styles.toolbarSearch].join(' ')}>
+            <span className={styles.visuallyHidden}>업무 제목 검색</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value)
+                setCurrentPage(1)
+              }}
+              placeholder="업무 제목 검색"
+            />
+            <Icon name="search" size={16} />
+          </label>
+        </div>
+      ) : null}
+
+      <div
+        className={[
+          styles.contentGrid,
+          filterLayout === 'toolbar' || !isFilterOpen ? styles.contentGridFull : '',
+        ].filter(Boolean).join(' ')}
+      >
         <div className={styles.tableCard}>
-          <div className={styles.tableScroller} role="table" aria-label="워크스페이스 업무 목록">
+          <div className={styles.tableScroller} role="table" aria-label={tableLabel}>
             <div className={styles.tableHeader} role="row">
               <span role="columnheader" className={styles.checkboxCell}>
                 <input
@@ -268,7 +401,7 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
           </div>
 
           <footer className={styles.tableFooter}>
-            <Link to="/work-items/new" className={styles.addTaskLink}>
+            <Link to={createHref} className={styles.addTaskLink}>
               <Icon name="plus" size={15} />
               새 업무 추가
             </Link>
@@ -328,7 +461,7 @@ export function WorkspaceTasksTab({ workItems, members }: WorkspaceTasksTabProps
           </footer>
         </div>
 
-        {isFilterOpen ? (
+        {filterLayout === 'sidebar' && isFilterOpen ? (
           <aside className={styles.filterPanel} aria-label="업무 필터">
             <div className={styles.filterHeader}>
               <strong>필터</strong>

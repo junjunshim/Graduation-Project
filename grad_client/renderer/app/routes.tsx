@@ -96,12 +96,10 @@ const router = createHashRouter([
           },
           {
             path: '/work-items',
-            element: (
-              <ShellPlaceholderPage
-                actionLabel="업무 등록"
-                actionTo="/work-items/new"
-              />
-            ),
+            lazy: async () => {
+              const { WorkItemsPage } = await import('../features/work-item/pages/WorkItemsPage')
+              return { Component: WorkItemsPage }
+            },
           },
           {
             path: '/work-items/new',

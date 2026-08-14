@@ -6,12 +6,24 @@ export type ShellPageMeta = {
   actionTo: string
 }
 
-export function getShellPageMeta(pathname: string, hasOrgContext: boolean): ShellPageMeta {
+export function getShellPageMeta(pathname: string, hasOrgContext: boolean, search = ''): ShellPageMeta {
   if (pathname === '/work-items') {
+    const activeView = new URLSearchParams(search).get('view') === 'create' ? 'create' : 'list'
+
+    if (activeView === 'create') {
+      return {
+        section: 'Work Items',
+        title: '업무 생성',
+        description: '새로운 업무를 등록하세요.',
+        actionLabel: '업무 목록',
+        actionTo: '/work-items',
+      }
+    }
+
     return {
       section: 'Work Items',
-      title: '업무',
-      description: '등록된 업무를 모아 보는 화면을 준비 중입니다.',
+      title: '업무 목록',
+      description: '전체 업무를 확인하고 관리할 수 있습니다.',
       actionLabel: '업무 등록',
       actionTo: '/work-items/new',
     }
@@ -35,7 +47,7 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean): Shel
     return {
       section: 'Work Item',
       title: '업무 수정',
-      description: '업무 수정 라우트의 구조를 준비하고 현재 업무 컨텍스트를 확인합니다.',
+      description: '업무의 상세 정보와 진행 상태를 수정하세요.',
       actionLabel: '상세 보기',
       actionTo: `/work-items/${workItemId}`,
     }

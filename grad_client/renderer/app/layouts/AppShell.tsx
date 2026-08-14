@@ -5,6 +5,9 @@ import { hasCustomWindowControls } from '../chrome/windowControls'
 import { useBodyScrollSurface } from '../chrome/useBodyScrollSurface'
 import { getCurrentUser, signOut } from '../../features/auth/api'
 import { getOrgSnapshot } from '../../features/workspace/data/orgService'
+import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../../features/workspace/model/labels'
+import { getWorkItemTag } from '../../features/workspace/model/workItemTags'
+import { getSelectedWorkItemDetail } from '../../features/workspace/queries/selectedWorkItemDetail'
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
 import { ShellSidebar } from './ShellSidebar'
 import { ShellTopActions, type ShellTopActionsHeading } from './ShellTopActions'
@@ -54,12 +57,19 @@ export function AppShell() {
   const overview = getWorkspaceOverview(currentUser.userId, snapshot)
   const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0
-  const pageMeta = getShellPageMeta(location.pathname, hasOrgContext)
+  const pageMeta = getShellPageMeta(location.pathname, hasOrgContext, location.search)
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
   const isWorkspaceRoute = location.pathname === '/workspace'
   const isWorkspaceTimelineRoute =
     isWorkspaceRoute && new URLSearchParams(location.search).get('view') === 'timeline'
-  const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname)
+  const isWorkItemsRoute = location.pathname === '/work-items'
+  const isWorkItemEditRoute = /^\/work-items\/[^/]+\/edit$/.test(location.pathname)
+  const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname) || isWorkItemEditRoute
+  const workItemDetailMatch = location.pathname.match(/^\/work-items\/([^/]+)$/)
+  const workItemDetail = workItemDetailMatch
+    ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
+    : null
+  const workItemCategory = workItemDetail ? getWorkItemTag(workItemDetail.item) : null
   const shellHeading: ShellTopActionsHeading = isWorkspaceRoute
     ? {
         type: 'breadcrumb',
@@ -69,6 +79,20 @@ export function AppShell() {
       }
     : location.pathname === '/dashboard'
       ? { type: 'greeting' }
+      : workItemDetail
+        ? {
+            type: 'workItem',
+            title: workItemDetail.item.title,
+            subtitle: workItemDetail.ownerNode.name,
+            backTo: '/work-items',
+            category: workItemCategory
+              ? { label: workItemCategory.label, tone: workItemCategory.tone }
+              : undefined,
+            status: {
+              label: getWorkItemStatusLabel(workItemDetail.item.status),
+              tone: getWorkItemStatusTone(workItemDetail.item.status),
+            },
+          }
       : hasSectionHeading
         ? {
             type: 'page',
@@ -115,7 +139,11 @@ export function AppShell() {
         {!hasCustomTitleBar ? <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} /> : null}
 
         <div
-          className={[styles.workspaceBody, isWorkspaceTimelineRoute ? styles.workspaceBodyTimeline : '']
+          className={[
+            styles.workspaceBody,
+            isWorkspaceTimelineRoute ? styles.workspaceBodyTimeline : '',
+            isWorkItemsRoute ? styles.workspaceBodyWorkItems : '',
+          ]
             .filter(Boolean)
             .join(' ')}
         >
@@ -125,7 +153,15 @@ export function AppShell() {
             inset="standard"
           />
 
-          <main className={[styles.main, isWorkspaceTimelineRoute ? styles.mainTimeline : ''].filter(Boolean).join(' ')}>
+          <main
+            className={[
+              styles.main,
+              isWorkspaceTimelineRoute ? styles.mainTimeline : '',
+              isWorkItemsRoute ? styles.mainWorkItems : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
             <Outlet />
           </main>
         </div>

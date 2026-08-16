@@ -20,8 +20,8 @@ export function getWorkItemComposerContext(
 
   const selectedNode =
     availableNodes.find((node) => node.id === nodeId) ??
-    availableNodes.find((node) => node.id === currentUser?.personalNodeId) ??
     availableNodes.find((node) => node.nodeType !== 'USER') ??
+    availableNodes.find((node) => node.id === currentUser?.personalNodeId) ??
     availableNodes[0] ??
     null
 

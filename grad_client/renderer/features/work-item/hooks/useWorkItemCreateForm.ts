@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import type { WorkItemStatus } from '../../workspace/model/types'
+import type { WorkItemTagId } from '../../workspace/model/workItemTags'
 
 export type WorkItemCreateFormState = {
+  categoryId: WorkItemTagId | ''
   ownerNodeId: string
   ownerUserId: string
   title: string
@@ -17,6 +19,7 @@ export type WorkItemCreateFormState = {
 }
 
 const initialForm: WorkItemCreateFormState = {
+  categoryId: '',
   ownerNodeId: '',
   ownerUserId: '',
   title: '',

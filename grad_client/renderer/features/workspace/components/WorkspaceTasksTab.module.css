@@ -34,6 +34,106 @@
   gap: 8px;
 }
 
+.listToolbar {
+  display: grid;
+  grid-template-columns:
+    minmax(9.5rem, 0.75fr)
+    minmax(9.5rem, 0.75fr)
+    minmax(20rem, 1.2fr)
+    minmax(18rem, 1.5fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.toolbarField {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-muted);
+}
+
+.toolbarField:focus-within {
+  border-color: var(--line-selected);
+  outline: 2px solid var(--accent-blue-soft);
+}
+
+.toolbarField select,
+.toolbarField input {
+  min-width: 0;
+  width: 100%;
+  height: 40px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.toolbarField select {
+  padding: 0 38px 0 13px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.toolbarField select + svg {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+}
+
+.dateRangeField {
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.dateRangeField > svg {
+  flex: 0 0 auto;
+}
+
+.dateRangeField label {
+  min-width: 0;
+  flex: 1;
+}
+
+.dateRangeField input {
+  padding: 0 3px;
+  font-size: 0.75rem;
+}
+
+.toolbarSearch {
+  padding: 0 12px;
+}
+
+.toolbarSearch input {
+  padding: 0;
+}
+
+.toolbarSearch input::placeholder {
+  color: var(--text-muted);
+}
+
+.toolbarSearch svg {
+  flex: 0 0 auto;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .createLink,
 .secondaryButton {
   display: inline-flex;
@@ -652,6 +752,10 @@
 }
 
 @media (max-width: 1080px) {
+  .listToolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .contentGrid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -671,6 +775,10 @@
 }
 
 @media (max-width: 720px) {
+  .listToolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .panel {
     padding-inline: 0;
   }

@@ -431,6 +431,12 @@
   overflow: hidden;
 }
 
+.workspaceBodyWorkItems {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+}
+
 .pageBar {
   position: sticky;
   top: 0;
@@ -548,6 +554,11 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.mainWorkItems {
+  height: 100%;
+  min-height: 0;
 }
 
 .placeholderPage {

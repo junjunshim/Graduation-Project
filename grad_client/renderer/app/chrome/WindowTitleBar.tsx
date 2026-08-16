@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AxisMark } from '../../design-system/primitives/AxisMark'
 import { Icon } from '../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../design-system/theme/ThemeToggle'
 import { getWindowControls } from './windowControls'
@@ -49,7 +50,7 @@ export function WindowTitleBar(props: WindowTitleBarProps) {
     <div className={[styles.bar, props.variant === 'workspace' ? styles.workspace : styles.auth].join(' ')}>
       <div className={styles.left}>
         <div className={styles.brand}>
-          <span className={styles.brandMark}>A</span>
+          <AxisMark size={22} className={styles.brandMark} />
           <span className={styles.brandTitle}>Axis</span>
         </div>
       </div>

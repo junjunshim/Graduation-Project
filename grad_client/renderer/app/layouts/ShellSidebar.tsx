@@ -1,4 +1,4 @@
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
 import type { WorkspaceOverview } from '../../features/workspace/model/types'
 import { navigationItems } from '../navigation'
@@ -12,6 +12,7 @@ type ShellSidebarProps = {
 }
 
 export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignOut }: ShellSidebarProps) {
+  const location = useLocation()
   const expandSidebarLabel = '사이드바 펼치기'
   const collapseSidebarLabel = '사이드바 접기'
   const signOutLabel = '로그아웃'
@@ -22,28 +23,62 @@ export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignO
       <div className={styles.sidebarInner}>
         <div className={styles.sidebarTop}>
           <nav className={styles.navigation} aria-label="주요 메뉴">
-            {navigationItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                aria-label={isCollapsed ? item.label : undefined}
-                data-tooltip={isCollapsed ? item.label : undefined}
-                className={({ isActive }) =>
-                  [
-                    styles.navItem,
-                    isCollapsed ? styles.tooltipAnchor : '',
-                    isActive ? styles.navItemActive : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')
-                }
-              >
-                <span className={styles.navIcon}>
-                  <Icon name={item.icon} size={16} />
-                </span>
-                <span className={styles.navCopy}>{item.label}</span>
-              </NavLink>
-            ))}
+            {navigationItems.map((item) => {
+              const isSectionActive = Boolean(
+                item.activePathPrefix &&
+                  (location.pathname === item.activePathPrefix ||
+                    location.pathname.startsWith(`${item.activePathPrefix}/`)),
+              )
+              const linkContent = (
+                <>
+                  <span className={styles.navIcon}>
+                    <Icon name={item.icon} size={16} />
+                  </span>
+                  <span className={styles.navCopy}>{item.label}</span>
+                </>
+              )
+
+              if (item.activePathPrefix) {
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    aria-label={isCollapsed ? item.label : undefined}
+                    aria-current={isSectionActive ? 'page' : undefined}
+                    data-tooltip={isCollapsed ? item.label : undefined}
+                    className={[
+                      styles.navItem,
+                      isCollapsed ? styles.tooltipAnchor : '',
+                      isSectionActive ? styles.navItemActive : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                  >
+                    {linkContent}
+                  </Link>
+                )
+              }
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  aria-label={isCollapsed ? item.label : undefined}
+                  data-tooltip={isCollapsed ? item.label : undefined}
+                  className={({ isActive }) =>
+                    [
+                      styles.navItem,
+                      isCollapsed ? styles.tooltipAnchor : '',
+                      isActive ? styles.navItemActive : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')
+                  }
+                >
+                  {linkContent}
+                </NavLink>
+              )
+            })}
           </nav>
         </div>
 

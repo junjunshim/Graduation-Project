@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
 import { useBodyScrollSurface } from '../../../app/chrome/useBodyScrollSurface'
+import { AxisMark } from '../../../design-system/primitives/AxisMark'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
 import styles from './AuthPageLayout.module.css'
 
@@ -54,9 +55,9 @@ export function AuthPageLayout({
       <div className={styles.pageInner}>
         <header className={styles.topBar}>
           <div className={styles.brandBlock}>
-            <div className={styles.brandMark}>GP</div>
+            <AxisMark size={30} className={styles.brandMark} />
             <div className={styles.brandCopy}>
-              <strong>Grad Client</strong>
+              <strong>Axis</strong>
               <span>협업 워크스페이스</span>
             </div>
           </div>

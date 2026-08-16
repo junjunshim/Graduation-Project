@@ -74,6 +74,13 @@ const router = createHashRouter([
             },
           },
           {
+            path: '/workspace/select',
+            lazy: async () => {
+              const { WorkspaceEntryPage } = await import('../features/workspace/pages/WorkspaceEntryPage')
+              return { Component: WorkspaceEntryPage }
+            },
+          },
+          {
             path: '/workspace',
             lazy: async () => {
               const { WorkspacePage } = await import('../features/workspace/pages/WorkspacePage')

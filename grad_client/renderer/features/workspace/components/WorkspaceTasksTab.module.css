@@ -604,8 +604,10 @@
 
 .selectField svg {
   position: absolute;
+  top: 50%;
   right: 8px;
   pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .statusFilters {

@@ -5,6 +5,10 @@ import { hasCustomWindowControls } from '../chrome/windowControls'
 import { useBodyScrollSurface } from '../chrome/useBodyScrollSurface'
 import { getCurrentUser, signOut } from '../../features/auth/api'
 import { getOrgSnapshot } from '../../features/workspace/data/orgService'
+import {
+  getActiveWorkspaceRootId,
+  getDefaultWorkspaceRootId,
+} from '../../features/workspace/data/workspaceDirectorySelection'
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
 import { ShellSidebar } from './ShellSidebar'
 import { ShellTopActions, type ShellTopActionsHeading } from './ShellTopActions'
@@ -51,11 +55,16 @@ export function AppShell() {
     return null
   }
 
-  const overview = getWorkspaceOverview(currentUser.userId, snapshot)
+  const overview = getWorkspaceOverview(currentUser.userId, snapshot, {
+    rootNodeId:
+      getActiveWorkspaceRootId(currentUser.userId) ??
+      getDefaultWorkspaceRootId(currentUser.userId),
+  })
   const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext)
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
+  const isWorkspaceSelectRoute = location.pathname === '/workspace/select'
   const isWorkspaceRoute = location.pathname === '/workspace'
   const isWorkspaceTimelineRoute =
     isWorkspaceRoute && new URLSearchParams(location.search).get('view') === 'timeline'
@@ -108,22 +117,29 @@ export function AppShell() {
       />
 
       <div
-        className={[styles.workspace, hasCustomTitleBar ? styles.workspaceWithoutPageBar : '']
+        className={[
+          styles.workspace,
+          hasCustomTitleBar || isWorkspaceSelectRoute ? styles.workspaceWithoutPageBar : '',
+        ]
           .filter(Boolean)
           .join(' ')}
       >
-        {!hasCustomTitleBar ? <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} /> : null}
+        {!hasCustomTitleBar && !isWorkspaceSelectRoute ? (
+          <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} />
+        ) : null}
 
         <div
           className={[styles.workspaceBody, isWorkspaceTimelineRoute ? styles.workspaceBodyTimeline : '']
             .filter(Boolean)
             .join(' ')}
         >
-          <ShellTopActions
-            currentUser={currentUser}
-            heading={shellHeading}
-            inset="standard"
-          />
+          {!isWorkspaceSelectRoute ? (
+            <ShellTopActions
+              currentUser={currentUser}
+              heading={shellHeading}
+              inset="standard"
+            />
+          ) : null}
 
           <main className={[styles.main, isWorkspaceTimelineRoute ? styles.mainTimeline : ''].filter(Boolean).join(' ')}>
             <Outlet />

@@ -11,12 +11,71 @@ export const TEAM_404_SEED_VERSION = 20260322
 export const TEAM_404_DEMO_USER_ID = 'U-1'
 
 const TEAM_404_DEMO_PASSWORD = 'team404-demo'
+const TEAM_404_MOCK_MEMBER_COUNT = 124
+
+const MOCK_MEMBER_SURNAMES = [
+  '김',
+  '이',
+  '박',
+  '최',
+  '정',
+  '강',
+  '조',
+  '윤',
+  '장',
+  '임',
+  '한',
+  '오',
+  '서',
+  '신',
+  '권',
+  '황',
+]
+
+const MOCK_MEMBER_GIVEN_NAMES = [
+  '민준',
+  '서연',
+  '도윤',
+  '하은',
+  '지호',
+  '수빈',
+  '현우',
+  '예린',
+]
 
 function getSeedTimestamp(offsetDays = 0) {
   const base = new Date('2026-03-01T09:00:00+09:00')
   base.setDate(base.getDate() + offsetDays)
   return base.toISOString()
 }
+
+function getMockUserId(memberNumber: number) {
+  return `MOCK-U-${String(memberNumber).padStart(3, '0')}`
+}
+
+function getMockUserIds(startMemberNumber: number, count: number) {
+  return Array.from({ length: count }, (_, index) => getMockUserId(startMemberNumber + index))
+}
+
+const team404MockUsers: UserRecord[] = Array.from(
+  { length: TEAM_404_MOCK_MEMBER_COUNT },
+  (_, index) => {
+    const memberNumber = index + 1
+    const surname = MOCK_MEMBER_SURNAMES[index % MOCK_MEMBER_SURNAMES.length]
+    const givenName =
+      MOCK_MEMBER_GIVEN_NAMES[
+        Math.floor(index / MOCK_MEMBER_SURNAMES.length) % MOCK_MEMBER_GIVEN_NAMES.length
+      ]
+
+    return {
+      userId: getMockUserId(memberNumber),
+      email: `mock${String(memberNumber).padStart(3, '0')}@team404.dev`,
+      name: `${surname}${givenName}`,
+      password: TEAM_404_DEMO_PASSWORD,
+      createdAt: getSeedTimestamp(10 + (index % 45)),
+    }
+  },
+)
 
 const team404SeedUsers: UserRecord[] = [
   {
@@ -51,6 +110,7 @@ const team404SeedUsers: UserRecord[] = [
     personalNodeId: 4,
     createdAt: getSeedTimestamp(1),
   },
+  ...team404MockUsers,
 ]
 
 const team404SeedNodes: OrganizationNodeRecord[] = [
@@ -83,7 +143,210 @@ const team404SeedNodes: OrganizationNodeRecord[] = [
     path: [5, 6, 8],
     createdAt: getSeedTimestamp(4),
   },
+  {
+    id: 10000,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '마케팅본부',
+    path: [5, 10000],
+    createdAt: getSeedTimestamp(20),
+  },
+  {
+    id: 10001,
+    parentNodeId: 10000,
+    nodeType: 'TEAM',
+    name: '브랜드마케팅팀',
+    path: [5, 10000, 10001],
+    createdAt: getSeedTimestamp(25),
+  },
+  {
+    id: 10002,
+    parentNodeId: 10000,
+    nodeType: 'TEAM',
+    name: '디지털마케팅팀',
+    path: [5, 10000, 10002],
+    createdAt: getSeedTimestamp(26),
+  },
+  {
+    id: 10003,
+    parentNodeId: 10000,
+    nodeType: 'TEAM',
+    name: '마케팅기획팀',
+    path: [5, 10000, 10003],
+    createdAt: getSeedTimestamp(27),
+  },
+  {
+    id: 10010,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '디자인본부',
+    path: [5, 10010],
+    createdAt: getSeedTimestamp(21),
+  },
+  {
+    id: 10011,
+    parentNodeId: 10010,
+    nodeType: 'TEAM',
+    name: 'UI/UX팀',
+    path: [5, 10010, 10011],
+    createdAt: getSeedTimestamp(28),
+  },
+  {
+    id: 10012,
+    parentNodeId: 10010,
+    nodeType: 'TEAM',
+    name: '브랜드디자인팀',
+    path: [5, 10010, 10012],
+    createdAt: getSeedTimestamp(29),
+  },
+  {
+    id: 10013,
+    parentNodeId: 10010,
+    nodeType: 'TEAM',
+    name: '콘텐츠디자인팀',
+    path: [5, 10010, 10013],
+    createdAt: getSeedTimestamp(30),
+  },
+  {
+    id: 10020,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '경영지원본부',
+    path: [5, 10020],
+    createdAt: getSeedTimestamp(22),
+  },
+  {
+    id: 10021,
+    parentNodeId: 10020,
+    nodeType: 'TEAM',
+    name: '인사팀',
+    path: [5, 10020, 10021],
+    createdAt: getSeedTimestamp(31),
+  },
+  {
+    id: 10022,
+    parentNodeId: 10020,
+    nodeType: 'TEAM',
+    name: '재무팀',
+    path: [5, 10020, 10022],
+    createdAt: getSeedTimestamp(32),
+  },
+  {
+    id: 10030,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '영업본부',
+    path: [5, 10030],
+    createdAt: getSeedTimestamp(23),
+  },
+  {
+    id: 10031,
+    parentNodeId: 10030,
+    nodeType: 'TEAM',
+    name: '국내영업팀',
+    path: [5, 10030, 10031],
+    createdAt: getSeedTimestamp(33),
+  },
+  {
+    id: 10032,
+    parentNodeId: 10030,
+    nodeType: 'TEAM',
+    name: '해외영업팀',
+    path: [5, 10030, 10032],
+    createdAt: getSeedTimestamp(34),
+  },
+  {
+    id: 10040,
+    parentNodeId: 5,
+    nodeType: 'DEPARTMENT',
+    name: '연구소',
+    path: [5, 10040],
+    createdAt: getSeedTimestamp(24),
+  },
+  {
+    id: 10041,
+    parentNodeId: 10040,
+    nodeType: 'TEAM',
+    name: '기술연구팀',
+    path: [5, 10040, 10041],
+    createdAt: getSeedTimestamp(35),
+  },
+  {
+    id: 10100,
+    parentNodeId: 6,
+    nodeType: 'TEAM',
+    name: '프로덕트팀',
+    path: [5, 6, 10100],
+    createdAt: getSeedTimestamp(36),
+  },
+  {
+    id: 10101,
+    parentNodeId: 6,
+    nodeType: 'TEAM',
+    name: 'QA팀',
+    path: [5, 6, 10101],
+    createdAt: getSeedTimestamp(37),
+  },
 ]
+
+const team404MockMemberships: Array<{ nodeId: number; userIds: string[] }> = [
+  { nodeId: 7, userIds: getMockUserIds(1, 9) },
+  { nodeId: 8, userIds: getMockUserIds(10, 9) },
+  { nodeId: 10100, userIds: getMockUserIds(19, 8) },
+  { nodeId: 10101, userIds: getMockUserIds(27, 6) },
+  { nodeId: 10001, userIds: getMockUserIds(33, 8) },
+  { nodeId: 10002, userIds: getMockUserIds(41, 10) },
+  { nodeId: 10003, userIds: getMockUserIds(51, 6) },
+  { nodeId: 10011, userIds: getMockUserIds(57, 8) },
+  { nodeId: 10012, userIds: getMockUserIds(65, 6) },
+  { nodeId: 10013, userIds: getMockUserIds(71, 4) },
+  { nodeId: 10021, userIds: getMockUserIds(75, 8) },
+  { nodeId: 10022, userIds: getMockUserIds(83, 14) },
+  { nodeId: 10031, userIds: getMockUserIds(97, 12) },
+  { nodeId: 10032, userIds: getMockUserIds(109, 8) },
+  { nodeId: 10041, userIds: getMockUserIds(117, 8) },
+]
+
+const team404MockBranchRoles: Array<{
+  userId: string
+  nodeId: number
+  roleName: RoleAssignmentRecord['roleName']
+}> = [
+  { userId: getMockUserId(33), nodeId: 10000, roleName: 'ADMIN' },
+  { userId: getMockUserId(41), nodeId: 10000, roleName: 'MANAGER' },
+  { userId: getMockUserId(57), nodeId: 10010, roleName: 'ADMIN' },
+  { userId: getMockUserId(65), nodeId: 10010, roleName: 'MANAGER' },
+  { userId: getMockUserId(75), nodeId: 10020, roleName: 'ADMIN' },
+  { userId: getMockUserId(83), nodeId: 10020, roleName: 'MANAGER' },
+  { userId: getMockUserId(97), nodeId: 10030, roleName: 'ADMIN' },
+  { userId: getMockUserId(109), nodeId: 10030, roleName: 'MANAGER' },
+  { userId: getMockUserId(117), nodeId: 10040, roleName: 'ADMIN' },
+  { userId: getMockUserId(118), nodeId: 10040, roleName: 'MANAGER' },
+]
+
+function createTeam404MockRoles() {
+  let nextRoleId = 20000
+  const branchRoles: RoleAssignmentRecord[] = team404MockBranchRoles.map((role, index) => ({
+    id: nextRoleId + index,
+    ...role,
+    createdAt: getSeedTimestamp(40 + (index % 10)),
+  }))
+  nextRoleId += branchRoles.length
+
+  const memberRoles = team404MockMemberships.flatMap(({ nodeId, userIds }) =>
+    userIds.map((userId, index) => ({
+      id: nextRoleId++,
+      userId,
+      nodeId,
+      roleName: index === 0 ? 'ADMIN' as const : index === 1 ? 'MANAGER' as const : 'MEMBER' as const,
+      createdAt: getSeedTimestamp(50 + (index % 20)),
+    })),
+  )
+
+  return [...branchRoles, ...memberRoles]
+}
+
+const team404MockRoles = createTeam404MockRoles()
 
 const team404SeedRoles: RoleAssignmentRecord[] = [
   { id: 1, userId: 'U-1', nodeId: 1, roleName: 'ADMIN', createdAt: getSeedTimestamp(0) },
@@ -99,6 +362,7 @@ const team404SeedRoles: RoleAssignmentRecord[] = [
   { id: 11, userId: 'U-3', nodeId: 7, roleName: 'MEMBER', createdAt: getSeedTimestamp(4) },
   { id: 12, userId: 'U-4', nodeId: 7, roleName: 'MEMBER', createdAt: getSeedTimestamp(4) },
   { id: 13, userId: 'U-1', nodeId: 8, roleName: 'ADMIN', createdAt: getSeedTimestamp(4) },
+  ...team404MockRoles,
 ]
 
 const team404SeedWorkItems: WorkItemRecord[] = [

@@ -4,6 +4,7 @@ export type NavigationItem = {
   to: string
   label: string
   icon: IconName
+  activePathPrefix?: string
 }
 
 export const navigationItems: NavigationItem[] = [
@@ -13,9 +14,10 @@ export const navigationItems: NavigationItem[] = [
     icon: 'home',
   },
   {
-    to: '/workspace',
-    label: '워크 스페이스',
+    to: '/workspace/select',
+    label: '워크스페이스',
     icon: 'folder',
+    activePathPrefix: '/workspace',
   },
   {
     to: '/work-items',

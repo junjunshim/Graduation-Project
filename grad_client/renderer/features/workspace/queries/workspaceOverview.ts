@@ -13,6 +13,48 @@ import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 
+type WorkspaceOverviewOptions = {
+  rootNodeId?: string | null
+}
+
+function parseRootNodeId(rootNodeId?: string | null) {
+  if (!rootNodeId || !/^\d+$/.test(rootNodeId)) {
+    return null
+  }
+
+  const parsedRootNodeId = Number(rootNodeId)
+  return Number.isSafeInteger(parsedRootNodeId) && parsedRootNodeId > 0 ? parsedRootNodeId : null
+}
+
+function getDescendantNodeIds(rootNodeId: number, nodes: OrganizationNodeRecord[]) {
+  const descendantNodeIds = new Set<number>()
+  const pendingNodeIds = [rootNodeId]
+  const childNodeIdsByParentId = new Map<number, number[]>()
+
+  nodes.forEach((node) => {
+    if (node.parentNodeId === undefined) {
+      return
+    }
+
+    const childNodeIds = childNodeIdsByParentId.get(node.parentNodeId) ?? []
+    childNodeIds.push(node.id)
+    childNodeIdsByParentId.set(node.parentNodeId, childNodeIds)
+  })
+
+  for (let index = 0; index < pendingNodeIds.length; index += 1) {
+    const nodeId = pendingNodeIds[index]
+
+    if (nodeId === undefined || descendantNodeIds.has(nodeId)) {
+      continue
+    }
+
+    descendantNodeIds.add(nodeId)
+    childNodeIdsByParentId.get(nodeId)?.forEach((childNodeId) => pendingNodeIds.push(childNodeId))
+  }
+
+  return descendantNodeIds
+}
+
 function isDueSoon(item: WorkItemRecord) {
   if (!item.dueDate || item.status === 'done') {
     return false
@@ -139,17 +181,49 @@ function buildWorkspaceTree(nodes: OrganizationNodeRecord[], workItems: WorkItem
   return roots
 }
 
-export function getWorkspaceOverview(userId?: string, providedSnapshot?: WorkspaceSnapshot): WorkspaceOverview {
+export function getWorkspaceOverview(
+  userId?: string,
+  providedSnapshot?: WorkspaceSnapshot,
+  options?: WorkspaceOverviewOptions,
+): WorkspaceOverview {
   const snapshot = providedSnapshot ?? getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const resolvedUserId = userId ?? currentUser?.userId
-  const accessibleNodeIds = resolvedUserId ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot) : []
+  const allAccessibleNodeIds = resolvedUserId ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot) : []
+  const allAccessibleNodeIdSet = new Set(allAccessibleNodeIds)
+  const allVisibleNodes = sortWorkspaceNodes(
+    snapshot.nodes.filter((node) => allAccessibleNodeIdSet.has(node.id)),
+  )
+  const visibleOrganizationNodeIds = new Set(
+    allVisibleNodes.filter((node) => node.nodeType !== 'USER').map((node) => node.id),
+  )
+  const accessibleRootNodes = allVisibleNodes.filter(
+    (node) =>
+      node.nodeType !== 'USER' &&
+      (node.parentNodeId === undefined || !visibleOrganizationNodeIds.has(node.parentNodeId)),
+  )
+  const requestedRootNodeId = parseRootNodeId(options?.rootNodeId)
+  const scopedRootNode = options
+    ? accessibleRootNodes.find((node) => node.id === requestedRootNodeId) ?? accessibleRootNodes[0]
+    : undefined
+  const scopedNodeIdSet = scopedRootNode
+    ? getDescendantNodeIds(scopedRootNode.id, allVisibleNodes)
+    : allAccessibleNodeIdSet
+  const accessibleNodeIds = allAccessibleNodeIds.filter((nodeId) => scopedNodeIdSet.has(nodeId))
   const accessibleNodeIdSet = new Set(accessibleNodeIds)
-  const summary = getWorkspaceSummary(resolvedUserId, snapshot)
   const visibleNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id)))
   const visibleWorkItems = sortWorkspaceWorkItems(
     snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId)),
   )
+  const summarySnapshot = scopedRootNode
+    ? {
+        users: snapshot.users,
+        nodes: visibleNodes,
+        roles: snapshot.roles.filter((role) => accessibleNodeIdSet.has(role.nodeId)),
+        workItems: visibleWorkItems,
+      }
+    : snapshot
+  const summary = getWorkspaceSummary(resolvedUserId, summarySnapshot)
   const roots = buildWorkspaceTree(visibleNodes, visibleWorkItems)
   const myWorkItems = sortWorkspaceWorkItems(
     visibleWorkItems.filter((item) => item.ownerUserId === resolvedUserId),

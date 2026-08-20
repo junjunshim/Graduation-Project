@@ -37,7 +37,7 @@ body {
 
 html[data-scroll-surface='workspace'],
 body[data-scroll-surface='workspace'] {
-  background: var(--surface-shell);
+  background: var(--axis-surface-canvas);
   scrollbar-gutter: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -111,7 +111,7 @@ html[data-scroll-surface='workspace']::-webkit-scrollbar-track,
 html[data-scroll-surface='workspace']::-webkit-scrollbar-corner,
 body[data-scroll-surface='workspace']::-webkit-scrollbar-track,
 body[data-scroll-surface='workspace']::-webkit-scrollbar-corner {
-  background: var(--surface-shell);
+  background: var(--axis-surface-canvas);
 }
 
 html[data-scroll-surface='workspace']::-webkit-scrollbar,

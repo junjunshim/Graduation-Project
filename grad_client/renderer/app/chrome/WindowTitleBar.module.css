@@ -15,6 +15,18 @@
 }
 
 .workspace {
+  --surface-shell: var(--axis-surface-canvas);
+  --surface-panel: var(--axis-surface-panel);
+  --surface-hover: var(--axis-surface-muted);
+  --text-primary: var(--axis-text-primary);
+  --text-secondary: var(--axis-text-secondary);
+  --text-muted: var(--axis-text-muted);
+  --line-default: var(--axis-line-default);
+  --line-strong: var(--axis-line-strong);
+  --radius-sm: var(--axis-radius-action);
+  --shadow-hover: var(--axis-shadow-popover);
+  --accent-red: var(--axis-danger);
+  --titlebar-danger-soft: var(--axis-danger-soft);
   background: var(--surface-shell);
 }
 
@@ -49,6 +61,11 @@
   font-size: 0.91rem;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.workspace .brandTitle {
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .divider {
@@ -156,8 +173,13 @@
   color: var(--text-primary);
 }
 
+.workspace button:focus-visible {
+  outline: 2px solid var(--axis-focus-outline);
+  outline-offset: 2px;
+}
+
 .controlClose:hover {
-  background: rgba(180, 35, 24, 0.12);
+  background: var(--titlebar-danger-soft, rgba(180, 35, 24, 0.12));
   color: var(--accent-red);
 }
 

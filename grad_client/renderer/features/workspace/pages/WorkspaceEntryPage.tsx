@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Button, ButtonLink } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { Panel } from '../../../design-system/primitives/Panel'
+import { SearchField } from '../../../design-system/primitives/SearchField'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
 import {
@@ -108,37 +111,39 @@ function DirectoryToolbar({
 }) {
   return (
     <div className={styles.utilityBar}>
-      <label className={styles.searchBox}>
-        <span className={styles.srOnly}>워크스페이스 검색</span>
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="워크스페이스 검색"
-        />
-        <Icon name="search" size={19} />
-      </label>
+      <SearchField
+        containerClassName={styles.searchBox}
+        label="워크스페이스 검색"
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        placeholder="워크스페이스 검색"
+      />
 
       <div className={styles.helpAnchor}>
-        <button
-          type="button"
-          className={styles.helpButton}
+        <Button
+          variant="icon"
           aria-label="워크스페이스 진입점 도움말"
+          aria-controls="workspace-entry-help"
           aria-expanded={isHelpOpen}
           onClick={onToggleHelp}
         >
           <Icon name="helpCircle" size={22} />
-        </button>
+        </Button>
         {isHelpOpen ? (
-          <div className={styles.helpPopover} role="status">
+          <Panel
+            id="workspace-entry-help"
+            className={styles.helpPopover}
+            variant="popover"
+            role="status"
+          >
             계층도나 목록에서 조직을 확인한 뒤 최상위 워크스페이스를 선택해 진입하세요.
-          </div>
+          </Panel>
         ) : null}
       </div>
 
-      <Link to="/setup/top-node" className={styles.createButton}>
+      <ButtonLink to="/setup/top-node" className={styles.createButton} variant="primary">
         워크스페이스 생성
-      </Link>
+      </ButtonLink>
     </div>
   )
 }
@@ -152,24 +157,24 @@ function ViewToggle({
 }) {
   return (
     <div className={styles.viewToggle} role="group" aria-label="워크스페이스 보기 방식">
-      <button
-        type="button"
-        className={view === 'hierarchy' ? styles.viewButtonActive : styles.viewButton}
+      <Button
+        variant="secondary"
+        className={styles.viewButton}
         aria-pressed={view === 'hierarchy'}
         onClick={() => onChange('hierarchy')}
       >
         <Icon name="orgChart" size={19} />
         계층도 보기
-      </button>
-      <button
-        type="button"
-        className={view === 'list' ? styles.viewButtonActive : styles.viewButton}
+      </Button>
+      <Button
+        variant="secondary"
+        className={styles.viewButton}
         aria-pressed={view === 'list'}
         onClick={() => onChange('list')}
       >
         <Icon name="list" size={19} />
         목록 보기
-      </button>
+      </Button>
     </div>
   )
 }
@@ -520,9 +525,10 @@ function WorkspaceChooserDialog({
         }
       }}
     >
-      <div
+      <Panel
         ref={dialogRef}
         className={styles.dialogPanel}
+        variant="dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="workspace-chooser-title"
@@ -590,15 +596,15 @@ function WorkspaceChooserDialog({
             </span>
           </label>
           <div className={styles.dialogActions}>
-            <button type="button" className={styles.cancelButton} onClick={onCancel}>
+            <Button variant="secondary" className={styles.dialogButton} onClick={onCancel}>
               취소
-            </button>
-            <button type="button" className={styles.confirmButton} onClick={onConfirm}>
+            </Button>
+            <Button variant="primary" className={styles.dialogButton} onClick={onConfirm}>
               확인
-            </button>
+            </Button>
           </div>
         </footer>
-      </div>
+      </Panel>
     </div>,
     document.body,
   )

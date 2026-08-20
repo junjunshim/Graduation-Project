@@ -1,0 +1,20 @@
+.panel {
+  border: 1px solid var(--axis-line-default);
+  background: var(--axis-surface-panel);
+}
+
+.surface {
+  border-radius: var(--axis-radius-panel);
+}
+
+.popover {
+  border-radius: var(--axis-radius-surface);
+  color: var(--axis-text-secondary);
+  box-shadow: var(--axis-shadow-popover);
+}
+
+.dialog {
+  border-color: var(--axis-dialog-border);
+  border-radius: var(--axis-radius-panel);
+  box-shadow: var(--axis-shadow-dialog);
+}

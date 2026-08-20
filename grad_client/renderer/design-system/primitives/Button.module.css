@@ -1,0 +1,79 @@
+.button {
+  --axis-button-motion: var(--axis-motion-standard);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--axis-button-height, var(--axis-control-height-md));
+  padding: var(--axis-button-padding, 0 0.85rem);
+  border: 1px solid transparent;
+  border-radius: var(--axis-button-radius, var(--axis-radius-action));
+  font-weight: 700;
+  line-height: 1;
+  transition:
+    background var(--axis-button-motion) ease,
+    border-color var(--axis-button-motion) ease,
+    color var(--axis-button-motion) ease,
+    transform var(--axis-button-motion) ease;
+}
+
+.primary {
+  border-color: var(--axis-brand-primary);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
+}
+
+.primary:not(:disabled):not([aria-disabled='true']):hover {
+  border-color: var(--axis-brand-primary-hover);
+  background: var(--axis-brand-primary-hover);
+}
+
+.secondary {
+  border-color: var(--axis-line-default);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-secondary);
+}
+
+.secondary:not(:disabled):not([aria-disabled='true']):hover {
+  border-color: var(--axis-line-strong);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-primary);
+}
+
+.secondary[aria-pressed='true'],
+.secondary[aria-pressed='true']:not(:disabled):not([aria-disabled='true']):hover {
+  border-color: var(--axis-brand-primary);
+  background: var(--axis-surface-panel);
+  color: var(--axis-brand-primary);
+}
+
+.icon {
+  --axis-button-height: var(--axis-icon-button-size, var(--axis-control-height-md));
+  width: var(--axis-icon-button-size, var(--axis-control-height-md));
+  padding: 0;
+  border: var(--axis-icon-button-border, 0);
+  border-radius: var(--axis-icon-button-radius, var(--axis-radius-pill));
+  background: var(--axis-icon-button-background, transparent);
+  color: var(--axis-icon-button-color, var(--axis-text-icon-strong));
+}
+
+.icon:not(:disabled):not([aria-disabled='true']):hover,
+.icon[aria-expanded='true'] {
+  border-color: var(--axis-icon-button-hover-border, transparent);
+  background: var(--axis-icon-button-hover-background, var(--axis-surface-muted));
+  color: var(--axis-icon-button-hover-color, var(--axis-brand-primary));
+}
+
+.button:disabled,
+.button[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.button[aria-disabled='true'] {
+  pointer-events: none;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--axis-focus-outline);
+  outline-offset: 2px;
+}

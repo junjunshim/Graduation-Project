@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: clamp(204px, 14vw, 224px) minmax(0, 1fr);
   min-height: 100vh;
-  background: var(--surface-shell);
+  background: var(--axis-surface-canvas);
   transition: grid-template-columns 180ms ease;
 }
 
@@ -33,6 +33,19 @@
 
 .sidebar {
   --sidebar-padding: 0.7rem;
+  --surface-sidebar: var(--axis-surface-panel);
+  --surface-panel: var(--axis-surface-panel);
+  --surface-panel-subtle: var(--axis-surface-muted);
+  --surface-hover: var(--axis-surface-muted);
+  --text-primary: var(--axis-text-primary);
+  --text-secondary: var(--axis-text-secondary);
+  --text-muted: var(--axis-text-muted);
+  --line-default: var(--axis-line-default);
+  --line-strong: var(--axis-line-strong);
+  --line-selected: var(--axis-focus-outline);
+  --radius-sm: var(--axis-radius-action);
+  --radius-xs: var(--axis-radius-action);
+  --shadow-hover: var(--axis-shadow-popover);
   position: relative;
   z-index: 10;
   min-width: 0;
@@ -149,9 +162,9 @@
 
 .navItemActive,
 .navItemActive:hover {
-  border-color: var(--line-strong);
-  background: var(--surface-hover);
-  color: var(--text-primary);
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-text-selected);
   font-weight: 700;
 }
 
@@ -365,6 +378,7 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
+  box-shadow: var(--shadow-hover);
   color: var(--text-primary);
   font-size: 0.78rem;
   font-weight: 600;
@@ -438,6 +452,17 @@
 }
 
 .pageBar {
+  --surface-page: var(--axis-surface-canvas);
+  --surface-panel: var(--axis-surface-panel);
+  --surface-hover: var(--axis-surface-muted);
+  --text-primary: var(--axis-text-primary);
+  --text-secondary: var(--axis-text-secondary);
+  --text-muted: var(--axis-text-muted);
+  --line-default: var(--axis-line-default);
+  --line-strong: var(--axis-line-strong);
+  --line-selected: var(--axis-focus-outline);
+  --radius-sm: var(--axis-radius-action);
+  --shadow-hover: var(--axis-shadow-popover);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -474,8 +499,9 @@
   overflow-wrap: anywhere;
   color: var(--text-primary);
   font-size: 1.35rem;
+  font-weight: 800;
   line-height: 1.25;
-  letter-spacing: 0;
+  letter-spacing: -0.03em;
 }
 
 .pageDescription {
@@ -547,7 +573,7 @@
 .main {
   min-width: 0;
   min-height: 0;
-  background: var(--surface-page);
+  background: var(--axis-surface-canvas);
 }
 
 .mainTimeline {

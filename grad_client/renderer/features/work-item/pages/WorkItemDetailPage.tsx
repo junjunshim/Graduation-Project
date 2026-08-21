@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { DocumentIcon } from '../../../design-system/primitives/DocumentIcon'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
+import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { formatWorkspaceDate } from '../../workspace/model/formatters'
@@ -102,7 +104,7 @@ export function WorkItemDetailPage() {
       <section className={styles.propertyGrid} aria-label="업무 주요 정보">
         <DetailProperty icon="user" label="담당자">
           <span className={styles.ownerValue}>
-            <span className={styles.avatar}><Icon name="user" size={14} /></span>
+            <UserAvatar name={ownerUser.name} userId={ownerUser.userId} size="medium" />
             {ownerUser.name}
           </span>
         </DetailProperty>
@@ -155,7 +157,7 @@ export function WorkItemDetailPage() {
         <div>
           <h3>첨부파일</h3>
           <div className={styles.emptyAttachment}>
-            <Icon name="fileText" size={18} />
+            <DocumentIcon size={18} />
             <span>첨부된 파일이 없습니다.</span>
           </div>
         </div>

@@ -30,27 +30,29 @@ export function WorkItemsPage() {
   const visibleMembers = snapshot.users.filter((user) => visibleOwnerIds.has(user.userId))
 
   return (
-    <section className={styles.page}>
-      <div className={styles.navigationBar}>
-        <nav className={styles.tabs} aria-label="업무 보기">
-          {workItemsTabs.map((tab) => {
-            const isActive = tab.view === activeView
+    <section className={[styles.page, activeView === 'create' ? styles.pageCreate : ''].filter(Boolean).join(' ')}>
+      {activeView !== 'create' ? (
+        <div className={styles.navigationBar}>
+          <nav className={styles.tabs} aria-label="업무 보기">
+            {workItemsTabs.map((tab) => {
+              const isActive = tab.view === activeView
 
-            return (
-              <Link
-                key={tab.view}
-                to={tab.to}
-                className={[styles.tabLink, isActive ? styles.tabLinkActive : '']
-                  .filter(Boolean)
-                  .join(' ')}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                {tab.label}
-              </Link>
-            )
-          })}
-        </nav>
-      </div>
+              return (
+                <Link
+                  key={tab.view}
+                  to={tab.to}
+                  className={[styles.tabLink, isActive ? styles.tabLinkActive : '']
+                    .filter(Boolean)
+                    .join(' ')}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  {tab.label}
+                </Link>
+              )
+            })}
+          </nav>
+        </div>
+      ) : null}
 
       <div className={styles.tabContent}>
         {activeView === 'create' ? (
@@ -59,6 +61,7 @@ export function WorkItemsPage() {
           <WorkspaceTasksTab
             workItems={overview.visibleWorkItems}
             members={visibleMembers}
+            workspaces={overview.visibleNodes}
             tableLabel="접근 가능한 전체 업무 목록"
             createHref="/work-items?view=create"
             filterLayout="toolbar"

@@ -8,6 +8,12 @@
   background: var(--surface-page);
 }
 
+.pageCreate {
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  padding-top: 0.75rem;
+}
+
 .navigationBar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

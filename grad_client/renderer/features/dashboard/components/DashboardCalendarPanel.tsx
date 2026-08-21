@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
@@ -9,7 +8,6 @@ import styles from '../pages/DashboardPage.module.css'
 
 type DashboardCalendarPanelProps = {
   calendar: DashboardCalendar
-  previewHeight?: number
   onMonthChange: (offset: number) => void
 }
 
@@ -26,14 +24,11 @@ function getStatusBadgeClassName(item: WorkItemRecord) {
   ].join(' ')
 }
 
-export function DashboardCalendarPanel({ calendar, previewHeight, onMonthChange }: DashboardCalendarPanelProps) {
-  const panelStyle = previewHeight
-    ? ({ '--dashboard-preview-panel-height': `${previewHeight}px` } as CSSProperties)
-    : undefined
+export function DashboardCalendarPanel({ calendar, onMonthChange }: DashboardCalendarPanelProps) {
   const previewItems = calendar.dueItems.slice(0, 3)
 
   return (
-    <section className={[styles.panel, styles.calendarPanel].join(' ')} style={panelStyle}>
+    <section className={[styles.panel, styles.calendarPanel].join(' ')}>
       <div className={styles.sectionHeader}>
         <div className={styles.calendarHeaderContent}>
           <h3 className={styles.sectionTitle}>캘린더</h3>
@@ -41,11 +36,11 @@ export function DashboardCalendarPanel({ calendar, previewHeight, onMonthChange 
             <span className={styles.monthLabel}>{calendar.monthLabel}</span>
             <div className={styles.calendarMonthControls} aria-label="캘린더 월 이동">
               <button type="button" className={styles.calendarMonthButton} onClick={() => onMonthChange(-1)}>
-                <Icon name="chevronUp" size={18} />
+                <Icon name="chevronLeft" size={17} />
                 <span className={styles.srOnly}>이전 달</span>
               </button>
               <button type="button" className={styles.calendarMonthButton} onClick={() => onMonthChange(1)}>
-                <Icon name="chevronDown" size={18} />
+                <Icon name="chevronRight" size={17} />
                 <span className={styles.srOnly}>다음 달</span>
               </button>
             </div>
@@ -89,7 +84,7 @@ export function DashboardCalendarPanel({ calendar, previewHeight, onMonthChange 
         })}
       </div>
 
-      <div className={styles.calendarPreview}>
+      <div className={styles.calendarPreview} aria-label="이번 달 업무 미리보기">
         {previewItems.length > 0 ? (
           <div className={styles.calendarPreviewList}>
             {previewItems.map((item) => (

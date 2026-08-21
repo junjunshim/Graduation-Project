@@ -1,9 +1,9 @@
 .page {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.75rem;
   min-width: 0;
-  padding: var(--space-page-top) var(--space-page-x) var(--space-page-bottom);
-  color: var(--text-primary);
+  padding: 0.75rem var(--space-page-x) var(--space-page-bottom);
+  color: var(--axis-text-primary);
 }
 
 .backLink {
@@ -119,18 +119,19 @@
 .contentPanel,
 .attachmentPanel,
 .emptyState {
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-lg);
-  background: var(--surface-panel);
-  box-shadow: var(--shadow-panel);
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-panel);
+  background: var(--axis-surface-panel);
+  box-shadow: none;
 }
 
 .progressPanel {
   display: grid;
-  grid-template-columns: 9rem minmax(0, 1fr) 3.5rem;
+  grid-template-columns: 8.5rem minmax(0, 1fr) 3.5rem;
   align-items: center;
   gap: 1rem;
-  padding: 1rem 1.15rem;
+  min-height: 3.1rem;
+  padding: 0.8rem 1.25rem;
 }
 
 .progressPanel > strong {
@@ -142,14 +143,14 @@
   height: 0.48rem;
   overflow: hidden;
   border-radius: 999px;
-  background: var(--surface-panel-muted);
+  background: var(--axis-surface-muted);
 }
 
 .progressTrack span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent-purple);
+  background: var(--axis-brand-primary);
   transition: width 240ms ease;
 }
 
@@ -161,8 +162,8 @@
 .propertyGrid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 1rem 1.15rem;
+  gap: clamp(1rem, 2vw, 2.25rem);
+  padding: 1rem 1.25rem;
 }
 
 .property {
@@ -176,14 +177,14 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: var(--text-muted);
+  color: var(--axis-text-muted);
   font-size: 0.75rem;
   font-weight: 700;
 }
 
 .propertyValue {
   min-width: 0;
-  color: var(--text-primary);
+  color: var(--axis-text-primary);
   font-size: 0.84rem;
   font-weight: 700;
 }
@@ -194,49 +195,38 @@
   gap: 0.45rem;
 }
 
-.avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  flex: 0 0 auto;
-  border: 1px solid var(--line-default);
-  border-radius: 50%;
-  background: var(--surface-panel-muted);
-  color: var(--text-secondary);
-}
-
 .priorityBadge {
-  padding: 0.28rem 0.55rem;
+  min-width: 4rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--axis-radius-pill);
 }
 
 .priorityBadge[data-tone='highest'],
 .priorityBadge[data-tone='high'] {
-  background: var(--accent-red-soft);
-  color: var(--accent-red);
+  background: var(--axis-danger-soft);
+  color: var(--axis-danger);
 }
 
 .priorityBadge[data-tone='medium'] {
-  background: var(--surface-panel-muted);
-  color: var(--text-secondary);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
 }
 
 .priorityBadge[data-tone='low'],
 .priorityBadge[data-tone='lowest'] {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
 }
 
 .contentPanel,
 .attachmentPanel {
-  padding: 1rem 1.15rem;
+  padding: 1rem 1.25rem;
 }
 
 .contentPanel {
   display: grid;
   gap: 0.75rem;
-  min-height: 7.5rem;
+  min-height: 7rem;
 }
 
 .contentPanel h3,
@@ -255,7 +245,7 @@
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  color: var(--text-muted);
+  color: var(--axis-text-muted);
   font-size: 0.8rem;
 }
 
@@ -269,7 +259,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 5.5rem;
+  min-height: 5rem;
 }
 
 .attachmentPanel > div {
@@ -288,14 +278,14 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.7rem 0.8rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-action);
+  color: var(--axis-text-primary);
 }
 
 .relatedItem:hover {
-  border-color: var(--line-strong);
-  background: var(--surface-hover);
+  border-color: var(--axis-line-strong);
+  background: var(--axis-surface-muted);
 }
 
 .relatedItem > span {
@@ -304,7 +294,7 @@
 }
 
 .relatedItem small {
-  color: var(--text-muted);
+  color: var(--axis-text-muted);
 }
 
 .actions {
@@ -322,7 +312,7 @@
   gap: 0.4rem;
   min-height: 2.5rem;
   padding: 0 1.15rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--axis-radius-action);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 600;
@@ -337,21 +327,21 @@
 }
 
 .editButton {
-  border: 1px solid var(--accent-purple);
-  background: var(--accent-purple);
-  color: var(--text-inverse);
+  border: 1px solid var(--axis-brand-primary);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
 }
 
 .deleteButton {
-  border: 1px solid var(--accent-red);
-  background: var(--surface-panel);
-  color: var(--accent-red);
+  border: 1px solid var(--axis-danger);
+  background: var(--axis-surface-panel);
+  color: var(--axis-danger);
 }
 
 .addFileButton {
-  border: 1px solid var(--line-default);
-  background: var(--surface-panel);
-  color: var(--accent-purple);
+  border: 1px solid var(--axis-line-default);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-selected);
 }
 
 .deleteButton:disabled,
@@ -363,7 +353,7 @@
 .backLink:focus-visible,
 .relatedItem:focus-visible,
 .editButton:focus-visible {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--axis-status-info);
   outline-offset: 2px;
 }
 

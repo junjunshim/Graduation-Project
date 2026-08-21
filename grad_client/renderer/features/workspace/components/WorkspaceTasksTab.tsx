@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { formatWorkspaceShortDate } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
-import type { UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
+import type { OrganizationNodeRecord, UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
 import styles from './WorkspaceTasksTab.module.css'
@@ -11,6 +12,7 @@ import styles from './WorkspaceTasksTab.module.css'
 type WorkspaceTasksTabProps = {
   workItems: WorkItemRecord[]
   members: Array<Pick<UserRecord, 'userId' | 'name'>>
+  workspaces?: Array<Pick<OrganizationNodeRecord, 'id' | 'name' | 'nodeType' | 'path'>>
   tableLabel?: string
   createHref?: string
   filterLayout?: 'sidebar' | 'toolbar'
@@ -57,12 +59,14 @@ function getVisiblePageNumbers(currentPage: number, pageCount: number) {
 export function WorkspaceTasksTab({
   workItems,
   members,
+  workspaces = [],
   tableLabel = '워크스페이스 업무 목록',
   createHref = '/work-items?view=create',
   filterLayout = 'sidebar',
   showHeading = true,
 }: WorkspaceTasksTabProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [workspaceFilter, setWorkspaceFilter] = useState('all')
   const [ownerFilter, setOwnerFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
   const [tagFilter, setTagFilter] = useState<TagFilter>('all')
@@ -86,10 +90,24 @@ export function WorkspaceTasksTab({
     )
   }, [members, workItems])
 
+  const workspaceOptions = useMemo(
+    () => workspaces.filter((workspace) => workspace.nodeType !== 'USER'),
+    [workspaces],
+  )
+
   const filteredWorkItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
 
     return workItems.filter((item) => {
+      const selectedWorkspace = workspaceOptions.find(
+        (workspace) => String(workspace.id) === workspaceFilter,
+      )
+      const ownerWorkspace = workspaces.find((workspace) => workspace.id === item.ownerNodeId)
+      const matchesWorkspace =
+        workspaceFilter === 'all' ||
+        (selectedWorkspace !== undefined &&
+          ownerWorkspace !== undefined &&
+          (ownerWorkspace.id === selectedWorkspace.id || ownerWorkspace.path.includes(selectedWorkspace.id)))
       const ownerName = getMemberName(item.ownerUserId, members)
       const matchesQuery =
         normalizedQuery.length === 0 ||
@@ -113,7 +131,15 @@ export function WorkspaceTasksTab({
           (!rangeStart || itemEnd >= rangeStart) &&
           (!rangeEnd || itemStart <= rangeEnd))
 
-      return matchesQuery && matchesOwner && matchesStatus && matchesPriority && matchesTag && matchesDateRange
+      return (
+        matchesWorkspace &&
+        matchesQuery &&
+        matchesOwner &&
+        matchesStatus &&
+        matchesPriority &&
+        matchesTag &&
+        matchesDateRange
+      )
     })
   }, [
     filterLayout,
@@ -126,6 +152,9 @@ export function WorkspaceTasksTab({
     statusFilter,
     statusFilters,
     tagFilter,
+    workspaceFilter,
+    workspaceOptions,
+    workspaces,
     workItems,
   ])
 
@@ -170,6 +199,7 @@ export function WorkspaceTasksTab({
 
   function resetFilters() {
     setSearchQuery('')
+    setWorkspaceFilter('all')
     setOwnerFilter('all')
     setPriorityFilter('all')
     setTagFilter('all')
@@ -204,6 +234,23 @@ export function WorkspaceTasksTab({
 
       {filterLayout === 'toolbar' ? (
         <div className={styles.listToolbar} aria-label="업무 목록 필터">
+          <label className={styles.toolbarField}>
+            <span className={styles.visuallyHidden}>워크스페이스</span>
+            <select
+              value={workspaceFilter}
+              onChange={(event) => {
+                setWorkspaceFilter(event.target.value)
+                setCurrentPage(1)
+              }}
+            >
+              <option value="all">워크스페이스</option>
+              {workspaceOptions.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
+              ))}
+            </select>
+            <Icon name="chevronDown" size={14} />
+          </label>
+
           <label className={styles.toolbarField}>
             <span className={styles.visuallyHidden}>카테고리</span>
             <select
@@ -340,9 +387,10 @@ export function WorkspaceTasksTab({
                         <Link to={`/work-items/${item.workItemId}`}>{item.title}</Link>
                       </span>
                       <span role="cell" className={styles.ownerCell}>
-                        <span className={styles.ownerIcon} aria-hidden="true">
-                          <Icon name="user" size={13} />
-                        </span>
+                        <UserAvatar
+                          name={getMemberName(item.ownerUserId, members)}
+                          userId={item.ownerUserId}
+                        />
                         <span className={styles.ownerName}>
                           {getMemberName(item.ownerUserId, members)}
                         </span>

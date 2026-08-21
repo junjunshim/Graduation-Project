@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
@@ -7,7 +7,7 @@ import { DashboardEmptyState } from './DashboardEmptyState'
 import { DashboardWorkItemCard } from './DashboardWorkItemCard'
 import styles from '../pages/DashboardPage.module.css'
 
-const PREVIEW_ITEM_LIMIT = 3
+const PREVIEW_ITEM_LIMIT = 4
 
 function getColumnHeaderToneClassName(columnId: string) {
   if (columnId === 'in-progress') {
@@ -24,44 +24,16 @@ function getColumnHeaderToneClassName(columnId: string) {
 type DashboardBoardProps = {
   workItems: WorkItemRecord[]
   users: UserRecord[]
-  onPreviewHeightChange?: (height: number) => void
 }
 
-export function DashboardBoard({ workItems, users, onPreviewHeightChange }: DashboardBoardProps) {
+export function DashboardBoard({ workItems, users }: DashboardBoardProps) {
   const [expandedColumns, setExpandedColumns] = useState<Record<string, boolean>>({})
-  const panelRef = useRef<HTMLElement>(null)
-  const hasExpandedColumn = Object.values(expandedColumns).some(Boolean)
-
-  useLayoutEffect(() => {
-    if (hasExpandedColumn) {
-      return undefined
-    }
-
-    const panel = panelRef.current
-
-    if (!panel) {
-      return undefined
-    }
-
-    const updatePreviewHeight = () => {
-      onPreviewHeightChange?.(panel.getBoundingClientRect().height)
-    }
-
-    updatePreviewHeight()
-
-    const observer = new ResizeObserver(updatePreviewHeight)
-    observer.observe(panel)
-
-    return () => {
-      observer.disconnect()
-    }
-  }, [hasExpandedColumn, onPreviewHeightChange, workItems])
 
   return (
-    <section ref={panelRef} className={[styles.panel, styles.boardPanel].join(' ')}>
+    <section className={[styles.panel, styles.boardPanel].join(' ')}>
       <div className={styles.sectionHeader}>
         <div>
-          <h3 className={styles.sectionTitle}>진행 중인 워크스페이스</h3>
+          <h3 className={styles.sectionTitle}>워크스페이스</h3>
         </div>
         <Link to="/org/manage" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
           전체 보기

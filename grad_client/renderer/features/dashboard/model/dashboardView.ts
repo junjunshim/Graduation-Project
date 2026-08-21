@@ -7,8 +7,8 @@ export const BOARD_COLUMNS: Array<{
   id: WorkItemStatus
   title: string
 }> = [
-  { id: 'in-progress', title: 'Doing'},
   { id: 'todo', title: 'To Do'},
+  { id: 'in-progress', title: 'Doing'},
   { id: 'done', title: 'Done'},
 ]
 
@@ -151,16 +151,15 @@ export function getDueSoonOpenWorkItems(overview: WorkspaceOverview) {
 }
 
 export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetric[] {
-  const activeWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'in-progress')
   const completedWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'done')
   const dueSoonOpenWorkItems = getDueSoonOpenWorkItems(overview)
   const teamMemberCount = overview.rootRoleMembers.length || overview.summary.roleCount
 
   return [
     {
-      label: '진행중인 워크스페이스',
-      value: String(activeWorkItems.length),
-      description: '현재 실행 중인 항목',
+      label: '워크 스페이스',
+      value: String(overview.summary.orgNodeCount),
+      description: '접근 가능한 워크스페이스',
       icon: 'trendingUp',
       tone: 'blue',
     },

@@ -101,7 +101,7 @@
   justify-content: center;
   width: fit-content;
   flex: 0 0 auto;
-  border-radius: var(--radius-sm);
+  border-radius: var(--axis-radius-pill);
   font-size: 0.76rem;
   font-weight: 800;
   white-space: nowrap;
@@ -136,25 +136,25 @@
 
 .workItemStatus {
   margin-left: auto;
-  min-width: 5.5rem;
-  min-height: 3rem;
-  padding: 0.72rem 1.25rem;
-  font-size: 1.08rem;
+  min-width: 4.5rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.84rem;
 }
 
 .workItemStatus[data-tone='todo'] {
-  background: var(--accent-amber-soft);
-  color: var(--accent-amber);
+  background: var(--axis-status-info-soft);
+  color: var(--axis-status-info);
 }
 
 .workItemStatus[data-tone='inProgress'] {
-  background: var(--accent-blue-soft);
-  color: var(--accent-blue);
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
 }
 
 .workItemStatus[data-tone='done'] {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
 }
 
 .shellBreadcrumb {

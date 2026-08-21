@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
 import { getWorkItemStatusLabel } from '../../workspace/model/labels'
 import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
@@ -33,9 +34,11 @@ export function DashboardActivityPanel({
         {activityItems.length > 0 ? (
           activityItems.map((item) => (
             <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.activityItem}>
-              <span className={styles.activityAvatar}>
-                <Icon name="user" size={15} />
-              </span>
+              <UserAvatar
+                name={getOwnerName(item.ownerUserId, users)}
+                userId={item.ownerUserId}
+                size="medium"
+              />
               <div className={styles.activityCopy}>
                 <p>
                   <strong>{getOwnerName(item.ownerUserId, users)}</strong> 님이 <strong>{item.title}</strong> 업무를{' '}

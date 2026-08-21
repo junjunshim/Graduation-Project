@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { DocumentIcon } from '../../../design-system/primitives/DocumentIcon'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
 import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
@@ -32,9 +33,7 @@ export function DashboardDocumentsPanel({
         {recentDocuments.length > 0 ? (
           recentDocuments.map((item) => (
             <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.documentRow}>
-              <span className={styles.documentIcon}>
-                <Icon name="fileText" size={15} />
-              </span>
+              <DocumentIcon />
               <strong className={styles.documentTitle}>{item.title}</strong>
               <span className={styles.documentOwner}>{getOwnerName(item.ownerUserId, users)} ·</span>
               <time className={styles.documentDate} dateTime={item.createdAt}>

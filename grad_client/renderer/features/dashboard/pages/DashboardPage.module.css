@@ -724,8 +724,8 @@
 .monthLabel {
   display: block;
   color: var(--text-secondary);
-  font-size: 0.86rem;
-  font-weight: 800;
+  font-size: 0.82rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -1342,4 +1342,495 @@
     padding: 0.85rem;
   }
 
+}
+
+/* Dashboard content refresh. The application shell, top actions, and sidebar
+   intentionally remain outside this module. */
+.page {
+  --dashboard-background: var(--axis-surface-canvas);
+  --dashboard-panel: var(--axis-surface-panel);
+  --dashboard-panel-muted: var(--axis-surface-muted);
+  --dashboard-text: var(--axis-text-primary);
+  --dashboard-text-secondary: var(--axis-text-secondary);
+  --dashboard-text-muted: var(--axis-text-muted);
+  --dashboard-line: var(--axis-line-default);
+  --dashboard-line-strong: var(--axis-line-strong);
+  --dashboard-primary: var(--axis-brand-primary);
+  gap: 0.9rem;
+  min-height: 100%;
+  padding: 1.55rem 1.5rem 2.75rem;
+  background: var(--dashboard-background);
+  color: var(--dashboard-text);
+}
+
+.page :is(button, a):focus-visible {
+  outline: 2px solid var(--axis-focus-outline);
+  outline-offset: 2px;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: clamp(1.5rem, 2vw, 2.6rem);
+  row-gap: 1rem;
+}
+
+.kpiCard {
+  gap: 0.45rem;
+  min-height: 5.35rem;
+  padding: 0.8rem 1rem;
+  border-color: color-mix(
+    in srgb,
+    var(--kpi-tone-color) 1%,
+    var(--dashboard-line)
+  );
+  border-radius: var(--axis-radius-panel);
+  box-shadow: none;
+}
+
+.kpiBlue {
+  --kpi-tone-color: var(--axis-text-selected);
+  border-color: color-mix(in srgb, var(--axis-brand-primary) 8%, var(--dashboard-line));
+  background: color-mix(in srgb, var(--axis-brand-primary-soft) 72%, var(--dashboard-panel));
+}
+
+.kpiAmber {
+  --kpi-tone-color: var(--axis-status-warning);
+  border-color: color-mix(in srgb, var(--axis-status-warning) 8%, var(--dashboard-line));
+  background: color-mix(in srgb, var(--axis-status-warning-soft) 76%, var(--dashboard-panel));
+}
+
+.kpiGreen {
+  --kpi-tone-color: var(--axis-status-success);
+  border-color: color-mix(in srgb, var(--axis-status-success) 8%, var(--dashboard-line));
+  background: color-mix(in srgb, var(--axis-status-success-soft) 76%, var(--dashboard-panel));
+}
+
+.kpiNeutral {
+  --kpi-tone-color: var(--axis-status-info);
+  border-color: color-mix(in srgb, var(--axis-status-info) 8%, var(--dashboard-line));
+  background: color-mix(in srgb, var(--axis-status-info-soft) 76%, var(--dashboard-panel));
+}
+
+.kpiLabel {
+  color: var(--kpi-tone-color);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.kpiValueRow strong {
+  color: var(--kpi-tone-color);
+  font-size: 1.7rem;
+  font-weight: 600;
+}
+
+.kpiIcon {
+  width: 2.15rem;
+  height: 2.15rem;
+  background: transparent !important;
+  color: var(--kpi-tone-color) !important;
+}
+
+.dashboardGrid {
+  gap: 1rem;
+  align-items: start;
+}
+
+.panel {
+  gap: 0.85rem;
+  padding: 1rem;
+  border-color: var(--dashboard-line);
+  border-radius: var(--axis-radius-panel);
+  background: var(--dashboard-panel);
+  box-shadow: none;
+}
+
+.panel:hover {
+  border-color: var(--dashboard-line-strong);
+}
+
+.boardPanel {
+  grid-column: span 8;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  padding-top: 1rem;
+}
+
+.calendarPanel {
+  grid-column: span 4;
+  grid-template-rows: auto auto minmax(12rem, 1fr) auto;
+  min-height: 0;
+  height: auto;
+}
+
+.documentsPanel {
+  grid-column: span 5;
+}
+
+.activityPanel {
+  grid-column: span 7;
+}
+
+.documentsPanel,
+.activityPanel {
+  gap: 0.8rem;
+  min-height: 11.5rem;
+}
+
+.sectionHeader {
+  align-items: center;
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--dashboard-text);
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+.boardPanel .sectionTitle,
+.calendarPanel .sectionTitle {
+  margin: 0;
+  line-height: 1.25;
+}
+
+.boardViewLink {
+  color: var(--dashboard-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.boardColumns {
+  gap: 0.8rem;
+  align-self: start;
+}
+
+.boardColumn {
+  gap: 0.55rem;
+}
+
+.columnHeader {
+  gap: 0.45rem;
+  padding: 0;
+  background: transparent;
+  color: var(--dashboard-text);
+}
+
+.columnHeaderInProgress,
+.columnHeaderTodo,
+.columnHeaderDone {
+  background: transparent;
+  color: var(--dashboard-text);
+}
+
+.columnHeader h4 {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.columnHeader strong,
+.columnHeaderInProgress strong,
+.columnHeaderTodo strong,
+.columnHeaderDone strong {
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  background: var(--dashboard-panel-muted);
+  color: var(--dashboard-text-secondary);
+  font-size: 0.7rem;
+}
+
+.taskStack {
+  gap: 1rem;
+}
+
+.taskCard {
+  grid-template-rows: auto auto;
+  gap: 0.42rem;
+  min-height: 3.7rem;
+  padding: 0.58rem 0.68rem;
+  border-color: var(--dashboard-line);
+  border-radius: var(--axis-radius-surface);
+  background: var(--dashboard-panel);
+}
+
+.taskCard:hover {
+  border-color: var(--dashboard-line-strong);
+  background: var(--dashboard-panel-muted);
+  transform: none;
+}
+
+.taskCardHeader {
+  justify-content: space-between;
+}
+
+.taskTitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dashboard-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskDoneIcon {
+  flex: 0 0 auto;
+  color: var(--axis-status-success);
+}
+
+.taskMeta {
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.taskOwnerIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0;
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-text-selected);
+}
+
+.taskDueDate {
+  color: var(--dashboard-text-secondary);
+}
+
+.moreItemsButton {
+  min-height: 1.35rem;
+  color: var(--dashboard-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.moreItemsDropdown {
+  border-color: var(--dashboard-line);
+  border-radius: var(--axis-radius-surface);
+  background: var(--dashboard-panel);
+  box-shadow: var(--axis-shadow-popover);
+}
+
+.calendarMonthRow {
+  margin-top: 0.5rem;
+}
+
+.monthLabel {
+  color: var(--dashboard-text);
+  font-size: 0.84rem;
+}
+
+.calendarMonthControls {
+  gap: 0.2rem;
+}
+
+.calendarMonthButton {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--dashboard-text-secondary);
+}
+
+.weekdayGrid,
+.calendarGrid {
+  gap: 0.15rem;
+}
+
+.weekdayGrid {
+  margin-top: 0.2rem;
+}
+
+.calendarGrid {
+  grid-template-rows: repeat(6, 2rem);
+  height: auto;
+}
+
+.calendarDay {
+  border-radius: var(--axis-radius-pill);
+  color: var(--dashboard-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.calendarDaySunday:not(.calendarDayMuted):not(.calendarDayActive) {
+  color: var(--axis-danger);
+}
+
+.calendarDaySaturday:not(.calendarDayMuted):not(.calendarDayActive) {
+  color: var(--axis-status-info);
+}
+
+.calendarDayActive {
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-text-selected);
+}
+
+.calendarToday {
+  border-color: var(--dashboard-primary);
+  color: var(--axis-text-selected);
+}
+
+.calendarDay strong {
+  width: 0.8rem;
+  height: 0.8rem;
+  font-size: 0.52rem;
+}
+
+.calendarPreview {
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--dashboard-line);
+}
+
+.documentList,
+.activityList {
+  gap: 0.2rem;
+}
+
+.documentRow,
+.activityItem {
+  min-height: 2.15rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: var(--axis-radius-action);
+  transition: background var(--axis-motion-fast) ease;
+}
+
+.documentRow:hover,
+.activityItem:hover {
+  background: var(--dashboard-panel-muted);
+}
+
+.documentIcon {
+  border-radius: var(--axis-radius-action);
+}
+
+.documentTitle,
+.activityCopy p {
+  color: var(--dashboard-text);
+  font-size: 0.76rem;
+}
+
+.documentOwner,
+.documentDate,
+.activityDate {
+  color: var(--dashboard-text-secondary);
+  font-size: 0.7rem;
+}
+
+.activityAvatar {
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-text-selected);
+}
+
+.documentAddLink {
+  width: 1.55rem;
+  height: 1.55rem;
+  margin-left: 0.4rem;
+  border: 0;
+}
+
+.emptyState {
+  color: var(--dashboard-text-muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 1080px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .boardPanel {
+    grid-column: 1 / -1;
+  }
+
+  .calendarPanel,
+  .documentsPanel,
+  .activityPanel {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 1rem;
+  }
+
+  .kpiGrid,
+  .boardColumns,
+  .dashboardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .boardPanel,
+  .calendarPanel,
+  .documentsPanel,
+  .activityPanel {
+    grid-column: 1 / -1;
+  }
+
+  .sectionHeader {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .calendarDay {
+    aspect-ratio: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpiCard,
+  .panel {
+    padding: 0.8rem;
+  }
+}
+
+/* Keep the dashboard comfortably inset from the shell while allowing its two
+   content rows to use the available desktop height. */
+@media (min-width: 1081px) {
+  .page {
+    grid-template-rows: auto auto;
+    align-content: start;
+    gap: 1rem;
+    width: 100%;
+    max-width: none;
+    min-height: auto;
+    margin-inline: 0;
+    padding: 1.55rem var(--space-page-x) 2rem;
+  }
+
+  .dashboardGrid {
+    grid-template-rows:
+      clamp(27rem, 48vh, 30rem)
+      clamp(12rem, 29vh, 21rem);
+    height: auto;
+  }
+
+  .boardPanel,
+  .calendarPanel,
+  .documentsPanel,
+  .activityPanel {
+    height: 100%;
+  }
+
+  .calendarPanel {
+    grid-template-rows: auto auto minmax(12rem, 1fr) auto;
+  }
+
+  .calendarGrid {
+    grid-template-rows: repeat(6, minmax(2rem, 1fr));
+    height: 100%;
+  }
+
+  .documentsPanel {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .documentList,
+  .activityList {
+    align-content: stretch;
+    grid-auto-rows: minmax(2.15rem, 1fr);
+  }
 }

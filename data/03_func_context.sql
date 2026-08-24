@@ -162,7 +162,25 @@ BEGIN
     )
     FROM role_authorities auth
     JOIN filtered_nodes fn ON auth.node_id = fn.node_id
-    WHERE (fn.effective_authority & v_node_members_view) = v_node_members_view; -- Bit 1: NODE_MEMBERS_VIEW
+    WHERE (fn.effective_authority & v_node_members_view) = v_node_members_view -- Bit 1: NODE_MEMBERS_VIEW
+
+    UNION ALL
+
+    -- MENTION 데이터 반환 (로그인 유저가 읽지 않은 알림)
+    SELECT jsonb_build_object(
+        'type', 'MENTION',
+        'id', m.mention_id,
+        'comment_id', m.comment_id,
+        'work_item_id', c.work_item_id,
+        'message', u_author.name || '님이 댓글에서 회원님을 멘션했습니다.',
+        'is_read', m.is_read,
+        'created_at', m.created_at,
+        'updated_at', m.updated_at
+    )
+    FROM comment_mentions m
+    JOIN work_item_comments c ON m.comment_id = c.comment_id
+    JOIN users u_author ON c.author_user_id = u_author.user_id
+    WHERE m.mentioned_user_id = v_user_id AND m.is_read = FALSE;
 
     EXCEPTION 
         WHEN SQLSTATE 'P0001' THEN
@@ -399,7 +417,26 @@ BEGIN
     FROM role_authority_histories h
     WHERE h.change_status = 'deleted'
         AND h.history_created_at > p_last_synced_at
-        AND h.node_id IN (SELECT node_id FROM filtered_nodes);
+        AND h.node_id IN (SELECT node_id FROM filtered_nodes)
+
+    UNION ALL
+
+    -- 9. 신규/수정/읽음처리 MENTION 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'MENTION',
+        'id', m.mention_id,
+        'comment_id', m.comment_id,
+        'work_item_id', c.work_item_id,
+        'message', u_author.name || '님이 댓글에서 회원님을 멘션했습니다.',
+        'is_read', m.is_read,
+        'created_at', m.created_at,
+        'updated_at', m.updated_at
+    )
+    FROM comment_mentions m
+    JOIN work_item_comments c ON m.comment_id = c.comment_id
+    JOIN users u_author ON c.author_user_id = u_author.user_id
+    WHERE m.mentioned_user_id = v_user_id
+        AND m.updated_at > p_last_synced_at;
 
     EXCEPTION 
         WHEN SQLSTATE 'P0001' THEN

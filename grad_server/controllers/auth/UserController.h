@@ -19,6 +19,7 @@ class UserController : public drogon::HttpController<UserController>
     ADD_METHOD_TO(UserController::getUser, "/api/users", Get, "JwtFilter");
     ADD_METHOD_TO(UserController::updateUser, "/api/users", Patch, "JwtFilter");
     ADD_METHOD_TO(UserController::deleteUser, "/api/users", Delete, "JwtFilter");
+    ADD_METHOD_TO(UserController::readNotification, "/api/users/notifications/read", Patch, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -29,5 +30,6 @@ class UserController : public drogon::HttpController<UserController>
     void getUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void updateUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void deleteUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void readNotification(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

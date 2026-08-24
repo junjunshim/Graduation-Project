@@ -287,4 +287,50 @@ void UserController::deleteUser(const HttpRequestPtr &req, std::function<void(co
         // DB 함수에 전달할 매개변수 (요청자 이메일, 대상 이메일)
         requester_email, target_email
     );
+}
+
+// 멘션 알림 읽음 처리 API
+void UserController::readNotification(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    // 1. 필수 파라미터 확인 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!jsonPtr || (*jsonPtr)["mention_id"].isNull()){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(mention_id)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    int mention_id = (*jsonPtr)["mention_id"].asInt();
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM read_comment_mention($1, $2)";
+
+    dbClient->execSqlAsync(
+        sql,
+        // [성공 콜백]
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        // [실패 콜백]
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, mention_id
+    );
 }   

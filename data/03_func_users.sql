@@ -286,3 +286,53 @@ BEGIN
         USING ERRCODE = 'P0508';
 END;
 $$ LANGUAGE plpgsql;
+
+-- UserController::readCommentMention
+CREATE OR REPLACE FUNCTION read_comment_mention(
+    p_requester_email users.email%TYPE,
+    p_mention_id INT
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_target_mention_id INT;
+BEGIN
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 멘션 존재 여부 확인 및 본인 것인지 소유권 대조
+    SELECT mention_id INTO v_target_mention_id 
+    FROM comment_mentions 
+    WHERE mention_id = p_mention_id AND mentioned_user_id = v_requester_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]Mention alert does not exist or not authorized: %', p_mention_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 멘션 읽음 처리 업데이트 (is_read: FALSE -> TRUE, updated_at이 트리거에 의해 자동 갱신됨)
+    UPDATE comment_mentions
+    SET is_read = TRUE
+    WHERE mention_id = p_mention_id;
+
+    -- 4. 갱신 결과 반환 (폴링 동기화 연동을 위해 갱신된 멘션 오브젝트 반환)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'MENTION',
+        'id', m.mention_id,
+        'comment_id', m.comment_id,
+        'work_item_id', c.work_item_id,
+        'message', u_author.name || '님이 댓글에서 회원님을 멘션했습니다.',
+        'is_read', m.is_read,
+        'created_at', m.created_at,
+        'updated_at', m.updated_at
+    )::jsonb AS out_data
+    FROM comment_mentions m
+    JOIN work_item_comments c ON m.comment_id = c.comment_id
+    JOIN users u_author ON c.author_user_id = u_author.user_id
+    WHERE m.mention_id = p_mention_id;
+END;
+$$ LANGUAGE plpgsql;

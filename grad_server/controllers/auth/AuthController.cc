@@ -117,9 +117,18 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
             Json::Value ret;
             ret["status"] = "success";
             ret["access_token"] = access_token;
-            ret["refresh_token"] = refresh_token;
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
+
+            // Refresh Token은 HTTP-Only 쿠키로 주입 (보안 강화)
+            auto refresh_exp = drogon::app().getCustomConfig()["refresh_token_expiry"].asInt();
+            drogon::Cookie cookie("refresh_token", refresh_token);
+            cookie.setPath("/api/users");
+            cookie.setHttpOnly(true);
+            cookie.setMaxAge(refresh_exp);
+            cookie.setSameSite(drogon::Cookie::SameSite::kStrict);
+
+            resp->addCookie(cookie);
             callback(resp);
         },
         // [실패 콜백]
@@ -140,5 +149,136 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
         },
         // DB 함수에 전달할 매개변수 (이메일, 비밀번호, 리프레시 토큰, 리프레시 토큰 만료 시간)
         email, password, refresh_token, refresh_token_expiry
+    );
+}
+
+// Access Token 재발급(Refresh) API
+void AuthController::refreshUserToken(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    // 1. 쿠키에서 refresh_token 추출
+    std::string refreshToken = req->getCookie("refresh_token");
+    if (refreshToken.empty()) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "리프레시 토큰이 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    // 2. JWT 리프레시 토큰 검증
+    auto secret = drogon::app().getCustomConfig()["app"]["jwt_secret"].asString();
+    std::string user_email;
+    try {
+        auto verifier = jwt::verify()
+            .allow_algorithm(jwt::algorithm::hs256{secret})
+            .with_issuer("grad_server");
+
+        auto decoded = jwt::decode(refreshToken);
+        verifier.verify(decoded);
+
+        user_email = decoded.get_payload_claim("user_email").as_string();
+    } catch (const std::exception &e) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "401";
+        ret["message"] = "유효하지 않거나 만료된 리프레시 토큰입니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k401Unauthorized);
+        callback(resp);
+        return;
+    }
+
+    // 3. 데이터베이스에서 해당 사용자의 최신 refresh_token과 비교 검증
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT refresh_token FROM user_refresh_tokens WHERE user_email = $1";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback, this, user_email, refreshToken](const orm::Result &result) {
+            // DB에 토큰 내역이 없는 경우
+            if (result.empty()) {
+                Json::Value ret;
+                ret["status"] = "error";
+                ret["message"] = "등록된 리프레시 토큰을 찾을 수 없습니다. 다시 로그인해 주세요.";
+                auto resp = HttpResponse::newHttpJsonResponse(ret);
+                resp->setStatusCode(k401Unauthorized);
+                callback(resp);
+                return;
+            }
+
+            auto row = result[0];
+            std::string db_token = row["refresh_token"].as<std::string>();
+
+            // 클라이언트 토큰이 DB의 최신 토큰과 불일치할 경우 (도난 방지)
+            if (db_token != refreshToken) {
+                Json::Value ret;
+                ret["status"] = "error";
+                ret["message"] = "토큰이 유효하지 않습니다. 다시 로그인해 주세요.";
+                auto resp = HttpResponse::newHttpJsonResponse(ret);
+                resp->setStatusCode(k401Unauthorized);
+                callback(resp);
+                return;
+            }
+
+            // 4. 검증 성공 시 새로운 Access Token 및 Refresh Token 세트 재생성 (토큰 로테이션)
+            Json::Value tokens = generateToken(user_email);
+            std::string access_token = tokens["access_token"].asString();
+            std::string new_refresh_token = tokens["refresh_token"].asString();
+            std::string new_refresh_expiry = tokens["refresh_token_expiry"].asString();
+
+            // 5. DB의 refresh_token 갱신
+            auto dbClient = drogon::app().getDbClient();
+            std::string updateSql = "INSERT INTO user_refresh_tokens (user_email, refresh_token, expires_at) "
+                                    "VALUES ($1, $2, $3::TIMESTAMP) "
+                                    "ON CONFLICT (user_email) DO UPDATE SET "
+                                    "refresh_token = EXCLUDED.refresh_token, "
+                                    "expires_at = EXCLUDED.expires_at";
+
+            auto refresh_exp = drogon::app().getCustomConfig()["refresh_token_expiry"].asInt();
+
+            dbClient->execSqlAsync(
+                updateSql,
+                [callback, access_token, new_refresh_token, refresh_exp](const orm::Result &uResult) {
+                    Json::Value ret;
+                    ret["status"] = "success";
+                    ret["access_token"] = access_token;
+
+                    auto resp = HttpResponse::newHttpJsonResponse(ret);
+                    resp->setStatusCode(k200OK);
+
+                    // 새 Refresh Token을 HTTP-Only 쿠키에 실어 반환
+                    drogon::Cookie cookie("refresh_token", new_refresh_token);
+                    cookie.setPath("/api/users");
+                    cookie.setHttpOnly(true);
+                    cookie.setMaxAge(refresh_exp);
+                    cookie.setSameSite(drogon::Cookie::SameSite::kStrict);
+
+                    resp->addCookie(cookie);
+                    callback(resp);
+                },
+                [callback](const orm::DrogonDbException &e) {
+                    Json::Value ret;
+                    ret["status"] = "error";
+                    ret["message"] = "토큰 정보 업데이트에 실패했습니다.";
+                    auto resp = HttpResponse::newHttpJsonResponse(ret);
+                    resp->setStatusCode(k500InternalServerError);
+                    callback(resp);
+                },
+                user_email, new_refresh_token, new_refresh_expiry
+            );
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret;
+            ret["status"] = "error";
+            ret["message"] = e.base().what();
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k500InternalServerError);
+            callback(resp);
+        },
+        user_email
     );
 }

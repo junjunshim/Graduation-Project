@@ -18,6 +18,7 @@ class AuthController : public drogon::HttpController<AuthController>
     // ADD_METHOD_TO(AuthController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
     ADD_METHOD_TO(AuthController::loginUser, "/api/users/login", Post);    
+    ADD_METHOD_TO(AuthController::refreshUserToken, "/api/users/refresh", Post);    
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -27,5 +28,6 @@ class AuthController : public drogon::HttpController<AuthController>
     Json::Value generateToken(const std::string &user_id);
     std::string timePointToString(const std::chrono::system_clock::time_point& tp);
     void loginUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void refreshUserToken(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

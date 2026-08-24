@@ -354,3 +354,48 @@ void WorkItemController::addComment(const HttpRequestPtr &req, std::function<voi
         requester_email, work_item_id, content
     );
 }
+
+// 단일 업무 상세 및 댓글 목록 통합 조회 API
+void WorkItemController::getWorkItemDetail(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    // 1. 필수 파라미터 확인 (GET Query Parameter)
+    std::string work_item_id = req->getParameter("work_item_id");
+    if(work_item_id.empty()){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(work_item_id)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    // 2. 비즈니스 로직 실행 (get_work_item_detail)
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM get_work_item_detail($1, $2)";
+
+    dbClient->execSqlAsync(
+        sql,
+        // [성공 콜백]
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        // [실패 콜백]
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, work_item_id
+    );
+}

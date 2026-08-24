@@ -469,3 +469,115 @@ BEGIN
     WHERE m.mention_id = v_new_mention_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- WorkItemController::getWorkItemDetail
+CREATE OR REPLACE FUNCTION get_work_item_detail(
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_hidden BOOLEAN;
+    v_authority BIT(24);
+    
+    -- 권한 비트 상수 캐싱용
+    v_node_info_view BIT(24);
+    v_wi_public_view BIT(24);
+    v_wi_hidden_view BIT(24);
+BEGIN
+    -- 0. 권한 상수 로드
+    SELECT 
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+    INTO v_node_info_view, v_wi_public_view, v_wi_hidden_view
+    FROM authority_constants
+    WHERE name IN ('NODE_INFO_VIEW', 'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW');
+
+    -- 1. 요청자 존재 여부 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 업무 조회 및 소유자, 노드, 숨김 상태 확인
+    SELECT owner_node_id, owner_user_id, hidden INTO v_owner_node_id, v_owner_user_id, v_hidden
+    FROM work_items 
+    WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0606]Work item does not exist or already deleted: %', p_work_item_id
+        USING ERRCODE = 'P0606';
+    END IF;
+
+    -- 3. 권한 대조
+    IF v_owner_user_id <> v_requester_id THEN
+        -- 담당자가 아닌 경우 권한 비트 계산
+        v_authority := get_effective_authority(v_requester_id, v_owner_node_id);
+        
+        -- 노드 보기 권한조차 없는 경우 거부
+        IF (v_authority & v_node_info_view) != v_node_info_view THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to view node info. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        -- 숨김(hidden) 업무인데 숨김 보기 권한이 없는 경우 거부
+        IF v_hidden = TRUE AND (v_authority & v_wi_hidden_view) != v_wi_hidden_view THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to view hidden work items. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        -- 일반 업무인데 공개 업무 보기 권한이 없는 경우 거부
+        IF v_hidden = FALSE AND (v_authority & v_wi_public_view) != v_wi_public_view THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to view public work items. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 4. 업무 상세(모든 필드)와 결합된 댓글 리스트 취합하여 JSON 형식으로 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM_DETAIL',
+        'work_item_id', w.work_item_id,
+        'parent_work_item_id', w.parent_work_item_id,
+        'owner_node_id', w.owner_node_id,
+        'owner_user_id', w.owner_user_id,
+        'owner_user_email', u_owner.email,
+        'owner_user_name', u_owner.name,
+        'title', w.title,
+        'description', w.description,
+        'status', w.status,
+        'priority', w.priority,
+        'weight', w.weight,
+        'progress', w.progress,
+        'hidden', w.hidden,
+        'start_date', w.start_date,
+        'due_date', w.due_date,
+        'created_at', w.created_at,
+        'updated_at', w.updated_at,
+        'comments', COALESCE(
+            (
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'comment_id', c.comment_id,
+                        'author_user_id', c.author_user_id,
+                        'author_name', u_author.name,
+                        'author_email', u_author.email,
+                        'content', c.content,
+                        'created_at', c.created_at
+                    ) ORDER BY c.created_at ASC
+                )
+                FROM work_item_comments c
+                JOIN users u_author ON c.author_user_id = u_author.user_id
+                WHERE c.work_item_id = w.work_item_id
+            ), '[]'::jsonb
+        )
+    )::jsonb AS out_data
+    FROM work_items w
+    JOIN users u_owner ON w.owner_user_id = u_owner.user_id
+    WHERE w.work_item_id = p_work_item_id;
+END;
+$$ LANGUAGE plpgsql;

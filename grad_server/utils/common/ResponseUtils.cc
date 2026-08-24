@@ -60,6 +60,7 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
     else if (errMsg.find("P0604") != std::string::npos) return DbErrorCode::UpdateWorkItemFailed;
     else if (errMsg.find("P0605") != std::string::npos) return DbErrorCode::DeleteWorkItemError;
+    else if (errMsg.find("P0606") != std::string::npos) return DbErrorCode::CommentWorkItemNotFound;
     else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
     else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
     else return DbErrorCode::Unknown;
@@ -190,6 +191,11 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::UpdateWorkItemFailed:{
             ret["message"] = "work item 업데이트에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::CommentWorkItemNotFound:{
+            ret["message"] = "댓글을 달 대상 work item을 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
             break;
         }
         case DbErrorCode::DeleteNodeError:{

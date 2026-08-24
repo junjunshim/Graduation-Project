@@ -216,3 +216,25 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 );
 CREATE INDEX idx_activity_logs_node_id ON activity_logs(node_id);
 CREATE INDEX idx_activity_logs_created_at ON activity_logs(created_at DESC);
+
+-- 9. 업무 댓글 및 멘션 알림 테이블
+CREATE TABLE IF NOT EXISTS work_item_comments (
+    comment_id SERIAL PRIMARY KEY,
+    work_item_id VARCHAR(50) NOT NULL REFERENCES work_items(work_item_id) ON DELETE CASCADE,
+    author_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_comments_work_item_id ON work_item_comments(work_item_id);
+
+CREATE TABLE IF NOT EXISTS comment_mentions (
+    mention_id SERIAL PRIMARY KEY,
+    comment_id INTEGER NOT NULL REFERENCES work_item_comments(comment_id) ON DELETE CASCADE,
+    mentioned_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_mentions_comment_id ON comment_mentions(comment_id);
+CREATE INDEX idx_mentions_user_id ON comment_mentions(mentioned_user_id);

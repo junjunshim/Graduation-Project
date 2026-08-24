@@ -364,7 +364,7 @@ BEGIN
         'id', w.work_item_id,
         'status', 'deleted',
         'updated_at', w.updated_at
-    )
+    )::jsonb
     FROM work_items w
     WHERE w.work_item_id = p_work_item_id;
 
@@ -374,5 +374,98 @@ BEGIN
         WHEN OTHERS THEN
         RAISE EXCEPTION '[P0605]Failed to delete work item: %, (REASON: %)', p_work_item_id, SQLERRM
         USING ERRCODE = 'P0605';
+END;
+$$ LANGUAGE plpgsql;
+
+-- WorkItemController::addComment
+CREATE OR REPLACE FUNCTION add_work_item_comment(
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE,
+    p_content TEXT
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_new_comment_id INT;
+BEGIN
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 업무 존재 여부 확인 및 노드 정보 가져오기
+    SELECT w.owner_node_id INTO v_owner_node_id FROM work_items w WHERE w.work_item_id = p_work_item_id AND w.is_deleted = FALSE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0606]Work item does not exist or already deleted: %', p_work_item_id
+        USING ERRCODE = 'P0606';
+    END IF;
+
+    -- 3. 권한 체크 (해당 노드에 MEMBER 권한 이상 보유하고 있는지 확인)
+    IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions to comment on this node. requester: %', p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 댓글 인서트
+    INSERT INTO work_item_comments (work_item_id, author_user_id, content)
+    VALUES (p_work_item_id, v_requester_id, p_content)
+    RETURNING comment_id INTO v_new_comment_id;
+
+    -- 4.5 최근 활동 피드 로깅
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'COMMENT', v_new_comment_id::VARCHAR, 'Comment on ' || p_work_item_id, 'inserted');
+
+    -- 5. 생성 결과 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'comment_id', c.comment_id,
+        'work_item_id', c.work_item_id,
+        'author_user_id', c.author_user_id,
+        'author_name', u.name,
+        'author_email', u.email,
+        'content', c.content,
+        'created_at', c.created_at
+    )::jsonb AS out_data
+    FROM work_item_comments c
+    JOIN users u ON c.author_user_id = u.user_id
+    WHERE c.comment_id = v_new_comment_id;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- WorkItemController::addCommentMention
+CREATE OR REPLACE FUNCTION add_comment_mention(
+    p_comment_id INT,
+    p_mentioned_email VARCHAR(100)
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_mentioned_user_id users.user_id%TYPE;
+    v_new_mention_id INT;
+BEGIN
+    -- 멘션 대상 사용자 존재 여부 조회
+    SELECT user_id INTO v_mentioned_user_id FROM users WHERE email = p_mentioned_email AND is_deleted = FALSE;
+    IF v_mentioned_user_id IS NULL THEN
+        RAISE EXCEPTION '[P0002]Mentioned target user does not exist: %', p_mentioned_email
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 멘션 레코드 인서트
+    INSERT INTO comment_mentions (comment_id, mentioned_user_id)
+    VALUES (p_comment_id, v_mentioned_user_id)
+    RETURNING comment_mentions.mention_id INTO v_new_mention_id;
+
+    -- 결과 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'mention_id', m.mention_id,
+        'comment_id', m.comment_id,
+        'mentioned_user_id', m.mentioned_user_id,
+        'mentioned_user_name', u.name,
+        'mentioned_user_email', u.email
+    )::jsonb AS out_data
+    FROM comment_mentions m
+    JOIN users u ON m.mentioned_user_id = u.user_id
+    WHERE m.mention_id = v_new_mention_id;
 END;
 $$ LANGUAGE plpgsql;

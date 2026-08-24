@@ -2,8 +2,10 @@
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
 #include "WorkItems.h"
+#include "NotificationWebSocketController.h"
 #include <json/json.h>
 #include <optional>
+#include <regex>
 
 using namespace api;
 using namespace app_utils;
@@ -248,5 +250,107 @@ void WorkItemController::deleteWorkItem(const HttpRequestPtr &req, std::function
         },
         // DB 함수에 전달할 매개변수 (요청자 이메일, 업무 ID)
         requester_email, work_item_id
+    );
+}
+
+// 업무 댓글 추가 및 실시간 멘션 릴레이 API
+void WorkItemController::addComment(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    // 1. 필수 파라미터 확인 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "work_item_id", "content")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(work_item_id, content)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    std::string work_item_id = (*jsonPtr)["work_item_id"].asString();
+    std::string content = (*jsonPtr)["content"].asString();
+
+    // 2. 본문에서 멘션된 이메일들을 정규식으로 안전하게 추출
+    // 포맷: <mention email='samsung_admin@samsung.com'>@삼성 관리자</mention> 또는 큰따옴표 포맷
+    std::regex mention_regex("<mention email=['\"]([^'\"]+)['\"]>@([^<]+)</mention>");
+    std::smatch match;
+    std::vector<std::string> mentioned_emails;
+    
+    auto search_start = content.cbegin();
+    while (std::regex_search(search_start, content.cend(), match, mention_regex)) {
+        mentioned_emails.push_back(match[1].str()); // 매칭된 이메일들 수집
+        search_start = match.suffix().first;
+    }
+
+    // 3. 댓글 추가 DB 비동기 함수 실행 (add_work_item_comment)
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM add_work_item_comment($1, $2, $3)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback, dbClient, requester_email, work_item_id, mentioned_emails](const orm::Result &result) {
+            if (result.empty()) {
+                Json::Value ret;
+                ret["status"] = "error";
+                ret["message"] = "댓글 작성에 실패했습니다.";
+                auto resp = HttpResponse::newHttpJsonResponse(ret);
+                resp->setStatusCode(k500InternalServerError);
+                callback(resp);
+                return;
+            }
+
+            // 댓글 데이터 변환 및 획득
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto comment_obj = ret["data"][0];
+            int comment_id = comment_obj["comment_id"].asInt();
+            std::string author_name = comment_obj["author_name"].asString();
+
+            // 4. 수집된 멘션 이메일들에 대해 순차적으로 DB 적재 및 웹소켓 알림 릴레이
+            for (const auto &mentioned_email : mentioned_emails) {
+                std::string mentionSql = "SELECT * FROM add_comment_mention($1, $2)";
+                
+                dbClient->execSqlAsync(
+                    mentionSql,
+                    [comment_id, author_name, work_item_id, mentioned_email](const orm::Result &mResult) {
+                        // DB에 멘션 레코드 적재가 성공했다면 실시간 웹소켓 푸시 시도
+                        if (!mResult.empty()) {
+                            Json::Value wsNotify;
+                            wsNotify["type"] = "MENTION";
+                            wsNotify["work_item_id"] = work_item_id;
+                            wsNotify["comment_id"] = comment_id;
+                            wsNotify["message"] = author_name + "님이 댓글에서 회원님을 멘션했습니다.";
+
+                            Json::StreamWriterBuilder writer;
+                            std::string jsonStr = Json::writeString(writer, wsNotify);
+
+                            // 해당 유저가 온라인이면 실시간 푸시 릴레이
+                            api::NotificationWebSocketController::sendNotificationToUser(mentioned_email, jsonStr);
+                        }
+                    },
+                    [](const orm::DrogonDbException &me) {
+                        LOG_ERROR << "Failed to insert comment mention: " << me.base().what();
+                    },
+                    comment_id, mentioned_email
+                );
+            }
+
+            // 클라이언트에 최종 댓글 생성 완료 응답 반환
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k201Created);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, work_item_id, content
     );
 }

@@ -1,0 +1,35 @@
+.viewToggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex: 0 0 auto;
+}
+
+.viewButton {
+  --axis-button-height: 2.62rem;
+  --axis-button-padding: 0 1rem;
+  --axis-button-radius: var(--axis-radius-surface);
+  gap: 0.6rem;
+  min-width: 7.8rem;
+  font-size: 0.84rem;
+}
+
+.viewButton:first-child {
+  min-width: 8.7rem;
+}
+
+@media (max-width: 760px) {
+  .viewToggle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .viewButton,
+  .viewButton:first-child {
+    min-width: 0;
+    width: 100%;
+    --axis-button-padding: 0 0.65rem;
+  }
+}

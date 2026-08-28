@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { WindowTitleBar } from '../chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../chrome/windowControls'
 import { useBodyScrollSurface } from '../chrome/useBodyScrollSurface'
@@ -39,10 +39,13 @@ function readInitialSidebarCollapsed() {
 export function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const hasCustomTitleBar = hasCustomWindowControls()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
+  const [workspaceEntryHeaderActionsTarget, setWorkspaceEntryHeaderActionsTarget] =
+    useState<HTMLDivElement | null>(null)
 
   useBodyScrollSurface('workspace')
 
@@ -68,9 +71,11 @@ export function AppShell() {
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext, location.search)
   const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
   const isWorkspaceSelectRoute = location.pathname === '/workspace/select'
+  const workspaceSelectView = searchParams.get('view') === 'list' ? 'list' : 'hierarchy'
+  const isWorkspaceSelectListView = workspaceSelectView === 'list'
   const isWorkspaceRoute = location.pathname === '/workspace'
   const isWorkspaceTimelineRoute =
-    isWorkspaceRoute && new URLSearchParams(location.search).get('view') === 'timeline'
+    isWorkspaceRoute && searchParams.get('view') === 'timeline'
   const isWorkItemsRoute = location.pathname === '/work-items'
   const isWorkItemEditRoute = /^\/work-items\/[^/]+\/edit$/.test(location.pathname)
   const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname) || isWorkItemEditRoute
@@ -79,14 +84,23 @@ export function AppShell() {
     ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
     : null
   const workItemCategory = workItemDetail ? getWorkItemTag(workItemDetail.item) : null
-  const shellHeading: ShellTopActionsHeading = isWorkspaceRoute
+  const shellHeading: ShellTopActionsHeading = isWorkspaceSelectRoute
     ? {
-        type: 'breadcrumb',
-        label: '워크 스페이스',
-        title: workspaceLabel,
-        subtitle: '공동작업을 위한 워크스페이스',
+        type: 'page',
+        title: isWorkspaceSelectListView ? '워크스페이스' : '워크스페이스 진입점',
+        titleDetail: isWorkspaceSelectListView ? '(목록)' : '(계층도)',
+        subtitle: isWorkspaceSelectListView
+          ? '조직의 모든 워크스페이스를 목록으로 확인하고 이동할 수 있습니다.'
+          : '조직의 모든 워크스페이스를 계층 구조로 확인하고 이동할 수 있습니다.',
       }
-    : location.pathname === '/dashboard'
+    : isWorkspaceRoute
+      ? {
+          type: 'breadcrumb',
+          label: '워크 스페이스',
+          title: workspaceLabel,
+          subtitle: '공동작업을 위한 워크스페이스',
+        }
+      : location.pathname === '/dashboard'
       ? { type: 'greeting' }
       : workItemDetail
         ? {
@@ -161,13 +175,19 @@ export function AppShell() {
             .filter(Boolean)
             .join(' ')}
         >
-          {!isWorkspaceSelectRoute ? (
-            <ShellTopActions
-              currentUser={currentUser}
-              heading={shellHeading}
-              inset="standard"
-            />
-          ) : null}
+          <ShellTopActions
+            currentUser={currentUser}
+            heading={shellHeading}
+            inset="standard"
+            actions={
+              isWorkspaceSelectRoute ? (
+                <div
+                  ref={setWorkspaceEntryHeaderActionsTarget}
+                  className={styles.workspaceEntryHeaderActionsHost}
+                />
+              ) : undefined
+            }
+          />
 
           <main
             className={[
@@ -178,7 +198,7 @@ export function AppShell() {
               .filter(Boolean)
               .join(' ')}
           >
-            <Outlet />
+            <Outlet context={{ workspaceEntryHeaderActionsTarget }} />
           </main>
         </div>
       </div>

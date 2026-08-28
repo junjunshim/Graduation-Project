@@ -451,6 +451,11 @@
   height: 100%;
 }
 
+.workspaceEntryHeaderActionsHost {
+  width: 100%;
+  min-width: 0;
+}
+
 .pageBar {
   --surface-page: var(--axis-surface-canvas);
   --surface-panel: var(--axis-surface-panel);

@@ -1,5 +1,5 @@
 // 각 페이지의 상단 액션(알림, 프로필 등) 관리
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../design-system/primitives/Button'
 import { Icon } from '../../design-system/primitives/Icon'
@@ -19,6 +19,7 @@ export type ShellTopActionsHeading =
   | {
       type: 'page'
       title: string
+      titleDetail?: string
       subtitle: string
     }
   | {
@@ -46,12 +47,14 @@ type ShellTopActionsProps = {
   }
   heading: ShellTopActionsHeading
   inset?: 'standard' | 'wide'
+  actions?: ReactNode
 }
 
 export function ShellTopActions({
   currentUser,
   heading,
   inset = 'standard',
+  actions,
 }: ShellTopActionsProps) {
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -73,7 +76,12 @@ export function ShellTopActions({
         </div>
       ) : heading.type === 'page' ? (
         <div className={styles.shellHeading}>
-          <h1 className={styles.shellPageTitle}>{heading.title}</h1>
+          <h1 className={styles.shellPageTitle}>
+            {heading.title}
+            {heading.titleDetail ? (
+              <span className={styles.shellPageTitleDetail}>{heading.titleDetail}</span>
+            ) : null}
+          </h1>
           <p className={styles.shellSubtitle}>{heading.subtitle}</p>
         </div>
       ) : heading.type === 'workItem' ? (
@@ -101,7 +109,13 @@ export function ShellTopActions({
         </p>
       ) : null}
 
-      {heading.type !== 'workItem' ? (
+      {actions !== undefined ? (
+        <div
+          className={[styles.shellTopActionControls, styles.shellTopCustomActions].join(' ')}
+        >
+          {actions}
+        </div>
+      ) : heading.type !== 'workItem' ? (
         <div className={styles.shellTopActionControls}>
           <SearchField
             containerClassName={styles.shellSearchBox}

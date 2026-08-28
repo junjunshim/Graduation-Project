@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
+import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
@@ -23,6 +24,7 @@ type WorkspaceMetric = {
   description: string
   icon?: IconName
   progress?: number
+  tone?: 'brand' | 'warning'
   variant?: 'primary' | 'standard'
 }
 
@@ -32,6 +34,19 @@ type TimelineItem = {
   item: WorkItemRecord
   left: number
   width: number
+}
+
+type WorkItemSchedule = {
+  item: WorkItemRecord
+  start: number
+  end: number
+}
+
+type WorkItemScheduleState = 'current' | 'upcoming' | 'past'
+
+type ActivityDisplay = {
+  dateLabel: string
+  actionLabel: string
 }
 
 type TimelineAxisLabel = {
@@ -69,8 +84,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
 const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
 const BOARD_ITEM_LIMIT = 5
 const TIMELINE_ITEM_LIMIT = 5
+const TIMELINE_WINDOW_PAST_DAYS = 21
+const TIMELINE_WINDOW_FUTURE_DAYS = 21
+const TIMELINE_TICK_COUNT = 7
 const DOCUMENT_LIMIT = 3
-const ACTIVITY_LIMIT = 6
+const ACTIVITY_LIMIT = 9
 const MIN_TIMELINE_BAR_WIDTH = 2.4
 
 function clampProgress(progress: number) {
@@ -97,7 +115,18 @@ function parseWorkspaceDay(value?: string) {
     return null
   }
 
-  return Date.UTC(year, monthIndex, day)
+  const timestamp = Date.UTC(year, monthIndex, day)
+  const parsedDate = new Date(timestamp)
+
+  if (
+    parsedDate.getUTCFullYear() !== year ||
+    parsedDate.getUTCMonth() !== monthIndex ||
+    parsedDate.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return timestamp
 }
 
 function formatMonthLabel(timestamp: number) {
@@ -198,7 +227,92 @@ function getWorkspaceTodayTimestamp() {
   return Date.UTC(year, month - 1, day)
 }
 
-function buildTimeline(workItems: WorkItemRecord[]): TimelineView {
+function getWorkItemSchedule(item: WorkItemRecord): WorkItemSchedule | null {
+  const parsedStart = parseWorkspaceDay(item.startDate)
+  const parsedEnd = parseWorkspaceDay(item.dueDate)
+  const start = parsedStart ?? parsedEnd
+  const end = parsedEnd ?? parsedStart
+
+  if (start === null || end === null) {
+    return null
+  }
+
+  return {
+    item,
+    start: Math.min(start, end),
+    end: Math.max(start, end),
+  }
+}
+
+function getWorkItemScheduleState(schedule: WorkItemSchedule, today: number): WorkItemScheduleState {
+  if (schedule.start <= today && schedule.end >= today) {
+    return 'current'
+  }
+
+  return schedule.start > today ? 'upcoming' : 'past'
+}
+
+function getWorkItemScheduleDistance(schedule: WorkItemSchedule, today: number) {
+  const state = getWorkItemScheduleState(schedule, today)
+
+  if (state === 'current') {
+    return 0
+  }
+
+  return state === 'upcoming' ? schedule.start - today : today - schedule.end
+}
+
+function compareWorkItemFallback(left: WorkItemRecord, right: WorkItemRecord) {
+  return (
+    right.createdAt.localeCompare(left.createdAt) ||
+    left.title.localeCompare(right.title, 'ko') ||
+    left.workItemId.localeCompare(right.workItemId)
+  )
+}
+
+function compareWorkItemSchedulesByToday(left: WorkItemSchedule, right: WorkItemSchedule, today: number) {
+  const distanceOrder = getWorkItemScheduleDistance(left, today) - getWorkItemScheduleDistance(right, today)
+
+  if (distanceOrder !== 0) {
+    return distanceOrder
+  }
+
+  const leftState = getWorkItemScheduleState(left, today)
+  const rightState = getWorkItemScheduleState(right, today)
+
+  if (leftState === 'current' && rightState === 'current') {
+    return left.end - right.end || right.start - left.start || compareWorkItemFallback(left.item, right.item)
+  }
+
+  if (leftState !== rightState) {
+    return leftState === 'upcoming' ? -1 : 1
+  }
+
+  const dateOrder = leftState === 'upcoming' ? left.start - right.start : right.end - left.end
+  return dateOrder || compareWorkItemFallback(left.item, right.item)
+}
+
+function sortWorkItemsByToday(workItems: WorkItemRecord[], today: number) {
+  return workItems
+    .map((item, index) => ({ index, item, schedule: getWorkItemSchedule(item) }))
+    .sort((left, right) => {
+      if (left.schedule && right.schedule) {
+        return compareWorkItemSchedulesByToday(left.schedule, right.schedule, today) || left.index - right.index
+      }
+
+      if (left.schedule || right.schedule) {
+        return left.schedule ? -1 : 1
+      }
+
+      return compareWorkItemFallback(left.item, right.item) || left.index - right.index
+    })
+    .map(({ item }) => item)
+}
+
+function buildTimeline(workItems: WorkItemRecord[], today: number): TimelineView {
+  const rangeStart = today - TIMELINE_WINDOW_PAST_DAYS * MS_PER_DAY
+  const rangeEnd = today + TIMELINE_WINDOW_FUTURE_DAYS * MS_PER_DAY
+  const rangeSpan = Math.max(rangeEnd - rangeStart, MS_PER_DAY)
   const rangedItems = workItems
     .map((item) => {
       const start = parseWorkspaceDay(item.startDate) ?? parseWorkspaceDay(item.dueDate)
@@ -215,45 +329,27 @@ function buildTimeline(workItems: WorkItemRecord[]): TimelineView {
       }
     })
     .filter((item): item is { item: WorkItemRecord; start: number; end: number } => Boolean(item))
-    .sort((left, right) => left.start - right.start || left.end - right.end)
+    .filter(({ start, end }) => end >= rangeStart && start <= rangeEnd)
+    .sort((left, right) => compareWorkItemSchedulesByToday(left, right, today))
     .slice(0, TIMELINE_ITEM_LIMIT)
-
-  if (rangedItems.length === 0) {
-    return {
-      items: [],
-      monthLabels: [{ align: 'start', label: '일정 미정', left: 0 }],
-      showToday: false,
-      ticks: [],
-      todayLeft: 0,
-    }
-  }
-
-  const rangeStart = Math.min(...rangedItems.map((item) => item.start))
-  const rangeEnd = Math.max(...rangedItems.map((item) => item.end))
-  const paddedStart = rangeStart - 2 * MS_PER_DAY
-  const paddedEnd = rangeEnd + 2 * MS_PER_DAY
-  const rangeSpan = Math.max(paddedEnd - paddedStart, MS_PER_DAY)
-  const tickCount = 7
-  const today = getWorkspaceTodayTimestamp()
-  const rawTodayLeft = ((today - paddedStart) / rangeSpan) * 100
-  const showToday = rawTodayLeft >= 0 && rawTodayLeft <= 100
-  const todayLeft = showToday ? rawTodayLeft : 0
-  const monthLabels = buildTimelineMonthLabels(paddedStart, paddedEnd, rangeSpan)
+  const todayLeft = ((today - rangeStart) / rangeSpan) * 100
+  const monthLabels = buildTimelineMonthLabels(rangeStart, rangeEnd, rangeSpan)
 
   return {
     monthLabels,
-    showToday,
+    showToday: true,
     todayLeft,
-    ticks: buildTimelineTicks(paddedStart, rangeSpan, tickCount),
+    ticks: buildTimelineTicks(rangeStart, rangeSpan, TIMELINE_TICK_COUNT),
     items: rangedItems.map(({ item, start, end }) => {
-      const left = ((start - paddedStart) / rangeSpan) * 100
-      const clampedLeft = Math.min(100, Math.max(0, left))
-      const width = Math.max(((end - start) / rangeSpan) * 100, MIN_TIMELINE_BAR_WIDTH)
+      const visibleStart = Math.max(start, rangeStart)
+      const visibleEnd = Math.min(end, rangeEnd)
+      const left = ((visibleStart - rangeStart) / rangeSpan) * 100
+      const width = Math.max(((visibleEnd - visibleStart) / rangeSpan) * 100, MIN_TIMELINE_BAR_WIDTH)
 
       return {
         item,
-        left: clampedLeft,
-        width: Math.min(100 - clampedLeft, width),
+        left,
+        width: Math.min(100 - left, width),
       }
     }),
   }
@@ -321,18 +417,21 @@ function getWorkspaceMetrics(overview: WorkspaceOverview): WorkspaceMetric[] {
       value: String(overview.summary.dueSoonWorkItemCount),
       description: '7일 이내 마감',
       icon: 'alertTriangle',
+      tone: 'warning',
     },
     {
       label: '팀원',
       value: String(teamMemberCount),
       description: '루트 공간 기준',
       icon: 'users',
+      tone: 'brand',
     },
     {
       label: '내 업무',
       value: String(overview.summary.myWorkItemCount),
       description: '내 담당 업무',
       icon: 'checkSquare',
+      tone: 'brand',
     },
   ]
 }
@@ -349,8 +448,60 @@ function getMemberName(userId: string, members: RoleMember[]) {
   return members.find((member) => member.userId === userId)?.name ?? userId
 }
 
-function getActivityDate(item: WorkItemRecord) {
-  return formatWorkspaceMonthDay(item.createdAt)
+function getDocumentScheduleLabel(item: WorkItemRecord, todayTimestamp: number) {
+  const schedule = getWorkItemSchedule(item)
+
+  if (!schedule) {
+    return `등록 ${formatWorkspaceMonthDay(item.createdAt)}`
+  }
+
+  const state = getWorkItemScheduleState(schedule, todayTimestamp)
+
+  if (state === 'current' && item.dueDate) {
+    return `마감 ${formatWorkspaceMonthDay(item.dueDate)}`
+  }
+
+  if (state === 'upcoming') {
+    return `시작 ${formatWorkspaceMonthDay(item.startDate ?? item.dueDate)}`
+  }
+
+  if (state === 'past') {
+    return `일정 종료 ${formatWorkspaceMonthDay(item.dueDate ?? item.startDate)}`
+  }
+
+  return `시작 ${formatWorkspaceMonthDay(item.startDate ?? item.dueDate)}`
+}
+
+function getActivityDisplay(item: WorkItemRecord, todayTimestamp: number): ActivityDisplay {
+  const schedule = getWorkItemSchedule(item)
+
+  if (!schedule) {
+    return {
+      dateLabel: formatWorkspaceMonthDay(item.createdAt),
+      actionLabel: '등록',
+    }
+  }
+
+  const state = getWorkItemScheduleState(schedule, todayTimestamp)
+
+  if (state === 'current') {
+    return {
+      dateLabel: '오늘 기준',
+      actionLabel: getWorkItemStatusLabel(item.status),
+    }
+  }
+
+  if (state === 'upcoming') {
+    return {
+      dateLabel: formatWorkspaceMonthDay(item.startDate ?? item.dueDate),
+      actionLabel: '시작 예정',
+    }
+  }
+
+  return {
+    dateLabel: formatWorkspaceMonthDay(item.dueDate ?? item.startDate),
+    actionLabel: item.status === 'done' ? '일정 종료' : '마감 경과',
+  }
 }
 
 function getDueStatus(item: WorkItemRecord, todayTimestamp: number): { label: string; tone: DueStatusTone } {
@@ -388,18 +539,6 @@ function getTimelineRangeLabel(item: WorkItemRecord) {
   return `${startLabel} - ${endLabel}`
 }
 
-function getActivityActionLabel(status: WorkItemStatus) {
-  if (status === 'done') {
-    return '완료 처리'
-  }
-
-  if (status === 'in-progress') {
-    return '진행 업데이트'
-  }
-
-  return '대기 등록'
-}
-
 export function WorkspacePage() {
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
@@ -423,13 +562,12 @@ export function WorkspacePage() {
   })
   const counts = getWorkItemCounts(overview.visibleWorkItems)
   const metrics = getWorkspaceMetrics(overview)
-  const filteredWorkItems = filterWorkItems(overview.visibleWorkItems, statusFilter).slice(0, BOARD_ITEM_LIMIT)
   const workspaceToday = getWorkspaceTodayTimestamp()
-  const timeline = buildTimeline(overview.visibleWorkItems)
-  const recentLinkedWorkItems = overview.recentWorkItems.slice(0, DOCUMENT_LIMIT)
-  const activityItems = [...overview.visibleWorkItems]
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .slice(0, ACTIVITY_LIMIT)
+  const todayRelevantWorkItems = sortWorkItemsByToday(overview.visibleWorkItems, workspaceToday)
+  const filteredWorkItems = filterWorkItems(todayRelevantWorkItems, statusFilter).slice(0, BOARD_ITEM_LIMIT)
+  const timeline = buildTimeline(overview.visibleWorkItems, workspaceToday)
+  const todayLinkedWorkItems = todayRelevantWorkItems.slice(0, DOCUMENT_LIMIT)
+  const activityItems = todayRelevantWorkItems.slice(0, ACTIVITY_LIMIT)
   const visibleMembers =
     overview.rootRoleMembers.length > 0
       ? overview.rootRoleMembers.slice(0, 4)
@@ -444,7 +582,13 @@ export function WorkspacePage() {
 
   return (
     <section
-      className={[styles.page, activeView === 'timeline' ? styles.timelinePage : ''].filter(Boolean).join(' ')}
+      className={[
+        styles.page,
+        activeView === 'overview' ? styles.overviewPage : '',
+        activeView === 'timeline' ? styles.timelinePage : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
       <div className={styles.workspaceNavBar}>
         <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
@@ -469,16 +613,17 @@ export function WorkspacePage() {
             {visibleMembers.map((member) => (
               <span
                 key={`${member.assignmentId}-${member.userId}`}
-                aria-label={member.name}
                 data-member-name={member.name}
               >
-                <Icon name="user" size={15} />
+                <UserAvatar name={member.name} userId={member.userId} size="medium" />
+                <span className={styles.memberName}>{member.name}</span>
               </span>
             ))}
             {extraMemberCount > 0 ? <strong data-member-name={`외 ${extraMemberCount}명`}>+{extraMemberCount}</strong> : null}
           </div>
 
           <button type="button" className={styles.secondaryAction}>
+            <Icon name="users" size={15} />
             공유
           </button>
           <button type="button" className={styles.iconAction} aria-label="더보기">
@@ -515,7 +660,12 @@ export function WorkspacePage() {
         {metrics.map((metric) => (
           <article
             key={metric.label}
-            className={[styles.metricCard, metric.variant === 'primary' ? styles.metricCardPrimary : '']
+            className={[
+              styles.metricCard,
+              metric.variant === 'primary' ? styles.metricCardPrimary : '',
+              metric.tone === 'brand' ? styles.metricCardBrand : '',
+              metric.tone === 'warning' ? styles.metricCardWarning : '',
+            ]
               .filter(Boolean)
               .join(' ')}
           >
@@ -525,7 +675,14 @@ export function WorkspacePage() {
             </div>
             <strong>{metric.value}</strong>
             {typeof metric.progress === 'number' ? (
-              <div className={styles.sketchProgress} aria-label={`진행률 ${metric.progress}%`}>
+              <div
+                className={styles.sketchProgress}
+                role="progressbar"
+                aria-label={metric.label}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={metric.progress}
+              >
                 <span style={{ width: `${metric.progress}%` }} />
               </div>
             ) : null}
@@ -540,7 +697,7 @@ export function WorkspacePage() {
             <div className={styles.panelHeader}>
               <div>
                 <h3 className={styles.panelTitle}>업무 보드</h3>
-                <div className={styles.statusFilters} aria-label="업무 상태 필터">
+                <div className={styles.statusFilters} role="group" aria-label="업무 상태 필터">
                   {statusFilters.map((filter) => (
                     <button
                       key={filter.id}
@@ -548,6 +705,7 @@ export function WorkspacePage() {
                       className={[styles.filterButton, statusFilter === filter.id ? styles.filterButtonActive : '']
                         .filter(Boolean)
                         .join(' ')}
+                      aria-pressed={statusFilter === filter.id}
                       onClick={() => setStatusFilter(filter.id)}
                     >
                       <span className={styles.filterButtonLabel}>
@@ -593,7 +751,10 @@ export function WorkspacePage() {
                     </div>
                     <span className={styles.assigneeCell}>
                       <span className={styles.assigneeAvatar} aria-hidden="true">
-                        <Icon name="user" size={13} />
+                        <UserAvatar
+                          name={getMemberName(item.ownerUserId, overview.rootRoleMembers)}
+                          userId={item.ownerUserId}
+                        />
                       </span>
                       <span>{getMemberName(item.ownerUserId, overview.rootRoleMembers)}</span>
                     </span>
@@ -664,7 +825,7 @@ export function WorkspacePage() {
                 timeline.items.map(({ item, left, width }) => (
                   <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.timelineItem}>
                     <span className={styles.timelineItemCopy}>
-                      <strong>{item.title}</strong>
+                      <strong title={item.title}>{item.title}</strong>
                       <small>{getTimelineRangeLabel(item)}</small>
                     </span>
                     <div className={styles.timelineTrack}>
@@ -673,7 +834,7 @@ export function WorkspacePage() {
                   </Link>
                 ))
               ) : (
-                <p className={styles.emptyCopy}>일정이 등록된 업무가 없습니다.</p>
+                <p className={styles.emptyCopy}>오늘 전후 3주 안에 표시할 일정이 없습니다.</p>
               )}
             </div>
           </section>
@@ -692,8 +853,8 @@ export function WorkspacePage() {
             </div>
 
             <div className={styles.documentList}>
-              {recentLinkedWorkItems.length > 0 ? (
-                recentLinkedWorkItems.map((item) => (
+              {todayLinkedWorkItems.length > 0 ? (
+                todayLinkedWorkItems.map((item) => (
                   <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.documentItem}>
                     <span className={styles.documentIcon}>
                       <Icon name="fileText" size={15} />
@@ -701,7 +862,8 @@ export function WorkspacePage() {
                     <span className={styles.documentCopy}>
                       <strong>{item.title}</strong>
                       <small>
-                        {getMemberName(item.ownerUserId, overview.rootRoleMembers)} · {formatWorkspaceMonthDay(item.createdAt)}
+                        {getMemberName(item.ownerUserId, overview.rootRoleMembers)} ·{' '}
+                        {getDocumentScheduleLabel(item, workspaceToday)}
                       </small>
                     </span>
                     <Icon name="arrowRight" size={14} />
@@ -735,21 +897,29 @@ export function WorkspacePage() {
 
             <div className={styles.activityList}>
               {activityItems.length > 0 ? (
-                activityItems.map((item) => (
-                  <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.activityItem}>
-                    <span className={styles.activityAvatar}>
-                      <Icon name="user" size={14} />
-                    </span>
-                    <span className={styles.activityCopy}>
-                      <small>
-                        {getActivityDate(item)} · {getActivityActionLabel(item.status)}
-                      </small>
-                      <strong>{item.title}</strong>
-                      <span>{getMemberName(item.ownerUserId, overview.rootRoleMembers)}</span>
-                    </span>
-                    <span className={getStatusBadgeClassName(item.status)}>{getWorkItemStatusLabel(item.status)}</span>
-                  </Link>
-                ))
+                activityItems.map((item) => {
+                  const activityDisplay = getActivityDisplay(item, workspaceToday)
+
+                  return (
+                    <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.activityItem}>
+                      <span className={styles.activityAvatar}>
+                        <UserAvatar
+                          name={getMemberName(item.ownerUserId, overview.rootRoleMembers)}
+                          userId={item.ownerUserId}
+                          size="medium"
+                        />
+                      </span>
+                      <span className={styles.activityCopy}>
+                        <small>
+                          {activityDisplay.dateLabel} · {activityDisplay.actionLabel}
+                        </small>
+                        <strong>{item.title}</strong>
+                        <span>{getMemberName(item.ownerUserId, overview.rootRoleMembers)}</span>
+                      </span>
+                      <span className={getStatusBadgeClassName(item.status)}>{getWorkItemStatusLabel(item.status)}</span>
+                    </Link>
+                  )
+                })
               ) : (
                 <p className={styles.emptyCopy}>표시할 활동이 없습니다.</p>
               )}

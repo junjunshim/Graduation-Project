@@ -35,11 +35,15 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
   min-height: var(--axis-control-height-md);
 }
 
 .searchBox {
   width: min(18rem, 100%);
+  min-width: 8rem;
+  flex: 1 1 12rem;
 }
 
 .helpAnchor {
@@ -62,66 +66,11 @@
   --axis-button-padding: 0 1rem;
   min-width: 8rem;
   font-size: 0.86rem;
+  white-space: nowrap;
 }
 
 .createButton:hover {
   transform: translateY(-1px);
-}
-
-.pageIntro {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem;
-  margin-top: 1.65rem;
-}
-
-.pageIntro > div:first-child {
-  display: grid;
-  gap: 0.55rem;
-  min-width: 0;
-}
-
-.pageIntro h1 {
-  margin: 0;
-  color: var(--entry-text);
-  font-size: clamp(1.55rem, 2.15vw, 1.8rem);
-  font-weight: 850;
-  line-height: 1.15;
-  letter-spacing: -0.045em;
-}
-
-.pageIntro h1 span {
-  color: var(--entry-primary);
-}
-
-.pageIntro p {
-  margin: 0;
-  color: var(--entry-text-secondary);
-  font-size: 0.84rem;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
-.viewToggle {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.65rem;
-  flex: 0 0 auto;
-}
-
-.viewButton {
-  --axis-button-height: 2.62rem;
-  --axis-button-padding: 0 1rem;
-  --axis-button-radius: var(--axis-radius-surface);
-  gap: 0.6rem;
-  min-width: 7.8rem;
-  font-size: 0.84rem;
-}
-
-.viewButton:first-child {
-  min-width: 8.7rem;
 }
 
 .treeViewport {
@@ -1125,16 +1074,6 @@
 }
 
 @media (max-width: 900px) {
-  .pageIntro {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .viewToggle {
-    justify-content: flex-start;
-    width: 100%;
-  }
-
   .treeViewport,
   .listSection {
     margin-top: 1.5rem;
@@ -1153,6 +1092,11 @@
 
   .searchBox {
     width: 100%;
+    min-width: 0;
+  }
+
+  .helpAnchor {
+    justify-self: end;
   }
 
   .createButton {
@@ -1160,20 +1104,9 @@
     width: 100%;
   }
 
-  .pageIntro {
-    margin-top: 1.35rem;
-  }
-
-  .viewToggle {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .viewButton,
-  .viewButton:first-child {
-    min-width: 0;
-    width: 100%;
-    --axis-button-padding: 0 0.65rem;
+  .helpPopover {
+    right: 0;
+    width: min(17.5rem, calc(100vw - 2rem));
   }
 
   .treeCanvas {

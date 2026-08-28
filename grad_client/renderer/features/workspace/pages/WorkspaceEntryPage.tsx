@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { Button, ButtonLink } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { Panel } from '../../../design-system/primitives/Panel'
 import { SearchField } from '../../../design-system/primitives/SearchField'
 import { getCurrentUser } from '../../auth/api'
+import { WorkspaceEntryViewToggle } from '../components/WorkspaceEntryViewToggle'
 import { getOrgSnapshot } from '../data/orgService'
 import {
   getActiveWorkspaceRootId,
@@ -17,6 +18,10 @@ import { getWorkspaceDirectory } from '../queries/workspaceDirectory'
 import styles from './WorkspaceEntryPage.module.css'
 
 const WORKSPACE_LIST_PAGE_SIZE = 10
+
+type WorkspaceEntryOutletContext = {
+  workspaceEntryHeaderActionsTarget: HTMLDivElement | null
+}
 
 const toneClassNames: Record<WorkspaceDirectoryTone, string> = {
   indigo: styles.toneIndigo,
@@ -144,37 +149,6 @@ function DirectoryToolbar({
       <ButtonLink to="/setup/top-node" className={styles.createButton} variant="primary">
         워크스페이스 생성
       </ButtonLink>
-    </div>
-  )
-}
-
-function ViewToggle({
-  view,
-  onChange,
-}: {
-  view: 'hierarchy' | 'list'
-  onChange: (view: 'hierarchy' | 'list') => void
-}) {
-  return (
-    <div className={styles.viewToggle} role="group" aria-label="워크스페이스 보기 방식">
-      <Button
-        variant="secondary"
-        className={styles.viewButton}
-        aria-pressed={view === 'hierarchy'}
-        onClick={() => onChange('hierarchy')}
-      >
-        <Icon name="orgChart" size={19} />
-        계층도 보기
-      </Button>
-      <Button
-        variant="secondary"
-        className={styles.viewButton}
-        aria-pressed={view === 'list'}
-        onClick={() => onChange('list')}
-      >
-        <Icon name="list" size={19} />
-        목록 보기
-      </Button>
     </div>
   )
 }
@@ -613,6 +587,8 @@ function WorkspaceChooserDialog({
 export function WorkspaceEntryPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { workspaceEntryHeaderActionsTarget } =
+    useOutletContext<WorkspaceEntryOutletContext>()
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const workspaceDirectory = getWorkspaceDirectory(currentUser?.userId, snapshot)
@@ -644,6 +620,7 @@ export function WorkspaceEntryPage() {
           .map((item) => item.id),
       ),
   )
+
   const normalizedQuery = query.trim().toLocaleLowerCase('ko-KR')
   const hierarchyBranches = hierarchyRoot
     ? !normalizedQuery || matchesWorkspace(hierarchyRoot, normalizedQuery)
@@ -740,27 +717,19 @@ export function WorkspaceEntryPage() {
 
   return (
     <div className={styles.page}>
-      <DirectoryToolbar
-        query={query}
-        isHelpOpen={isHelpOpen}
-        onQueryChange={handleQueryChange}
-        onToggleHelp={() => setIsHelpOpen((current) => !current)}
-      />
+      {workspaceEntryHeaderActionsTarget
+        ? createPortal(
+            <DirectoryToolbar
+              query={query}
+              isHelpOpen={isHelpOpen}
+              onQueryChange={handleQueryChange}
+              onToggleHelp={() => setIsHelpOpen((current) => !current)}
+            />,
+            workspaceEntryHeaderActionsTarget,
+          )
+        : null}
 
-      <header className={styles.pageIntro}>
-        <div>
-          <h1>
-            {view === 'hierarchy' ? '워크스페이스 진입점 ' : '워크스페이스 '}
-            <span>({view === 'hierarchy' ? '계층도' : '목록'})</span>
-          </h1>
-          <p>
-            {view === 'hierarchy'
-              ? '조직의 모든 워크스페이스를 계층 구조로 확인하고 이동할 수 있습니다.'
-              : '조직의 모든 워크스페이스를 목록으로 확인하고 이동할 수 있습니다.'}
-          </p>
-        </div>
-        <ViewToggle view={view} onChange={handleViewChange} />
-      </header>
+      <WorkspaceEntryViewToggle view={view} onChange={handleViewChange} />
 
       {view === 'hierarchy' && hierarchyRoot ? (
         <HierarchyView

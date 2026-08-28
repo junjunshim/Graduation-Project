@@ -3,6 +3,7 @@
 #include <drogon/WebSocketController.h>
 #include <shared_mutex>
 #include <unordered_map>
+#include <array>
 #include <string>
 
 using namespace drogon;
@@ -26,8 +27,20 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
     static bool sendNotificationToUser(const std::string &user_email, const std::string &message);
 
   private:
-    // 유저 이메일과 웹소켓 연결 객체를 매핑하는 전역 관리용 스레드 안전 맵 구조
-    static std::unordered_map<std::string, WebSocketConnectionPtr> userConnections_;
-    static std::shared_mutex connectionsMutex_;
+    // 샤드 1개를 구성하는 구조체 (독립된 Mutex와 Map)
+    struct ConnectionShard {
+        mutable std::shared_mutex mutex;
+        std::unordered_map<std::string, WebSocketConnectionPtr> connections;
+    };
+
+    // 32개의 독립된 샤드로 분할 관리
+    static constexpr size_t SHARD_COUNT = 32;
+    static std::array<ConnectionShard, SHARD_COUNT> shards_;
+
+    // 유저 이메일의 해시값을 통해 O(1)로 담당 샤드를 반환하는 헬퍼 함수
+    static ConnectionShard& getShard(const std::string &user_email) {
+        size_t index = std::hash<std::string>{}(user_email) % SHARD_COUNT;
+        return shards_[index];
+    }
 };
 }

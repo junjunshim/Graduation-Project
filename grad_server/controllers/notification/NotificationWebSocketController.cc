@@ -4,9 +4,8 @@
 
 using namespace api;
 
-// 정적 멤버 변수 초기화
-std::unordered_map<std::string, WebSocketConnectionPtr> NotificationWebSocketController::userConnections_;
-std::shared_mutex NotificationWebSocketController::connectionsMutex_;
+// 정적 샤드 배열 초기화
+std::array<NotificationWebSocketController::ConnectionShard, NotificationWebSocketController::SHARD_COUNT> NotificationWebSocketController::shards_;
 
 void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &req, const WebSocketConnectionPtr &wsConnPtr)
 {
@@ -40,10 +39,11 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
         return;
     }
 
-    // 3. 스레드 안전하게 연결 맵에 세션 추가
+    // 3. 해당 유저의 담당 샤드에만 스레드 안전하게 세션 추가
+    auto &shard = getShard(user_email);
     {
-        std::unique_lock<std::shared_mutex> lock(connectionsMutex_);
-        userConnections_[user_email] = wsConnPtr;
+        std::unique_lock<std::shared_mutex> lock(shard.mutex);
+        shard.connections[user_email] = wsConnPtr;
     }
 
     // 4. 소켓 커넥션 객체에 유저 정보를 컨텍스트로 바인딩 (연결 종료 시 식별용)
@@ -75,10 +75,11 @@ void NotificationWebSocketController::handleConnectionClosed(const WebSocketConn
     if (user_email_ptr)
     {
         std::string user_email = *user_email_ptr;
-        // 스레드 안전하게 세션 맵에서 삭제
+        // 해당 유저의 샤드에서 스레드 안전하게 세션 삭제
+        auto &shard = getShard(user_email);
         {
-            std::unique_lock<std::shared_mutex> lock(connectionsMutex_);
-            userConnections_.erase(user_email);
+            std::unique_lock<std::shared_mutex> lock(shard.mutex);
+            shard.connections.erase(user_email);
         }
         LOG_INFO << "WebSocket disconnected: " << user_email;
     }
@@ -86,13 +87,23 @@ void NotificationWebSocketController::handleConnectionClosed(const WebSocketConn
 
 bool NotificationWebSocketController::sendNotificationToUser(const std::string &user_email, const std::string &message)
 {
-    // 공유 락을 획득하여 동시 조회를 스레드 안전하게 수행
-    std::shared_lock<std::shared_mutex> lock(connectionsMutex_);
-    auto it = userConnections_.find(user_email);
-    if (it != userConnections_.end())
+    WebSocketConnectionPtr targetConn = nullptr;
+
+    // 1. 해당 샤드에서 Read Lock을 아주 잠깐만 걸고 소켓 스마트 포인터만 복사(Copy-out)
+    auto &shard = getShard(user_email);
     {
-        // 대상이 온라인이면 실시간 푸시 발송
-        it->second->send(message);
+        std::shared_lock<std::shared_mutex> lock(shard.mutex);
+        auto it = shard.connections.find(user_email);
+        if (it != shard.connections.end())
+        {
+            targetConn = it->second;
+        }
+    } // 🔓 락 즉시 해제
+
+    // 2. 락이 완전히 해제된 상태에서 실제 네트워크 I/O 전송
+    if (targetConn)
+    {
+        targetConn->send(message);
         return true;
     }
     return false; // 대상이 오프라인 상태임

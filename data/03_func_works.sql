@@ -458,13 +458,17 @@ BEGIN
     -- 결과 반환
     RETURN QUERY
     SELECT jsonb_build_object(
-        'mention_id', m.mention_id,
+        'target_email', u.email,
+        'type', 'NOTIFICATION',
+        'sub_type', 'MENTION',
+        'work_item_id', c.work_item_id,
         'comment_id', m.comment_id,
+        'mention_id', m.mention_id,
         'mentioned_user_id', m.mentioned_user_id,
-        'mentioned_user_name', u.name,
-        'mentioned_user_email', u.email
+        'mentioned_user_name', u.name
     )::jsonb AS out_data
     FROM comment_mentions m
+    JOIN work_item_comments c ON m.comment_id = c.comment_id
     JOIN users u ON m.mentioned_user_id = u.user_id
     WHERE m.mention_id = v_new_mention_id;
 END;

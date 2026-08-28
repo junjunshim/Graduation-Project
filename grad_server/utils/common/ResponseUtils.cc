@@ -1,4 +1,43 @@
 #include "ResponseUtils.h"
+#include "NotificationWebSocketController.h"
+
+// DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
+bool app_utils::sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message) {
+    if (result.empty()) return false;
+
+    Json::Reader reader;
+    Json::StreamWriterBuilder writer;
+
+    for (auto const &row : result) {
+        std::string jsonStr = row["out_data"].as<std::string>();
+        Json::Value item;
+        if (!reader.parse(jsonStr, item)) {
+            LOG_ERROR << "Failed to parse notification JSON: " << jsonStr;
+            continue;
+        }
+
+        // 대상 이메일 추출
+        if (!item.isMember("target_email")) {
+            LOG_WARN << "Notification payload missing target_email: " << jsonStr;
+            continue;
+        }
+        std::string targetEmail = item["target_email"].asString();
+
+        // target_email은 웹소켓 발송 라우팅용이므로 클라이언트 페이로드에서 제거하거나 유지
+        item.removeMember("target_email");
+
+        // API에서 커스텀 message를 전달한 경우 메시지 주입
+        if (!message.empty()) {
+            item["message"] = message;
+        }
+
+        std::string payloadStr = Json::writeString(writer, item);
+
+        // 샤딩 락 웹소켓 컨트롤러를 통해 전송
+        api::NotificationWebSocketController::sendNotificationToUser(targetEmail, payloadStr);
+    }
+    return true;
+}
 
 // DB 결과를 프론트엔드 응답용 JSON으로 변환하는 공통 함수
 Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &result) {

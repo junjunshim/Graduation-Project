@@ -314,21 +314,9 @@ void WorkItemController::addComment(const HttpRequestPtr &req, std::function<voi
                 
                 dbClient->execSqlAsync(
                     mentionSql,
-                    [comment_id, author_name, work_item_id, mentioned_email](const orm::Result &mResult) {
-                        // DB에 멘션 레코드 적재가 성공했다면 실시간 웹소켓 푸시 시도
-                        if (!mResult.empty()) {
-                            Json::Value wsNotify;
-                            wsNotify["type"] = "MENTION";
-                            wsNotify["work_item_id"] = work_item_id;
-                            wsNotify["comment_id"] = comment_id;
-                            wsNotify["message"] = author_name + "님이 댓글에서 회원님을 멘션했습니다.";
-
-                            Json::StreamWriterBuilder writer;
-                            std::string jsonStr = Json::writeString(writer, wsNotify);
-
-                            // 해당 유저가 온라인이면 실시간 푸시 릴레이
-                            api::NotificationWebSocketController::sendNotificationToUser(mentioned_email, jsonStr);
-                        }
+                    [author_name](const orm::Result &mResult) {
+                        // DB 결과(out_data)를 파싱하고 API에서 지정한 메시지를 주입하여 웹소켓 전송
+                        sendNotificationFromDbResult(mResult, author_name + "님이 댓글에서 회원님을 멘션했습니다.");
                     },
                     [](const orm::DrogonDbException &me) {
                         LOG_ERROR << "Failed to insert comment mention: " << me.base().what();

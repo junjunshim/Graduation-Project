@@ -1,7 +1,11 @@
 .page {
   display: grid;
-  gap: 1rem;
-  padding: var(--space-page-top) var(--space-page-x) var(--space-page-bottom);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+  min-height: 100%;
+  padding: 0.75rem var(--space-page-x) var(--space-page-bottom);
+  background: var(--surface-page);
 }
 
 .header,
@@ -235,7 +239,10 @@ button.primaryAction:disabled {
 
 @media (max-width: 760px) {
   .page {
-    padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+    grid-template-rows: auto;
+    min-height: 0;
+    padding-right: var(--space-page-x-mobile);
+    padding-left: var(--space-page-x-mobile);
   }
 
   .header,

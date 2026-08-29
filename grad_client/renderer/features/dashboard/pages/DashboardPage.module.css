@@ -1371,13 +1371,13 @@
 .kpiGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap: clamp(1.5rem, 2vw, 2.6rem);
+  column-gap: 2.85rem;
   row-gap: 1rem;
 }
 
 .kpiCard {
   gap: 0.45rem;
-  min-height: 5.35rem;
+  min-height: 6.55rem;
   padding: 0.8rem 1rem;
   border-color: color-mix(
     in srgb,
@@ -1420,8 +1420,8 @@
 
 .kpiValueRow strong {
   color: var(--kpi-tone-color);
-  font-size: 1.7rem;
-  font-weight: 600;
+  font-size: 1.85rem;
+  font-weight: 700;
 }
 
 .kpiIcon {

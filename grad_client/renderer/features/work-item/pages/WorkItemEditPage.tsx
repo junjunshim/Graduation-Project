@@ -9,6 +9,7 @@ import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkI
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
+import createPageStyles from '../styles/WorkItemCreatePage.module.css'
 import styles from './WorkItemEditPage.module.css'
 
 function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
@@ -111,17 +112,23 @@ export function WorkItemEditPage() {
 
   return (
     <section className={styles.page}>
-      <WorkItemCreateForm
-        composer={composer}
-        form={form}
-        submitting={submitting}
-        feedback={feedback}
-        onSubmit={handleSubmit}
-        onCancel={() => navigate(`/work-items/${item.workItemId}`)}
-        onFieldChange={setField}
-        submitLabel="저장"
-        submittingLabel="저장 중..."
-      />
+      <div className={`${createPageStyles.page} ${createPageStyles.pageEmbedded}`}>
+        <div className={`${createPageStyles.layout} ${createPageStyles.layoutEmbedded}`}>
+          <section className={`${createPageStyles.editorPanel} ${createPageStyles.editorPanelEmbedded}`}>
+            <WorkItemCreateForm
+              composer={composer}
+              form={form}
+              submitting={submitting}
+              feedback={feedback}
+              onSubmit={handleSubmit}
+              onCancel={() => navigate(`/work-items/${item.workItemId}`)}
+              onFieldChange={setField}
+              submitLabel="저장"
+              submittingLabel="저장 중..."
+            />
+          </section>
+        </div>
+      </div>
     </section>
   )
 }

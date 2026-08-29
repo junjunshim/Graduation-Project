@@ -1,8 +1,8 @@
 .page {
   display: grid;
-  gap: 0.75rem;
+  gap: 1.05rem;
   min-width: 0;
-  padding: 0.75rem var(--space-page-x) var(--space-page-bottom);
+  padding: 2rem calc(var(--space-page-x) + 2rem) var(--space-page-bottom);
   color: var(--axis-text-primary);
 }
 
@@ -127,15 +127,24 @@
 
 .progressPanel {
   display: grid;
-  grid-template-columns: 8.5rem minmax(0, 1fr) 3.5rem;
-  align-items: center;
-  gap: 1rem;
-  min-height: 3.1rem;
-  padding: 0.8rem 1.25rem;
+  gap: 0.9rem;
+  min-height: 7rem;
+  padding: 1rem 1.25rem;
 }
 
-.progressPanel > strong {
-  font-size: 0.82rem;
+.progressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.progressHeader > strong:first-child {
+  font-size: 0.95rem;
+}
+
+.progressHeader .progressPercent {
+  font-size: 1.35rem;
 }
 
 .progressTrack {
@@ -159,6 +168,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+.detailLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(18rem, 0.8fr);
+  align-items: stretch;
+  gap: 1.05rem;
+  min-width: 0;
+}
+
+.primaryColumn,
+.secondaryColumn {
+  display: grid;
+  align-content: start;
+  gap: 1.05rem;
+  min-width: 0;
+}
+
+.secondaryColumn {
+  grid-template-rows: auto minmax(8rem, 1fr);
+}
+
 .propertyGrid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -178,14 +207,14 @@
   align-items: center;
   gap: 0.35rem;
   color: var(--axis-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
 .propertyValue {
   min-width: 0;
   color: var(--axis-text-primary);
-  font-size: 0.84rem;
+  font-size: 1rem;
   font-weight: 700;
 }
 
@@ -199,6 +228,7 @@
   min-width: 4rem;
   padding: 0.3rem 0.65rem;
   border-radius: var(--axis-radius-pill);
+  font-size: 1rem;
 }
 
 .priorityBadge[data-tone='highest'],
@@ -229,11 +259,17 @@
   min-height: 7rem;
 }
 
+.descriptionPanel {
+  align-content: start;
+  grid-template-rows: auto auto;
+  min-height: clamp(10rem, 22vh, 14rem);
+}
+
 .contentPanel h3,
 .attachmentPanel h3,
 .emptyState h2 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
 }
 
 .description {
@@ -255,46 +291,16 @@
 }
 
 .attachmentPanel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  align-content: start;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 1rem;
-  min-height: 5rem;
+  min-height: 8rem;
 }
 
-.attachmentPanel > div {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.relatedList {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.relatedItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid var(--axis-line-default);
-  border-radius: var(--axis-radius-action);
-  color: var(--axis-text-primary);
-}
-
-.relatedItem:hover {
-  border-color: var(--axis-line-strong);
-  background: var(--axis-surface-muted);
-}
-
-.relatedItem > span {
-  display: grid;
-  gap: 0.2rem;
-}
-
-.relatedItem small {
-  color: var(--axis-text-muted);
+.attachmentPanel .addFileButton {
+  align-self: end;
+  justify-self: end;
 }
 
 .actions {
@@ -322,8 +328,11 @@
 .deleteButton {
   width: auto;
   min-width: 7rem;
-  min-height: auto;
-  padding: 0.72rem 0.9rem;
+  min-height: 2.5rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--axis-radius-action);
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 
 .editButton {
@@ -351,7 +360,6 @@
 }
 
 .backLink:focus-visible,
-.relatedItem:focus-visible,
 .editButton:focus-visible {
   outline: 2px solid var(--axis-status-info);
   outline-offset: 2px;
@@ -366,14 +374,26 @@
 }
 
 @media (max-width: 980px) {
+  .page {
+    padding-right: calc(var(--space-page-x) + 1.5rem);
+    padding-left: calc(var(--space-page-x) + 1.5rem);
+  }
+
   .propertyGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
+@media (max-width: 860px) {
+  .detailLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
   .page {
-    padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+    padding: var(--space-page-top-mobile) calc(var(--space-page-x-mobile) + 1rem)
+      var(--space-page-bottom-mobile);
   }
 
   .header,
@@ -382,9 +402,12 @@
     flex-direction: column;
   }
 
-  .progressPanel,
   .propertyGrid {
     grid-template-columns: 1fr;
+  }
+
+  .descriptionPanel {
+    min-height: 10rem;
   }
 
   .progressPercent {

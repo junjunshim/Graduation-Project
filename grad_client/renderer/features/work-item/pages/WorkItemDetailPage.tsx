@@ -6,7 +6,6 @@ import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { formatWorkspaceDate } from '../../workspace/model/formatters'
-import type { WorkItemRecord } from '../../workspace/model/types'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import styles from './WorkItemDetailPage.module.css'
 
@@ -48,18 +47,6 @@ function getPriorityMeta(priority: number) {
   return { label: '매우 낮음', symbol: '↓↓', tone: 'lowest' }
 }
 
-function RelatedWorkItemLink({ item }: { item: WorkItemRecord }) {
-  return (
-    <Link to={`/work-items/${item.workItemId}`} className={styles.relatedItem}>
-      <span>
-        <strong>{item.title}</strong>
-        <small>{item.workItemId}</small>
-      </span>
-      <Icon name="chevronRight" size={15} />
-    </Link>
-  )
-}
-
 export function WorkItemDetailPage() {
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
@@ -85,22 +72,13 @@ export function WorkItemDetailPage() {
     )
   }
 
-  const { item, ownerUser, parentWorkItem, childWorkItems } = detail
+  const { item, ownerUser } = detail
   const priority = getPriorityMeta(item.priority)
   const progress = Math.min(100, Math.max(0, item.progress))
   const description = item.description.trim() || '업무 설명이 아직 등록되지 않았습니다.'
-  const hasRelatedWorkItems = Boolean(parentWorkItem || childWorkItems.length > 0)
 
   return (
     <section className={styles.page}>
-      <section className={styles.progressPanel} aria-label={`진행률 ${progress}%`}>
-        <strong>진행 현황</strong>
-        <div className={styles.progressTrack} aria-hidden="true">
-          <span style={{ width: `${progress}%` }} />
-        </div>
-        <strong className={styles.progressPercent}>{progress}%</strong>
-      </section>
-
       <section className={styles.propertyGrid} aria-label="업무 주요 정보">
         <DetailProperty icon="user" label="담당자">
           <span className={styles.ownerValue}>
@@ -128,44 +106,46 @@ export function WorkItemDetailPage() {
         </DetailProperty>
       </section>
 
-      <section className={styles.contentPanel}>
-        <h3>업무 설명</h3>
-        <p className={styles.description}>{description}</p>
-      </section>
+      <div className={styles.detailLayout}>
+        <div className={styles.primaryColumn}>
+          <section className={`${styles.contentPanel} ${styles.descriptionPanel}`}>
+            <h3>업무 설명</h3>
+            <p className={styles.description}>{description}</p>
+          </section>
 
-      {hasRelatedWorkItems ? (
-        <section className={styles.contentPanel}>
-          <h3>관련 업무</h3>
-          <div className={styles.relatedList}>
-            {parentWorkItem ? <RelatedWorkItemLink item={parentWorkItem} /> : null}
-            {childWorkItems.map((childItem) => (
-              <RelatedWorkItemLink key={childItem.workItemId} item={childItem} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      <section className={styles.contentPanel}>
-        <h3>활동 내역 / 댓글</h3>
-        <div className={styles.emptyPanelState}>
-          <Icon name="messageCircle" size={19} />
-          <span>등록된 활동이나 댓글이 없습니다.</span>
+          <section className={styles.contentPanel}>
+            <h3>활동 내역 / 댓글</h3>
+            <div className={styles.emptyPanelState}>
+              <Icon name="messageCircle" size={19} />
+              <span>등록된 활동이나 댓글이 없습니다.</span>
+            </div>
+          </section>
         </div>
-      </section>
 
-      <section className={styles.attachmentPanel}>
-        <div>
-          <h3>첨부파일</h3>
-          <div className={styles.emptyAttachment}>
-            <DocumentIcon size={18} />
-            <span>첨부된 파일이 없습니다.</span>
-          </div>
-        </div>
-        <button type="button" className={styles.addFileButton} disabled title="첨부파일 기능 개발 예정">
-          <Icon name="plus" size={15} />
-          파일 추가
-        </button>
-      </section>
+        <aside className={styles.secondaryColumn}>
+          <section className={styles.progressPanel} aria-label={`진행률 ${progress}%`}>
+            <div className={styles.progressHeader}>
+              <strong>진행 현황</strong>
+              <strong className={styles.progressPercent}>{progress}%</strong>
+            </div>
+            <div className={styles.progressTrack} aria-hidden="true">
+              <span style={{ width: `${progress}%` }} />
+            </div>
+          </section>
+
+          <section className={styles.attachmentPanel}>
+            <h3>첨부파일</h3>
+            <div className={styles.emptyAttachment}>
+              <DocumentIcon size={18} />
+              <span>첨부된 파일이 없습니다.</span>
+            </div>
+            <button type="button" className={styles.addFileButton} disabled title="첨부파일 기능 개발 예정">
+              <Icon name="plus" size={15} />
+              파일 추가
+            </button>
+          </section>
+        </aside>
+      </div>
 
       <footer className={styles.actions}>
         <button type="button" className={styles.deleteButton} disabled title="업무 삭제 기능 개발 예정">

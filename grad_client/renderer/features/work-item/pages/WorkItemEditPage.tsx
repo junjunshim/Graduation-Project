@@ -3,13 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { claimWorkItem, updateWorkItem } from '../../workspace/data/workItemService'
+import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import type { WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
-import createPageStyles from '../styles/WorkItemCreatePage.module.css'
 import styles from './WorkItemEditPage.module.css'
 
 function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
@@ -38,7 +38,8 @@ export function WorkItemEditPage() {
     currentUser && workItemId
       ? getSelectedWorkItemDetail(workItemId, currentUser.userId, snapshot)
       : null
-  const [form, setForm] = useState<WorkItemCreateFormState>(() => createInitialForm(detail?.item))
+  const [initialForm] = useState<WorkItemCreateFormState>(() => createInitialForm(detail?.item))
+  const [form, setForm] = useState<WorkItemCreateFormState>(initialForm)
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
 
@@ -62,6 +63,7 @@ export function WorkItemEditPage() {
 
   const { item } = detail
   const composer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
+  const isServerMode = isServerDataSource()
 
   function setField<Key extends keyof WorkItemCreateFormState>(
     field: Key,
@@ -72,63 +74,74 @@ export function WorkItemEditPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitting(true)
-    setFeedback(null)
 
-    if (form.ownerUserId !== item.ownerUserId) {
-      const claimResponse = await claimWorkItem({
-        workItemId: item.workItemId,
-        ownerUserId: form.ownerUserId,
-      })
-
-      if (claimResponse.status === 'error') {
-        setSubmitting(false)
-        setFeedback({ tone: 'error', message: claimResponse.message })
-        return
-      }
-    }
-
-    const response = await updateWorkItem({
-      workItemId: item.workItemId,
-      title: form.title,
-      description: form.description,
-      status: form.status,
-      priority: Number(form.priority),
-      weight: Number(form.weight),
-      progress: Number(form.progress),
-      startDate: form.startDate,
-      dueDate: form.dueDate,
-    })
-
-    setSubmitting(false)
-
-    if (response.status === 'error') {
-      setFeedback({ tone: 'error', message: response.message })
+    if (submitting) {
       return
     }
 
-    navigate(`/work-items/${item.workItemId}`)
+    setSubmitting(true)
+    setFeedback(null)
+
+    if (!form.title.trim()) {
+      setSubmitting(false)
+      setFeedback({ tone: 'error', message: '업무 제목을 입력해 주세요.' })
+      return
+    }
+
+    const dateRangeError = getWorkItemDateRangeError(form.startDate, form.dueDate)
+
+    if (dateRangeError) {
+      setSubmitting(false)
+      setFeedback({ tone: 'error', message: dateRangeError })
+      return
+    }
+
+    try {
+      if (form.ownerUserId !== item.ownerUserId) {
+        const claimResponse = await claimWorkItem({
+          workItemId: item.workItemId,
+          ownerUserId: form.ownerUserId,
+        })
+
+        if (claimResponse.status === 'error') {
+          setFeedback({ tone: 'error', message: claimResponse.message })
+          return
+        }
+      }
+
+      const response = await updateWorkItem(
+        createWorkItemUpdatePayload(item.workItemId, initialForm, form),
+      )
+
+      if (response.status === 'error') {
+        setFeedback({ tone: 'error', message: response.message })
+        return
+      }
+
+      navigate(`/work-items/${item.workItemId}`)
+    } catch (error) {
+      setFeedback({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '업무를 수정하지 못했습니다.',
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <section className={styles.page}>
-      <div className={`${createPageStyles.page} ${createPageStyles.pageEmbedded}`}>
-        <div className={`${createPageStyles.layout} ${createPageStyles.layoutEmbedded}`}>
-          <section className={`${createPageStyles.editorPanel} ${createPageStyles.editorPanelEmbedded}`}>
-            <WorkItemCreateForm
-              composer={composer}
-              form={form}
-              submitting={submitting}
-              feedback={feedback}
-              onSubmit={handleSubmit}
-              onCancel={() => navigate(`/work-items/${item.workItemId}`)}
-              onFieldChange={setField}
-              submitLabel="저장"
-              submittingLabel="저장 중..."
-            />
-          </section>
-        </div>
-      </div>
+      <WorkItemCreateForm
+        composer={composer}
+        form={form}
+        submitting={submitting}
+        feedback={feedback}
+        onSubmit={handleSubmit}
+        onCancel={() => navigate(`/work-items/${item.workItemId}`)}
+        onFieldChange={setField}
+        submitLabel="저장"
+        submittingLabel="저장 중..."
+      />
     </section>
   )
 }

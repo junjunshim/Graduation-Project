@@ -30,6 +30,11 @@ export function TopNodeSetupPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (submitting) {
+      return
+    }
+
     setSubmitting(true)
     setFeedback(null)
 
@@ -39,21 +44,28 @@ export function TopNodeSetupPage() {
       return
     }
 
-    const response = await createTopNode({
-      nodeType,
-      name,
-      userId: user.userId,
-      roleName: 'ADMIN',
-    })
+    try {
+      const response = await createTopNode({
+        nodeType,
+        name,
+        userId: user.userId,
+        roleName: 'ADMIN',
+      })
 
-    setSubmitting(false)
+      if (response.status === 'error') {
+        setFeedback({ tone: 'error', message: response.message })
+        return
+      }
 
-    if (response.status === 'error') {
-      setFeedback({ tone: 'error', message: response.message })
-      return
+      navigate('/dashboard')
+    } catch (error) {
+      setFeedback({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '공유 공간을 만들지 못했습니다.',
+      })
+    } finally {
+      setSubmitting(false)
     }
-
-    navigate('/dashboard')
   }
 
   return (
@@ -75,13 +87,14 @@ export function TopNodeSetupPage() {
             </div>
           </div>
 
-          <form className={styles.form} onSubmit={handleSubmit}>
+          <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting}>
             <label className={styles.field}>
               <span className={styles.label}>공간 유형</span>
               <select
                 value={nodeType}
                 onChange={(event) => setNodeType(event.target.value as Exclude<NodeType, 'USER'>)}
                 className={styles.input}
+                disabled={submitting}
               >
                 {ORG_NODE_TYPE_OPTIONS.map((type) => (
                   <option key={type} value={type}>
@@ -95,6 +108,7 @@ export function TopNodeSetupPage() {
               <span className={styles.label}>공간 이름</span>
               <input
                 className={styles.input}
+                disabled={submitting}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="예: 404, 무한 확장형 조직 노드 기반 협업 시스템, 프론트엔드"
@@ -113,6 +127,7 @@ export function TopNodeSetupPage() {
                   styles.feedback,
                   feedback.tone === 'error' ? styles.feedbackError : styles.feedbackSuccess,
                 ].join(' ')}
+                role={feedback.tone === 'error' ? 'alert' : 'status'}
               >
                 {feedback.message}
               </div>

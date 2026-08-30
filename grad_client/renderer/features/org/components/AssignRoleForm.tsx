@@ -7,7 +7,9 @@ type AssignRoleFormProps = {
   assignRoleName: RoleName
   roleEmail: string
   users: UserRecord[]
+  allowCustomEmail?: boolean
   disabled?: boolean
+  busy?: boolean
   onAssignRoleNameChange: (value: RoleName) => void
   onRoleEmailChange: (value: string) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -17,13 +19,15 @@ export function AssignRoleForm({
   assignRoleName,
   roleEmail,
   users,
+  allowCustomEmail = false,
   disabled = false,
+  busy = false,
   onAssignRoleNameChange,
   onRoleEmailChange,
   onSubmit,
 }: AssignRoleFormProps) {
   return (
-    <form className={styles.panel} onSubmit={onSubmit}>
+    <form className={styles.panel} onSubmit={onSubmit} aria-busy={busy}>
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.panelEyebrow}>Assign Role</p>
@@ -33,18 +37,39 @@ export function AssignRoleForm({
 
       <label className={styles.field}>
         <span className={styles.label}>사용자</span>
-        <select
-          className={styles.input}
-          value={roleEmail}
-          disabled={disabled}
-          onChange={(event) => onRoleEmailChange(event.target.value)}
-        >
-          {users.map((member) => (
-            <option key={member.userId} value={member.email}>
-              {member.name} ({member.userId})
-            </option>
-          ))}
-        </select>
+        {allowCustomEmail ? (
+          <>
+            <input
+              type="email"
+              list="assign-role-email-options"
+              className={styles.input}
+              value={roleEmail}
+              disabled={disabled}
+              required
+              onChange={(event) => onRoleEmailChange(event.target.value)}
+              placeholder="등록된 사용자 이메일"
+            />
+            <datalist id="assign-role-email-options">
+              {users.map((member) => (
+                <option key={member.userId} value={member.email}>{member.name}</option>
+              ))}
+            </datalist>
+          </>
+        ) : (
+          <select
+            className={styles.input}
+            value={roleEmail}
+            disabled={disabled}
+            required
+            onChange={(event) => onRoleEmailChange(event.target.value)}
+          >
+            {users.map((member) => (
+              <option key={member.userId} value={member.email}>
+                {member.name} ({member.userId})
+              </option>
+            ))}
+          </select>
+        )}
       </label>
 
       <label className={styles.field}>
@@ -64,7 +89,7 @@ export function AssignRoleForm({
       </label>
 
       <button type="submit" className={styles.submitButton} disabled={disabled}>
-        권한 추가
+        {busy ? '추가 중...' : '권한 추가'}
       </button>
     </form>
   )

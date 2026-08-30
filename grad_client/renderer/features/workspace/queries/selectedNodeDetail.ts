@@ -7,6 +7,10 @@ import type {
 import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 
+type SelectedNodeDetailOptions = {
+  requireDirectManagementRole?: boolean
+}
+
 function getInheritedManagers(
   node: OrganizationNodeRecord,
   roles: Array<RoleMember & { nodeId: number }>,
@@ -45,6 +49,7 @@ export function getSelectedNodeDetail(
   nodeId: number,
   userId?: string,
   providedSnapshot?: WorkspaceSnapshot,
+  options: SelectedNodeDetailOptions = {},
 ): SelectedNodeDetail | null {
   const snapshot = providedSnapshot ?? getOrgSnapshot()
   const accessibleNodeIds = userId
@@ -81,7 +86,9 @@ export function getSelectedNodeDetail(
       allRolesWithNodeId.some(
         (role) =>
           role.userId === userId &&
-          node.path.includes(role.nodeId) &&
+          (options.requireDirectManagementRole
+            ? role.nodeId === node.id
+            : node.path.includes(role.nodeId)) &&
           (role.roleName === 'ADMIN' || role.roleName === 'MANAGER'),
       ),
   )

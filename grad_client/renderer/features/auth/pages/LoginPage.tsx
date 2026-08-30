@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
 import { useBodyScrollSurface } from '../../../app/chrome/useBodyScrollSurface'
@@ -7,6 +7,7 @@ import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
 import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
+import { isMockDataSource } from '../../workspace/data/workspaceMode'
 import { enterDemoWorkspace, getCurrentUser, signIn } from '../api'
 import styles from './LoginPage.module.css'
 
@@ -27,14 +28,25 @@ function readRememberedEmail() {
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const currentUser = getCurrentUser()
+  const isMockMode = isMockDataSource()
   const hasCustomTitleBar = hasCustomWindowControls()
   const rememberedEmail = readRememberedEmail()
   const [form, setForm] = useState({ email: rememberedEmail, password: '' })
   const [rememberEmail, setRememberEmail] = useState(Boolean(rememberedEmail))
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [feedback, setFeedback] = useState<Feedback | null>(() => {
+    const state = location.state
+
+    return state &&
+      typeof state === 'object' &&
+      'notice' in state &&
+      typeof state.notice === 'string'
+      ? { tone: 'info', message: state.notice }
+      : null
+  })
 
   useBodyScrollSurface(hasCustomTitleBar ? 'auth' : undefined)
 
@@ -44,28 +56,40 @@ export function LoginPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitting(true)
-    setFeedback(null)
 
-    const response = await signIn({
-      email: form.email,
-      password: form.password,
-    })
-
-    setSubmitting(false)
-
-    if (response.status === 'error') {
-      setFeedback({ tone: 'error', message: '이메일 또는 비밀번호를 확인해 주세요.' })
+    if (submitting) {
       return
     }
 
-    if (rememberEmail) {
-      window.localStorage.setItem(REMEMBERED_EMAIL_KEY, form.email.trim())
-    } else {
-      window.localStorage.removeItem(REMEMBERED_EMAIL_KEY)
-    }
+    setSubmitting(true)
+    setFeedback(null)
 
-    navigate('/dashboard', { replace: true })
+    try {
+      const response = await signIn({
+        email: form.email,
+        password: form.password,
+      })
+
+      if (response.status === 'error') {
+        setFeedback({ tone: 'error', message: response.message })
+        return
+      }
+
+      if (rememberEmail) {
+        window.localStorage.setItem(REMEMBERED_EMAIL_KEY, form.email.trim())
+      } else {
+        window.localStorage.removeItem(REMEMBERED_EMAIL_KEY)
+      }
+
+      navigate('/dashboard', { replace: true })
+    } catch (error) {
+      setFeedback({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '로그인 요청을 처리하지 못했습니다.',
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function handleDemoEnter() {
@@ -157,7 +181,7 @@ export function LoginPage() {
               <p>Axis 계정으로 로그인해주세요.</p>
             </div>
 
-            <form className={styles.form} onSubmit={handleSubmit}>
+            <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting}>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="login-email">
                   이메일
@@ -169,6 +193,7 @@ export function LoginPage() {
                     type="email"
                     autoComplete="email"
                     required
+                    disabled={submitting}
                     value={form.email}
                     onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
                     className={styles.input}
@@ -188,6 +213,7 @@ export function LoginPage() {
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
                     required
+                    disabled={submitting}
                     value={form.password}
                     onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
                     className={[styles.input, styles.passwordInput].join(' ')}
@@ -243,10 +269,14 @@ export function LoginPage() {
             </div>
 
             <div className={styles.secondaryActions}>
-              <button type="button" className={styles.secondaryLink} onClick={handleDemoEnter}>
-                데모로 둘러보기
-              </button>
-              <span aria-hidden="true">·</span>
+              {isMockMode ? (
+                <>
+                  <button type="button" className={styles.secondaryLink} onClick={handleDemoEnter}>
+                    데모로 둘러보기
+                  </button>
+                  <span aria-hidden="true">·</span>
+                </>
+              ) : null}
               <Link to="/signup" className={styles.secondaryLink}>
                 회원가입
               </Link>

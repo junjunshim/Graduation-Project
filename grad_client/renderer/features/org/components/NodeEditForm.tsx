@@ -8,6 +8,7 @@ type NodeEditFormProps = {
   selectedDetail: SelectedNodeDetail
   editNodeName: string
   editNodeType: Exclude<NodeType, 'USER'>
+  busy?: boolean
   onEditNodeNameChange: (value: string) => void
   onEditNodeTypeChange: (value: Exclude<NodeType, 'USER'>) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -17,12 +18,13 @@ export function NodeEditForm({
   selectedDetail,
   editNodeName,
   editNodeType,
+  busy = false,
   onEditNodeNameChange,
   onEditNodeTypeChange,
   onSubmit,
 }: NodeEditFormProps) {
   return (
-    <form className={styles.panel} onSubmit={onSubmit}>
+    <form className={styles.panel} onSubmit={onSubmit} aria-busy={busy}>
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.panelEyebrow}>Edit Node</p>
@@ -35,7 +37,8 @@ export function NodeEditForm({
         <input
           className={styles.input}
           value={editNodeName}
-          disabled={!selectedDetail.canManage}
+          disabled={!selectedDetail.canManage || busy}
+          required
           onChange={(event) => onEditNodeNameChange(event.target.value)}
         />
       </label>
@@ -45,7 +48,7 @@ export function NodeEditForm({
         <select
           className={styles.input}
           value={editNodeType}
-          disabled={!selectedDetail.canManage}
+          disabled={!selectedDetail.canManage || busy}
           onChange={(event) => onEditNodeTypeChange(event.target.value as Exclude<NodeType, 'USER'>)}
         >
           {ORG_NODE_TYPE_OPTIONS.map((type) => (
@@ -60,8 +63,8 @@ export function NodeEditForm({
         <p className={styles.emptyState}>현재 계정은 이 조직을 읽기 전용으로 확인할 수 있습니다.</p>
       ) : null}
 
-      <button type="submit" className={styles.submitButton} disabled={!selectedDetail.canManage}>
-        조직 수정
+      <button type="submit" className={styles.submitButton} disabled={!selectedDetail.canManage || busy}>
+        {busy ? '처리 중...' : '조직 수정'}
       </button>
     </form>
   )

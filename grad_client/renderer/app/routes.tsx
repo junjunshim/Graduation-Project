@@ -1,7 +1,8 @@
-import { Navigate, Outlet, RouterProvider, createHashRouter } from 'react-router-dom'
+import { Navigate, Outlet, RouterProvider, createHashRouter, useRouteError } from 'react-router-dom'
 import { getCurrentUser } from '../features/auth/api'
 import { AppShell } from './layouts/AppShell'
 import { ShellPlaceholderPage } from './layouts/ShellPlaceholderPage'
+import styles from './RouteState.module.css'
 
 function RootEntry() {
   const currentUser = getCurrentUser()
@@ -30,17 +31,43 @@ function GuestOnly() {
 }
 
 function RouteHydrationFallback() {
-  return null
+  return (
+    <main className={styles.page} aria-busy="true" aria-live="polite">
+      <div className={styles.card}>
+        <h1>화면을 불러오는 중입니다.</h1>
+        <p>필요한 화면 코드를 준비하고 있습니다.</p>
+      </div>
+    </main>
+  )
+}
+
+function RouteErrorFallback() {
+  const error = useRouteError()
+  const message = error instanceof Error ? error.message : '화면을 표시하지 못했습니다.'
+
+  return (
+    <main className={styles.page}>
+      <div className={styles.card} role="alert">
+        <h1>화면을 불러오지 못했습니다.</h1>
+        <p>{message}</p>
+        <button type="button" className={styles.action} onClick={() => window.location.reload()}>
+          다시 불러오기
+        </button>
+      </div>
+    </main>
+  )
 }
 
 const router = createHashRouter([
   {
     path: '/',
     element: <RootEntry />,
+    errorElement: <RouteErrorFallback />,
   },
   {
     element: <GuestOnly />,
     HydrateFallback: RouteHydrationFallback,
+    errorElement: <RouteErrorFallback />,
     children: [
       {
         path: '/login',
@@ -61,6 +88,7 @@ const router = createHashRouter([
   {
     element: <RequireSession />,
     HydrateFallback: RouteHydrationFallback,
+    errorElement: <RouteErrorFallback />,
     children: [
       {
         path: '/',

@@ -1,4 +1,4 @@
-export type RoleName = 'ADMIN' | 'MANAGER' | 'MEMBER'
+export type RoleName = 'ADMIN' | 'MANAGER' | 'MEMBER' | 'VIEWER'
 
 export type NodeType = 'USER' | 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM' | 'PROJECT'
 
@@ -8,7 +8,8 @@ export type UserRecord = {
   userId: string
   email: string
   name: string
-  password: string
+  /** Mock authentication only. Real server users never persist a password in the domain cache. */
+  password?: string
   personalNodeId?: number
   createdAt: string
 }
@@ -106,8 +107,9 @@ export type AssignRoleRequest = {
 
 export type UpdateNodeRequest = {
   nodeId: number
-  name?: string
-  nodeType?: Exclude<NodeType, 'USER'>
+  /** The checked-in server treats this PATCH as a full node update. */
+  name: string
+  nodeType: Exclude<NodeType, 'USER'>
 }
 
 export type UpdateRoleRequest = {

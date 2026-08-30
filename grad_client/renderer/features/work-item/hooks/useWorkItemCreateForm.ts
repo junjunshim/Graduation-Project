@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
+import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import type { WorkItemStatus } from '../../workspace/model/types'
 import type { WorkItemTagId } from '../../workspace/model/workItemTags'
 
@@ -36,9 +37,15 @@ const initialForm: WorkItemCreateFormState = {
 export function useWorkItemCreateForm(userId?: string) {
   const [form, setForm] = useState<WorkItemCreateFormState>(initialForm)
   const selectedNodeId = form.ownerNodeId ? Number(form.ownerNodeId) : undefined
+  const enforceServerCreateContract = isServerDataSource()
   const composer = useMemo(
-    () => getWorkItemComposerContext(userId, selectedNodeId),
-    [selectedNodeId, userId],
+    () => getWorkItemComposerContext(
+      userId,
+      selectedNodeId,
+      undefined,
+      { enforceServerCreateContract },
+    ),
+    [enforceServerCreateContract, selectedNodeId, userId],
   )
 
   useEffect(() => {

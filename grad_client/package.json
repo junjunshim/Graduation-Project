@@ -5,9 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "dev:server": "vite --mode server",
     "build": "tsc && vite build && electron-builder",
+    "build:mock": "tsc && vite build --mode mock && electron-builder",
+    "build:server": "tsc && vite build --mode server && electron-builder",
     "build:bundle": "tsc && vite build",
+    "build:bundle:mock": "tsc && vite build --mode mock",
+    "build:bundle:server": "tsc && vite build --mode server",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "tsc -p tsconfig.test.json && node node_modules/.grad-client-tests/tests/all.test.js",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json --tsBuildInfoFile node_modules/.grad-client-tsconfig-node.tsbuildinfo",
     "preview": "vite preview"
   },

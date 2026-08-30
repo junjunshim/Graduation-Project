@@ -5,13 +5,10 @@ import type {
   WorkItemRecord,
   WorkspaceDatabase,
 } from '../model/types'
-import {
-  createTeam404WorkspaceSeed,
-  TEAM_404_DATASET_ID,
-  TEAM_404_SEED_VERSION,
-} from './seed'
-import { ensureSessionUserExists } from './session'
-import { isServerDataSource } from './workspaceMode'
+import { createConfiguredMockWorkspaceSeed } from './mockScenario.js'
+import { ensureSessionUserExists } from './session.js'
+import { isServerDataSource } from './workspaceMode.js'
+import { notifyWorkspaceCacheUpdated } from './workspaceCacheEvents.js'
 
 const DB_STORAGE_KEY = 'grad-client-mvp-db'
 const SERVER_DB_STORAGE_KEY = 'grad-client-server-db'
@@ -95,7 +92,8 @@ function normalizeDb(
   raw: unknown,
   options: { allowExternalDataset?: boolean; fallback?: () => WorkspaceDatabase } = {},
 ): WorkspaceDatabase {
-  const createFallback = options.fallback ?? createTeam404WorkspaceSeed
+  const configuredMockSeed = options.allowExternalDataset ? null : createConfiguredMockWorkspaceSeed()
+  const createFallback = options.fallback ?? createConfiguredMockWorkspaceSeed
 
   if (!raw || typeof raw !== 'object') {
     return createFallback()
@@ -105,7 +103,10 @@ function normalizeDb(
   const datasetId = String(rawDb.datasetId ?? '')
   const seedVersion = Number(rawDb.seedVersion)
 
-  if (!options.allowExternalDataset && (datasetId !== TEAM_404_DATASET_ID || seedVersion !== TEAM_404_SEED_VERSION)) {
+  if (
+    configuredMockSeed &&
+    (datasetId !== configuredMockSeed.datasetId || seedVersion !== configuredMockSeed.seedVersion)
+  ) {
     return createFallback()
   }
 
@@ -122,11 +123,13 @@ function normalizeDb(
 
   rawDb.users.forEach((entry, index) => {
     const item = entry as Record<string, unknown>
-    const userId = String(item.userId ?? item.user_id ?? `U-${index + 1}`)
+    const rawUserId = item.userId ?? item.user_id
+    const userId = String(rawUserId ?? (options.allowExternalDataset ? '' : `U-${index + 1}`)).trim()
     const email = String(item.email ?? '').trim().toLowerCase()
     const name = String(item.name ?? userId).trim()
+    const password = String(item.password ?? item.password_hash ?? '')
 
-    if (!email || !name) {
+    if (!userId || !name || (!email && !options.allowExternalDataset)) {
       return
     }
 
@@ -139,7 +142,7 @@ function normalizeDb(
       userId,
       email,
       name,
-      password: String(item.password ?? item.password_hash ?? ''),
+      ...(password ? { password } : {}),
       ...(Number.isFinite(personalNodeId) ? { personalNodeId } : {}),
       createdAt: String(item.createdAt ?? item.createAt ?? item.create_at ?? getDefaultTimestamp(index)),
     })
@@ -173,7 +176,9 @@ function normalizeDb(
     node.path = node.path.length > 0 ? node.path : computePath(node.id, nodes)
   })
 
-  const userByEmail = new Map(users.map((user) => [user.email.toLowerCase(), user]))
+  const userByEmail = new Map(
+    users.filter((user) => Boolean(user.email)).map((user) => [user.email.toLowerCase(), user]),
+  )
   const userById = new Map(users.map((user) => [user.userId, user]))
   const nodeIds = new Set(nodes.map((node) => node.id))
 
@@ -281,12 +286,14 @@ function normalizeDb(
   })
 
   return {
-    datasetId: options.allowExternalDataset ? datasetId || SERVER_DATASET_ID : TEAM_404_DATASET_ID,
+    datasetId: options.allowExternalDataset
+      ? datasetId || SERVER_DATASET_ID
+      : configuredMockSeed?.datasetId ?? datasetId,
     seedVersion: options.allowExternalDataset
       ? Number.isFinite(seedVersion)
         ? seedVersion
         : SERVER_SEED_VERSION
-      : TEAM_404_SEED_VERSION,
+      : configuredMockSeed?.seedVersion ?? seedVersion,
     users,
     nodes,
     roles,
@@ -298,19 +305,26 @@ function normalizeDb(
   }
 }
 
+export function normalizeServerWorkspaceDb(raw: unknown): WorkspaceDatabase {
+  return normalizeDb(raw, {
+    allowExternalDataset: true,
+    fallback: createEmptyServerWorkspace,
+  })
+}
+
 export function readWorkspaceDb(): WorkspaceDatabase {
   if (isServerDataSource()) {
     return readServerWorkspaceDb()
   }
 
   if (!hasStorage()) {
-    return createTeam404WorkspaceSeed()
+    return createConfiguredMockWorkspaceSeed()
   }
 
   const raw = window.localStorage.getItem(DB_STORAGE_KEY)
 
   if (!raw) {
-    const seededDb = createTeam404WorkspaceSeed()
+    const seededDb = createConfiguredMockWorkspaceSeed()
     window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(seededDb))
     ensureSessionUserExists(seededDb)
     return seededDb
@@ -328,7 +342,7 @@ export function readWorkspaceDb(): WorkspaceDatabase {
 
     return normalized
   } catch {
-    const seededDb = createTeam404WorkspaceSeed()
+    const seededDb = createConfiguredMockWorkspaceSeed()
     window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(seededDb))
     ensureSessionUserExists(seededDb)
     return seededDb
@@ -341,6 +355,7 @@ export function writeWorkspaceDb(db: WorkspaceDatabase) {
   }
 
   window.localStorage.setItem(isServerDataSource() ? SERVER_DB_STORAGE_KEY : DB_STORAGE_KEY, JSON.stringify(db))
+  notifyWorkspaceCacheUpdated()
 }
 
 export function readServerWorkspaceDb(): WorkspaceDatabase {
@@ -355,10 +370,7 @@ export function readServerWorkspaceDb(): WorkspaceDatabase {
   }
 
   try {
-    const normalized = normalizeDb(JSON.parse(raw), {
-      allowExternalDataset: true,
-      fallback: createEmptyServerWorkspace,
-    })
+    const normalized = normalizeServerWorkspaceDb(JSON.parse(raw))
     const normalizedRaw = JSON.stringify(normalized)
 
     if (normalizedRaw !== raw) {
@@ -377,6 +389,7 @@ export function writeServerWorkspaceDb(db: WorkspaceDatabase) {
   }
 
   window.localStorage.setItem(SERVER_DB_STORAGE_KEY, JSON.stringify(db))
+  notifyWorkspaceCacheUpdated()
 }
 
 export function clearServerWorkspaceDb() {
@@ -385,15 +398,16 @@ export function clearServerWorkspaceDb() {
   }
 
   window.localStorage.removeItem(SERVER_DB_STORAGE_KEY)
+  notifyWorkspaceCacheUpdated()
 }
 
 function ensureSeedData(db: WorkspaceDatabase) {
-  const seedDb = createTeam404WorkspaceSeed()
+  const seedDb = createConfiguredMockWorkspaceSeed()
   let changed = false
 
-  if (db.datasetId !== TEAM_404_DATASET_ID || db.seedVersion !== TEAM_404_SEED_VERSION) {
-    db.datasetId = TEAM_404_DATASET_ID
-    db.seedVersion = TEAM_404_SEED_VERSION
+  if (db.datasetId !== seedDb.datasetId || db.seedVersion !== seedDb.seedVersion) {
+    db.datasetId = seedDb.datasetId
+    db.seedVersion = seedDb.seedVersion
     changed = true
   }
 

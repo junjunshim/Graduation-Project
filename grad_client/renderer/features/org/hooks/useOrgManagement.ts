@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { assignRoleToNode, createSubNode, getOrgSnapshot, updateNode, updateRole } from '../../workspace/data/orgService'
 import { getSelectedNodeDetail } from '../../workspace/queries/selectedNodeDetail'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
 import type { NodeType, RoleName, UserRecord } from '../../workspace/model/types'
+import { isServerDataSource } from '../../workspace/data/workspaceMode'
 
 export function useOrgManagement(currentUser: UserRecord | null) {
+  const requireDirectManagementRole = isServerDataSource()
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [subNodeType, setSubNodeType] = useState<Exclude<NodeType, 'USER'>>('TEAM')
   const [subNodeName, setSubNodeName] = useState('')
@@ -17,6 +19,8 @@ export function useOrgManagement(currentUser: UserRecord | null) {
   const [updateRoleEmail, setUpdateRoleEmail] = useState('')
   const [updateRoleName, setUpdateRoleName] = useState<RoleName>('MEMBER')
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
+  const pendingActionRef = useRef<string | null>(null)
 
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const [overview, setOverview] = useState(() =>
@@ -90,9 +94,14 @@ export function useOrgManagement(currentUser: UserRecord | null) {
   const selectedDetail = useMemo(
     () =>
       currentUserId && selectedNodeId
-        ? getSelectedNodeDetail(selectedNodeId, currentUserId, snapshot)
+        ? getSelectedNodeDetail(
+            selectedNodeId,
+            currentUserId,
+            snapshot,
+            { requireDirectManagementRole },
+          )
         : null,
-    [currentUserId, selectedNodeId, snapshot],
+    [currentUserId, requireDirectManagementRole, selectedNodeId, snapshot],
   )
   const selectedDetailNodeId = selectedDetail?.node.id
   const selectedDetailNodeName = selectedDetail?.node.name ?? ''
@@ -133,6 +142,28 @@ export function useOrgManagement(currentUser: UserRecord | null) {
     setOverview(getWorkspaceOverview(currentUser.userId, nextSnapshot))
   }
 
+  async function runMutation<Result>(action: string, operation: () => Promise<Result>) {
+    if (pendingActionRef.current) {
+      return null
+    }
+
+    pendingActionRef.current = action
+    setPendingAction(action)
+
+    try {
+      return await operation()
+    } catch (error) {
+      setFeedback({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '요청을 처리하지 못했습니다.',
+      })
+      return null
+    } finally {
+      pendingActionRef.current = null
+      setPendingAction(null)
+    }
+  }
+
   async function handleSubNodeSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -146,13 +177,29 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       return
     }
 
-    const response = await createSubNode({
-      nodeType: subNodeType,
-      parentNodeId: selectedNodeId,
-      name: subNodeName,
-      email: managerEmail,
-      roleName: 'ADMIN',
-    })
+    if (!subNodeName.trim()) {
+      setFeedback({ tone: 'error', message: '하위 조직 이름을 입력해 주세요.' })
+      return
+    }
+
+    if (!managerEmail.trim()) {
+      setFeedback({ tone: 'error', message: '관리자 이메일을 입력해 주세요.' })
+      return
+    }
+
+    const response = await runMutation('create-sub-node', () =>
+      createSubNode({
+        nodeType: subNodeType,
+        parentNodeId: selectedNodeId,
+        name: subNodeName,
+        email: managerEmail,
+        roleName: 'ADMIN',
+      }),
+    )
+
+    if (!response) {
+      return
+    }
 
     if (response.status === 'error') {
       setFeedback({ tone: 'error', message: response.message })
@@ -177,11 +224,22 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       return
     }
 
-    const response = await assignRoleToNode({
-      email: roleEmail,
-      nodeId: selectedNodeId,
-      roleName: assignRoleName,
-    })
+    if (!roleEmail.trim()) {
+      setFeedback({ tone: 'error', message: '권한을 부여할 사용자 이메일을 입력해 주세요.' })
+      return
+    }
+
+    const response = await runMutation('assign-role', () =>
+      assignRoleToNode({
+        email: roleEmail,
+        nodeId: selectedNodeId,
+        roleName: assignRoleName,
+      }),
+    )
+
+    if (!response) {
+      return
+    }
 
     if (response.status === 'error') {
       setFeedback({ tone: 'error', message: response.message })
@@ -200,11 +258,22 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       return
     }
 
-    const response = await updateNode({
-      nodeId: selectedDetail.node.id,
-      name: editNodeName,
-      nodeType: editNodeType,
-    })
+    if (!editNodeName.trim()) {
+      setFeedback({ tone: 'error', message: '조직 이름을 입력해 주세요.' })
+      return
+    }
+
+    const response = await runMutation('update-node', () =>
+      updateNode({
+        nodeId: selectedDetail.node.id,
+        name: editNodeName,
+        nodeType: editNodeType,
+      }),
+    )
+
+    if (!response) {
+      return
+    }
 
     if (response.status === 'error') {
       setFeedback({ tone: 'error', message: response.message })
@@ -223,11 +292,17 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       return
     }
 
-    const response = await updateRole({
-      email: updateRoleEmail,
-      nodeId: selectedDetail.node.id,
-      roleName: updateRoleName,
-    })
+    const response = await runMutation('update-role', () =>
+      updateRole({
+        email: updateRoleEmail,
+        nodeId: selectedDetail.node.id,
+        roleName: updateRoleName,
+      }),
+    )
+
+    if (!response) {
+      return
+    }
 
     if (response.status === 'error') {
       setFeedback({ tone: 'error', message: response.message })
@@ -249,6 +324,7 @@ export function useOrgManagement(currentUser: UserRecord | null) {
     handleSubNodeSubmit,
     managerEmail,
     overview,
+    pendingAction,
     roleEmail,
     rootNodes,
     searchQuery,

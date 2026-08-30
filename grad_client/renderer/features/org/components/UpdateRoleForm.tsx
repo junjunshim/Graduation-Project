@@ -7,6 +7,7 @@ type UpdateRoleFormProps = {
   selectedDetail: SelectedNodeDetail
   updateRoleEmail: string
   updateRoleName: RoleName
+  busy?: boolean
   onUpdateRoleEmailChange: (value: string) => void
   onUpdateRoleNameChange: (value: RoleName) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -16,14 +17,15 @@ export function UpdateRoleForm({
   selectedDetail,
   updateRoleEmail,
   updateRoleName,
+  busy = false,
   onUpdateRoleEmailChange,
   onUpdateRoleNameChange,
   onSubmit,
 }: UpdateRoleFormProps) {
-  const isDisabled = !selectedDetail.canManage || selectedDetail.directRoles.length === 0
+  const isDisabled = !selectedDetail.canManage || selectedDetail.directRoles.length === 0 || busy
 
   return (
-    <form className={styles.panel} onSubmit={onSubmit}>
+    <form className={styles.panel} onSubmit={onSubmit} aria-busy={busy}>
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.panelEyebrow}>Update Role</p>
@@ -64,7 +66,7 @@ export function UpdateRoleForm({
       </label>
 
       <button type="submit" className={styles.submitButton} disabled={isDisabled}>
-        권한 변경
+        {busy ? '처리 중...' : '권한 변경'}
       </button>
     </form>
   )

@@ -5,6 +5,7 @@ import { hasCustomWindowControls } from '../chrome/windowControls'
 import { useBodyScrollSurface } from '../chrome/useBodyScrollSurface'
 import { getCurrentUser, signOut } from '../../features/auth/api'
 import { getOrgSnapshot } from '../../features/workspace/data/orgService'
+import { useWorkspaceData } from '../../features/workspace/data/WorkspaceDataProvider'
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
@@ -37,6 +38,7 @@ function readInitialSidebarCollapsed() {
 }
 
 export function AppShell() {
+  useWorkspaceData()
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

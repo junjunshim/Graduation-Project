@@ -1,1 +1,1 @@
-export * from './server/workspaceMode'
+export * from './server/workspaceMode.js'

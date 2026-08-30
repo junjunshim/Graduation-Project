@@ -7,6 +7,7 @@ import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
 import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
+import { isMockDataSource } from '../../workspace/data/workspaceMode'
 import signupHeroUrl from '../assets/signup-collaboration-hero.png'
 import { enterDemoWorkspace, getCurrentUser, getSuggestedUserId, signUp } from '../api'
 import styles from './SignupPage.module.css'
@@ -24,6 +25,7 @@ type Feedback = {
 export function SignupPage() {
   const navigate = useNavigate()
   const currentUser = getCurrentUser()
+  const isMockMode = isMockDataSource()
   const suggestedUserId = useMemo(() => getSuggestedUserId(), [])
   const hasCustomTitleBar = hasCustomWindowControls()
   const [form, setForm] = useState(initialForm)
@@ -75,6 +77,14 @@ export function SignupPage() {
       }
 
       if (response.status === 'error') {
+        if ('accountCreated' in response && response.accountCreated) {
+          navigate('/login', {
+            replace: true,
+            state: { notice: response.message },
+          })
+          return
+        }
+
         setFeedback({ message: response.message || '가입 정보를 다시 확인해 주세요.' })
         return
       }
@@ -321,17 +331,21 @@ export function SignupPage() {
               >
                 로그인
               </Link>
-              <span className={styles.actionDivider} aria-hidden="true">
-                ·
-              </span>
-              <button
-                type="button"
-                className={styles.demoButton}
-                onClick={handleDemoEnter}
-                disabled={submitting}
-              >
-                데모로 둘러보기
-              </button>
+              {isMockMode ? (
+                <>
+                  <span className={styles.actionDivider} aria-hidden="true">
+                    ·
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.demoButton}
+                    onClick={handleDemoEnter}
+                    disabled={submitting}
+                  >
+                    데모로 둘러보기
+                  </button>
+                </>
+              ) : null}
             </div>
           </section>
         </div>

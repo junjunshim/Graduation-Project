@@ -9,10 +9,12 @@ import { OrgDetailPanel } from '../components/OrgDetailPanel'
 import { OrgTree } from '../components/OrgTree'
 import { UpdateRoleForm } from '../components/UpdateRoleForm'
 import { useOrgManagement } from '../hooks/useOrgManagement'
+import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import styles from '../styles/OrgManagePage.module.css'
 
 export function OrgManagePage() {
   const currentUser = getCurrentUser()
+  const isServerMode = isServerDataSource()
   const {
     assignRoleName,
     editNodeName,
@@ -23,6 +25,7 @@ export function OrgManagePage() {
     handleRoleUpdateSubmit,
     handleSubNodeSubmit,
     managerEmail,
+    pendingAction,
     roleEmail,
     rootNodes,
     searchQuery,
@@ -84,6 +87,7 @@ export function OrgManagePage() {
             styles.feedback,
             feedback.tone === 'error' ? styles.feedbackError : styles.feedbackSuccess,
           ].join(' ')}
+          role={feedback.tone === 'error' ? 'alert' : 'status'}
         >
           {feedback.message}
         </div>
@@ -111,6 +115,7 @@ export function OrgManagePage() {
               selectedDetail={selectedDetail}
               editNodeName={editNodeName}
               editNodeType={editNodeType}
+              busy={Boolean(pendingAction)}
               onEditNodeNameChange={setEditNodeName}
               onEditNodeTypeChange={setEditNodeType}
               onSubmit={handleNodeUpdateSubmit}
@@ -121,8 +126,12 @@ export function OrgManagePage() {
             managerEmail={managerEmail}
             subNodeName={subNodeName}
             subNodeType={subNodeType}
-            users={snapshot.users}
-            disabled={!selectedDetail?.canManage}
+            users={snapshot.users.filter(
+              (user) => Boolean(user.email) && !user.email.endsWith('@local.invalid'),
+            )}
+            allowCustomManagerEmail={isServerMode}
+            disabled={!selectedDetail?.canManage || Boolean(pendingAction)}
+            busy={pendingAction === 'create-sub-node'}
             onManagerEmailChange={setManagerEmail}
             onSubNodeNameChange={setSubNodeName}
             onSubNodeTypeChange={setSubNodeType}
@@ -132,8 +141,12 @@ export function OrgManagePage() {
           <AssignRoleForm
             assignRoleName={assignRoleName}
             roleEmail={roleEmail}
-            users={snapshot.users}
-            disabled={!selectedDetail?.canManage}
+            users={snapshot.users.filter(
+              (user) => Boolean(user.email) && !user.email.endsWith('@local.invalid'),
+            )}
+            allowCustomEmail={isServerMode}
+            disabled={!selectedDetail?.canManage || Boolean(pendingAction)}
+            busy={pendingAction === 'assign-role'}
             onAssignRoleNameChange={setAssignRoleName}
             onRoleEmailChange={setRoleEmail}
             onSubmit={handleRoleSubmit}
@@ -144,6 +157,7 @@ export function OrgManagePage() {
               selectedDetail={selectedDetail}
               updateRoleEmail={updateRoleEmail}
               updateRoleName={updateRoleName}
+              busy={Boolean(pendingAction)}
               onUpdateRoleEmailChange={setUpdateRoleEmail}
               onUpdateRoleNameChange={setUpdateRoleName}
               onSubmit={handleRoleUpdateSubmit}

@@ -16,6 +16,11 @@ type WorkItemCreateFormProps = {
   onCancel: () => void
   submitLabel?: string
   submittingLabel?: string
+  categoryRequired?: boolean
+  categorySupported?: boolean
+  dueDateRequired?: boolean
+  ownerLocked?: boolean
+  submitDisabled?: boolean
   onFieldChange: <Key extends keyof WorkItemCreateFormState>(
     field: Key,
     value: WorkItemCreateFormState[Key],
@@ -39,8 +44,17 @@ export function WorkItemCreateForm({
   onCancel,
   submitLabel = '업무 생성',
   submittingLabel = '생성 중...',
+  categoryRequired = true,
+  categorySupported = true,
+  dueDateRequired = true,
+  ownerLocked = false,
+  submitDisabled = false,
   onFieldChange,
 }: WorkItemCreateFormProps) {
+  const hasSelectedOwner = composer.assignableUsers.some(
+    (user) => user.userId === form.ownerUserId,
+  )
+
   return (
     <form className={styles.form} onSubmit={onSubmit}>
       <div className={styles.formGridTwo}>
@@ -56,30 +70,41 @@ export function WorkItemCreateForm({
         </label>
 
         <label className={styles.field}>
-          <span className={styles.label}>카테고리 <i>*</i></span>
+          <span className={styles.label}>
+            카테고리 {categoryRequired && categorySupported ? <i>*</i> : null}
+          </span>
           <select
             className={styles.input}
             value={form.categoryId}
             onChange={(event) => onFieldChange('categoryId', event.target.value as WorkItemTagId)}
-            required
+            required={categoryRequired && categorySupported}
+            disabled={!categorySupported}
           >
-            <option value="" disabled>카테고리를 선택하세요</option>
-            {Object.entries(WORK_ITEM_TAGS).map(([categoryId, category]) => (
-              <option key={categoryId} value={categoryId}>{category.label}</option>
-            ))}
+            <option value="" disabled={categorySupported}>
+              {categorySupported ? '카테고리를 선택하세요' : '현재 서버 API에서 지원하지 않습니다'}
+            </option>
+            {categorySupported
+              ? Object.entries(WORK_ITEM_TAGS).map(([categoryId, category]) => (
+                  <option key={categoryId} value={categoryId}>{category.label}</option>
+                ))
+              : null}
           </select>
         </label>
       </div>
 
       <div className={styles.assignmentRow}>
         <label className={styles.field}>
-          <span className={styles.label}>담당자 <i>*</i></span>
+          <span className={styles.label}>담당자 {!ownerLocked ? <i>*</i> : null}</span>
           <select
             className={styles.input}
             value={form.ownerUserId}
             onChange={(event) => onFieldChange('ownerUserId', event.target.value)}
-            required
+            required={!ownerLocked}
+            disabled={ownerLocked}
           >
+            {!hasSelectedOwner && form.ownerUserId ? (
+              <option value={form.ownerUserId}>{form.ownerUserId}</option>
+            ) : null}
             {composer.assignableUsers.map((user) => (
               <option key={user.userId} value={user.userId}>{user.name} ({user.userId})</option>
             ))}
@@ -136,13 +161,13 @@ export function WorkItemCreateForm({
         </label>
 
         <label className={styles.field}>
-          <span className={styles.label}>마감일 <i>*</i></span>
+          <span className={styles.label}>마감일 {dueDateRequired ? <i>*</i> : null}</span>
           <input
             type="date"
             className={styles.input}
             value={form.dueDate}
             onChange={(event) => onFieldChange('dueDate', event.target.value)}
-            required
+            required={dueDateRequired}
           />
         </label>
       </div>
@@ -181,7 +206,7 @@ export function WorkItemCreateForm({
         <button type="button" className={styles.cancelButton} onClick={onCancel} disabled={submitting}>
           취소
         </button>
-        <button type="submit" className={styles.submitButton} disabled={submitting}>
+        <button type="submit" className={styles.submitButton} disabled={submitting || submitDisabled}>
           {submitting ? submittingLabel : submitLabel}
         </button>
       </div>

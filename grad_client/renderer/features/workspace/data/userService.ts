@@ -1,11 +1,16 @@
 import type { SignInRequest, SignInResponse, SignUpRequest, WorkspaceDatabase } from '../model/types'
 import { delay, generateUserId, getUserByEmail, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
 import { getCurrentServerUser, signInServerUser, signOutServerUser, signUpServerUser } from './serverWorkspace'
+import { createServerEntityId } from './server/serverId'
 import { TEAM_404_DEMO_USER_ID } from './seed'
 import { getCurrentSessionUserId, setCurrentSessionUserId } from './session'
 import { isServerDataSource } from './workspaceMode'
 
 export function getNextGeneratedUserId() {
+  if (isServerDataSource()) {
+    return createServerEntityId('U')
+  }
+
   return generateUserId(readWorkspaceDb())
 }
 

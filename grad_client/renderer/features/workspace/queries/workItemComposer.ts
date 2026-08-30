@@ -3,18 +3,30 @@ import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '.
 import { getNextGeneratedWorkItemId } from '../data/workItemService'
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
+import {
+  getServerAssignableUsers,
+  getServerAvailableParentItems,
+  getServerCreatableNodeIds,
+} from './serverWorkItemCreateContract'
+
+type WorkItemComposerOptions = {
+  enforceServerCreateContract?: boolean
+}
 
 export function getWorkItemComposerContext(
   userId?: string,
   nodeId?: number,
   providedSnapshot?: WorkspaceSnapshot,
+  options: WorkItemComposerOptions = {},
 ): WorkItemComposerContext {
   const snapshot = providedSnapshot ?? getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const resolvedUserId = userId ?? currentUser?.userId
-  const accessibleNodeIds = resolvedUserId
-    ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot)
-    : snapshot.nodes.map((node) => node.id)
+  const accessibleNodeIds = options.enforceServerCreateContract && resolvedUserId
+    ? Array.from(getServerCreatableNodeIds(resolvedUserId, snapshot))
+    : resolvedUserId
+      ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot)
+      : snapshot.nodes.map((node) => node.id)
   const accessibleNodeIdSet = new Set(accessibleNodeIds)
   const availableNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id)))
 
@@ -26,7 +38,9 @@ export function getWorkItemComposerContext(
     null
 
   const assignableUsers = selectedNode
-    ? (() => {
+    ? options.enforceServerCreateContract
+      ? getServerAssignableUsers(selectedNode.id, snapshot)
+      : (() => {
         const userIds = Array.from(
           new Set(
             snapshot.roles
@@ -42,13 +56,17 @@ export function getWorkItemComposerContext(
         }
 
         return currentUser ? [currentUser] : snapshot.users
-      })()
+        })()
     : currentUser
       ? [currentUser]
       : snapshot.users
 
   const availableParentItems = selectedNode
-    ? sortWorkspaceWorkItems(snapshot.workItems.filter((item) => selectedNode.path.includes(item.ownerNodeId)))
+    ? sortWorkspaceWorkItems(
+        options.enforceServerCreateContract && resolvedUserId
+          ? getServerAvailableParentItems(resolvedUserId, selectedNode.path, snapshot)
+          : snapshot.workItems.filter((item) => selectedNode.path.includes(item.ownerNodeId)),
+      )
     : []
 
   return {

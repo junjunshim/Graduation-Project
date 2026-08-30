@@ -3,9 +3,11 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { createWorkItem } from '../../workspace/data/workItemService'
+import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import { WorkItemCreateSidebar } from '../components/WorkItemCreateSidebar'
 import { useWorkItemCreateForm } from '../hooks/useWorkItemCreateForm'
+import { getWorkItemDateRangeError } from '../model/workItemFormValidation'
 import styles from '../styles/WorkItemCreatePage.module.css'
 
 type WorkItemCreatePageProps = {
@@ -17,6 +19,7 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
   const currentUser = getCurrentUser()
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const isServerMode = isServerDataSource()
   const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId)
 
   if (!currentUser || !composer) {
@@ -24,11 +27,29 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
   }
 
   const activeComposer = composer
+  const serverAvailabilityMessage = isServerMode
+    ? !activeComposer.selectedNode
+      ? '업무를 생성할 직접 권한(ADMIN, MANAGER 또는 MEMBER)이 있는 조직이 없습니다.'
+      : activeComposer.assignableUsers.length === 0
+        ? '선택한 조직에 업무 담당자로 지정할 직접 멤버가 없습니다.'
+        : null
+    : null
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (submitting) {
+      return
+    }
+
     setSubmitting(true)
     setFeedback(null)
+
+    if (serverAvailabilityMessage) {
+      setSubmitting(false)
+      setFeedback({ tone: 'error', message: serverAvailabilityMessage })
+      return
+    }
 
     if (!form.title.trim()) {
       setSubmitting(false)
@@ -36,29 +57,44 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
       return
     }
 
-    const response = await createWorkItem({
-      workItemId: activeComposer.suggestedWorkItemId,
-      ownerNodeId: Number(form.ownerNodeId),
-      ownerUserId: form.ownerUserId,
-      title: form.title,
-      parentWorkItemId: form.parentWorkItemId || undefined,
-      description: form.description,
-      status: form.status,
-      priority: Number(form.priority),
-      weight: Number(form.weight),
-      progress: Number(form.progress),
-      startDate: form.startDate || undefined,
-      dueDate: form.dueDate || undefined,
-    })
+    const dateRangeError = getWorkItemDateRangeError(form.startDate, form.dueDate)
 
-    setSubmitting(false)
-
-    if (response.status === 'error') {
-      setFeedback({ tone: 'error', message: response.message })
+    if (dateRangeError) {
+      setSubmitting(false)
+      setFeedback({ tone: 'error', message: dateRangeError })
       return
     }
 
-    navigate(embedded ? '/work-items' : '/dashboard')
+    try {
+      const response = await createWorkItem({
+        workItemId: activeComposer.suggestedWorkItemId,
+        ownerNodeId: Number(form.ownerNodeId),
+        ownerUserId: form.ownerUserId,
+        title: form.title,
+        parentWorkItemId: form.parentWorkItemId || undefined,
+        description: form.description,
+        status: form.status,
+        priority: Number(form.priority),
+        weight: Number(form.weight),
+        progress: Number(form.progress),
+        startDate: form.startDate || undefined,
+        dueDate: form.dueDate || undefined,
+      })
+
+      if (response.status === 'error') {
+        setFeedback({ tone: 'error', message: response.message })
+        return
+      }
+
+      navigate(embedded ? '/work-items' : '/dashboard')
+    } catch (error) {
+      setFeedback({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '업무를 생성하지 못했습니다.',
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -78,8 +114,13 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
           <WorkItemCreateForm
             composer={activeComposer}
             form={form}
+            categoryRequired={!isServerMode}
+            categorySupported={!isServerMode}
             submitting={submitting}
-            feedback={feedback}
+            feedback={feedback ?? (serverAvailabilityMessage
+              ? { tone: 'error', message: serverAvailabilityMessage }
+              : null)}
+            submitDisabled={Boolean(serverAvailabilityMessage)}
             onSubmit={handleSubmit}
             onCancel={() => navigate('/work-items')}
             onFieldChange={setField}

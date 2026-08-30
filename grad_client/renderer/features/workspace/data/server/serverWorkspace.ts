@@ -3,8 +3,6 @@ import type {
   CreateSubNodeRequest,
   CreateTopNodeRequest,
   CreateWorkItemRequest,
-  NodeType,
-  RoleName,
   SignInRequest,
   SignInResponse,
   SignUpRequest,
@@ -12,55 +10,31 @@ import type {
   UpdateRoleRequest,
   UpdateWorkItemRequest,
   UserRecord,
-  WorkItemStatus,
   WorkspaceDatabase,
 } from '../../model/types'
-import { apiRequest, clearServerSession, getServerSessionEmail, setServerSession } from './apiClient'
+import {
+  apiRequest,
+  clearServerSession,
+  getServerSessionEmail,
+  hasServerSession,
+  setServerSession,
+  type ApiRequestOptions,
+} from './apiClient'
+import {
+  isServerStatusResponse,
+  parseServerContextItems,
+  type ServerContextResponse,
+  type ServerLoginResponse,
+} from './apiTypes'
+import { normalizeServerContext } from './contextAdapter'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore'
-import { getCurrentSessionUserId, setCurrentSessionUserId } from '../session'
-
-type ServerStatusResponse = {
-  status: 'success' | 'error'
-  message?: string
-}
+import { setCurrentSessionUserId } from '../session'
+import { notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents'
 
 type ServerOperationError = {
   status: 'error'
   message: string
 }
-
-type ServerLoginResponse = ServerStatusResponse & {
-  access_token?: string
-  refresh_token?: string
-}
-
-type ServerContextResponse = ServerStatusResponse & {
-  data?: ServerIntegratedItem[]
-}
-
-type ServerIntegratedItem = {
-  type?: string
-  id?: string | number
-  node_id?: string | number
-  node_type?: string
-  parent_id?: string | number | null
-  title?: string
-  status?: string
-  priority?: number
-  weight?: number
-  progress?: number
-  description?: string
-  owner_user_id?: string
-  owner_user_email?: string
-  start_date?: string
-  due_date?: string
-  extra_info?: string
-  updated_at?: string
-}
-
-const SERVER_DATASET_ID = 'server-workspace'
-const SERVER_SEED_VERSION = 1
-const DEFAULT_SERVER_PASSWORD = ''
 
 async function withServerOperationError<Result>(
   operation: () => Promise<Result>,
@@ -76,103 +50,46 @@ async function withServerOperationError<Result>(
   }
 }
 
-function nowIso() {
-  return new Date().toISOString()
-}
+async function requestServerStatus(path: string, options?: ApiRequestOptions) {
+  const response = await apiRequest<unknown>(path, options)
 
-function toStringValue(value: unknown) {
-  return value === undefined || value === null ? '' : String(value)
-}
+  if (!isServerStatusResponse(response)) {
+    throw new Error('서버 응답 형식이 올바르지 않습니다.')
+  }
 
-function toOptionalString(value: unknown) {
-  const normalized = toStringValue(value).trim()
-  return normalized ? normalized : undefined
-}
-
-function toNumberValue(value: unknown, fallback: number) {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : fallback
+  return response
 }
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-function getDisplayNameFromEmail(email: string) {
+async function refreshWorkspaceAfterCommittedMutation() {
+  try {
+    await loadServerWorkspace()
+  } catch {
+    notifyWorkspaceCacheRefreshFailed(
+      '변경은 서버에 반영되었지만 최신 데이터를 다시 불러오지 못했습니다. 같은 변경을 다시 제출하지 말고 “다시 시도”로 데이터를 새로고침해 주세요.',
+    )
+  }
+}
+
+function createServerSessionUser(email: string): UserRecord {
   const [name] = email.split('@')
-  return name || email
-}
-
-function normalizeNodeType(value: unknown): NodeType {
-  const normalized = toStringValue(value).toUpperCase()
-
-  if (
-    normalized === 'USER' ||
-    normalized === 'COMPANY' ||
-    normalized === 'DIVISION' ||
-    normalized === 'DEPARTMENT' ||
-    normalized === 'TEAM' ||
-    normalized === 'PROJECT'
-  ) {
-    return normalized
+  return {
+    userId: email,
+    email,
+    name: name || email,
+    createdAt: new Date().toISOString(),
   }
-
-  return 'TEAM'
-}
-
-function normalizeRoleName(value: unknown): RoleName {
-  const normalized = toStringValue(value).toUpperCase()
-
-  if (normalized === 'ADMIN' || normalized === 'MANAGER' || normalized === 'MEMBER') {
-    return normalized
-  }
-
-  return 'MEMBER'
-}
-
-function normalizeWorkItemStatus(value: unknown): WorkItemStatus {
-  const normalized = toStringValue(value).trim().toLowerCase().replace('_', '-')
-
-  if (normalized === 'in-progress' || normalized === 'doing') {
-    return 'in-progress'
-  }
-
-  if (normalized === 'done' || normalized === 'end' || normalized === 'completed') {
-    return 'done'
-  }
-
-  return 'todo'
-}
-
-function parseNodePath(value: unknown) {
-  const raw = toStringValue(value)
-  const matches = raw.match(/\d+/g)
-  return matches ? matches.map(Number).filter(Number.isFinite) : []
-}
-
-function ensureUser(users: Map<string, UserRecord>, email: string) {
-  const normalizedEmail = normalizeEmail(email)
-  const existing = users.get(normalizedEmail)
-
-  if (existing) {
-    return existing
-  }
-
-  const user: UserRecord = {
-    userId: normalizedEmail,
-    email: normalizedEmail,
-    name: getDisplayNameFromEmail(normalizedEmail),
-    password: DEFAULT_SERVER_PASSWORD,
-    createdAt: nowIso(),
-  }
-
-  users.set(normalizedEmail, user)
-  return user
 }
 
 function getCurrentServerEmail() {
-  const sessionUserId = getCurrentSessionUserId()
-  return normalizeEmail(sessionUserId ?? getServerSessionEmail() ?? '')
+  if (!hasServerSession()) {
+    return ''
+  }
+
+  return normalizeEmail(getServerSessionEmail() ?? '')
 }
 
 function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDatabase): WorkspaceDatabase {
@@ -202,101 +119,6 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
   }
 }
 
-export function normalizeServerContext(items: ServerIntegratedItem[], currentEmail: string): WorkspaceDatabase {
-  const timestamp = nowIso()
-  const users = new Map<string, UserRecord>()
-  const normalizedCurrentEmail = normalizeEmail(currentEmail)
-
-  if (normalizedCurrentEmail) {
-    ensureUser(users, normalizedCurrentEmail)
-  }
-
-  const nodes = items
-    .filter((item) => item.type === 'NODE')
-    .map((item) => {
-      const id = toNumberValue(item.id ?? item.node_id, 0)
-      const parentNodeId = toOptionalString(item.parent_id)
-      const path = parseNodePath(item.extra_info)
-
-      return {
-        id,
-        ...(parentNodeId ? { parentNodeId: Number(parentNodeId) } : {}),
-        nodeType: normalizeNodeType(item.node_type),
-        name: toOptionalString(item.title) ?? `Node ${id}`,
-        path: path.length > 0 ? path : [id],
-        createdAt: toOptionalString(item.updated_at) ?? timestamp,
-      }
-    })
-    .filter((node) => node.id > 0)
-
-  const roles = items
-    .filter((item) => item.type === 'ROLE')
-    .map((item, index) => {
-      const email = normalizeEmail(toStringValue(item.title))
-      const user = ensureUser(users, email || normalizedCurrentEmail || `server-user-${index + 1}`)
-      const nodeId = toNumberValue(item.parent_id ?? item.node_id, 0)
-      const roleName = normalizeRoleName(item.status ?? item.extra_info)
-
-      if (roleName === 'ADMIN') {
-        const node = nodes.find((candidate) => candidate.id === nodeId)
-
-        if (node?.nodeType === 'USER') {
-          user.personalNodeId = node.id
-        }
-      }
-
-      return {
-        id: toNumberValue(item.id, index + 1),
-        userId: user.userId,
-        nodeId,
-        roleName,
-        createdAt: toOptionalString(item.updated_at) ?? timestamp,
-      }
-    })
-    .filter((role) => role.nodeId > 0)
-
-  const currentUser = normalizedCurrentEmail ? ensureUser(users, normalizedCurrentEmail) : null
-  const fallbackOwnerUserId = currentUser?.userId ?? Array.from(users.values())[0]?.userId ?? 'server-user'
-  const workItems = items
-    .filter((item) => item.type === 'WORK_ITEM')
-    .map((item) => {
-      const ownerEmail = normalizeEmail(item.owner_user_email ?? '')
-      const ownerUser = ownerEmail ? ensureUser(users, ownerEmail) : null
-      const workItemId = toStringValue(item.id).trim()
-      const parentWorkItemId = toOptionalString(item.extra_info)
-
-      return {
-        workItemId,
-        ownerNodeId: toNumberValue(item.parent_id, 0),
-        ownerUserId: item.owner_user_id ?? ownerUser?.userId ?? fallbackOwnerUserId,
-        title: toOptionalString(item.title) ?? workItemId,
-        description: toOptionalString(item.description) ?? '',
-        status: normalizeWorkItemStatus(item.status),
-        priority: toNumberValue(item.priority, 3),
-        weight: toNumberValue(item.weight, 1),
-        progress: toNumberValue(item.progress, 0),
-        ...(toOptionalString(item.start_date) ? { startDate: toOptionalString(item.start_date) } : {}),
-        ...(toOptionalString(item.due_date) ? { dueDate: toOptionalString(item.due_date) } : {}),
-        ...(parentWorkItemId ? { parentWorkItemId } : {}),
-        createdAt: toOptionalString(item.updated_at) ?? timestamp,
-      }
-    })
-    .filter((item) => item.workItemId && item.ownerNodeId > 0)
-
-  return {
-    datasetId: SERVER_DATASET_ID,
-    seedVersion: SERVER_SEED_VERSION,
-    users: Array.from(users.values()),
-    nodes,
-    roles,
-    workItems,
-    counters: {
-      node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
-      role: Math.max(0, ...roles.map((role) => role.id)) + 1,
-    },
-  }
-}
-
 export function getCurrentServerUser(snapshot?: Pick<WorkspaceDatabase, 'users'>) {
   const email = getCurrentServerEmail()
 
@@ -309,27 +131,53 @@ export function getCurrentServerUser(snapshot?: Pick<WorkspaceDatabase, 'users'>
 }
 
 export async function loadServerWorkspace(email = getCurrentServerEmail()) {
-  const response = await apiRequest<ServerContextResponse>('/context/init')
+  const response = await apiRequest<unknown>('/context/init')
+
+  if (!isServerStatusResponse(response)) {
+    throw new Error('서버 컨텍스트 응답 형식이 올바르지 않습니다.')
+  }
 
   if (response.status === 'error') {
     throw new Error(response.message ?? '워크스페이스를 불러오지 못했습니다.')
   }
 
-  const db = normalizeServerContext(response.data ?? [], email)
+  const items = parseServerContextItems((response as ServerContextResponse).data)
+  const { workspace: db, issues } = normalizeServerContext(items, email)
+
+  if (issues.length > 0) {
+    throw new Error(`서버 컨텍스트 일부를 변환하지 못했습니다: ${issues[0].message}`)
+  }
+
   writeServerWorkspaceDb(db)
   return db
 }
 
 export async function syncServerWorkspace(lastSyncedAt = '1970-01-01 00:00:00') {
-  const response = await apiRequest<ServerContextResponse>(
+  const response = await apiRequest<unknown>(
     `/context/sync?last_synced_at=${encodeURIComponent(lastSyncedAt)}`,
   )
+
+  if (!isServerStatusResponse(response)) {
+    throw new Error('서버 동기화 응답 형식이 올바르지 않습니다.')
+  }
 
   if (response.status === 'error') {
     throw new Error(response.message ?? '워크스페이스 동기화에 실패했습니다.')
   }
 
-  const merged = mergeServerUpdates(readWorkspaceDb(), normalizeServerContext(response.data ?? [], getCurrentServerEmail()))
+  const items = parseServerContextItems((response as ServerContextResponse).data)
+  const current = readWorkspaceDb()
+  const { workspace: normalized, issues } = normalizeServerContext(
+    items,
+    getCurrentServerEmail(),
+    { referenceWorkspace: current },
+  )
+
+  if (issues.length > 0) {
+    throw new Error(`서버 동기화 데이터 일부를 변환하지 못했습니다: ${issues[0].message}`)
+  }
+
+  const merged = mergeServerUpdates(current, normalized)
   writeServerWorkspaceDb(merged)
   return merged
 }
@@ -346,14 +194,14 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
   }
 
   try {
-    const response = await apiRequest<ServerLoginResponse>('/users/login', {
+    const response = (await requestServerStatus('/users/login', {
       method: 'POST',
       body: {
         email,
         password: payload.password,
       },
       includeToken: false,
-    })
+    })) as ServerLoginResponse
 
     if (response.status === 'error' || !response.access_token || !response.refresh_token) {
       return {
@@ -371,7 +219,7 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
     setCurrentSessionUserId(email)
     await loadServerWorkspace(email)
 
-    const user = getCurrentServerUser() ?? ensureUser(new Map(), email)
+    const user = getCurrentServerUser() ?? createServerSessionUser(email)
 
     return {
       status: 'success',
@@ -392,13 +240,15 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
 }
 
 export async function signUpServerUser(payload: SignUpRequest) {
+  const email = normalizeEmail(payload.email)
+
   try {
-    const response = await apiRequest<ServerStatusResponse>('/users', {
+    const response = await requestServerStatus('/users', {
       method: 'POST',
       body: {
-        user_id: payload.userId,
-        email: payload.email,
-        name: payload.name,
+        user_id: payload.userId.trim(),
+        email,
+        name: payload.name.trim(),
         password: payload.password,
       },
       includeToken: false,
@@ -411,10 +261,21 @@ export async function signUpServerUser(payload: SignUpRequest) {
       }
     }
 
-    return signInServerUser({
-      email: payload.email,
+    const signInResponse = await signInServerUser({
+      email,
       password: payload.password,
     })
+
+    if (signInResponse.status === 'error') {
+      return {
+        status: 'error' as const,
+        accountCreated: true as const,
+        message:
+          '계정 생성은 완료되었지만 자동 로그인에 실패했습니다. 가입을 다시 시도하지 말고 생성한 계정으로 로그인해 주세요.',
+      }
+    }
+
+    return signInResponse
   } catch (error) {
     return {
       status: 'error' as const,
@@ -431,7 +292,7 @@ export function signOutServerUser() {
 
 export async function createTopNodeOnServer(payload: CreateTopNodeRequest) {
   return withServerOperationError(async () => {
-    const response = await apiRequest<ServerStatusResponse>('/org/topNodes', {
+    const response = await requestServerStatus('/org/topNodes', {
       method: 'POST',
       body: {
         node_type: payload.nodeType,
@@ -444,20 +305,20 @@ export async function createTopNodeOnServer(payload: CreateTopNodeRequest) {
       return { status: 'error' as const, message: response.message ?? '공유 공간을 만들지 못했습니다.' }
     }
 
-    await loadServerWorkspace()
+    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const, newNodeId: 0 }
   }, '공유 공간을 만들지 못했습니다.')
 }
 
 export async function createSubNodeOnServer(payload: CreateSubNodeRequest) {
   return withServerOperationError(async () => {
-    const response = await apiRequest<ServerStatusResponse>('/org/subNodes', {
+    const response = await requestServerStatus('/org/subNodes', {
       method: 'POST',
       body: {
         node_type: payload.nodeType,
         parent_node_id: payload.parentNodeId,
         name: payload.name,
-        email: payload.email,
+        email: normalizeEmail(payload.email),
         role_name: payload.roleName,
       },
     })
@@ -466,17 +327,17 @@ export async function createSubNodeOnServer(payload: CreateSubNodeRequest) {
       return { status: 'error' as const, message: response.message ?? '하위 조직을 추가하지 못했습니다.' }
     }
 
-    await loadServerWorkspace()
+    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const, newNodeId: 0 }
   }, '하위 조직을 추가하지 못했습니다.')
 }
 
 export async function assignRoleOnServer(payload: AssignRoleRequest) {
   return withServerOperationError(async () => {
-    const response = await apiRequest<ServerStatusResponse>('/roles', {
+    const response = await requestServerStatus('/roles', {
       method: 'POST',
       body: {
-        email: payload.email,
+        email: normalizeEmail(payload.email),
         node_id: payload.nodeId,
         role_name: payload.roleName,
       },
@@ -486,19 +347,19 @@ export async function assignRoleOnServer(payload: AssignRoleRequest) {
       return { status: 'error' as const, message: response.message ?? '권한을 추가하지 못했습니다.' }
     }
 
-    await loadServerWorkspace()
+    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const, newRoleId: 0 }
   }, '권한을 추가하지 못했습니다.')
 }
 
 export async function updateNodeOnServer(payload: UpdateNodeRequest) {
   return withServerOperationError(async () => {
-    const response = await apiRequest<ServerStatusResponse>('/org/nodes', {
+    const response = await requestServerStatus('/org/nodes', {
       method: 'PATCH',
       body: {
         node_id: payload.nodeId,
-        ...(payload.name !== undefined ? { name: payload.name } : {}),
-        ...(payload.nodeType !== undefined ? { node_type: payload.nodeType } : {}),
+        name: payload.name,
+        node_type: payload.nodeType,
       },
     })
 
@@ -506,17 +367,17 @@ export async function updateNodeOnServer(payload: UpdateNodeRequest) {
       return { status: 'error' as const, message: response.message ?? '조직을 수정하지 못했습니다.' }
     }
 
-    await loadServerWorkspace()
+    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const }
   }, '조직을 수정하지 못했습니다.')
 }
 
 export async function updateRoleOnServer(payload: UpdateRoleRequest) {
   return withServerOperationError(async () => {
-    const response = await apiRequest<ServerStatusResponse>('/roles', {
+    const response = await requestServerStatus('/roles', {
       method: 'PATCH',
       body: {
-        email: payload.email,
+        email: normalizeEmail(payload.email),
         node_id: payload.nodeId,
         role_name: payload.roleName,
       },
@@ -526,7 +387,7 @@ export async function updateRoleOnServer(payload: UpdateRoleRequest) {
       return { status: 'error' as const, message: response.message ?? '권한을 변경하지 못했습니다.' }
     }
 
-    await loadServerWorkspace()
+    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const }
   }, '권한을 변경하지 못했습니다.')
 }
@@ -536,7 +397,7 @@ export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
     const ownerUser = readWorkspaceDb().users.find((user) => user.userId === payload.ownerUserId)
     const ownerEmail = ownerUser?.email || payload.ownerUserId
 
-    const response = await apiRequest<ServerStatusResponse>('/workItems', {
+    const response = await requestServerStatus('/workItems', {
       method: 'POST',
       body: {
         work_item_id: payload.workItemId,
@@ -558,14 +419,14 @@ export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
       return { status: 'error' as const, message: response.message ?? '업무를 생성하지 못했습니다.' }
     }
 
-    await loadServerWorkspace()
+    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const, workItemId: payload.workItemId }
   }, '업무를 생성하지 못했습니다.')
 }
 
 export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
   return withServerOperationError(async () => {
-    const response = await apiRequest<ServerStatusResponse>('/workItems', {
+    const response = await requestServerStatus('/workItems', {
       method: 'PATCH',
       body: {
         work_item_id: payload.workItemId,
@@ -584,7 +445,7 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
       return { status: 'error' as const, message: response.message ?? '업무를 수정하지 못했습니다.' }
     }
 
-    await loadServerWorkspace()
+    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const, workItemId: payload.workItemId }
   }, '업무를 수정하지 못했습니다.')
 }

@@ -9,7 +9,9 @@ type CreateSubNodeFormProps = {
   subNodeName: string
   subNodeType: Exclude<NodeType, 'USER'>
   users: UserRecord[]
+  allowCustomManagerEmail?: boolean
   disabled?: boolean
+  busy?: boolean
   onManagerEmailChange: (value: string) => void
   onSubNodeNameChange: (value: string) => void
   onSubNodeTypeChange: (value: Exclude<NodeType, 'USER'>) => void
@@ -21,14 +23,16 @@ export function CreateSubNodeForm({
   subNodeName,
   subNodeType,
   users,
+  allowCustomManagerEmail = false,
   disabled = false,
+  busy = false,
   onManagerEmailChange,
   onSubNodeNameChange,
   onSubNodeTypeChange,
   onSubmit,
 }: CreateSubNodeFormProps) {
   return (
-    <form className={styles.panel} onSubmit={onSubmit}>
+    <form className={styles.panel} onSubmit={onSubmit} aria-busy={busy}>
       <div className={styles.panelHeader}>
         <div>
           <p className={styles.panelEyebrow}>Create Sub Node</p>
@@ -58,6 +62,7 @@ export function CreateSubNodeForm({
           className={styles.input}
           value={subNodeName}
           disabled={disabled}
+          required
           onChange={(event) => onSubNodeNameChange(event.target.value)}
           placeholder="예: 프론트엔드, 백엔드, 발표 준비"
         />
@@ -65,18 +70,39 @@ export function CreateSubNodeForm({
 
       <label className={styles.field}>
         <span className={styles.label}>관리자</span>
-        <select
-          className={styles.input}
-          value={managerEmail}
-          disabled={disabled}
-          onChange={(event) => onManagerEmailChange(event.target.value)}
-        >
-          {users.map((member) => (
-            <option key={member.userId} value={member.email}>
-              {member.name} ({member.userId})
-            </option>
-          ))}
-        </select>
+        {allowCustomManagerEmail ? (
+          <>
+            <input
+              type="email"
+              list="sub-node-manager-email-options"
+              className={styles.input}
+              value={managerEmail}
+              disabled={disabled}
+              required
+              onChange={(event) => onManagerEmailChange(event.target.value)}
+              placeholder="등록된 사용자 이메일"
+            />
+            <datalist id="sub-node-manager-email-options">
+              {users.map((member) => (
+                <option key={member.userId} value={member.email}>{member.name}</option>
+              ))}
+            </datalist>
+          </>
+        ) : (
+          <select
+            className={styles.input}
+            value={managerEmail}
+            disabled={disabled}
+            required
+            onChange={(event) => onManagerEmailChange(event.target.value)}
+          >
+            {users.map((member) => (
+              <option key={member.userId} value={member.email}>
+                {member.name} ({member.userId})
+              </option>
+            ))}
+          </select>
+        )}
       </label>
 
       <div className={styles.callout}>
@@ -86,7 +112,7 @@ export function CreateSubNodeForm({
       </div>
 
       <button type="submit" className={styles.submitButton} disabled={disabled}>
-        하위 조직 추가
+        {busy ? '추가 중...' : '하위 조직 추가'}
       </button>
     </form>
   )

@@ -6,9 +6,14 @@ import type {
 } from '../model/types'
 import { delay, generateWorkItemId, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
 import { createWorkItemOnServer, updateWorkItemOnServer } from './serverWorkspace'
+import { createServerEntityId } from './server/serverId'
 import { isServerDataSource } from './workspaceMode'
 
 export function getNextGeneratedWorkItemId(workspace?: Pick<WorkspaceDatabase, 'workItems'>) {
+  if (isServerDataSource()) {
+    return createServerEntityId('WI')
+  }
+
   return generateWorkItemId(workspace ?? readWorkspaceDb())
 }
 

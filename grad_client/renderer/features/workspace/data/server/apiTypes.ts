@@ -16,7 +16,14 @@ export type ServerStatusResponse = {
 
 export type ServerLoginResponse = ServerStatusResponse & {
   access_token?: string
-  refresh_token?: string
+}
+
+export function getServerLoginAccessToken(response: ServerLoginResponse) {
+  if (response.status !== 'success' || typeof response.access_token !== 'string') {
+    return null
+  }
+
+  return response.access_token.trim() || null
 }
 
 /**
@@ -41,6 +48,7 @@ export type ServerContextItem = {
   user_email?: string
   role?: string
   role_name?: string
+  authority?: string
   owner_node_id?: string | number
   owner_user_id?: string
   owner_user_email?: string
@@ -53,6 +61,12 @@ export type ServerContextItem = {
   created_at?: string
   personal_node_id?: string | number | null
   name?: string
+  hidden?: boolean
+
+  comment_id?: string | number
+  work_item_id?: string
+  message?: string
+  is_read?: boolean
 }
 
 export type ServerContextResponse = ServerStatusResponse & {

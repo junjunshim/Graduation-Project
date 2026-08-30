@@ -14,7 +14,11 @@ const SERVER_DATASET_ID = 'server-workspace'
 const SERVER_SEED_VERSION = 1
 const UNKNOWN_OWNER_USER_ID = 'server-owner-unknown'
 const UNKNOWN_OWNER_EMAIL = 'unknown-owner@local.invalid'
-const SUPPORTED_CONTEXT_ITEM_TYPES = new Set(['USER', 'NODE', 'ROLE', 'WORK_ITEM'])
+const WORKSPACE_CONTEXT_ITEM_TYPES = new Set(['USER', 'NODE', 'ROLE', 'WORK_ITEM'])
+// The server includes these records in the shared context envelope, but the
+// current workspace domain has no authority-policy or notification collection.
+// Accept them without misrepresenting them as roles or work items.
+const KNOWN_NON_WORKSPACE_CONTEXT_ITEM_TYPES = new Set(['AUTHORITY', 'MENTION'])
 
 export type ServerContextNormalizationIssue = {
   index: number
@@ -179,7 +183,10 @@ export function normalizeServerContext(
       return
     }
 
-    if (!SUPPORTED_CONTEXT_ITEM_TYPES.has(itemType)) {
+    if (
+      !WORKSPACE_CONTEXT_ITEM_TYPES.has(itemType) &&
+      !KNOWN_NON_WORKSPACE_CONTEXT_ITEM_TYPES.has(itemType)
+    ) {
       addIssue(index, itemType, `지원하지 않는 컨텍스트 항목 type(${itemType})입니다.`)
     }
   })

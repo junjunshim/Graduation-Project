@@ -126,10 +126,9 @@ Graduation-Project/
 | Mock 사용자 세션 | grad-client-mock-session |
 | Server 사용자 식별 세션 | grad-client-server-session-user |
 | Server access token | grad-client-server-access-token |
-| Server refresh token | grad-client-server-refresh-token |
 | Server email | grad-client-server-email |
 
-기존 grad-client-mvp-session 값은 값의 형태에 따라 해당 모드의 키로 한 번 이전한다. 서버 사용자 캐시에 비밀번호를 저장하지 않도록 UserRecord.password를 선택 필드로 바꿨다.
+기존 grad-client-mvp-session 값은 값의 형태에 따라 해당 모드의 키로 한 번 이전한다. 이전 프론트가 사용하던 grad-client-server-refresh-token 값은 로그인 또는 로그아웃 시 제거한다. 현재 서버의 refresh token은 JSON이 아니라 HttpOnly 쿠키 계약이므로 프론트 localStorage에 저장하지 않는다. 서버 사용자 캐시에 비밀번호를 저장하지 않도록 UserRecord.password를 선택 필드로 바꿨다.
 
 ## 4. 환경변수와 모드 전환
 
@@ -211,16 +210,19 @@ renderer/features/workspace/data/server/apiClient.ts에서 다음을 공통 처�
 
 서버의 status가 success/error인 공통 envelope는 apiTypes.ts에서 런타임 검사한다. HTTP 2xx라도 envelope가 맞지 않거나 context의 data가 배열이 아니면 오류로 처리한다.
 
+현재 `credentials: omit`은 의도적인 임시 설정이다. 체크인된 서버가 `Access-Control-Allow-Origin: *`을 사용하므로 곧바로 credentialed request로 바꾸면 브라우저 CORS 검증에 실패한다. 따라서 현 단계에서는 로그인 JSON의 access token만 사용하며, refresh 쿠키와 자동 토큰 갱신은 서버 CORS·쿠키 정책과 함께 후속 구현해야 한다.
+
 ## 6. API 엔드포인트와 프론트엔드 기능
 
-저장소의 grad_server/controllers/api_v1_*.h 라우트와 docs/API_SPECIFICATION.md 및 docs/api 문서를 함께 대조했다. 실제 서버 코드의 공통 prefix는 /api/v1이며, 일부 문서의 /api 표기보다 서버 라우트를 우선했다.
+저장소의 grad_server/controllers 아래 라우트와 docs/API_SPECIFICATION.md 및 docs/api 문서를 함께 대조했다. 2026-08-30 현재 HTTP 컨트롤러의 공통 prefix는 /api이며, 실행 시 VITE_WORKSPACE_API_BASE_URL도 이 prefix를 포함해야 한다. 알림 WebSocket의 /api/v1 경로는 별도이며 이 프론트 연동 범위에 포함하지 않았다.
 
 아래 경로는 VITE_WORKSPACE_API_BASE_URL 뒤에 붙는다.
 
 | 프론트 기능 | 메서드/경로 | 주요 요청 필드 | 처리 |
 |---|---|---|---|
 | 회원가입 | POST /users | user_id, email, name, password | 성공 후 로그인 |
-| 로그인 | POST /users/login | email, password | access_token/refresh_token 저장 후 context 초기화 |
+| 로그인 | POST /users/login | email, password | JSON access_token 저장 후 context 초기화; HttpOnly refresh 쿠키는 현재 미사용 |
+| 토큰 갱신 | POST /users/refresh | refresh_token HttpOnly 쿠키 | 서버에는 구현되어 있으나 credentialed CORS가 준비될 때까지 프론트 자동 갱신 미연결 |
 | 초기 데이터 | GET /context/init | 없음 | 응답 정규화 후 서버 캐시 교체 |
 | 증분 데이터 | GET /context/sync?last_synced_at=... | 마지막 동기화 시각 | 정규화 후 캐시 병합; 자동 호출은 아직 미연결 |
 | 최상위 조직 생성 | POST /org/topNodes | node_type, name, role_name | 성공 후 전체 context 재조회 |
@@ -249,9 +251,11 @@ users.user_id와 work_items.work_item_id는 서버 DB의 전역 문자열 기본
 
 RoleName에는 서버 DB 열거형과 맞추기 위해 VIEWER를 추가했고 역할 선택 UI에서도 사용할 수 있게 했다.
 
+로그인 성공 응답은 `{ status: "success", access_token: string }`으로 해석한다. `getServerLoginAccessToken`이 status, 문자열 자료형, 공백 토큰을 검사하며 JSON `refresh_token`은 요구하지 않는다. 서버가 발급하는 refresh token은 `Set-Cookie`의 HttpOnly 쿠키이므로 화면 DTO나 localStorage 모델에 포함하지 않는다.
+
 ### 7.2 실제 compact context 변환
 
-현재 서버 ContextController가 반환하는 항목은 type, id, node_type?, parent_id?, title, status?, priority?, extra_info?, updated_at 중심의 다형 구조다.
+현재 서버 ContextController는 NODE, ROLE, WORK_ITEM, AUTHORITY, MENTION을 한 data 배열에 담는 평면 다형 구조를 반환한다. USER 및 과거 compact 필드도 프론트 호환 범위에 포함한다.
 
 | 서버 type | compact 필드 해석 | 프론트 도메인 |
 |---|---|---|
@@ -259,8 +263,12 @@ RoleName에는 서버 DB 열거형과 맞추기 위해 VIEWER를 추가했고 �
 | ROLE | id, parent_id(node id), title(user email), status(role) | RoleAssignmentRecord와 이메일 기반 UserRecord |
 | WORK_ITEM | id, parent_id(owner node), title, status, priority, extra_info(parent work item) | WorkItemRecord |
 | USER | 문서화된 확장 응답에 존재할 경우 식별 정보 사용 | UserRecord |
+| AUTHORITY | id, node_id, role, authority(24비트 문자열) | 알려진 서버 권한 정책으로 수용하되 현재 WorkspaceDatabase에는 저장하지 않음 |
+| MENTION | id, comment_id, work_item_id, message, is_read | 알려진 알림 메타데이터로 수용하되 현재 알림 도메인이 없어 저장하지 않음 |
 
 문서에 있는 확장 필드 owner_node_id, owner_user_id/email, description, weight, progress, start_date, due_date, created_at 등도 함께 지원한다. 서버가 실제로 보내면 손실 없이 도메인 레코드에 반영한다.
+
+AUTHORITY는 사용자 역할 배정인 ROLE과 달리 노드별 역할의 권한 비트 정책이므로 RoleAssignmentRecord로 변환하지 않는다. AUTHORITY와 MENTION 때문에 관련 없는 노드·역할·업무 hydration 전체가 실패하지 않도록 알려진 비워크스페이스 항목으로 분류한다. 알 수 없는 새 type은 기존처럼 normalization issue로 처리해 계약 변경을 조용히 숨기지 않는다.
 
 compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적으로 처리한다.
 
@@ -365,7 +373,7 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 | renderer/features/workspace/data/mockScenario.ts | default/empty/boundary 목 데이터 생성 |
 | renderer/features/workspace/data/server/workspaceMode.ts | 모드, Base URL, timeout 파싱·검증 |
 | renderer/features/workspace/data/server/apiClient.ts | 공통 fetch, 인증, timeout, 오류 분류 |
-| renderer/features/workspace/data/server/apiTypes.ts | 전송 DTO와 응답 envelope 런타임 검사 |
+| renderer/features/workspace/data/server/apiTypes.ts | 전송 DTO와 응답 envelope 및 access-token-only 로그인 응답 런타임 검사 |
 | renderer/features/workspace/data/server/contextAdapter.ts | compact/확장 context의 도메인 정규화 |
 | renderer/features/workspace/data/server/serverId.ts | DB 길이 안의 UUID 기반 server entity ID 생성 |
 | renderer/features/workspace/data/server/serverWorkspace.ts | 실제 endpoint 호출과 payload 변환, 캐시 갱신 |
@@ -377,7 +385,8 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 | renderer/features/workspace/queries/serverWorkItemCreateContract.ts | server 업무 생성 직접 역할 계약의 순수 필터 |
 | tests/all.test.ts | 프론트 단위 테스트 진입점 |
 | tests/apiClient.test.ts | URL/JSON/204/HTTP/parse/network/body timeout/5xx 정보 노출 방지 검증 |
-| tests/contextAdapter.test.ts | compact/확장/빈/잘못된 context 및 partial sync 검증 |
+| tests/apiTypes.test.ts | JSON refresh token 없이 access token만 반환하는 로그인 성공 계약과 잘못된 토큰 검증 |
+| tests/contextAdapter.test.ts | compact/확장/빈/잘못된 context, AUTHORITY/MENTION 호환 및 partial sync 검증 |
 | tests/localStore.test.ts | compact 미확인 담당자와 expanded ID-only 담당자의 캐시 왕복 보존 검증 |
 | tests/mockScenario.test.ts | 기본 시드 무결성 및 empty/boundary/error 검증 |
 | tests/serverId.test.ts | server UUID 형식, 충돌 방지 특성, DB 길이 제한 검증 |
@@ -441,15 +450,42 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 7. 각 변경 뒤 /context/init이 재호출되고 화면에 결과가 반영되는지 확인한다.
 8. 네트워크 차단, 401, 500, 빈 context를 각각 확인한다.
 
+### 11.4 access-token-only 로그인 보정 검증 (2026-08-30)
+
+서버 성공 응답에는 JSON `access_token`만 있고 `refresh_token`은 HttpOnly 쿠키로 오는 현재 계약에 맞춰 프론트 로그인 판정을 보정했다.
+
+| 명령 | 결과 |
+|---|---|
+| npm test | 통과, 26개 테스트 |
+| npm run typecheck | 실패, 기존 WorkItemEditPage.tsx의 미사용 변수 1개와 누락된 함수 참조 2개; 이번 로그인 변경 파일의 테스트용 TypeScript 컴파일은 통과 |
+| npm run lint | 실패, 기존 WorkItemEditPage.tsx의 isServerMode 미사용 오류 1개 |
+| npm run build:bundle:mock / build:bundle:server | 둘 다 선행 tsc에서 위 기존 WorkItemEditPage.tsx 오류로 중단 |
+| npx vite build --mode mock / server | 둘 다 통과, renderer/main/preload 번들 생성 |
+
+실계정 비밀번호를 작업 환경에 제공하거나 저장하지 않았으므로 실제 로그인 재현은 수행하지 않았다. 사용자는 `npm run dev:server`로 실행한 뒤 로그인하고, Network에서 `POST /api/users/login` 다음 `GET /api/context/init`이 호출되며 두 번째 요청에 `Authorization: Bearer ...`가 포함되는지 확인해야 한다. 로그인 다음에 새 오류가 표시되면 인증 판정이 아니라 `/context/init` 응답·정규화 단계로 구분해 진단한다.
+
+### 11.5 AUTHORITY/MENTION 컨텍스트 호환 보정 (2026-08-30)
+
+서버와 API 문서가 정상 응답으로 정의한 AUTHORITY를 프론트가 미지원 type으로 거부하던 문제를 수정했다. 같은 초기 응답에 포함될 수 있는 MENTION도 알려진 비워크스페이스 메타데이터로 함께 수용한다.
+
+| 명령 | 결과 |
+|---|---|
+| npm test | 통과, 27개 테스트; AUTHORITY/MENTION 포함 context 회귀 테스트 통과 |
+| npm run typecheck / npm run lint | 기존 WorkItemEditPage.tsx 오류가 남아 있어 전체 검증은 계속 중단됨 |
+| npx vite build --mode server | 통과, renderer/main/preload 번들 생성 |
+
+실제 서버 계정으로 다시 로그인한 뒤 `/api/context/init`에 AUTHORITY가 포함되어도 워크스페이스 화면으로 진입하는지 확인해야 한다. 이 환경에서는 서버에 재접속할 수 없어 live 응답 검증은 수행하지 못했다.
+
 ## 12. 제약사항, 가정, 미해결 항목과 TODO
 
 ### 12.1 프론트엔드 제약과 TODO
 
-- refresh_token은 저장하지만 서버에 refresh endpoint가 없어 자동 갱신하지 않는다. access token 만료 시 재로그인 흐름이 필요하다.
+- 서버의 refresh_token은 HttpOnly 쿠키이고 `/users/refresh`도 존재하지만, 프론트 요청은 현재 `credentials: omit`이라 자동 갱신하지 않는다. access token 만료 시 재로그인이 필요하다.
+- AUTHORITY와 MENTION은 현재 workspace 화면 모델에 저장하지 않는다. 권한 비트 기반 UI 제어 및 알림 UI를 구현할 때 전용 도메인·캐시·동기화 계층이 필요하다.
 - /context/sync 구현은 있으나 삭제 tombstone이 없는 현재 응답으로는 안전한 삭제 병합을 보장할 수 없어 자동 동기화에 연결하지 않았다.
 - 업무 담당자 변경/claim API가 없어 서버 모드에서는 해당 동작을 차단한다.
 - 역할/하위 조직 대상 이메일은 직접 입력할 수 있지만 사용자 검색 endpoint는 없다. datalist에는 현재 context에서 알 수 있는 사용자만 표시되며, 신규 이메일의 가입 여부는 제출 후 서버 응답으로 확인한다.
-- 서버 캐시는 localStorage 기반이다. 장기적으로 민감 토큰은 Electron의 더 안전한 저장소 또는 httpOnly cookie 정책을 검토해야 한다.
+- 서버 캐시와 access token은 현재 localStorage 기반이다. 장기적으로 access token도 Electron의 더 안전한 저장소 또는 서버의 HttpOnly cookie 정책을 검토해야 한다.
 - 현재는 시작 시 hydration과 변경 후 전체 재조회 방식이다. 서버 계약이 안정되면 query cache, retry/backoff, focus revalidation을 검토할 수 있다.
 
 ### 12.2 서버 또는 백엔드 측 확인이 필요한 사항
@@ -458,13 +494,13 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 
 1. 실제 ContextController compact 응답에는 업무 owner 사용자, description, weight, progress, start/due date, created_at이 없다. 화면에 필요한 전체 필드를 반환할지 계약 확정이 필요하다.
 2. 문서의 context 확장 응답과 실제 컨트롤러 응답의 필드명·중첩 구조가 다르다.
-3. 일부 문서는 /api를 사용하지만 실제 컨트롤러 prefix는 /api/v1이다.
-4. refresh token을 발급하지만 갱신 endpoint가 확인되지 않는다.
+3. 현재 HTTP 컨트롤러 prefix는 /api이지만 일부 기존 문서·프론트 fallback은 /api/v1을 전제로 한다. 배포 API의 최종 prefix를 명세에 고정해야 한다.
+4. HttpOnly refresh 쿠키 기반 갱신을 사용하려면 서버가 `Access-Control-Allow-Origin`을 정확한 프론트 Origin으로 제한하고 `Access-Control-Allow-Credentials: true`를 추가해야 한다. Electron/localhost와 원격 서버 조합에서 `SameSite=Strict`, `Secure`, Origin 정책도 함께 확정해야 한다.
 5. context sync에 삭제 tombstone이 없어 삭제 전파 방식이 불명확하다.
 6. 업무 담당자 변경/claim 및 사용자 검색·조회 계약이 확인되지 않는다. 조직/역할 endpoint의 이메일 직접 입력은 지원하지만 사전 사용자 검색은 할 수 없다.
 7. 잘못된 JWT가 401 대신 500으로 처리될 가능성이 있어 인증 오류 규약 확인이 필요하다.
 8. 조직 PATCH 응답 생성 시점과 extra_info 오타(etra_info)로 보이는 서버 코드 확인이 필요하다.
-9. JWT 환경설정 조회 경로와 구성 키 구조가 일치하는지 확인이 필요하다.
+9. main.cc는 JWT_SECRET을 `custom_config.jwt_secret`에 쓰지만 AuthController/JwtFilter는 `custom_config.app.jwt_secret`을 읽는다. 환경변수 secret이 실제 토큰 발급·검증에 반영되는지 서버 측 확인이 필요하다.
 10. 서버 포트는 Docker compose의 SERVER_PORT 매핑과 컨테이너 8080 외에 체크인된 단일 실행 설정으로 확정할 수 없었다.
 11. 역할 열거형 VIEWER의 실제 권한 의미와 hidden 필드 사용 여부를 명세에 반영할 필요가 있다.
 12. 업무 수정 SQL은 빈 description/date를 기존 값 유지로 해석하므로 화면에서 값을 완전히 지우는 계약이 필요한지 확인해야 한다.
@@ -476,6 +512,8 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 18. 업무 category는 현재 프론트의 기존 정적 태그 표현에만 있고 POST/PATCH/DB 계약에는 없다. Server 모드에서는 저장되는 값처럼 보이지 않도록 비활성화했으며, 실제 저장 기능이 필요하면 서버 필드와 응답 계약을 추가해야 한다.
 19. 현재 조직/역할/업무 생성 SQL은 상위 노드의 상속 역할이 아니라 대상 노드의 직접 역할을 검사한다. 프론트 Server 모드는 이 동작에 맞췄지만, 제품 정책이 상속 권한을 의도했다면 서버 권한 규칙과 응답 명세를 함께 변경해야 한다.
 20. PATCH /org/nodes는 이름/유형 중 하나가 누락되면 컨트롤러가 빈 문자열을 채워 SQL에서 기존 값을 덮는다. 프론트는 두 필드를 필수 공통 요청 타입으로 만들고 항상 함께 보내지만, 서버에서도 부분 PATCH 또는 full update 중 하나로 계약을 명확히 해야 한다.
+21. 프론트의 현재 버튼 노출 권한은 역할명 중심이며 서버의 AUTHORITY 24비트 정책을 직접 소비하지 않는다. 커스텀 role_authorities를 허용할 경우 권한 상수·상속·DENY를 포함한 공개 계약이 필요하다.
+22. MENTION 초기/동기화 응답은 확인했지만 현재 프론트 알림 도메인과 삭제·읽음 병합 규칙이 없다. 알림 기능 구현 전 응답 및 갱신 계약을 확정해야 한다.
 
 ## 13. 변경 범위 확인
 

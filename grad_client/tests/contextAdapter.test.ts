@@ -107,6 +107,52 @@ test('documented expanded response fields are preserved when the server provides
   assert.equal(item?.dueDate, '2026-08-30')
 })
 
+test('documented authority and mention metadata do not block workspace normalization', () => {
+  const result = normalizeServerContext(
+    [
+      {
+        type: 'NODE',
+        id: 30,
+        node_type: 'TEAM',
+        title: 'Authority Team',
+        path: [30],
+        updated_at: '2026-08-30T01:00:00Z',
+      },
+      {
+        type: 'ROLE',
+        id: 9,
+        node_id: 30,
+        email: 'admin@example.com',
+        role: 'ADMIN',
+        updated_at: '2026-08-30T01:01:00Z',
+      },
+      {
+        type: 'AUTHORITY',
+        id: 2,
+        node_id: 30,
+        role: 'ADMIN',
+        authority: '011111111111111111111111',
+        updated_at: '2026-08-30T01:02:00Z',
+      },
+      {
+        type: 'MENTION',
+        id: 3,
+        comment_id: 7,
+        work_item_id: 'WI-30',
+        message: '댓글에서 회원님을 멘션했습니다.',
+        is_read: false,
+        updated_at: '2026-08-30T01:03:00Z',
+      },
+    ],
+    'admin@example.com',
+  )
+
+  assert.equal(result.issues.length, 0)
+  assert.equal(result.workspace.roles.length, 1)
+  assert.equal(result.workspace.roles[0]?.roleName, 'ADMIN')
+  assert.equal(result.lastUpdatedAt, '2026-08-30T01:03:00Z')
+})
+
 test('an empty context is valid and still keeps the authenticated identity', () => {
   const result = normalizeServerContext([], 'empty@example.com')
 

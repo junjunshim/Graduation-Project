@@ -21,6 +21,7 @@ import {
   type ApiRequestOptions,
 } from './apiClient'
 import {
+  getServerLoginAccessToken,
   isServerStatusResponse,
   parseServerContextItems,
   type ServerContextResponse,
@@ -202,8 +203,9 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
       },
       includeToken: false,
     })) as ServerLoginResponse
+    const accessToken = getServerLoginAccessToken(response)
 
-    if (response.status === 'error' || !response.access_token || !response.refresh_token) {
+    if (!accessToken) {
       return {
         status: 'error',
         message: response.message ?? '로그인에 실패했습니다.',
@@ -212,8 +214,7 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
 
     shouldRollbackSession = true
     setServerSession({
-      accessToken: response.access_token,
-      refreshToken: response.refresh_token,
+      accessToken,
       email,
     })
     setCurrentSessionUserId(email)

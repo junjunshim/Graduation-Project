@@ -1,4 +1,5 @@
 import './apiClient.test.js'
+import './apiTypes.test.js'
 import './contextAdapter.test.js'
 import './localStore.test.js'
 import './mockScenario.test.js'

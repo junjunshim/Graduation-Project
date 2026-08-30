@@ -11,6 +11,7 @@ test('api client normalizes the base URL and serializes JSON bodies', async () =
   globalThis.fetch = async (input, init) => {
     assert.equal(input, 'http://localhost:8080/api/v1/users')
     assert.equal(init?.method, 'POST')
+    assert.equal(init?.credentials, 'omit')
     assert.equal(new Headers(init?.headers).get('Content-Type'), 'application/json')
     assert.equal(init?.body, JSON.stringify({ email: 'test@example.com' }))
     return new Response(JSON.stringify({ status: 'success' }), { status: 200 })

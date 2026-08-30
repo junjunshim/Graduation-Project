@@ -6,19 +6,17 @@ using namespace drogon;
 
 namespace api
 {
-namespace v1
-{
 class ContextController : public drogon::HttpController<ContextController>
 {
   public:
     METHOD_LIST_BEGIN
     // use METHOD_ADD to add your custom processing function here;
-    // METHOD_ADD(ContextController::get, "/{2}/{1}", Get); // path is /api/v1/ContextController/{arg2}/{arg1}
-    // METHOD_ADD(ContextController::your_method_name, "/{1}/{2}/list", Get); // path is /api/v1/ContextController/{arg1}/{arg2}/list
+    // METHOD_ADD(ContextController::get, "/{2}/{1}", Get); // path is /api/ContextController/{arg2}/{arg1}
+    // METHOD_ADD(ContextController::your_method_name, "/{1}/{2}/list", Get); // path is /api/ContextController/{arg1}/{arg2}/list
     // ADD_METHOD_TO(ContextController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
-    ADD_METHOD_TO(ContextController::getInitialContext, "/api/v1/context/init", Get, "JwtFilter");
-    ADD_METHOD_TO(ContextController::syncContext, "/api/v1/context/sync", Get, "JwtFilter");
+    ADD_METHOD_TO(ContextController::getInitialContext, "/api/context/init", Get, "JwtFilter");
+    ADD_METHOD_TO(ContextController::syncContext, "/api/context/sync", Get, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -28,5 +26,4 @@ class ContextController : public drogon::HttpController<ContextController>
     void getInitialContext(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void syncContext(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
-}
 }

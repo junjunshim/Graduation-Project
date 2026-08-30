@@ -6,19 +6,17 @@ using namespace drogon;
 
 namespace api
 {
-namespace v1
-{
 class RoleController : public drogon::HttpController<RoleController>
 {
   public:
     METHOD_LIST_BEGIN
     // use METHOD_ADD to add your custom processing function here;
-    // METHOD_ADD(RoleController::get, "/{2}/{1}", Get); // path is /api/v1/RoleController/{arg2}/{arg1}
-    // METHOD_ADD(RoleController::your_method_name, "/{1}/{2}/list", Get); // path is /api/v1/RoleController/{arg1}/{arg2}/list
+    // METHOD_ADD(RoleController::get, "/{2}/{1}", Get); // path is /api/RoleController/{arg2}/{arg1}
+    // METHOD_ADD(RoleController::your_method_name, "/{1}/{2}/list", Get); // path is /api/RoleController/{arg1}/{arg2}/list
     // ADD_METHOD_TO(RoleController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
-    ADD_METHOD_TO(RoleController::addRole, "/api/v1/roles", Post, "JwtFilter");
-    ADD_METHOD_TO(RoleController::updateRole, "/api/v1/roles", Patch, "JwtFilter");
+    ADD_METHOD_TO(RoleController::addRole, "/api/roles", Post, "JwtFilter");
+    ADD_METHOD_TO(RoleController::updateRole, "/api/roles", Patch, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -28,5 +26,4 @@ class RoleController : public drogon::HttpController<RoleController>
     void addRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void updateRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
-}
 }

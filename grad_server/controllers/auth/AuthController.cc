@@ -255,17 +255,6 @@ void AuthController::refreshUserToken(const HttpRequestPtr &req, std::function<v
                 user_email, new_refresh_token, new_refresh_expiry
             );
         },
-                [callback](const orm::DrogonDbException &e) {
-                    Json::Value ret;
-                    ret["status"] = "error";
-                    ret["message"] = "토큰 정보 업데이트에 실패했습니다.";
-                    auto resp = HttpResponse::newHttpJsonResponse(ret);
-                    resp->setStatusCode(k500InternalServerError);
-                    callback(resp);
-                },
-                user_email, new_refresh_token, new_refresh_expiry
-            );
-        },
         [callback](const orm::DrogonDbException &e) {
             Json::Value ret;
             ret["status"] = "error";

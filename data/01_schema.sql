@@ -238,3 +238,21 @@ CREATE TABLE IF NOT EXISTS comment_mentions (
 );
 CREATE INDEX idx_mentions_comment_id ON comment_mentions(comment_id);
 CREATE INDEX idx_mentions_user_id ON comment_mentions(mentioned_user_id);
+
+-- 10. 업무 첨부 파일 테이블
+CREATE TABLE IF NOT EXISTS work_item_files (
+    file_id SERIAL PRIMARY KEY,
+    work_item_id VARCHAR(50) NOT NULL REFERENCES work_items(work_item_id) ON DELETE CASCADE,
+    uploader_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    original_file_name VARCHAR(255) NOT NULL,
+    stored_file_name VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size BIGINT NOT NULL,
+    mime_type VARCHAR(100),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_files_work_item_id ON work_item_files(work_item_id);
+CREATE INDEX idx_files_is_deleted ON work_item_files(is_deleted);
+

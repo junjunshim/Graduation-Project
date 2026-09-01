@@ -86,6 +86,13 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0404") != std::string::npos) return DbErrorCode::TargetIsAdmin;
     else if (errMsg.find("P0405") != std::string::npos) return DbErrorCode::InvalidRoleChange;
     else if (errMsg.find("P0406") != std::string::npos) return DbErrorCode::RoleChangeFailed;
+    else if (errMsg.find("P0407") != std::string::npos) return DbErrorCode::RoleNotDefined;
+    else if (errMsg.find("P0408") != std::string::npos) return DbErrorCode::RoleNameEmpty;
+    else if (errMsg.find("P0409") != std::string::npos) return DbErrorCode::CannotModifyAdminRole;
+    else if (errMsg.find("P0410") != std::string::npos) return DbErrorCode::InvalidAuthorityBit;
+    else if (errMsg.find("P0411") != std::string::npos) return DbErrorCode::CreateRoleDefinitionFailed;
+    else if (errMsg.find("P0412") != std::string::npos) return DbErrorCode::RoleDefinitionAlreadyExists;
+    else if (errMsg.find("P0413") != std::string::npos) return DbErrorCode::UpdateRoleAuthorityFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
@@ -208,6 +215,41 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::RoleChangeFailed:{
             ret["message"] = "사용자 역할 변경에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RoleNotDefined:{
+            ret["message"] = "해당 노드에 정의되지 않은 역할입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RoleNameEmpty:{
+            ret["message"] = "역할 이름이 비어있습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::CannotModifyAdminRole:{
+            ret["message"] = "ADMIN 역할은 임의로 생성하거나 수정할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::InvalidAuthorityBit:{
+            ret["message"] = "유효하지 않은 24비트 권한 비트 문자열입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::CreateRoleDefinitionFailed:{
+            ret["message"] = "역할 정의 생성에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RoleDefinitionAlreadyExists:{
+            ret["message"] = "해당 노드에 이미 존재하는 역할입니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::UpdateRoleAuthorityFailed:{
+            ret["message"] = "역할 권한 수정에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

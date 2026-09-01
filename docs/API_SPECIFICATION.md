@@ -46,6 +46,8 @@
 | 활동 기록 조회 | Get | /api/org/activities | 완료 | [link](api/Get/activity.md) |
 | Role 부여 | Post | /api/roles | 완료 | [link](api/Post/role.md) |
 | Role 수정 | Patch | /api/roles | 완료 | [link](api/Patch/role.md) |
+| Role 생성 | Post | /api/roles/definition | 완료 | [link](api/Post/role_definition.md) |
+| Role 권한 수정 | Patch | /api/roles/definition | 완료 | [link](api/Patch/role_definition.md) |
 | work_item 생성 | Post | /api/workItems | 완료 | [link](api/Post/work_item.md) |
 | work_item 수정 | Patch | /api/workItems | 완료 | [link](api/Patch/work_item.md) |
 | work_item 삭제 | Delete | /api/workItems | 완료 | [link](api/Delete/work_item.md) |

@@ -32,19 +32,6 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
     std::string target_email = (*jsonPtr)["email"].asString();
     int node_id = (*jsonPtr)["node_id"].asInt();
     std::string role_name = (*jsonPtr)["role_name"].asString();
-    
-    // role_name 유효성 검사
-    if(role_name != "ADMIN" && role_name != "MANAGER" && role_name != "MEMBER" && role_name != "VIEWER"){
-        Json::Value ret;
-        ret["status"] = "error";
-        ret["code"] = "400";
-        ret["message"] = "유효하지 않은 role_name입니다. (허용값: ADMIN, MANAGER, MEMBER, VIEWER)";
-
-        auto resp = HttpResponse::newHttpJsonResponse(ret);
-        resp->setStatusCode(k400BadRequest);
-        callback(resp);
-        return;
-    }
 
     // 2. 비지니스 로직
     //데이터베이스 클라이언트 가져오기
@@ -96,27 +83,22 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
     // 요청 바디에서 JSON 데이터 파싱
     auto jsonPtr = req->getJsonObject();
     
-    // 필수 파라미터
-    std::string target_email = (*jsonPtr)["email"].asString();
-    int node_id = (*jsonPtr)["node_id"].asInt();
-
-    // 선택 파라미터
-    auto getStrOrNull = [&](const std::string &key) {
-        return (*jsonPtr)[key].isNull() ? "" : (*jsonPtr)[key].asString();
-    };
-    
     // 필수 파라미터 유효성 검사
-    if(!jsonPtr || (*jsonPtr)["email"].isNull() || (*jsonPtr)["node_id"].isNull()){
+    if(!jsonPtr || !validateStrings(jsonPtr, "email", "role_name") || !validateInts(jsonPtr, "node_id")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(email, node_id)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(email, node_id, role_name)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
         callback(resp);
         return;
     }
+
+    std::string target_email = (*jsonPtr)["email"].asString();
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    std::string role_name = (*jsonPtr)["role_name"].asString();
     
     // 2. 비지니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기
@@ -158,6 +140,122 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
         requester_email, 
         target_email, 
         node_id, 
-        getStrOrNull("role_name")
+        role_name
+    );
+}
+
+// 노드별 신규 역할 생성 api
+void RoleController::createRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "role_name", "authority") || !validateInts(jsonPtr, "node_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(node_id, role_name, authority)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    std::string role_name = (*jsonPtr)["role_name"].asString();
+    std::string authority = (*jsonPtr)["authority"].asString();
+
+    if (authority.length() != 24) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "authority는 24비트 2진수 문자열이어야 합니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM create_role_definition($1, $2, $3, $4)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k201Created);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, node_id, role_name, authority
+    );
+}
+
+// 노드별 역할 권한 수정 api
+void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "role_name", "authority") || !validateInts(jsonPtr, "node_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(node_id, role_name, authority)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    std::string role_name = (*jsonPtr)["role_name"].asString();
+    std::string authority = (*jsonPtr)["authority"].asString();
+
+    if (authority.length() != 24) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "authority는 24비트 2진수 문자열이어야 합니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM update_role_authority($1, $2, $3, $4)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, node_id, role_name, authority
     );
 }

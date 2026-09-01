@@ -1,7 +1,5 @@
 -- 0. enum 타입 정의
-DROP TYPE IF EXISTS role_name CASCADE;
 DROP TYPE IF EXISTS history_status CASCADE;
-CREATE TYPE role_name AS ENUM ('ADMIN', 'MANAGER', 'MEMBER', 'VIEWER');
 CREATE TYPE history_status AS ENUM ('inserted', 'updated', 'deleted');
 
 
@@ -39,7 +37,7 @@ CREATE TABLE IF NOT EXISTS role_assignments (
     assignment_id SERIAL PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_assignments UNIQUE (user_id, node_id, role)
@@ -52,7 +50,7 @@ CREATE INDEX idx_assignments_node_id ON role_assignments(node_id);
 CREATE TABLE IF NOT EXISTS role_authorities (
     authority_id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     authority BIT(24) NOT NULL, -- Bitmask 권한 (8 -> 24)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -70,7 +68,7 @@ CREATE TABLE IF NOT EXISTS authority_constants (
 
 -- 4.2 역할별 기본 권한 테이블
 CREATE TABLE IF NOT EXISTS role_defaults (
-    role role_name PRIMARY KEY,
+    role VARCHAR(50) PRIMARY KEY,
     default_authority BIT(24) NOT NULL
 );
 
@@ -148,7 +146,7 @@ CREATE TABLE role_assignment_histories (
     assignment_id INTEGER NOT NULL,
     user_id VARCHAR(50) NOT NULL,
     node_id INTEGER NOT NULL,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     change_status history_status NOT NULL,
@@ -163,7 +161,7 @@ CREATE TABLE role_authority_histories (
     history_id SERIAL PRIMARY KEY,
     authority_id INTEGER NOT NULL,
     node_id INTEGER NOT NULL,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     authority BIT(24) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,

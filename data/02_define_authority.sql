@@ -17,7 +17,7 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 ('NODE_INFO_CHANGE', 12, '노드 정보 변경 가능'),
 ('NODE_SUB_CREATE', 13, '하위 노드 생성 가능'),
 ('NODE_ADD_ROLE', 14,'사용자에게 역할 부여 가능'),
--- (bit 15 reserved)
+('ROLE_CHANGE', 15, '역할 생성 및 권한 변경 가능'),
 -- Integration Bits (16-19)
 ('FILE_VIEW', 16, '파일 조회 및 다운로드 가능'),
 ('FILE_CHANGE', 17, '파일 등록 및 삭제 가능'),
@@ -30,12 +30,12 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 
 -- Role Default Permissions
 -- admin => deny 비트(23) 제외 모두 1
--- manager => bit 0~6, 8~14, 16, 17, 20, 21 ON  -> B'001100110111111101111111'
+-- manager => bit 0~6, 8~17, 20, 21 ON  -> B'001100111111111101111111'
 -- member  => bit 0~4, 6, 8, 9, 16, 17, 20 ON    -> B'000100110000001101010111'
 -- viewer  => bit 0, 4 ON (파일 권한 제외)       -> B'000000000000000000010001'
 
 INSERT INTO role_defaults (role, default_authority) VALUES
 ('ADMIN',   B'011111111111111111111111'),
-('MANAGER', B'001100110111111101111111'),
+('MANAGER', B'001100111111111101111111'),
 ('MEMBER',  B'000100110000001101010111'),
 ('VIEWER',  B'000000000000000000010001');

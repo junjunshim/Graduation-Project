@@ -23,6 +23,13 @@ enum class DbErrorCode {
     TargetIsAdmin,              // P0404 변경할 타켓이 ADMIN
     InvalidRoleChange,          // P0405 변경할 역할이 부적절함
     RoleChangeFailed,           // P0406 사용자 역할 변경 실패
+    RoleNotDefined,             // P0407 노드에 정의되지 않은 역할
+    RoleNameEmpty,              // P0408 역할 이름이 비어있음
+    CannotModifyAdminRole,      // P0409 ADMIN 역할은 생성/수정 불가
+    InvalidAuthorityBit,        // P0410 유효하지 않은 24비트 권한 문자열
+    CreateRoleDefinitionFailed, // P0411 역할 정의 생성 실패
+    RoleDefinitionAlreadyExists,// P0412 노드에 이미 존재하는 역할 정의
+    UpdateRoleAuthorityFailed,  // P0413 역할 권한 수정 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     EmailNotFound,              // P0503 이메일 찾을 수 없음

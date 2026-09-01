@@ -430,6 +430,13 @@ BEGIN
     FROM work_item_comments c
     JOIN users u ON c.author_user_id = u.user_id
     WHERE c.comment_id = v_new_comment_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0606' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0607]Failed to add comment: %, (REASON: %)', p_work_item_id, SQLERRM
+            USING ERRCODE = 'P0607';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -471,6 +478,13 @@ BEGIN
     JOIN work_item_comments c ON m.comment_id = c.comment_id
     JOIN users u ON m.mentioned_user_id = u.user_id
     WHERE m.mention_id = v_new_mention_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0002' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0608]Failed to add comment mention for: %, (REASON: %)', p_mentioned_email, SQLERRM
+            USING ERRCODE = 'P0608';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -490,15 +504,18 @@ DECLARE
     v_node_info_view BIT(24);
     v_wi_public_view BIT(24);
     v_wi_hidden_view BIT(24);
+    v_file_view BIT(24);
+    v_can_view_files BOOLEAN := FALSE;
 BEGIN
     -- 0. 권한 상수 로드
     SELECT 
         BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
-    INTO v_node_info_view, v_wi_public_view, v_wi_hidden_view
+        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+    INTO v_node_info_view, v_wi_public_view, v_wi_hidden_view, v_file_view
     FROM authority_constants
-    WHERE name IN ('NODE_INFO_VIEW', 'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW');
+    WHERE name IN ('NODE_INFO_VIEW', 'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'FILE_VIEW');
 
     -- 1. 요청자 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
@@ -518,10 +535,9 @@ BEGIN
     END IF;
 
     -- 3. 권한 대조
+    v_authority := get_effective_authority(v_requester_id, v_owner_node_id);
+
     IF v_owner_user_id <> v_requester_id THEN
-        -- 담당자가 아닌 경우 권한 비트 계산
-        v_authority := get_effective_authority(v_requester_id, v_owner_node_id);
-        
         -- 노드 보기 권한조차 없는 경우 거부
         IF (v_authority & v_node_info_view) != v_node_info_view THEN
             RAISE EXCEPTION '[P0103]Insufficient permissions to view node info. requester: %', p_requester_email
@@ -541,7 +557,12 @@ BEGIN
         END IF;
     END IF;
 
-    -- 4. 업무 상세(모든 필드)와 결합된 댓글 리스트 취합하여 JSON 형식으로 반환
+    -- 파일 조회 권한(FILE_VIEW) 검사 (소유자이거나 FILE_VIEW 권한 비트가 켜져 있는 경우)
+    IF v_owner_user_id = v_requester_id OR (v_authority & v_file_view) = v_file_view THEN
+        v_can_view_files := TRUE;
+    END IF;
+
+    -- 4. 업무 상세(모든 필드)와 결합된 댓글/파일 리스트 취합하여 JSON 형식으로 반환
     RETURN QUERY
     SELECT jsonb_build_object(
         'type', 'WORK_ITEM_DETAIL',
@@ -578,10 +599,329 @@ BEGIN
                 JOIN users u_author ON c.author_user_id = u_author.user_id
                 WHERE c.work_item_id = w.work_item_id
             ), '[]'::jsonb
-        )
+        ),
+        'files', CASE WHEN v_can_view_files THEN
+            COALESCE(
+                (
+                    SELECT jsonb_agg(
+                        jsonb_build_object(
+                            'file_id', f.file_id,
+                            'uploader_user_id', f.uploader_user_id,
+                            'uploader_name', u_uploader.name,
+                            'uploader_email', u_uploader.email,
+                            'original_file_name', f.original_file_name,
+                            'file_size', f.file_size,
+                            'mime_type', f.mime_type,
+                            'created_at', f.created_at
+                        ) ORDER BY f.created_at ASC
+                    )
+                    FROM work_item_files f
+                    JOIN users u_uploader ON f.uploader_user_id = u_uploader.user_id
+                    WHERE f.work_item_id = w.work_item_id AND f.is_deleted = FALSE
+                ), '[]'::jsonb
+            )
+        ELSE '[]'::jsonb END
     )::jsonb AS out_data
     FROM work_items w
     JOIN users u_owner ON w.owner_user_id = u_owner.user_id
     WHERE w.work_item_id = p_work_item_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0606' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0609]Failed to get work item detail: %, (REASON: %)', p_work_item_id, SQLERRM
+            USING ERRCODE = 'P0609';
+END;
+$$ LANGUAGE plpgsql;
+
+-- WorkItemController::addWorkItemFile
+CREATE OR REPLACE FUNCTION add_work_item_file(
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE,
+    p_original_file_name VARCHAR(255),
+    p_stored_file_name VARCHAR(255),
+    p_file_path TEXT,
+    p_file_size BIGINT,
+    p_mime_type VARCHAR(100) DEFAULT NULL
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_hidden BOOLEAN;
+    v_new_file_id INT;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 업무 존재 여부 확인 및 노드 ID 가져오기
+    SELECT owner_node_id, owner_user_id, hidden INTO v_owner_node_id, v_owner_user_id, v_hidden
+    FROM work_items WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0606]Work item does not exist or already deleted: %', p_work_item_id
+        USING ERRCODE = 'P0606';
+    END IF;
+
+    -- 3. 업무 접근 권한 및 파일 변경 권한(FILE_CHANGE) 검증
+    IF v_owner_user_id <> v_requester_id THEN
+        IF v_hidden = TRUE AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_HIDDEN_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to access hidden work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        IF v_hidden = FALSE AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PUBLIC_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to access public work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'FILE_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to upload file on this node. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 4. 파일 메타데이터 인서트
+    INSERT INTO work_item_files (work_item_id, uploader_user_id, original_file_name, stored_file_name, file_path, file_size, mime_type)
+    VALUES (p_work_item_id, v_requester_id, p_original_file_name, p_stored_file_name, p_file_path, p_file_size, p_mime_type)
+    RETURNING file_id INTO v_new_file_id;
+
+    -- 5. 활동 로그 기록
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'FILE', v_new_file_id::VARCHAR, 'Uploaded file: ' || p_original_file_name, 'inserted');
+
+    -- 6. 결과 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'file_id', f.file_id,
+        'work_item_id', f.work_item_id,
+        'uploader_user_id', f.uploader_user_id,
+        'uploader_name', u.name,
+        'uploader_email', u.email,
+        'original_file_name', f.original_file_name,
+        'file_size', f.file_size,
+        'mime_type', f.mime_type,
+        'created_at', f.created_at
+    )::jsonb AS out_data
+    FROM work_item_files f
+    JOIN users u ON f.uploader_user_id = u.user_id
+    WHERE f.file_id = v_new_file_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0606' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0610]Failed to add work item file: %, (REASON: %)', p_original_file_name, SQLERRM
+            USING ERRCODE = 'P0610';
+END;
+$$ LANGUAGE plpgsql;
+
+-- WorkItemController::deleteWorkItemFile
+CREATE OR REPLACE FUNCTION delete_work_item_file(
+    p_requester_email users.email%TYPE,
+    p_file_id INT
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_uploader_user_id users.user_id%TYPE;
+    v_work_item_id work_items.work_item_id%TYPE;
+    v_original_file_name VARCHAR(255);
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 파일 존재 여부 및 관련 노드/업로더 확인
+    SELECT f.uploader_user_id, f.work_item_id, f.original_file_name, w.owner_node_id
+    INTO v_uploader_user_id, v_work_item_id, v_original_file_name, v_owner_node_id
+    FROM work_item_files f
+    JOIN work_items w ON f.work_item_id = w.work_item_id
+    WHERE f.file_id = p_file_id AND f.is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]File does not exist or already deleted: %', p_file_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 권한 체크 (업로더 본인이거나 노드의 FILE_CHANGE 권한 보유 확인)
+    IF v_uploader_user_id <> v_requester_id THEN
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'FILE_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to delete file on this node. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 4. 소프트 딜리트
+    UPDATE work_item_files
+    SET is_deleted = TRUE
+    WHERE file_id = p_file_id;
+
+    -- 5. 활동 로그 기록
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'FILE', p_file_id::VARCHAR, 'Deleted file: ' || v_original_file_name, 'deleted');
+
+    -- 6. 결과 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'file_id', p_file_id,
+        'work_item_id', v_work_item_id,
+        'is_deleted', TRUE
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0611]Failed to delete work item file: %, (REASON: %)', p_file_id, SQLERRM
+            USING ERRCODE = 'P0611';
+END;
+$$ LANGUAGE plpgsql;
+
+-- WorkItemController::getWorkItemFiles
+CREATE OR REPLACE FUNCTION get_work_item_files(
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_hidden BOOLEAN;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 업무 존재 여부 확인 및 노드 ID 가져오기
+    SELECT owner_node_id, owner_user_id, hidden INTO v_owner_node_id, v_owner_user_id, v_hidden
+    FROM work_items WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0606]Work item does not exist or already deleted: %', p_work_item_id
+        USING ERRCODE = 'P0606';
+    END IF;
+
+    -- 3. 업무 접근 권한 및 파일 조회 권한(FILE_VIEW) 검증
+    IF v_owner_user_id <> v_requester_id THEN
+        IF v_hidden = TRUE AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_HIDDEN_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to view hidden work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        IF v_hidden = FALSE AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PUBLIC_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to view public work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'FILE_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to view files on this node. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 4. 파일 목록 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'file_id', f.file_id,
+        'work_item_id', f.work_item_id,
+        'uploader_user_id', f.uploader_user_id,
+        'uploader_name', u.name,
+        'uploader_email', u.email,
+        'original_file_name', f.original_file_name,
+        'file_size', f.file_size,
+        'mime_type', f.mime_type,
+        'created_at', f.created_at
+    )::jsonb AS out_data
+    FROM work_item_files f
+    JOIN users u ON f.uploader_user_id = u.user_id
+    WHERE f.work_item_id = p_work_item_id AND f.is_deleted = FALSE
+    ORDER BY f.created_at ASC;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0606' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0612]Failed to fetch work item files: %, (REASON: %)', p_work_item_id, SQLERRM
+            USING ERRCODE = 'P0612';
+END;
+$$ LANGUAGE plpgsql;
+
+-- WorkItemController::getWorkItemFileDownload (다운로드 시 실제 경로 및 권한 검증용)
+CREATE OR REPLACE FUNCTION get_work_item_file_download(
+    p_requester_email users.email%TYPE,
+    p_file_id INT
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_hidden BOOLEAN;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 파일 및 연관 업무/노드 확인
+    SELECT w.owner_node_id, w.owner_user_id, w.hidden INTO v_owner_node_id, v_owner_user_id, v_hidden
+    FROM work_item_files f
+    JOIN work_items w ON f.work_item_id = w.work_item_id
+    WHERE f.file_id = p_file_id AND f.is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]File does not exist or already deleted: %', p_file_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 업무 접근 권한 및 파일 다운로드 권한(FILE_VIEW) 검증
+    IF v_owner_user_id <> v_requester_id THEN
+        IF v_hidden = TRUE AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_HIDDEN_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to access hidden work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        IF v_hidden = FALSE AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PUBLIC_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to access public work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'FILE_VIEW') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to download file. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 4. 파일 상세 경로 및 메타데이터 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'file_id', f.file_id,
+        'work_item_id', f.work_item_id,
+        'original_file_name', f.original_file_name,
+        'stored_file_name', f.stored_file_name,
+        'file_path', f.file_path,
+        'file_size', f.file_size,
+        'mime_type', f.mime_type
+    )::jsonb AS out_data
+    FROM work_item_files f
+    WHERE f.file_id = p_file_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0613]Failed to get work item file download: %, (REASON: %)', p_file_id, SQLERRM
+            USING ERRCODE = 'P0613';
 END;
 $$ LANGUAGE plpgsql;

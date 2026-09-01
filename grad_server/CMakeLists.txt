@@ -41,10 +41,24 @@ else ()
     message(STATUS "use c++20")
 endif ()
 
-aux_source_directory(controllers CTL_SRC)
-aux_source_directory(filters FILTER_SRC)
+aux_source_directory(controllers/auth CTL_AUTH_SRC)
+aux_source_directory(controllers/node CTL_NODE_SRC)
+aux_source_directory(controllers/work CTL_WORK_SRC)
+aux_source_directory(controllers/role CTL_ROLE_SRC)
+aux_source_directory(controllers/context CTL_CONTEXT_SRC)
+aux_source_directory(controllers/notification CTL_NOTIFICATION_SRC)
+set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC})
+
+aux_source_directory(filters/auth FILTER_SRC)
 aux_source_directory(plugins PLUGIN_SRC)
-aux_source_directory(models MODEL_SRC)
+
+aux_source_directory(models/auth MODEL_AUTH_SRC)
+aux_source_directory(models/node MODEL_NODE_SRC)
+aux_source_directory(models/work MODEL_WORK_SRC)
+aux_source_directory(models/role MODEL_ROLE_SRC)
+set(MODEL_SRC ${MODEL_AUTH_SRC} ${MODEL_NODE_SRC} ${MODEL_WORK_SRC} ${MODEL_ROLE_SRC})
+
+aux_source_directory(utils/common UTIL_SRC)
 
 drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
                     ${CMAKE_CURRENT_BINARY_DIR})
@@ -58,14 +72,26 @@ drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
 
 target_include_directories(${PROJECT_NAME}
                            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
-                                   ${CMAKE_CURRENT_SOURCE_DIR}/models)
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/auth
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/node
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/work
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/role
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/context
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/notification
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/filters/auth
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/models/auth
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/models/node
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/models/work
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/models/role
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/common)
 target_sources(${PROJECT_NAME}
                PRIVATE
                ${SRC_DIR}
                ${CTL_SRC}
                ${FILTER_SRC}
                ${PLUGIN_SRC}
-               ${MODEL_SRC})
+               ${MODEL_SRC}
+               ${UTIL_SRC})
 # ##############################################################################
 # uncomment the following line for dynamically loading views 
 # set_property(TARGET ${PROJECT_NAME} PROPERTY ENABLE_EXPORTS ON)

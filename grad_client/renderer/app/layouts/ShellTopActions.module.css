@@ -1,0 +1,325 @@
+.shellTopActions {
+  --surface-page: var(--axis-surface-canvas);
+  --surface-panel: var(--axis-surface-panel);
+  --surface-panel-muted: var(--axis-surface-muted);
+  --surface-input: var(--axis-surface-panel);
+  --surface-hover: var(--axis-surface-muted);
+  --text-primary: var(--axis-text-primary);
+  --text-secondary: var(--axis-text-secondary);
+  --text-muted: var(--axis-text-muted);
+  --line-default: var(--axis-line-default);
+  --line-strong: var(--axis-line-strong);
+  --line-selected: var(--axis-brand-primary);
+  --radius-sm: var(--axis-radius-action);
+  --accent-purple-soft: var(--axis-brand-primary-soft);
+  --accent-purple: var(--axis-text-selected);
+  --accent-blue-soft: var(--axis-status-info-soft);
+  --accent-blue: var(--axis-status-info);
+  --accent-green-soft: var(--axis-status-success-soft);
+  --accent-green: var(--axis-status-success);
+  --accent-amber-soft: var(--axis-status-warning-soft);
+  --accent-amber: var(--axis-status-warning);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-width: 0;
+  padding-top: var(--space-page-top);
+  background: var(--surface-page);
+}
+
+.shellTopActionsStandard {
+  padding-inline: var(--space-page-x);
+}
+
+.shellTopActionsWide {
+  padding-inline: 2.5rem;
+}
+
+.shellTopActionControls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.shellTopCustomActions {
+  align-self: flex-end;
+  flex: 0 1 30rem;
+  width: min(30rem, 100%);
+  min-width: 0;
+}
+
+.shellHeading {
+  display: grid;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+}
+
+.workItemHeading {
+  display: grid;
+  gap: 0.48rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workItemBackLink {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.workItemBackLink:hover {
+  color: var(--text-primary);
+}
+
+.workItemTitleLine {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.workItemTitle {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: clamp(1.55rem, 2vw, 1.85rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workItemCategory,
+.workItemStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  flex: 0 0 auto;
+  border-radius: var(--axis-radius-pill);
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.workItemCategory {
+  padding: 0.28rem 0.52rem;
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.workItemCategory[data-tone='purple'] {
+  background: var(--accent-purple-soft);
+  color: var(--accent-purple);
+}
+
+.workItemCategory[data-tone='blue'],
+.workItemCategory[data-tone='sky'] {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.workItemCategory[data-tone='green'] {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.workItemCategory[data-tone='orange'] {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.workItemStatus {
+  margin-left: auto;
+  min-width: 4.5rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.84rem;
+}
+
+.workItemStatus[data-tone='todo'] {
+  background: var(--axis-status-info-soft);
+  color: var(--axis-status-info);
+}
+
+.workItemStatus[data-tone='inProgress'] {
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
+}
+
+.workItemStatus[data-tone='done'] {
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+}
+
+.shellBreadcrumb {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  gap: 0.42rem;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(1.2rem, 1.8vw, 1.55rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+
+.shellPageTitle {
+  justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: clamp(1.2rem, 1.8vw, 1.55rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shellPageTitleDetail {
+  margin-left: 0.28rem;
+  color: var(--axis-brand-primary);
+}
+
+.shellBreadcrumb span,
+.shellBreadcrumb strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shellBreadcrumb svg {
+  flex: 0 0 auto;
+}
+
+.shellSubtitle {
+  justify-self: start;
+  max-width: 100%;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.shellGreeting {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.035em;
+}
+
+.shellGreetingIcon {
+  display: inline-flex;
+  color: var(--text-primary);
+}
+
+.shellSearchBox {
+  width: min(100%, 14rem);
+}
+
+.shellActionButtons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.shellIconButton,
+.shellProfileButton {
+  flex: 0 0 var(--axis-control-height-md);
+}
+
+.shellIconButton {
+  --axis-icon-button-border: 1px solid transparent;
+  --axis-icon-button-radius: var(--axis-radius-action);
+  --axis-icon-button-hover-border: var(--axis-line-strong);
+}
+
+.shellProfileButton {
+  --axis-icon-button-border: 1px solid var(--axis-brand-border);
+  --axis-icon-button-background: var(--axis-brand-primary-soft);
+  --axis-icon-button-color: var(--axis-text-selected);
+  --axis-icon-button-hover-border: var(--axis-brand-primary);
+  --axis-icon-button-hover-background: var(--axis-brand-primary-soft);
+  --axis-icon-button-hover-color: var(--axis-text-selected);
+}
+
+@media (max-width: 760px) {
+  .shellTopActions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding-top: var(--space-page-top-mobile);
+    padding-inline: var(--space-page-x-mobile);
+  }
+
+  .shellTopActionControls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .shellTopCustomActions {
+    align-self: stretch;
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .shellGreeting {
+    min-height: auto;
+    white-space: normal;
+  }
+
+  .shellSearchBox {
+    width: 100%;
+    max-width: none;
+  }
+
+  .shellActionButtons {
+    justify-content: flex-end;
+  }
+
+  .workItemTitleLine {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .workItemTitle {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .workItemStatus {
+    margin-left: 0;
+  }
+}

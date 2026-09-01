@@ -1,0 +1,207 @@
+:root {
+  --font-sans:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI Variable",
+    "Segoe UI",
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    sans-serif;
+
+  --radius-xl: 0.5rem;
+  --radius-lg: 0.5rem;
+  --radius-md: 0.45rem;
+  --radius-sm: 0.375rem;
+  --radius-xs: 0.25rem;
+
+  --shadow-window: none;
+  --shadow-panel: none;
+  --shadow-hover: none;
+
+  --space-page-x: 1.5rem;
+  --space-page-top: 1.35rem;
+  --space-page-bottom: 2rem;
+  --space-page-x-mobile: 1rem;
+  --space-page-top-mobile: 1rem;
+  --space-page-bottom-mobile: 1.5rem;
+
+  --space-section-lg: 1.35rem;
+  --space-section: 1rem;
+  --space-stack: 0.75rem;
+  --space-compact: 0.5rem;
+
+  --space-panel-lg: 1.1rem;
+  --space-panel: 0.9rem;
+  --space-panel-compact: 0.75rem;
+
+  --space-control-y: 0.62rem;
+  --space-control-x: 0.75rem;
+  --space-pill-y: 0.3rem;
+  --space-pill-x: 0.52rem;
+  --window-titlebar-height: 48px;
+
+  /* Workspace v2 foundation. Keep these separate from the legacy theme
+     tokens until every authenticated route has migrated. */
+  --axis-control-height-sm: 2rem;
+  --axis-control-height-md: 2.5rem;
+  --axis-radius-control: 0.48rem;
+  --axis-radius-action: 0.42rem;
+  --axis-radius-panel: 0.58rem;
+  --axis-radius-surface: 0.5rem;
+  --axis-radius-pill: 999px;
+  --axis-motion-fast: 140ms;
+  --axis-motion-standard: 150ms;
+
+  --axis-text-on-brand: #ffffff;
+  --axis-text-icon-strong: #26324b;
+  --axis-text-icon-muted: #65718c;
+  --axis-text-disabled: #b6bdca;
+
+  --axis-shadow-field: 0 1px 2px rgba(15, 23, 42, 0.03);
+  --axis-shadow-card-hover: 0 8px 24px rgba(25, 35, 58, 0.08);
+  --axis-shadow-row-hover: 0 4px 14px rgba(15, 23, 42, 0.035);
+  --axis-shadow-popover: 0 12px 30px rgba(15, 23, 42, 0.12);
+  --axis-shadow-dialog: 0 18px 48px rgba(15, 23, 42, 0.2);
+  --axis-focus-shadow: 0 0 0 3px rgba(98, 92, 242, 0.1);
+  --axis-selected-ring: 0 0 0 1px rgba(98, 92, 242, 0.08);
+  --axis-focus-outline: rgba(98, 92, 242, 0.45);
+  --axis-option-focus-outline: rgba(98, 92, 242, 0.38);
+  --axis-dialog-backdrop: rgba(15, 23, 42, 0.32);
+  --axis-dialog-border: rgba(220, 226, 237, 0.9);
+}
+
+:root,
+[data-theme='light'] {
+  --axis-surface-canvas: #ffffff;
+  --axis-surface-panel: #ffffff;
+  --axis-surface-muted: #f8f9fc;
+
+  --axis-text-primary: #10172d;
+  --axis-text-secondary: #535e77;
+  --axis-text-muted: #657089;
+  --axis-dialog-text-muted: #657089;
+
+  --axis-line-default: #dce2ed;
+  --axis-line-strong: #c9d1df;
+  --axis-dialog-divider: #edf0f5;
+
+  --axis-brand-primary: #625cf2;
+  --axis-brand-primary-hover: #5650e8;
+  --axis-brand-primary-soft: #f0efff;
+  --axis-brand-border: #c8c7ff;
+  --axis-brand-badge-surface: #f7f6ff;
+
+  --axis-text-selected: #5650e8;
+  --axis-danger: #b42318;
+  --axis-danger-soft: rgba(180, 35, 24, 0.12);
+  --axis-status-info: #2f5fb8;
+  --axis-status-info-soft: #edf4ff;
+  --axis-status-success: #217346;
+  --axis-status-success-soft: #edf7ee;
+  --axis-status-warning: #8b6415;
+  --axis-status-warning-soft: #fcf3d9;
+
+  --axis-focus-outline: #625cf2;
+
+  --surface-app: #ffffff;
+  --surface-shell: #fbfbfa;
+  --surface-sidebar: #f7f7f5;
+  --surface-page: #ffffff;
+  --surface-panel: #ffffff;
+  --surface-panel-muted: #f6f6f4;
+  --surface-panel-subtle: #fafaf9;
+  --surface-hover: #f4f4f2;
+  --surface-selected: #f0f5ff;
+  --surface-selected-strong: #e5eeff;
+  --surface-input: #ffffff;
+  --surface-input-disabled: #f7f7f5;
+
+  --text-primary: #37352f;
+  --text-secondary: #5f5b53;
+  --text-muted: #8f8a80;
+  --text-inverse: #ffffff;
+
+  --line-default: #e7e5df;
+  --line-strong: #d4d1c8;
+  --line-selected: #b9c8ef;
+
+  --accent-blue-soft: #edf4ff;
+  --accent-blue: #2f5fb8;
+  --accent-purple-soft: #f1edff;
+  --accent-purple: #6e56cf;
+  --accent-amber-soft: #fcf3d9;
+  --accent-amber: #8b6415;
+  --accent-green-soft: #edf7ee;
+  --accent-green: #217346;
+  --accent-red-soft: #fff1ef;
+  --accent-red: #b42318;
+}
+
+[data-theme='dark'] {
+  --axis-surface-canvas: #18191d;
+  --axis-surface-panel: #202127;
+  --axis-surface-muted: #282a31;
+
+  --axis-text-primary: #f2f3f8;
+  --axis-text-secondary: #b7bdcb;
+  --axis-text-muted: #858da0;
+  --axis-dialog-text-muted: #929aac;
+
+  --axis-line-default: #343741;
+  --axis-line-strong: #484c59;
+  --axis-dialog-divider: #343741;
+
+  --axis-brand-primary: #918cff;
+  --axis-brand-primary-hover: #a6a2ff;
+  --axis-brand-primary-soft: rgba(98, 92, 242, 0.16);
+  --axis-brand-border: rgba(145, 140, 255, 0.45);
+  --axis-brand-badge-surface: rgba(98, 92, 242, 0.12);
+
+  --axis-text-on-brand: #10172d;
+  --axis-text-icon-strong: #b7bdcb;
+  --axis-text-selected: #a6a2ff;
+  --axis-danger: #ff9b90;
+  --axis-danger-soft: rgba(180, 35, 24, 0.2);
+  --axis-status-info: #93afe8;
+  --axis-status-info-soft: rgba(88, 124, 194, 0.18);
+  --axis-status-success: #8fe0ad;
+  --axis-status-success-soft: rgba(33, 115, 70, 0.22);
+  --axis-status-warning: #f0c266;
+  --axis-status-warning-soft: rgba(138, 104, 24, 0.2);
+
+  --axis-focus-outline: #918cff;
+
+  --surface-app: #191919;
+  --surface-shell: #191919;
+  --surface-sidebar: #1f1f1f;
+  --surface-page: #191919;
+  --surface-panel: #202020;
+  --surface-panel-muted: #262626;
+  --surface-panel-subtle: #232323;
+  --surface-hover: #292929;
+  --surface-selected: #243047;
+  --surface-selected-strong: #2b3a57;
+  --surface-input: #232323;
+  --surface-input-disabled: #272727;
+
+  --text-primary: #efefec;
+  --text-secondary: #b6b4ad;
+  --text-muted: #8d8b85;
+  --text-inverse: #191919;
+
+  --line-default: #303030;
+  --line-strong: #3c3c3c;
+  --line-selected: #4a5f8f;
+
+  --accent-blue-soft: rgba(88, 124, 194, 0.18);
+  --accent-blue: #93afe8;
+  --accent-purple-soft: rgba(126, 105, 205, 0.22);
+  --accent-purple: #b9a7ff;
+  --accent-amber-soft: rgba(138, 104, 24, 0.2);
+  --accent-amber: #f0c266;
+  --accent-green-soft: rgba(33, 115, 70, 0.22);
+  --accent-green: #8fe0ad;
+  --accent-red-soft: rgba(180, 35, 24, 0.2);
+  --accent-red: #ff9b90;
+}

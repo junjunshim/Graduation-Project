@@ -1,0 +1,91 @@
+.statePage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: var(--color-text-primary, #18202f);
+  background: var(--color-background, #f5f7fb);
+}
+
+.stateCard {
+  width: min(520px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 40px;
+  border: 1px solid var(--color-border, #dce2eb);
+  border-radius: 18px;
+  text-align: center;
+  background: var(--color-surface, #ffffff);
+  box-shadow: 0 18px 50px rgb(25 40 70 / 10%);
+}
+
+.stateCard h1,
+.stateCard p {
+  margin: 0;
+}
+
+.stateCard h1 {
+  font-size: 20px;
+}
+
+.stateCard p {
+  color: var(--color-text-secondary, #657086);
+  line-height: 1.6;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #d8e2f2;
+  border-top-color: #4f6fd8;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.errorMark {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #9f2f2f;
+  font-weight: 800;
+  background: #fdeaea;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.primaryAction,
+.secondaryAction {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryAction {
+  color: #ffffff;
+  background: #4f6fd8;
+}
+
+.secondaryAction {
+  color: inherit;
+  border-color: var(--color-border, #dce2eb);
+  background: transparent;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noEmit": false,
+    "rootDir": ".",
+    "outDir": "node_modules/.grad-client-tests",
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "renderer/features/workspace/model/types.ts",
+    "renderer/features/workspace/data/seed.ts",
+    "renderer/features/workspace/data/mockScenario.ts",
+    "renderer/features/workspace/data/server/apiTypes.ts",
+    "renderer/features/workspace/data/server/workspaceMode.ts",
+    "renderer/features/workspace/data/server/apiClient.ts",
+    "renderer/features/workspace/data/server/contextAdapter.ts",
+    "tests/**/*.ts"
+  ]
+}

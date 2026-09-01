@@ -1,0 +1,1181 @@
+.page,
+.dialogBackdrop {
+  --entry-background: var(--axis-surface-canvas);
+  --entry-panel: var(--axis-surface-panel);
+  --entry-panel-muted: var(--axis-surface-muted);
+  --entry-text: var(--axis-text-primary);
+  --entry-text-secondary: var(--axis-text-secondary);
+  --entry-text-muted: var(--axis-text-muted);
+  --entry-line: var(--axis-line-default);
+  --entry-line-strong: var(--axis-line-strong);
+  --entry-primary: var(--axis-brand-primary);
+  --entry-primary-strong: var(--axis-brand-primary-hover);
+  --entry-primary-soft: var(--axis-brand-primary-soft);
+}
+
+.page {
+  min-width: 0;
+  min-height: 100%;
+  padding: 1.55rem 1.5rem 2.75rem;
+  overflow: hidden;
+  background: var(--entry-background);
+  color: var(--entry-text);
+}
+
+.page button,
+.page input,
+.page a {
+  font-family: inherit;
+}
+
+.utilityBar {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--axis-control-height-md);
+}
+
+.searchBox {
+  width: min(18rem, 100%);
+  min-width: 8rem;
+  flex: 1 1 12rem;
+}
+
+.helpAnchor {
+  position: relative;
+}
+
+.helpPopover {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: -2.4rem;
+  z-index: 20;
+  width: 17.5rem;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.createButton {
+  --axis-button-padding: 0 1rem;
+  min-width: 8rem;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.createButton:hover {
+  transform: translateY(-1px);
+}
+
+.treeViewport {
+  min-width: 0;
+  margin-top: 2.25rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.treeCanvas {
+  --connector-radius: 0.55rem;
+  --connector-tail-radius: 0.3rem;
+  position: relative;
+  min-width: 74.25rem;
+  min-height: 49rem;
+  padding-bottom: 1rem;
+}
+
+.rootCard {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.95rem;
+  width: 21.55rem;
+  height: 6.45rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+  border: 1px solid var(--entry-line);
+  border-radius: var(--axis-radius-panel);
+  background: var(--entry-panel);
+  color: var(--entry-text);
+  text-align: left;
+  transition:
+    border-color var(--axis-motion-standard) ease,
+    box-shadow var(--axis-motion-standard) ease;
+}
+
+.rootCard::after {
+  content: '';
+  position: absolute;
+  top: calc(100% - 1px);
+  left: calc(50% - 0.5px);
+  width: 1px;
+  height: calc(1.9rem + 2px);
+  border-radius: var(--axis-radius-pill);
+  background: var(--entry-line-strong);
+  pointer-events: none;
+}
+
+.treeCanvas:not(:has(> .branchGrid)) > .rootCard::after {
+  display: none;
+}
+
+.rootCard:hover {
+  border-color: var(--entry-primary);
+  box-shadow: var(--axis-shadow-card-hover);
+}
+
+.workspaceGlyph {
+  --glyph-color: #625cf2;
+  --glyph-background: #eeedff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: var(--glyph-background);
+  color: var(--glyph-color);
+}
+
+.workspaceGlyphRoot,
+.workspaceGlyphBranch,
+.workspaceGlyphDialog,
+.workspaceGlyphList {
+  border-radius: var(--axis-radius-pill);
+}
+
+.workspaceGlyphRoot {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.workspaceGlyphBranch {
+  width: 3.35rem;
+  height: 3.35rem;
+}
+
+.workspaceGlyphLeaf {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--axis-radius-surface);
+}
+
+.workspaceGlyphList {
+  width: 3.65rem;
+  height: 3.65rem;
+}
+
+.workspaceGlyphDialog {
+  width: 3.5rem;
+  height: 3.5rem;
+}
+
+.toneIndigo {
+  --glyph-color: #544ee2;
+  --glyph-background: linear-gradient(145deg, #d9d7ff, #8f8bf8);
+}
+
+.toneTeal {
+  --glyph-color: #237e84;
+  --glyph-background: #dff2f2;
+}
+
+.toneBlue {
+  --glyph-color: #1572d3;
+  --glyph-background: #e4f1ff;
+}
+
+.toneGreen {
+  --glyph-color: #13a960;
+  --glyph-background: #e2f8eb;
+}
+
+.toneViolet {
+  --glyph-color: #7357ea;
+  --glyph-background: #eee8ff;
+}
+
+.toneOrange {
+  --glyph-color: #dd8411;
+  --glyph-background: #fff0df;
+}
+
+.tonePink {
+  --glyph-color: #be3b88;
+  --glyph-background: #fde6f3;
+}
+
+.rootCardCopy,
+.rootOptionCopy {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.rootNameLine,
+.rowNameLine {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  min-width: 0;
+}
+
+.rootNameLine strong,
+.rowNameLine strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--entry-text);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rootCardCopy > span:not(.rootNameLine),
+.rootOptionCopy > span:not(.rootNameLine) {
+  color: var(--entry-text-secondary);
+  font-size: 0.76rem;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.rootCard .rootNameLine strong {
+  font-size: 1rem;
+}
+
+.rootCard .rootCardCopy > span:not(.rootNameLine) {
+  font-size: 0.8rem;
+}
+
+.rootCardCopy i,
+.rootOptionCopy i,
+.branchCard > span i {
+  display: inline-block;
+  width: 1px;
+  height: 0.7rem;
+  margin: 0 0.55rem;
+  background: var(--entry-line-strong);
+  vertical-align: -0.08rem;
+}
+
+.rootCard > svg {
+  color: var(--entry-text-muted);
+}
+
+.rootBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  flex: 0 0 auto;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--axis-brand-border);
+  border-radius: 0.3rem;
+  background: var(--axis-brand-badge-surface);
+  color: var(--entry-primary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.branchGrid {
+  --branch-axis: calc(8.333333% - 0.479167rem);
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1.15rem;
+  margin-top: 1.9rem;
+  padding-top: 2.25rem;
+  padding-inline: 0;
+  list-style: none;
+}
+
+.branchGrid::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: calc(var(--branch-axis) + var(--connector-radius) - 1px);
+  left: calc(var(--branch-axis) + var(--connector-radius) - 1px);
+  height: 0;
+  border-top: 1px solid var(--entry-line-strong);
+  pointer-events: none;
+}
+
+.branchGridFiltered {
+  --branch-axis: 5.7rem;
+  width: max-content;
+  margin-inline: auto;
+}
+
+.branchGridSingle::before {
+  display: none;
+}
+
+.branchColumn {
+  --leaf-list-indent: 0.72rem;
+  --leaf-axis: 0.36rem;
+  --leaf-axis-negative: -0.36rem;
+  position: relative;
+  min-width: 0;
+}
+
+.branchColumn::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% - 1px);
+  left: calc(50% - 0.5px);
+  width: 1px;
+  height: calc(2.25rem + 1px);
+  border-radius: 999px;
+  background: var(--entry-line-strong);
+  pointer-events: none;
+}
+
+.branchColumn:first-child::before {
+  left: 50%;
+  width: var(--connector-radius);
+  box-sizing: border-box;
+  border-top: 1px solid var(--entry-line-strong);
+  border-left: 1px solid var(--entry-line-strong);
+  border-radius: var(--connector-radius) 0 0;
+  background: none;
+}
+
+.branchColumn:last-child::before {
+  right: 50%;
+  left: auto;
+  width: var(--connector-radius);
+  box-sizing: border-box;
+  border-top: 1px solid var(--entry-line-strong);
+  border-right: 1px solid var(--entry-line-strong);
+  border-radius: 0 var(--connector-radius) 0 0;
+  background: none;
+}
+
+.branchGridSingle .branchColumn::before {
+  right: auto;
+  left: calc(50% - 0.5px);
+  width: 1px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--entry-line-strong);
+}
+
+.branchCard {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.62rem;
+  height: 11.55rem;
+  min-width: 0;
+  padding: 1rem 0.7rem 0.9rem;
+  border: 1px solid var(--entry-line);
+  border-radius: 0.56rem;
+  background: var(--entry-panel);
+  text-align: center;
+}
+
+.branchCard::after {
+  content: '';
+  position: absolute;
+  top: calc(100% - 1px);
+  left: calc(50% - 0.5px);
+  width: 1px;
+  height: calc(1.1rem + 2px);
+  border-radius: 999px;
+  background: var(--entry-line-strong);
+  pointer-events: none;
+}
+
+.branchColumn:not(:has(> .leafList)) > .branchCard::after {
+  display: none;
+}
+
+.branchFavorite,
+.branchMore {
+  position: absolute;
+  top: 0.65rem;
+}
+
+.branchFavorite {
+  left: 0.65rem;
+}
+
+.branchMore {
+  right: 0.48rem;
+}
+
+.branchCard h2 {
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--entry-text);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branchCard p {
+  width: 100%;
+  min-height: 2.25em;
+  margin: 0;
+  overflow: hidden;
+  color: var(--entry-text-secondary);
+  display: -webkit-box;
+  font-size: 0.8rem;
+  font-weight: 550;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.branchCard > span {
+  color: var(--entry-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.favoriteButton,
+.moreButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 1.75rem;
+  border-radius: 0.36rem;
+  color: var(--entry-text-muted);
+  transition:
+    background var(--axis-motion-fast) ease,
+    color var(--axis-motion-fast) ease;
+}
+
+.favoriteButton:hover,
+.moreButton:hover {
+  background: var(--entry-panel-muted);
+  color: var(--entry-text);
+}
+
+.favoriteButtonActive {
+  color: #f5ab12;
+}
+
+.branchFavorite .favoriteButton:not(.favoriteButtonActive),
+.leafFavorite .favoriteButton:not(.favoriteButtonActive) {
+  opacity: 0;
+}
+
+.branchCard:hover .branchFavorite .favoriteButton,
+.leafCard:hover .leafFavorite .favoriteButton,
+.branchFavorite .favoriteButton:focus-visible,
+.leafFavorite .favoriteButton:focus-visible {
+  opacity: 1;
+}
+
+.favoriteButtonActive svg,
+.legendStar {
+  fill: currentColor;
+}
+
+.leafList {
+  position: relative;
+  display: grid;
+  gap: 0.7rem;
+  margin: 2.25rem 0 0 var(--leaf-list-indent);
+  padding: 0;
+  list-style: none;
+}
+
+.leafList::before {
+  content: '';
+  position: absolute;
+  top: calc(-1.15rem + var(--connector-radius) - 1px);
+  bottom: calc(2.8rem + var(--connector-tail-radius) - 1px);
+  left: var(--leaf-axis-negative);
+  width: calc(var(--connector-radius) + 1px);
+  box-sizing: border-box;
+  border-top: 1px solid var(--entry-line-strong);
+  border-left: 1px solid var(--entry-line-strong);
+  border-top-left-radius: var(--connector-radius);
+  pointer-events: none;
+}
+
+.leafList::after {
+  content: '';
+  position: absolute;
+  top: -1.15rem;
+  right: calc(50% + var(--leaf-axis));
+  left: calc(var(--leaf-axis-negative) + var(--connector-radius) - 1px);
+  height: var(--connector-radius);
+  box-sizing: border-box;
+  border-right: 1px solid var(--entry-line-strong);
+  border-bottom: 1px solid var(--entry-line-strong);
+  border-bottom-right-radius: var(--connector-radius);
+  pointer-events: none;
+}
+
+.leafCard {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.62rem;
+  min-height: 5.6rem;
+  min-width: 0;
+  padding: 0.65rem 0.42rem 0.65rem 0.58rem;
+  border: 1px solid var(--entry-line);
+  border-radius: 0.52rem;
+  background: var(--entry-panel);
+}
+
+.leafCard::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: calc(100% - 1px);
+  left: var(--leaf-axis-negative);
+  height: 0;
+  border-top: 1px solid var(--entry-line-strong);
+  pointer-events: none;
+}
+
+.leafCard:last-child::before {
+  top: calc(50% - var(--connector-tail-radius));
+  height: calc(var(--connector-tail-radius) + 1px);
+  box-sizing: border-box;
+  border: 0;
+  border-left: 1px solid var(--entry-line-strong);
+  border-bottom: 1px solid var(--entry-line-strong);
+  border-bottom-left-radius: var(--connector-tail-radius);
+}
+
+.leafFavorite {
+  position: absolute;
+  top: 0.32rem;
+  left: 0.32rem;
+}
+
+.leafFavorite .favoriteButton {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-basis: 1.1rem;
+}
+
+.leafFavorite .favoriteButton svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.leafCopy {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+  text-align: left;
+}
+
+.leafCopy strong,
+.leafCopy span,
+.leafCopy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leafCopy strong {
+  color: var(--entry-text);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.leafCopy span {
+  color: var(--entry-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 550;
+  line-height: 1.3;
+}
+
+.leafCopy small {
+  color: var(--entry-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.leafCard .moreButton {
+  align-self: start;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-basis: 1.25rem;
+}
+
+.legend {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  display: grid;
+  gap: 0.78rem;
+  width: 11.8rem;
+  min-height: 12.75rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--entry-line);
+  border-radius: 0.52rem;
+  background: var(--entry-panel);
+}
+
+.legend > strong {
+  color: var(--entry-text);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.legend > span {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  color: var(--entry-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.legend > span > svg {
+  flex: 0 0 1.2rem;
+  color: var(--entry-text-muted);
+}
+
+.legend > span > .legendStar {
+  color: #f5ab12;
+}
+
+.legendRootIcon,
+.legendLeafIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: 0 0 1.2rem;
+  color: var(--entry-primary);
+}
+
+.legendRootIcon {
+  border-radius: 999px;
+  background: #e6e4ff;
+}
+
+.legendLeafIcon {
+  border-radius: 0.22rem;
+  background: #e4f1ff;
+  color: #1572d3;
+}
+
+.legendConnector {
+  position: relative;
+  display: inline-block;
+  width: 1.2rem;
+  height: 0.8rem;
+  flex: 0 0 1.2rem;
+  border-bottom: 1px solid var(--entry-text-muted);
+}
+
+.legendConnector::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -0.32rem;
+  width: 1px;
+  height: 0.65rem;
+  background: var(--entry-text-muted);
+}
+
+.emptyState,
+.listEmptyState {
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  border: 1px dashed var(--entry-line-strong);
+  border-radius: 0.6rem;
+  color: var(--entry-text-secondary);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.emptyState {
+  margin-top: 2.25rem;
+}
+
+.listSection {
+  min-width: 0;
+  margin-top: 2.4rem;
+  overflow-x: auto;
+}
+
+.workspaceRows {
+  display: grid;
+  gap: 0.48rem;
+  min-width: 70rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspaceRow {
+  display: grid;
+  grid-template-columns: 1.75rem 27.5rem 8rem 14.5rem 10rem minmax(1.75rem, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.7rem;
+  padding: 0 1.15rem 0 0.75rem;
+  border: 1px solid var(--entry-line);
+  border-radius: 0.54rem;
+  background: var(--entry-panel);
+  transition:
+    border-color var(--axis-motion-fast) ease,
+    box-shadow var(--axis-motion-fast) ease;
+}
+
+.workspaceRow:hover {
+  border-color: var(--entry-line-strong);
+  box-shadow: var(--axis-shadow-row-hover);
+}
+
+.rowIdentity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1.2rem;
+  min-width: 0;
+  color: inherit;
+  text-align: left;
+}
+
+.rowCopy {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.rowCopy > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--entry-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 550;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowNameLine strong {
+  font-size: 1rem;
+}
+
+.workspaceRow > .moreButton {
+  justify-self: end;
+}
+
+.rowMeta,
+.rowDate {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  color: var(--entry-text-secondary);
+  font-size: 0.79rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.rowMeta svg,
+.rowDate > svg {
+  flex: 0 0 auto;
+  color: var(--axis-text-icon-muted);
+}
+
+.rowDate > span {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.rowDate time {
+  white-space: nowrap;
+}
+
+.listEmptyState {
+  min-width: 70rem;
+}
+
+.listFooter {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-width: 70rem;
+  min-height: 4.25rem;
+  color: var(--entry-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.pagination button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 0.36rem;
+  color: var(--entry-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  transition:
+    background var(--axis-motion-fast) ease,
+    color var(--axis-motion-fast) ease;
+}
+
+.pagination button:first-child,
+.pagination button:last-child {
+  background: var(--entry-panel-muted);
+}
+
+.pagination button:hover:not(:disabled) {
+  background: var(--entry-primary-soft);
+  color: var(--entry-primary);
+}
+
+.pagination button:disabled {
+  color: var(--axis-text-disabled);
+  cursor: not-allowed;
+}
+
+.pagination .paginationActive {
+  background: var(--entry-primary);
+  color: var(--axis-text-on-brand);
+}
+
+.dialogBackdrop {
+  --entry-text-muted: var(--axis-dialog-text-muted);
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  overflow-y: auto;
+  background: var(--axis-dialog-backdrop);
+  backdrop-filter: blur(1px);
+}
+
+.dialogPanel {
+  width: min(36.85rem, calc(100vw - 2rem));
+  min-height: 22.55rem;
+  padding: 1.85rem;
+}
+
+.dialogHeader {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.dialogHeader h2 {
+  margin: 0;
+  color: var(--entry-text);
+  font-size: 1.22rem;
+  font-weight: 850;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+
+.dialogHeader p {
+  margin: 0;
+  color: var(--entry-text-secondary);
+  font-size: 0.77rem;
+  font-weight: 550;
+  line-height: 1.45;
+}
+
+.rootOptions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.95rem;
+  margin: 1.8rem 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.rootOption {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.85rem;
+  min-width: 0;
+  min-height: 8.3rem;
+  padding: 1rem 0.75rem;
+  border: 1px solid var(--entry-line);
+  border-radius: var(--axis-radius-surface);
+  background: var(--entry-panel);
+  cursor: pointer;
+  transition:
+    border-color var(--axis-motion-fast) ease,
+    box-shadow var(--axis-motion-fast) ease;
+}
+
+.rootOption:hover {
+  border-color: var(--entry-line-strong);
+}
+
+.rootOptionSelected {
+  border-color: var(--entry-primary);
+  box-shadow: var(--axis-selected-ring);
+}
+
+.rootOption > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.rootOption:has(input:focus-visible) {
+  outline: 2px solid var(--axis-option-focus-outline);
+  outline-offset: 2px;
+}
+
+.rootOptionCopy {
+  align-self: center;
+  gap: 0.42rem;
+}
+
+.rootOptionCopy .rootNameLine {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rootOptionCopy .rootNameLine strong {
+  font-size: 0.86rem;
+}
+
+.radioMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 1.5px solid var(--entry-line-strong);
+  border-radius: var(--axis-radius-pill);
+  background: var(--entry-panel);
+}
+
+.rootOptionSelected .radioMark {
+  border-color: var(--entry-primary);
+}
+
+.rootOptionSelected .radioMark i {
+  width: 0.68rem;
+  height: 0.68rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--entry-primary);
+}
+
+.dialogFooter {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-top: 1.75rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--axis-dialog-divider);
+}
+
+.skipChoice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-width: 0;
+  color: var(--entry-text-secondary);
+  cursor: pointer;
+}
+
+.skipChoice input {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  margin: 0.12rem 0 0;
+  accent-color: var(--entry-primary);
+}
+
+.skipChoice > span {
+  display: grid;
+  gap: 0.28rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.skipChoice small {
+  color: var(--entry-text-muted);
+  font-size: 0.69rem;
+  font-weight: 500;
+}
+
+.dialogActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.dialogButton {
+  --axis-button-motion: var(--axis-motion-fast);
+  min-width: 4.1rem;
+  font-size: 0.79rem;
+}
+
+.page :is(button, a, input):focus-visible {
+  outline: 2px solid var(--axis-focus-outline);
+  outline-offset: 2px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .treeViewport,
+  .listSection {
+    margin-top: 1.5rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 1rem var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+  }
+
+  .utilityBar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .searchBox {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .helpAnchor {
+    justify-self: end;
+  }
+
+  .createButton {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .helpPopover {
+    right: 0;
+    width: min(17.5rem, calc(100vw - 2rem));
+  }
+
+  .treeCanvas {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .rootCard {
+    width: 100%;
+  }
+
+  .rootCard::after,
+  .branchGrid::before,
+  .branchColumn::before {
+    display: none;
+  }
+
+  .branchGrid,
+  .branchGridFiltered {
+    width: 100%;
+    margin-top: 1rem;
+    margin-inline: 0;
+    padding-top: 0;
+    grid-template-columns: 1fr !important;
+  }
+
+  .branchCard {
+    height: auto;
+    min-height: 10rem;
+  }
+
+  .branchColumn {
+    --leaf-list-indent: 1rem;
+    --leaf-axis: 0.5rem;
+    --leaf-axis-negative: -0.5rem;
+  }
+
+  .legend {
+    position: static;
+    width: 100%;
+    margin-top: 1rem;
+  }
+
+  .dialogPanel {
+    min-height: 0;
+    padding: 1.25rem;
+  }
+
+  .rootOptions {
+    grid-template-columns: 1fr;
+    margin-top: 1.25rem;
+  }
+
+  .rootOption {
+    min-height: 7.5rem;
+  }
+
+  .dialogFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dialogActions,
+  .dialogButton {
+    width: 100%;
+  }
+
+  .helpPopover {
+    right: 0;
+    width: min(17.5rem, calc(100vw - 2rem));
+  }
+}

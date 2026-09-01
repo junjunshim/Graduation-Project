@@ -5,13 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
+    "dev:server": "vite --mode server",
     "build": "tsc && vite build && electron-builder",
+    "build:mock": "tsc && vite build --mode mock && electron-builder",
+    "build:server": "tsc && vite build --mode server && electron-builder",
+    "build:bundle": "tsc && vite build",
+    "build:bundle:mock": "tsc && vite build --mode mock",
+    "build:bundle:server": "tsc && vite build --mode server",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "test": "tsc -p tsconfig.test.json && node node_modules/.grad-client-tests/tests/all.test.js",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json --tsBuildInfoFile node_modules/.grad-client-tsconfig-node.tsbuildinfo",
     "preview": "vite preview"
   },
   "dependencies": {
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.13.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.64",
@@ -19,13 +29,13 @@
     "@typescript-eslint/eslint-plugin": "^7.1.1",
     "@typescript-eslint/parser": "^7.1.1",
     "@vitejs/plugin-react": "^4.2.1",
+    "electron": "^30.0.1",
+    "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
     "typescript": "^5.2.2",
     "vite": "^5.1.6",
-    "electron": "^30.0.1",
-    "electron-builder": "^24.13.3",
     "vite-plugin-electron": "^0.28.6",
     "vite-plugin-electron-renderer": "^0.14.5"
   },

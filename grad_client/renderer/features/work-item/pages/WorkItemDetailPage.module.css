@@ -1,0 +1,423 @@
+.page {
+  display: grid;
+  gap: 1.05rem;
+  min-width: 0;
+  padding: 2rem calc(var(--space-page-x) + 2rem) var(--space-page-bottom);
+  color: var(--axis-text-primary);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.backLink:hover {
+  color: var(--text-primary);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 0.25rem 0 0.35rem;
+}
+
+.headerCopy {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.headerCopy p,
+.description,
+.emptyState p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.titleRow h2 {
+  margin: 0;
+  font-size: clamp(1.55rem, 2.2vw, 2rem);
+  line-height: 1.2;
+}
+
+.categoryBadge,
+.statusBadge,
+.priorityBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.categoryBadge {
+  padding: 0.28rem 0.55rem;
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.categoryBadge[data-tone='purple'] {
+  background: var(--accent-purple-soft);
+  color: var(--accent-purple);
+}
+
+.categoryBadge[data-tone='blue'],
+.categoryBadge[data-tone='sky'] {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.categoryBadge[data-tone='green'] {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.categoryBadge[data-tone='orange'] {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.statusBadge {
+  padding: 0.48rem 0.75rem;
+}
+
+.statusBadge[data-tone='todo'] {
+  background: var(--accent-amber-soft);
+  color: var(--accent-amber);
+}
+
+.statusBadge[data-tone='inProgress'] {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.statusBadge[data-tone='done'] {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.progressPanel,
+.propertyGrid,
+.contentPanel,
+.attachmentPanel,
+.emptyState {
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-panel);
+  background: var(--axis-surface-panel);
+  box-shadow: none;
+}
+
+.progressPanel {
+  display: grid;
+  gap: 0.9rem;
+  min-height: 7rem;
+  padding: 1rem 1.25rem;
+}
+
+.progressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.progressHeader > strong:first-child {
+  font-size: 0.95rem;
+}
+
+.progressHeader .progressPercent {
+  font-size: 1.35rem;
+}
+
+.progressTrack {
+  width: 100%;
+  height: 0.48rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--axis-surface-muted);
+}
+
+.progressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--axis-brand-primary);
+  transition: width 240ms ease;
+}
+
+.progressPercent {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.detailLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(18rem, 0.8fr);
+  align-items: stretch;
+  gap: 1.05rem;
+  min-width: 0;
+}
+
+.primaryColumn,
+.secondaryColumn {
+  display: grid;
+  align-content: start;
+  gap: 1.05rem;
+  min-width: 0;
+}
+
+.secondaryColumn {
+  grid-template-rows: auto minmax(8rem, 1fr);
+}
+
+.propertyGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(1rem, 2vw, 2.25rem);
+  padding: 1rem 1.25rem;
+}
+
+.property {
+  display: grid;
+  align-content: start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.propertyLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--axis-text-muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.propertyValue {
+  min-width: 0;
+  color: var(--axis-text-primary);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.ownerValue {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.priorityBadge {
+  min-width: 4rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--axis-radius-pill);
+  font-size: 1rem;
+}
+
+.priorityBadge[data-tone='highest'],
+.priorityBadge[data-tone='high'] {
+  background: var(--axis-danger-soft);
+  color: var(--axis-danger);
+}
+
+.priorityBadge[data-tone='medium'] {
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
+}
+
+.priorityBadge[data-tone='low'],
+.priorityBadge[data-tone='lowest'] {
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+}
+
+.contentPanel,
+.attachmentPanel {
+  padding: 1rem 1.25rem;
+}
+
+.contentPanel {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 7rem;
+}
+
+.descriptionPanel {
+  align-content: start;
+  grid-template-rows: auto auto;
+  min-height: clamp(10rem, 22vh, 14rem);
+}
+
+.contentPanel h3,
+.attachmentPanel h3,
+.emptyState h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.description {
+  white-space: pre-wrap;
+}
+
+.emptyPanelState,
+.emptyAttachment {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--axis-text-muted);
+  font-size: 0.8rem;
+}
+
+.emptyPanelState {
+  min-height: 3.75rem;
+  justify-content: center;
+}
+
+.attachmentPanel {
+  display: grid;
+  align-content: start;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 1rem;
+  min-height: 8rem;
+}
+
+.attachmentPanel .addFileButton {
+  align-self: end;
+  justify-self: end;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.editButton,
+.deleteButton,
+.addFileButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  padding: 0 1.15rem;
+  border-radius: var(--axis-radius-action);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.editButton,
+.deleteButton {
+  width: auto;
+  min-width: 7rem;
+  min-height: 2.5rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--axis-radius-action);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.editButton {
+  border: 1px solid var(--axis-brand-primary);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
+}
+
+.deleteButton {
+  border: 1px solid var(--axis-danger);
+  background: var(--axis-surface-panel);
+  color: var(--axis-danger);
+}
+
+.addFileButton {
+  border: 1px solid var(--axis-line-default);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-selected);
+}
+
+.deleteButton:disabled,
+.addFileButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.backLink:focus-visible,
+.editButton:focus-visible {
+  outline: 2px solid var(--axis-status-info);
+  outline-offset: 2px;
+}
+
+.emptyState {
+  display: grid;
+  justify-items: start;
+  gap: 0.85rem;
+  width: min(100%, 36rem);
+  padding: 1.25rem;
+}
+
+@media (max-width: 980px) {
+  .page {
+    padding-right: calc(var(--space-page-x) + 1.5rem);
+    padding-left: calc(var(--space-page-x) + 1.5rem);
+  }
+
+  .propertyGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .detailLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: var(--space-page-top-mobile) calc(var(--space-page-x-mobile) + 1rem)
+      var(--space-page-bottom-mobile);
+  }
+
+  .header,
+  .attachmentPanel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .propertyGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .descriptionPanel {
+    min-height: 10rem;
+  }
+
+  .progressPercent {
+    text-align: left;
+  }
+
+  .addFileButton,
+  .actions,
+  .editButton,
+  .deleteButton {
+    width: 100%;
+  }
+}

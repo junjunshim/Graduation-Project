@@ -1,10 +1,16 @@
-import { app, BrowserWindow } from 'electron'
-import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { createRequire } from 'node:module'
+import type { BrowserWindow as BrowserWindowType } from 'electron'
+import { fileURLToPath } from 'node:url'
+import {
+  registerWindowControlHandlers,
+  sendWindowMaximizeState,
+  watchWindowMaximizeState,
+} from './windowControls'
 
-const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const require = createRequire(import.meta.url)
+const { app, BrowserWindow, Menu } = require('electron') as typeof import('electron')
 
 // The built directory structure
 //
@@ -24,19 +30,28 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
-let win: BrowserWindow | null
+let win: BrowserWindowType | null
+const isWindows = process.platform === 'win32'
+
+registerWindowControlHandlers()
 
 function createWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    autoHideMenuBar: true,
+    frame: !isWindows,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
 
-  // Test active push message to Renderer-process.
+  Menu.setApplicationMenu(null)
+
+  if (isWindows) {
+    watchWindowMaximizeState(win)
+  }
+
   win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', (new Date).toLocaleString())
+    sendWindowMaximizeState(win)
   })
 
   if (VITE_DEV_SERVER_URL) {

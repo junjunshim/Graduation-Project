@@ -1,0 +1,673 @@
+import type {
+  OrganizationNodeRecord,
+  RoleAssignmentRecord,
+  UserRecord,
+  WorkItemRecord,
+  WorkspaceDatabase,
+} from '../model/types'
+
+export const TEAM_404_DATASET_ID = 'team-404-workspace'
+export const TEAM_404_SEED_VERSION = 20260322
+export const TEAM_404_DEMO_USER_ID = 'U-1'
+
+const TEAM_404_DEMO_PASSWORD = 'team404-demo'
+const TEAM_404_MOCK_MEMBER_COUNT = 124
+
+const MOCK_MEMBER_SURNAMES = [
+  '김',
+  '이',
+  '박',
+  '최',
+  '정',
+  '강',
+  '조',
+  '윤',
+  '장',
+  '임',
+  '한',
+  '오',
+  '서',
+  '신',
+  '권',
+  '황',
+]
+
+const MOCK_MEMBER_GIVEN_NAMES = [
+  '민준',
+  '서연',
+  '도윤',
+  '하은',
+  '지호',
+  '수빈',
+  '현우',
+  '예린',
+]
+
+function getSeedTimestamp(offsetDays = 0) {
+  const base = new Date('2026-03-01T09:00:00+09:00')
+  base.setDate(base.getDate() + offsetDays)
+  return base.toISOString()
+}
+
+function getMockUserId(memberNumber: number) {
+  return `MOCK-U-${String(memberNumber).padStart(3, '0')}`
+}
+
+function getMockUserIds(startMemberNumber: number, count: number) {
+  return Array.from({ length: count }, (_, index) => getMockUserId(startMemberNumber + index))
+}
+
+const team404MockUsers: UserRecord[] = Array.from(
+  { length: TEAM_404_MOCK_MEMBER_COUNT },
+  (_, index) => {
+    const memberNumber = index + 1
+    const surname = MOCK_MEMBER_SURNAMES[index % MOCK_MEMBER_SURNAMES.length]
+    const givenName =
+      MOCK_MEMBER_GIVEN_NAMES[
+        Math.floor(index / MOCK_MEMBER_SURNAMES.length) % MOCK_MEMBER_GIVEN_NAMES.length
+      ]
+
+    return {
+      userId: getMockUserId(memberNumber),
+      email: `mock${String(memberNumber).padStart(3, '0')}@team404.dev`,
+      name: `${surname}${givenName}`,
+      password: TEAM_404_DEMO_PASSWORD,
+      createdAt: getSeedTimestamp(10 + (index % 45)),
+    }
+  },
+)
+
+const team404SeedUsers: UserRecord[] = [
+  {
+    userId: 'U-1',
+    email: 'backend.lead@team404.dev',
+    name: '윤서준',
+    password: TEAM_404_DEMO_PASSWORD,
+    personalNodeId: 1,
+    createdAt: getSeedTimestamp(0),
+  },
+  {
+    userId: 'U-2',
+    email: 'frontend.lead@team404.dev',
+    name: '김채린',
+    password: TEAM_404_DEMO_PASSWORD,
+    personalNodeId: 2,
+    createdAt: getSeedTimestamp(0),
+  },
+  {
+    userId: 'U-3',
+    email: 'frontend.ui@team404.dev',
+    name: '박도현',
+    password: TEAM_404_DEMO_PASSWORD,
+    personalNodeId: 3,
+    createdAt: getSeedTimestamp(1),
+  },
+  {
+    userId: 'U-4',
+    email: 'frontend.qa@team404.dev',
+    name: '이서현',
+    password: TEAM_404_DEMO_PASSWORD,
+    personalNodeId: 4,
+    createdAt: getSeedTimestamp(1),
+  },
+  ...team404MockUsers,
+]
+
+const team404SeedNodes: OrganizationNodeRecord[] = [
+  { id: 1, nodeType: 'USER', name: '윤서준 개인공간', path: [1], createdAt: getSeedTimestamp(0) },
+  { id: 2, nodeType: 'USER', name: '김채린 개인공간', path: [2], createdAt: getSeedTimestamp(0) },
+  { id: 3, nodeType: 'USER', name: '박도현 개인공간', path: [3], createdAt: getSeedTimestamp(1) },
+  { id: 4, nodeType: 'USER', name: '이서현 개인공간', path: [4], createdAt: getSeedTimestamp(1) },
+  { id: 5, nodeType: 'TEAM', name: '404', path: [5], createdAt: getSeedTimestamp(2) },
+  {
+    id: 6,
+    parentNodeId: 5,
+    nodeType: 'PROJECT',
+    name: '무한 확장형 조직 노드 기반 협업 시스템',
+    path: [5, 6],
+    createdAt: getSeedTimestamp(3),
+  },
+  {
+    id: 7,
+    parentNodeId: 6,
+    nodeType: 'TEAM',
+    name: '프론트엔드',
+    path: [5, 6, 7],
+    createdAt: getSeedTimestamp(4),
+  },
+  {
+    id: 8,
+    parentNodeId: 6,
+    nodeType: 'TEAM',
+    name: '백엔드',
+    path: [5, 6, 8],
+    createdAt: getSeedTimestamp(4),
+  },
+  {
+    id: 10000,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '마케팅본부',
+    path: [5, 10000],
+    createdAt: getSeedTimestamp(20),
+  },
+  {
+    id: 10001,
+    parentNodeId: 10000,
+    nodeType: 'TEAM',
+    name: '브랜드마케팅팀',
+    path: [5, 10000, 10001],
+    createdAt: getSeedTimestamp(25),
+  },
+  {
+    id: 10002,
+    parentNodeId: 10000,
+    nodeType: 'TEAM',
+    name: '디지털마케팅팀',
+    path: [5, 10000, 10002],
+    createdAt: getSeedTimestamp(26),
+  },
+  {
+    id: 10003,
+    parentNodeId: 10000,
+    nodeType: 'TEAM',
+    name: '마케팅기획팀',
+    path: [5, 10000, 10003],
+    createdAt: getSeedTimestamp(27),
+  },
+  {
+    id: 10010,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '디자인본부',
+    path: [5, 10010],
+    createdAt: getSeedTimestamp(21),
+  },
+  {
+    id: 10011,
+    parentNodeId: 10010,
+    nodeType: 'TEAM',
+    name: 'UI/UX팀',
+    path: [5, 10010, 10011],
+    createdAt: getSeedTimestamp(28),
+  },
+  {
+    id: 10012,
+    parentNodeId: 10010,
+    nodeType: 'TEAM',
+    name: '브랜드디자인팀',
+    path: [5, 10010, 10012],
+    createdAt: getSeedTimestamp(29),
+  },
+  {
+    id: 10013,
+    parentNodeId: 10010,
+    nodeType: 'TEAM',
+    name: '콘텐츠디자인팀',
+    path: [5, 10010, 10013],
+    createdAt: getSeedTimestamp(30),
+  },
+  {
+    id: 10020,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '경영지원본부',
+    path: [5, 10020],
+    createdAt: getSeedTimestamp(22),
+  },
+  {
+    id: 10021,
+    parentNodeId: 10020,
+    nodeType: 'TEAM',
+    name: '인사팀',
+    path: [5, 10020, 10021],
+    createdAt: getSeedTimestamp(31),
+  },
+  {
+    id: 10022,
+    parentNodeId: 10020,
+    nodeType: 'TEAM',
+    name: '재무팀',
+    path: [5, 10020, 10022],
+    createdAt: getSeedTimestamp(32),
+  },
+  {
+    id: 10030,
+    parentNodeId: 5,
+    nodeType: 'DIVISION',
+    name: '영업본부',
+    path: [5, 10030],
+    createdAt: getSeedTimestamp(23),
+  },
+  {
+    id: 10031,
+    parentNodeId: 10030,
+    nodeType: 'TEAM',
+    name: '국내영업팀',
+    path: [5, 10030, 10031],
+    createdAt: getSeedTimestamp(33),
+  },
+  {
+    id: 10032,
+    parentNodeId: 10030,
+    nodeType: 'TEAM',
+    name: '해외영업팀',
+    path: [5, 10030, 10032],
+    createdAt: getSeedTimestamp(34),
+  },
+  {
+    id: 10040,
+    parentNodeId: 5,
+    nodeType: 'DEPARTMENT',
+    name: '연구소',
+    path: [5, 10040],
+    createdAt: getSeedTimestamp(24),
+  },
+  {
+    id: 10041,
+    parentNodeId: 10040,
+    nodeType: 'TEAM',
+    name: '기술연구팀',
+    path: [5, 10040, 10041],
+    createdAt: getSeedTimestamp(35),
+  },
+  {
+    id: 10100,
+    parentNodeId: 6,
+    nodeType: 'TEAM',
+    name: '프로덕트팀',
+    path: [5, 6, 10100],
+    createdAt: getSeedTimestamp(36),
+  },
+  {
+    id: 10101,
+    parentNodeId: 6,
+    nodeType: 'TEAM',
+    name: 'QA팀',
+    path: [5, 6, 10101],
+    createdAt: getSeedTimestamp(37),
+  },
+]
+
+const team404MockMemberships: Array<{ nodeId: number; userIds: string[] }> = [
+  { nodeId: 7, userIds: getMockUserIds(1, 9) },
+  { nodeId: 8, userIds: getMockUserIds(10, 9) },
+  { nodeId: 10100, userIds: getMockUserIds(19, 8) },
+  { nodeId: 10101, userIds: getMockUserIds(27, 6) },
+  { nodeId: 10001, userIds: getMockUserIds(33, 8) },
+  { nodeId: 10002, userIds: getMockUserIds(41, 10) },
+  { nodeId: 10003, userIds: getMockUserIds(51, 6) },
+  { nodeId: 10011, userIds: getMockUserIds(57, 8) },
+  { nodeId: 10012, userIds: getMockUserIds(65, 6) },
+  { nodeId: 10013, userIds: getMockUserIds(71, 4) },
+  { nodeId: 10021, userIds: getMockUserIds(75, 8) },
+  { nodeId: 10022, userIds: getMockUserIds(83, 14) },
+  { nodeId: 10031, userIds: getMockUserIds(97, 12) },
+  { nodeId: 10032, userIds: getMockUserIds(109, 8) },
+  { nodeId: 10041, userIds: getMockUserIds(117, 8) },
+]
+
+const team404MockBranchRoles: Array<{
+  userId: string
+  nodeId: number
+  roleName: RoleAssignmentRecord['roleName']
+}> = [
+  { userId: getMockUserId(33), nodeId: 10000, roleName: 'ADMIN' },
+  { userId: getMockUserId(41), nodeId: 10000, roleName: 'MANAGER' },
+  { userId: getMockUserId(57), nodeId: 10010, roleName: 'ADMIN' },
+  { userId: getMockUserId(65), nodeId: 10010, roleName: 'MANAGER' },
+  { userId: getMockUserId(75), nodeId: 10020, roleName: 'ADMIN' },
+  { userId: getMockUserId(83), nodeId: 10020, roleName: 'MANAGER' },
+  { userId: getMockUserId(97), nodeId: 10030, roleName: 'ADMIN' },
+  { userId: getMockUserId(109), nodeId: 10030, roleName: 'MANAGER' },
+  { userId: getMockUserId(117), nodeId: 10040, roleName: 'ADMIN' },
+  { userId: getMockUserId(118), nodeId: 10040, roleName: 'MANAGER' },
+]
+
+function createTeam404MockRoles() {
+  let nextRoleId = 20000
+  const branchRoles: RoleAssignmentRecord[] = team404MockBranchRoles.map((role, index) => ({
+    id: nextRoleId + index,
+    ...role,
+    createdAt: getSeedTimestamp(40 + (index % 10)),
+  }))
+  nextRoleId += branchRoles.length
+
+  const memberRoles = team404MockMemberships.flatMap(({ nodeId, userIds }) =>
+    userIds.map((userId, index) => ({
+      id: nextRoleId++,
+      userId,
+      nodeId,
+      roleName: index === 0 ? 'ADMIN' as const : index === 1 ? 'MANAGER' as const : 'MEMBER' as const,
+      createdAt: getSeedTimestamp(50 + (index % 20)),
+    })),
+  )
+
+  return [...branchRoles, ...memberRoles]
+}
+
+const team404MockRoles = createTeam404MockRoles()
+
+const team404SeedRoles: RoleAssignmentRecord[] = [
+  { id: 1, userId: 'U-1', nodeId: 1, roleName: 'ADMIN', createdAt: getSeedTimestamp(0) },
+  { id: 2, userId: 'U-2', nodeId: 2, roleName: 'ADMIN', createdAt: getSeedTimestamp(0) },
+  { id: 3, userId: 'U-3', nodeId: 3, roleName: 'ADMIN', createdAt: getSeedTimestamp(1) },
+  { id: 4, userId: 'U-4', nodeId: 4, roleName: 'ADMIN', createdAt: getSeedTimestamp(1) },
+  { id: 5, userId: 'U-1', nodeId: 5, roleName: 'ADMIN', createdAt: getSeedTimestamp(2) },
+  { id: 6, userId: 'U-2', nodeId: 5, roleName: 'MANAGER', createdAt: getSeedTimestamp(2) },
+  { id: 7, userId: 'U-3', nodeId: 5, roleName: 'MEMBER', createdAt: getSeedTimestamp(2) },
+  { id: 8, userId: 'U-4', nodeId: 5, roleName: 'MEMBER', createdAt: getSeedTimestamp(2) },
+  { id: 9, userId: 'U-2', nodeId: 6, roleName: 'ADMIN', createdAt: getSeedTimestamp(3) },
+  { id: 10, userId: 'U-2', nodeId: 7, roleName: 'ADMIN', createdAt: getSeedTimestamp(4) },
+  { id: 11, userId: 'U-3', nodeId: 7, roleName: 'MEMBER', createdAt: getSeedTimestamp(4) },
+  { id: 12, userId: 'U-4', nodeId: 7, roleName: 'MEMBER', createdAt: getSeedTimestamp(4) },
+  { id: 13, userId: 'U-1', nodeId: 8, roleName: 'ADMIN', createdAt: getSeedTimestamp(4) },
+  ...team404MockRoles,
+]
+
+const team404SeedWorkItems: WorkItemRecord[] = [
+  {
+    workItemId: 'WI-1',
+    ownerNodeId: 5,
+    ownerUserId: 'U-1',
+    title: '2026 졸업작품 개발 일정',
+    description: '팀 404의 설계, 구현, 검토, 데모 준비를 묶는 상위 일정입니다.',
+    status: 'in-progress',
+    priority: 1,
+    weight: 5,
+    progress: 58,
+    startDate: '2026-03-03',
+    dueDate: '2026-04-12',
+    createdAt: getSeedTimestamp(5),
+  },
+  {
+    workItemId: 'WI-2',
+    ownerNodeId: 6,
+    ownerUserId: 'U-2',
+    title: '조직 관리 흐름 점검',
+    description: '온보딩 이후 조직 생성, 역할 부여, 경로 표기를 하나의 시나리오로 검증합니다.',
+    status: 'in-progress',
+    priority: 1,
+    weight: 2,
+    progress: 64,
+    startDate: '2026-03-12',
+    dueDate: '2026-03-27',
+    parentWorkItemId: 'WI-1',
+    createdAt: getSeedTimestamp(6),
+  },
+  {
+    workItemId: 'WI-3',
+    ownerNodeId: 7,
+    ownerUserId: 'U-2',
+    title: '대시보드 UI 정교화',
+    description: '워크스페이스 개요, 우선순위 업무, 팀 구성 정보가 한 화면에서 읽히도록 정리합니다.',
+    status: 'in-progress',
+    priority: 1,
+    weight: 2,
+    progress: 72,
+    startDate: '2026-03-10',
+    dueDate: '2026-03-26',
+    parentWorkItemId: 'WI-1',
+    createdAt: getSeedTimestamp(6),
+  },
+  {
+    workItemId: 'WI-4',
+    ownerNodeId: 7,
+    ownerUserId: 'U-3',
+    title: '업무 생성 폼 개선',
+    description: '노드 선택, 담당자 지정, 상위 work item 연결 흐름을 실제 입력 순서에 맞게 다듬습니다.',
+    status: 'todo',
+    priority: 2,
+    weight: 1,
+    progress: 0,
+    startDate: '2026-03-18',
+    dueDate: '2026-03-30',
+    parentWorkItemId: 'WI-1',
+    createdAt: getSeedTimestamp(7),
+  },
+  {
+    workItemId: 'WI-5',
+    ownerNodeId: 7,
+    ownerUserId: 'U-4',
+    title: 'mock 데이터 구조 정비',
+    description: '홈, 조직, 대시보드 화면에서 일관되게 보이는 팀 404 기준 샘플 데이터를 정리했습니다.',
+    status: 'done',
+    priority: 2,
+    weight: 1,
+    progress: 100,
+    startDate: '2026-03-14',
+    dueDate: '2026-03-31',
+    parentWorkItemId: 'WI-1',
+    createdAt: getSeedTimestamp(7),
+  },
+  {
+    workItemId: 'WI-6',
+    ownerNodeId: 8,
+    ownerUserId: 'U-1',
+    title: 'API/스키마 정리',
+    description: '조직 노드, 권한, work item API 응답 구조를 문서와 mock 데이터 기준으로 맞춥니다.',
+    status: 'in-progress',
+    priority: 1,
+    weight: 2,
+    progress: 51,
+    startDate: '2026-03-11',
+    dueDate: '2026-03-28',
+    parentWorkItemId: 'WI-1',
+    createdAt: getSeedTimestamp(6),
+  },
+  {
+    workItemId: 'WI-7',
+    ownerNodeId: 8,
+    ownerUserId: 'U-1',
+    title: 'Git Webhook 시나리오 정리',
+    description: '커밋 메시지의 work item ID 감지와 상태 변경 플로우를 시연 기준으로 문서화합니다.',
+    status: 'todo',
+    priority: 2,
+    weight: 1,
+    progress: 15,
+    startDate: '2026-03-19',
+    dueDate: '2026-04-03',
+    parentWorkItemId: 'WI-1',
+    createdAt: getSeedTimestamp(8),
+  },
+  {
+    workItemId: 'WI-8',
+    ownerNodeId: 6,
+    ownerUserId: 'U-2',
+    title: '발표/데모 준비',
+    description: '데모 계정, 발표 흐름, 예상 질의 대응 메모를 최종 리허설 기준으로 정리합니다.',
+    status: 'in-progress',
+    priority: 2,
+    weight: 1,
+    progress: 35,
+    startDate: '2026-03-20',
+    dueDate: '2026-04-05',
+    parentWorkItemId: 'WI-1',
+    createdAt: getSeedTimestamp(8),
+  },
+  {
+    workItemId: 'WI-9',
+    ownerNodeId: 5,
+    ownerUserId: 'U-1',
+    title: '타임라인 기능 안정화',
+    description: '확대·축소, 오늘 이동, 월 맞춤 동작을 다양한 기간의 업무로 검증합니다.',
+    status: 'in-progress',
+    priority: 1,
+    weight: 3,
+    progress: 45,
+    startDate: '2026-07-01',
+    dueDate: '2026-09-15',
+    createdAt: getSeedTimestamp(9),
+  },
+  {
+    workItemId: 'WI-10',
+    ownerNodeId: 6,
+    ownerUserId: 'U-2',
+    title: '월 단위 탐색 시나리오 점검',
+    description: '월 시작일과 마지막 날이 화면 안에 자연스럽게 들어오는지 확인합니다.',
+    status: 'in-progress',
+    priority: 2,
+    weight: 2,
+    progress: 60,
+    startDate: '2026-07-15',
+    dueDate: '2026-08-07',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(10),
+  },
+  {
+    workItemId: 'WI-11',
+    ownerNodeId: 7,
+    ownerUserId: 'U-3',
+    title: '타임라인 헤더 고정 테스트',
+    description: '가로와 세로 스크롤 중 날짜 헤더와 업무 열이 고정되는지 검증합니다.',
+    status: 'done',
+    priority: 2,
+    weight: 1,
+    progress: 100,
+    startDate: '2026-07-20',
+    dueDate: '2026-08-02',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(11),
+  },
+  {
+    workItemId: 'WI-12',
+    ownerNodeId: 7,
+    ownerUserId: 'U-4',
+    title: '트랙패드 확대 감도 조정',
+    description: '트랙패드 스크롤에서 배율이 급격하게 변경되지 않는지 확인합니다.',
+    status: 'in-progress',
+    priority: 1,
+    weight: 2,
+    progress: 35,
+    startDate: '2026-07-27',
+    dueDate: '2026-08-12',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(12),
+  },
+  {
+    workItemId: 'WI-13',
+    ownerNodeId: 8,
+    ownerUserId: 'U-1',
+    title: '오늘 기준선 위치 검증',
+    description: '오늘 버튼 실행 후 기준선과 초기 배율이 정확히 복원되는지 확인합니다.',
+    status: 'done',
+    priority: 2,
+    weight: 1,
+    progress: 100,
+    startDate: '2026-07-10',
+    dueDate: '2026-07-31',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(13),
+  },
+  {
+    workItemId: 'WI-14',
+    ownerNodeId: 8,
+    ownerUserId: 'U-1',
+    title: '최대 배율 레이아웃 점검',
+    description: '최대 확대 상태에서 행과 하단 컨트롤이 겹치거나 잘리지 않는지 검증합니다.',
+    status: 'in-progress',
+    priority: 1,
+    weight: 2,
+    progress: 50,
+    startDate: '2026-07-28',
+    dueDate: '2026-08-15',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(14),
+  },
+  {
+    workItemId: 'WI-15',
+    ownerNodeId: 5,
+    ownerUserId: 'U-2',
+    title: '노트북 화면 반응형 검수',
+    description: '노트북 해상도에서 타임라인과 하단 범례가 자연스럽게 배치되는지 확인합니다.',
+    status: 'todo',
+    priority: 2,
+    weight: 2,
+    progress: 0,
+    startDate: '2026-08-01',
+    dueDate: '2026-08-30',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(15),
+  },
+  {
+    workItemId: 'WI-16',
+    ownerNodeId: 6,
+    ownerUserId: 'U-2',
+    title: '업무 기간 경계값 테스트',
+    description: '월을 걸치는 업무의 시작일과 마감일이 정확한 너비로 표시되는지 검증합니다.',
+    status: 'todo',
+    priority: 3,
+    weight: 1,
+    progress: 10,
+    startDate: '2026-08-04',
+    dueDate: '2026-08-25',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(16),
+  },
+  {
+    workItemId: 'WI-17',
+    ownerNodeId: 7,
+    ownerUserId: 'U-3',
+    title: '카테고리 필터 동작 확인',
+    description: '하단 범례에서 조직별 업무 표시를 켜고 끌 때 레이아웃을 확인합니다.',
+    status: 'todo',
+    priority: 3,
+    weight: 1,
+    progress: 0,
+    startDate: '2026-08-18',
+    dueDate: '2026-09-05',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(17),
+  },
+  {
+    workItemId: 'WI-18',
+    ownerNodeId: 8,
+    ownerUserId: 'U-1',
+    title: '타임라인 회귀 테스트 마무리',
+    description: '이동, 확대·축소, 링크 탐색을 최종 시나리오 기준으로 다시 확인합니다.',
+    status: 'todo',
+    priority: 2,
+    weight: 2,
+    progress: 5,
+    startDate: '2026-08-24',
+    dueDate: '2026-09-12',
+    parentWorkItemId: 'WI-9',
+    createdAt: getSeedTimestamp(18),
+  },
+]
+
+function cloneUsers(users: UserRecord[]) {
+  return users.map((user) => ({ ...user }))
+}
+
+function cloneNodes(nodes: OrganizationNodeRecord[]) {
+  return nodes.map((node) => ({ ...node, path: [...node.path] }))
+}
+
+function cloneRoles(roles: RoleAssignmentRecord[]) {
+  return roles.map((role) => ({ ...role }))
+}
+
+function cloneWorkItems(workItems: WorkItemRecord[]) {
+  return workItems.map((item) => ({ ...item }))
+}
+
+export function createTeam404WorkspaceSeed(): WorkspaceDatabase {
+  const users = cloneUsers(team404SeedUsers)
+  const nodes = cloneNodes(team404SeedNodes)
+  const roles = cloneRoles(team404SeedRoles)
+  const workItems = cloneWorkItems(team404SeedWorkItems)
+
+  return {
+    datasetId: TEAM_404_DATASET_ID,
+    seedVersion: TEAM_404_SEED_VERSION,
+    users,
+    nodes,
+    roles,
+    workItems,
+    counters: {
+      node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
+      role: Math.max(0, ...roles.map((role) => role.id)) + 1,
+    },
+  }
+}

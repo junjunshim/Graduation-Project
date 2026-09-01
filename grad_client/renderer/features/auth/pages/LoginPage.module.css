@@ -1,0 +1,838 @@
+.page {
+  --login-bg: #faf9fe;
+  --login-surface: #ffffff;
+  --login-ink: #10192f;
+  --login-text: #182139;
+  --login-muted: #65718a;
+  --login-placeholder: #8792aa;
+  --login-border: #dde1eb;
+  --login-primary: #5549e6;
+  --login-primary-strong: #4938e5;
+  --login-accent: #665bf0;
+  display: grid;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--login-ink);
+  background: var(--login-bg);
+}
+
+:global([data-theme='dark']) .page {
+  --login-bg: #171726;
+  --login-surface: rgba(32, 32, 49, 0.97);
+  --login-ink: #f6f5ff;
+  --login-text: #ecebfa;
+  --login-muted: #aaa8c2;
+  --login-placeholder: #85829f;
+  --login-border: #3b3a54;
+  --login-primary: #756bf5;
+  --login-primary-strong: #5e50ed;
+  --login-accent: #958cff;
+}
+
+.pageWithCustomChrome {
+  grid-template-rows: var(--window-titlebar-height) minmax(0, 1fr);
+}
+
+.titleBarSlot {
+  min-height: var(--window-titlebar-height);
+}
+
+.surface {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 2.75rem 2.75rem 2.35rem;
+  overflow: hidden;
+  border-radius: 1.75rem;
+  background:
+    radial-gradient(circle at 53% 42%, rgba(255, 255, 255, 0.9), transparent 35%),
+    var(--login-bg);
+}
+
+:global([data-theme='dark']) .surface {
+  background:
+    radial-gradient(circle at 53% 42%, rgba(88, 77, 150, 0.14), transparent 35%),
+    var(--login-bg);
+}
+
+.pageWithCustomChrome .surface {
+  min-height: calc(100vh - var(--window-titlebar-height));
+  min-height: calc(100dvh - var(--window-titlebar-height));
+}
+
+.backgroundDecor {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.topGlow {
+  position: absolute;
+  top: -15rem;
+  left: -13rem;
+  width: 42rem;
+  height: 29rem;
+  border-radius: 42% 58% 62% 38% / 62% 50% 50% 38%;
+  background: linear-gradient(135deg, rgba(205, 200, 255, 0.66), rgba(240, 238, 255, 0.2));
+  filter: blur(1px);
+  transform: rotate(-11deg);
+}
+
+.waveBack,
+.waveFront {
+  position: absolute;
+  right: -15rem;
+  bottom: -24rem;
+  width: 48rem;
+  height: 49rem;
+  border-radius: 50% 0 0 0;
+  transform: rotate(-9deg);
+}
+
+.waveBack {
+  background: linear-gradient(145deg, rgba(245, 243, 255, 0), rgba(232, 229, 255, 0.72));
+}
+
+.waveFront {
+  right: -21rem;
+  bottom: -30rem;
+  background: linear-gradient(145deg, rgba(249, 248, 255, 0), rgba(216, 211, 255, 0.52));
+}
+
+.decorDot {
+  position: absolute;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #bbb5ff, #8f88ed);
+  opacity: 0.72;
+  box-shadow: 0 0 18px rgba(105, 94, 235, 0.12);
+}
+
+.dotOne {
+  top: 16%;
+  left: 10.5%;
+}
+
+.dotTwo {
+  top: 42%;
+  right: 4.2%;
+}
+
+.dotThree {
+  top: 55%;
+  right: 8.5%;
+}
+
+.utilityBar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  min-height: 2.9rem;
+}
+
+.utilityActions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.languageChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.72rem;
+  justify-content: center;
+  min-width: 9.3rem;
+  min-height: 2.9rem;
+  padding: 0 0.95rem;
+  border: 1px solid var(--login-border);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--login-surface) 88%, transparent);
+  box-shadow: 0 8px 24px rgba(64, 53, 134, 0.03);
+  color: var(--login-text);
+  font-size: 1.125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  backdrop-filter: blur(14px);
+}
+
+.languageChip > svg {
+  color: var(--login-muted);
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 25.5rem 31.5rem;
+  gap: 5rem;
+  align-items: center;
+  width: min(100%, 62rem);
+  margin: 0 auto;
+  padding: 0.65rem 0 1rem;
+}
+
+.brandPanel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.axisBrand {
+  position: relative;
+  display: block;
+  width: 9.5625rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.axisLogo {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.axisLogoDark {
+  display: none;
+}
+
+:global([data-theme='dark']) .axisLogoLight {
+  display: none;
+}
+
+:global([data-theme='dark']) .axisLogoDark {
+  display: block;
+}
+
+.heroTitle {
+  margin: 2.6rem 0 0;
+  color: var(--login-ink);
+  font-size: clamp(2.25rem, 3vw, 2.75rem);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.045em;
+}
+
+.heroTitle span {
+  color: var(--login-accent);
+}
+
+.heroDescription {
+  margin: 1.55rem 0 0;
+  color: var(--login-muted);
+  font-size: 1.18rem;
+  line-height: 1.65;
+  letter-spacing: -0.02em;
+}
+
+.illustrationWrap {
+  width: 37.75rem;
+  margin: 2.15rem 0 -0.9rem -9.5rem;
+}
+
+.illustration {
+  width: 100%;
+  height: auto;
+  filter:
+    saturate(0.65)
+    brightness(1.07)
+    contrast(0.92)
+    drop-shadow(0 22px 28px rgba(72, 59, 177, 0.08));
+  user-select: none;
+}
+
+.loginCard {
+  display: flex;
+  min-width: 0;
+  min-height: 44.25rem;
+  flex-direction: column;
+  padding: 4rem 3rem 2.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 1.4rem;
+  background: var(--login-surface);
+  box-shadow: 0 22px 64px rgba(58, 48, 122, 0.055);
+  backdrop-filter: blur(18px);
+}
+
+:global([data-theme='dark']) .loginCard {
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+.cardHeader {
+  padding-left: 3.3rem;
+}
+
+.cardHeader h2 {
+  margin: 0;
+  color: var(--login-ink);
+  font-size: 1.75rem;
+  font-weight: 750;
+  line-height: 1.3;
+  letter-spacing: -0.035em;
+}
+
+.cardHeader p {
+  margin: 0.65rem 0 0;
+  color: var(--login-muted);
+  font-size: 1.125rem;
+  line-height: 1.45;
+  letter-spacing: -0.018em;
+}
+
+.form {
+  display: grid;
+  gap: 1.65rem;
+  margin-top: 2.75rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.label {
+  color: var(--login-text);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.inputShell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 3.65rem;
+  border: 1px solid var(--login-border);
+  border-radius: 0.68rem;
+  background: color-mix(in srgb, var(--login-surface) 92%, transparent);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.inputShell:focus-within {
+  border-color: color-mix(in srgb, var(--login-primary) 70%, white);
+  background: var(--login-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--login-primary) 12%, transparent);
+}
+
+.input {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0 1.1rem 0 3.75rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--login-text);
+  font-size: 1.125rem;
+  letter-spacing: -0.015em;
+}
+
+.passwordInput {
+  padding-right: 3.5rem;
+}
+
+.input::placeholder {
+  color: var(--login-placeholder);
+  opacity: 1;
+}
+
+.fieldIcon {
+  position: absolute;
+  left: 1.25rem;
+  z-index: 1;
+  color: var(--login-placeholder);
+  pointer-events: none;
+}
+
+.passwordToggle {
+  position: absolute;
+  right: 0.7rem;
+  display: inline-flex;
+  width: 2.45rem;
+  height: 2.45rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--login-placeholder);
+  transition:
+    color 140ms ease,
+    background 140ms ease;
+}
+
+.passwordToggle:hover {
+  background: color-mix(in srgb, var(--login-primary) 8%, transparent);
+  color: var(--login-primary);
+}
+
+.passwordToggle svg {
+  pointer-events: none;
+}
+
+.optionsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: -0.05rem;
+}
+
+.checkboxLabel {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--login-text);
+  font-size: 1rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkboxLabel input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.customCheckbox {
+  position: relative;
+  width: 1.12rem;
+  height: 1.12rem;
+  flex: 0 0 auto;
+  border: 1.5px solid #aeb6c9;
+  border-radius: 0.18rem;
+  background: var(--login-surface);
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.checkboxLabel input:focus-visible + .customCheckbox {
+  outline: 2px solid color-mix(in srgb, var(--login-primary) 38%, transparent);
+  outline-offset: 2px;
+}
+
+.checkboxLabel input:checked + .customCheckbox {
+  border-color: var(--login-primary);
+  background: var(--login-primary);
+}
+
+.checkboxLabel input:checked + .customCheckbox::after {
+  position: absolute;
+  top: 0.14rem;
+  left: 0.34rem;
+  width: 0.28rem;
+  height: 0.52rem;
+  border-right: 2px solid white;
+  border-bottom: 2px solid white;
+  content: '';
+  transform: rotate(42deg);
+}
+
+.textButton,
+.secondaryLink {
+  color: var(--login-primary);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  transition:
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.textButton {
+  font-size: 1rem;
+}
+
+.textButton:hover,
+.secondaryLink:hover {
+  color: var(--login-primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.feedback {
+  margin-top: -0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.feedbackError {
+  border-color: rgba(180, 35, 24, 0.18);
+  background: var(--accent-red-soft);
+  color: var(--accent-red);
+}
+
+.feedbackInfo {
+  border-color: color-mix(in srgb, var(--login-primary) 20%, transparent);
+  background: color-mix(in srgb, var(--login-primary) 8%, transparent);
+  color: var(--login-primary);
+}
+
+.primaryButton {
+  display: inline-flex;
+  width: 100%;
+  min-height: 4rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.05rem;
+  border-radius: 0.72rem;
+  background: linear-gradient(105deg, var(--login-primary-strong), var(--login-primary));
+  box-shadow: 0 12px 25px rgba(76, 61, 220, 0.17);
+  color: white;
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  transition:
+    box-shadow 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.primaryButton:hover:not(:disabled) {
+  box-shadow: 0 15px 30px rgba(76, 61, 220, 0.24);
+  transform: translateY(-1px);
+}
+
+.primaryButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.primaryButton:disabled {
+  opacity: 0.68;
+  cursor: progress;
+}
+
+.divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 2.65rem;
+  color: var(--login-muted);
+}
+
+.divider span {
+  height: 1px;
+  background: var(--login-border);
+}
+
+.divider b {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.secondaryActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  margin-top: 1.85rem;
+  color: var(--login-muted);
+  font-size: 0.95rem;
+}
+
+.secondaryLink {
+  font-size: 1.05rem;
+}
+
+.footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  min-height: 1.5rem;
+  color: var(--login-muted);
+  font-size: 0.9rem;
+}
+
+.footerDivider {
+  width: 1px;
+  height: 0.8rem;
+  background: var(--login-border);
+}
+
+@media (max-width: 1180px) {
+  .content {
+    grid-template-columns: minmax(20rem, 22rem) minmax(27rem, 30rem);
+    gap: clamp(2.5rem, 5vw, 4rem);
+    width: min(100%, 56rem);
+  }
+
+  .illustrationWrap {
+    width: 31rem;
+    margin-left: -5.25rem;
+  }
+}
+
+@media (max-width: 980px) {
+  .surface {
+    overflow-y: auto;
+  }
+
+  .content {
+    grid-template-columns: minmax(0, 31.5rem);
+    gap: 1.7rem;
+    justify-content: center;
+    width: 100%;
+    padding: 2rem 0 2.5rem;
+  }
+
+  .brandPanel {
+    align-items: center;
+  }
+
+  .heroTitle,
+  .heroDescription,
+  .illustrationWrap {
+    display: none;
+  }
+
+  .loginCard {
+    width: 100%;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .surface {
+    padding: 1.1rem 1rem 1.4rem;
+    border-radius: 0;
+  }
+
+  .topGlow {
+    top: -13rem;
+    left: -18rem;
+    opacity: 0.62;
+  }
+
+  .waveBack,
+  .waveFront,
+  .dotTwo,
+  .dotThree {
+    display: none;
+  }
+
+  .utilityBar {
+    min-height: 2.65rem;
+  }
+
+  .languageChip {
+    min-height: 2.65rem;
+    padding: 0 0.78rem;
+    font-size: 0.9rem;
+  }
+
+  .content {
+    gap: 1.35rem;
+    padding: 1.5rem 0 2rem;
+  }
+
+  .axisBrand {
+    width: 7.96875rem;
+    height: 2.5rem;
+  }
+
+  .loginCard {
+    min-height: 0;
+    padding: 2rem 1.35rem 1.8rem;
+    border-radius: 1.15rem;
+  }
+
+  .cardHeader {
+    padding-left: 0;
+  }
+
+  .cardHeader h2 {
+    font-size: 1.55rem;
+  }
+
+  .cardHeader p {
+    font-size: 0.98rem;
+  }
+
+  .form {
+    gap: 1.35rem;
+    margin-top: 2.1rem;
+  }
+
+  .optionsRow {
+    align-items: flex-start;
+  }
+
+  .checkboxLabel,
+  .textButton {
+    font-size: 0.84rem;
+  }
+
+  .inputShell {
+    height: 3.45rem;
+  }
+
+  .primaryButton {
+    min-height: 3.65rem;
+  }
+
+  .divider {
+    margin-top: 2.2rem;
+  }
+
+  .secondaryActions {
+    margin-top: 1.45rem;
+  }
+
+  .footer {
+    gap: 0.65rem 0.9rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (min-width: 981px) and (min-height: 851px) {
+  .content {
+    transform: translateY(-1.25rem);
+  }
+}
+
+@media (max-width: 390px) {
+  .utilityActions {
+    gap: 0.45rem;
+  }
+
+  .optionsRow {
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .footerDivider {
+    display: none;
+  }
+}
+
+@media (min-width: 981px) and (max-height: 850px) {
+  .surface {
+    padding-top: 1.4rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .content {
+    padding-block: 0.5rem;
+  }
+
+  .heroTitle {
+    margin-top: 1.65rem;
+  }
+
+  .heroDescription {
+    margin-top: 1rem;
+  }
+
+  .illustrationWrap {
+    width: 29rem;
+    margin-top: 0.75rem;
+  }
+
+  .loginCard {
+    min-height: 0;
+    padding-top: 2.5rem;
+    padding-bottom: 2rem;
+  }
+
+  .form {
+    gap: 1.2rem;
+    margin-top: 1.8rem;
+  }
+
+  .divider {
+    margin-top: 1.75rem;
+  }
+
+  .secondaryActions {
+    margin-top: 1.25rem;
+  }
+}
+
+@media (max-width: 980px) and (max-height: 720px) {
+  .surface {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .content {
+    gap: 0.5rem;
+    padding-block: 1rem 1.5rem;
+  }
+
+  .axisBrand {
+    width: 7.171875rem;
+    height: 2.25rem;
+  }
+
+  .loginCard {
+    padding-top: 2rem;
+    padding-bottom: 1.75rem;
+  }
+
+  .cardHeader {
+    padding-left: 0;
+  }
+
+  .form {
+    gap: 1.1rem;
+    margin-top: 1.5rem;
+  }
+
+  .inputShell {
+    height: 3.3rem;
+  }
+
+  .primaryButton {
+    min-height: 3.45rem;
+  }
+
+  .divider {
+    margin-top: 1.45rem;
+  }
+
+  .secondaryActions {
+    margin-top: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inputShell,
+  .passwordToggle,
+  .primaryButton,
+  .textButton,
+  .secondaryLink,
+  .customCheckbox {
+    transition: none;
+  }
+}

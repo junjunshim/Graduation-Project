@@ -1,17 +1,11 @@
-import { useState } from "react"
+import '../design-system/global/index.css'
+import { AppProviders } from './providers'
+import { AppRoutes } from './routes'
 
-function App() {
-  const [count, setCount] = useState(0)
-
+export default function App() {
   return (
-    <div>
-      <h1>Hello Electron + React</h1>
-
-      <button onClick={() => setCount(count + 1)}>
-        count: {count}
-      </button>
-    </div>
+    <AppProviders>
+      <AppRoutes />
+    </AppProviders>
   )
 }
-
-export default App

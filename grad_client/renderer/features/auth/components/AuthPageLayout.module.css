@@ -1,0 +1,321 @@
+.page {
+  display: grid;
+  min-height: 100vh;
+  background: var(--surface-app);
+}
+
+.pageWithCustomChrome {
+  grid-template-rows: var(--window-titlebar-height) minmax(0, 1fr);
+}
+
+.titleBarSlot {
+  min-height: var(--window-titlebar-height);
+}
+
+.pageInner {
+  min-width: 0;
+  padding: 1.25rem;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 1040px;
+  margin: 0 auto 1.25rem;
+}
+
+.brandBlock {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brandMark {
+  width: auto;
+  height: 1.9rem;
+  filter: drop-shadow(0 2px 3px rgba(72, 57, 204, 0.12));
+}
+
+.brandCopy {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.brandCopy strong {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.brandCopy span {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.72fr) minmax(24rem, 0.92fr);
+  gap: 2rem;
+  max-width: 1040px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+.storyPanel,
+.formShell,
+.stepCard,
+.supportCard {
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.storyPanel {
+  display: grid;
+  align-content: start;
+  gap: 1.35rem;
+  padding: 0.2rem 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.heroCopy {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.eyebrow,
+.formEyebrow {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.title {
+  margin: 0;
+  max-width: 16ch;
+  font-size: clamp(1.8rem, 3vw, 2.6rem);
+  line-height: 1.08;
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+.description,
+.formText,
+.supportText,
+.stepCard p,
+.metaText {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.stepRail {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line-default);
+}
+
+.stepCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.82rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--line-default);
+  border-radius: 0;
+  background: transparent;
+}
+
+.stepNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.stepCopy {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.stepCard strong {
+  color: var(--text-primary);
+  font-size: 0.96rem;
+}
+
+.formShell {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: 1.15rem;
+}
+
+.formColumn,
+.supportColumn {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+
+.formHeader {
+  display: grid;
+  gap: 0.5rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--line-default);
+}
+
+.formTitle,
+.supportTitle {
+  margin: 0;
+  font-size: 1.24rem;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.label {
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.input {
+  width: 100%;
+  padding: 0.68rem 0.75rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.input:focus {
+  border-color: var(--line-selected);
+  background: var(--surface-panel);
+}
+
+.feedback {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.feedbackError {
+  background: var(--accent-red-soft);
+  border-color: rgba(180, 35, 24, 0.18);
+  color: var(--accent-red);
+}
+
+.feedbackSuccess {
+  background: var(--accent-green-soft);
+  border-color: rgba(33, 115, 70, 0.16);
+  color: var(--accent-green);
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: 0.68rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.primaryButton {
+  background: var(--text-primary);
+  color: var(--text-inverse);
+}
+
+.secondaryButton {
+  border: 1px solid var(--line-default);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+}
+
+.primaryButton:hover,
+.secondaryButton:hover {
+  border-color: var(--line-strong);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.supportCard {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  border: 0;
+  border-top: 1px solid var(--line-default);
+  border-radius: 0;
+  background: transparent;
+}
+
+.metaList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.linkRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.textLink {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .frame {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .pageInner {
+    padding: 1rem;
+  }
+
+  .topBar {
+    align-items: flex-start;
+  }
+
+  .storyPanel,
+  .formShell {
+    padding: 1.1rem;
+  }
+}

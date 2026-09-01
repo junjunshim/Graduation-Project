@@ -1,19 +1,17 @@
-# 최상위 노드 추가 api (version 1)
+# 최상위 노드 추가 api
 - 최상위 노드 추가 api
 ## Request
 - Request syntax
 ```json
 {
     "node_type" : "COMPANY",
-    "name" : "테스트 회사",
-    "user_id" : "U-100",
-    "role_name" : "ADMIN"
+    "name" : "테스트 회사"
 }
 ```
 
 | Method | URL |
 | :--- | :--- |
-| Post | http://{서버 url}/api/v1/topNodes |
+| Post | http://{서버 url}/api/org/topNodes |
 
 ---
 - Request Header
@@ -21,6 +19,7 @@
 | 파라미터 | 타입 | 필수여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | Content_type | String | 필수 | application/json |
+| Authorization | String | 필수 | Bearer 사용자 토큰 | 
 
 ---
 - Request Elements
@@ -29,8 +28,6 @@
 | :--- | :--- | :--- | :--- |
 | node_type | String | 필수 | 노드의 타입 |
 | name | String | 필수 | 노드의 이름 |
-| user_id | String | 필수 | 노드를 생성하는 유저 id |
-| role_name | String | 필수 | 생성자에게 부여할 역할 |
 
 ---
 
@@ -38,8 +35,34 @@
 - Response Syntax
 ```json
 {
-    "status" : "success"
-    "new_node_id" : 12
+    "status" : "success",
+    "data" : [
+        {
+            "type" : "NODE",
+            "id" : 4,
+            "node_type" : "DEPARTMENT",
+            "parent_id" : "1" or null,
+            "title" : "개발 부서",
+            "path" : [1, 4],
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
+        },
+        {
+            "type" : "ROLE",
+            "id" : 20,
+            "node_id" : 4,
+            "email" : "test1234@gmail.com",
+            "role" : "ADMIN",
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
+        },
+        {
+            "type" : "AUTHORITY",
+            "id" : 2,
+            "node_id" : 4,
+            "role" : "ADMIN",
+            "authority" : "011111111111111111111111",
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
+        }
+    ]
 }
 ```
 ```json
@@ -54,11 +77,21 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
-| new_node_id | Integer | 성공 | 생성한 노드 id |
+| data | json | 성공 | 생성한 노드의 데이터 |
 | message | String | 에러 | 요청 관련 메세지 |
 
----
-## 업데이트
-### version 1 : 서버와 데이터베이스 연결 여부 확인용
-- 개선 사항 : token 기능, 생성자 식별을 email로 변경 필요
+- Data Elements
 
+| 파라미터 | 타입 | 필수 여부 | 설명 |
+| :--- | :--- | :--- | :--- |
+| type | String | 필수 | 데이터의 타입 |
+| id | String | 필수 | 데이터 식별 id |
+| node_type | String | node | 노드의 타입 |
+| parent_id | Integer | node | 상위 노드 id |
+| title | String | node | 노드의 이름 |
+| path | Array | node | 노드의 트리구조 |
+| node_id | Integer | role or authority | 소속 노드의 id |
+| email | String | role | 역할이 배정된 인원 |
+| role | String | role or authority | 배정된 역할 이름 |
+| authority | String | authority | 역할의 권한 비트 |
+| updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

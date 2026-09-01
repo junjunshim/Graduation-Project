@@ -1,0 +1,102 @@
+.page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: clamp(0.85rem, 1.55vh, 1.35rem);
+  min-width: 0;
+  min-height: 100%;
+  padding: 0.5rem var(--space-page-x) var(--space-page-bottom);
+  background: var(--surface-page);
+}
+
+.pageCreate {
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  padding-top: 0.75rem;
+}
+
+.navigationBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--line-default);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  min-width: 0;
+  overflow: visible;
+}
+
+.tabLink {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  flex: 0 0 auto;
+  padding: 0 0.42rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.1;
+  transition: background 140ms ease;
+}
+
+.tabLink::after {
+  content: '';
+  position: absolute;
+  right: 0.42rem;
+  bottom: -1px;
+  left: 0.42rem;
+  height: 2px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.tabLinkActive::after {
+  background: var(--text-primary);
+}
+
+.tabLink:hover {
+  background: var(--surface-hover);
+}
+
+.tabLink:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.tabContent {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+@media (max-width: 720px) {
+  .page {
+    grid-template-rows: auto auto;
+    min-height: 0;
+    padding-right: var(--space-page-x-mobile);
+    padding-left: var(--space-page-x-mobile);
+  }
+
+  .tabContent {
+    height: auto;
+  }
+
+  .tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+}

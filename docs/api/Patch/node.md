@@ -42,8 +42,8 @@
         {
             "type" : "NODE",
             "id" : 2,
-            "node_type" : "변경된 타입",
-            "parent_id" : "1" or null,
+            "node_type" : "DEPARTMENT",
+            "parent_id" : 1,
             "title" : "변경된 이름",
             "path" : [1, 2],
             "updated_at" : "2026-03-19 12:29:24.745634+00"
@@ -70,10 +70,10 @@
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 데이터 식별 id |
+| type | String | 필수 | 데이터의 타입 (NODE) |
+| id | Integer | 필수 | 노드 식별 id |
 | node_type | String | 필수 | 노드의 타입 |
-| parent_id | Integer | 필수 | 상위 노드 id |
+| parent_id | Integer or Null | 선택 | 상위 노드 id (최상위 노드는 null) |
 | title | String | 필수 | 노드의 이름 |
-| path | Array | 필수 | 노드의 트리구조 |
+| path | Array | 필수 | 노드의 계층 경로 배열 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

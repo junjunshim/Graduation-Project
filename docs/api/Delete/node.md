@@ -64,6 +64,6 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 데이터 식별 id |
+| id | Integer | 필수 | 데이터 식별 id |
 | status | String | 필수 | 삭제 성공 메세지 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

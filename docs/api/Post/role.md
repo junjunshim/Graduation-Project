@@ -62,15 +62,15 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
-| data | json | 성공 | 생성한 권한 데이터 |
+| data | Array | 성공 | 생성된 역할 데이터 배열 |
 | message | String | 에러 | 요청 관련 메세지 |
 
 - Data Elements
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 데이터 식별 id |
+| type | String | 필수 | 데이터의 타입 (ROLE) |
+| id | Integer | 필수 | 역할 배정 식별 id |
 | node_id | Integer | role | 소속 노드의 id |
 | email | String | role | 역할이 배정된 인원 |
 | role | String | role | 배정된 역할 이름 |

@@ -9,7 +9,7 @@
 
 | Method | URL |
 | :--- | :--- |
-| Get | http://{서버 url}/api/users?target_email= |
+| Get | http://{서버 url}/api/users?target_email=target@gmail.com |
 
 ---
 - Request Header
@@ -34,7 +34,7 @@
 {
     "status" : "success",
     "data" : [
-        # target_email과 요청자가 동일할 때
+        // 1. target_email과 요청자가 동일할 때 (본인 정보 조회)
         {
             "type" : "USER",
             "id" : "U-121",
@@ -43,8 +43,15 @@
             "personal_node_id" : 12,
             "created_at" : "2026-03-19 12:29:24.745634+00",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
-        },
-        # target_email과 요청자가 다를 때
+        }
+    ]
+}
+```
+```json
+{
+    "status" : "success",
+    "data" : [
+        // 2. target_email과 요청자가 다를 때 (타인 정보 조회)
         {
             "type" : "USER",
             "email" : "target@gmail.com",
@@ -72,10 +79,10 @@
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 데이터 식별 id |
+| type | String | 필수 | 데이터의 타입 (USER) |
+| id | String | 선택 | 데이터 식별 id (본인 조회 시에만 포함) |
 | email | String | 필수 | 유저 이메일 |
 | name | String | 필수 | 유저 이름 |
-| personal_node_id | Integer | 선택 | 개인 공간 노드 id |
-| created_at | Array | 선택 | 유저 가입날짜 |
-| updated_at | String | 선택 | 데이터의 최신 업데이트 시간 |
+| personal_node_id | Integer | 선택 | 개인 공간 노드 id (본인 조회 시에만 포함) |
+| created_at | String | 선택 | 유저 가입날짜 (본인 조회 시에만 포함) |
+| updated_at | String | 선택 | 데이터의 최신 업데이트 시간 (본인 조회 시에만 포함) |

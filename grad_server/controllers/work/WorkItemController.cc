@@ -94,6 +94,7 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
         requester_email, work_item_id, owner_node_id, owner_user_email, title,
         getStrOrNull("parent_work_item_id"),
         getStrOrNull("description"),
+        getStrOrNull("category"),
         getBoolOrNull("hidden", false),
         getStrOrNull("status"),
         getIntOrNull("priority", 3),
@@ -145,7 +146,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
     auto dbClient = drogon::app().getDbClient();
     
     // DB 함수 호출 SQL
-    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
     
     // DB 함수 비동기 실행
     dbClient->execSqlAsync(
@@ -181,6 +182,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         work_item_id,
         getStrOrNull("title"),
         getStrOrNull("description"),
+        getStrOrNull("category"),
         getBoolOrNull("hidden"),
         getStrOrNull("status"),
         getIntOrNull("priority", -1),

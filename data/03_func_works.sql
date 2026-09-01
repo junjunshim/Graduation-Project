@@ -9,6 +9,7 @@ CREATE OR REPLACE FUNCTION create_work_item(
     p_title work_items.title%TYPE,
     p_parent_work_item_id work_items.parent_work_item_id%TYPE DEFAULT NULL,
     p_description work_items.description%TYPE DEFAULT NULL,
+    p_category work_items.category%TYPE DEFAULT NULL,
     p_hidden work_items.hidden%TYPE DEFAULT FALSE,
     p_status work_items.status%TYPE DEFAULT 'todo',
     p_priority work_items.priority%TYPE DEFAULT 3,
@@ -102,6 +103,7 @@ BEGIN
         title, 
         parent_work_item_id, 
         description, 
+        category,
         hidden,
         status, 
         priority, 
@@ -116,6 +118,7 @@ BEGIN
         p_title,
         NULLIF(p_parent_work_item_id, ''),
         NULLIF(p_description, ''),
+        NULLIF(p_category, ''),
         COALESCE(p_hidden, FALSE),
         COALESCE(NULLIF(p_status, ''), 'todo'),
         COALESCE(p_priority, 3),
@@ -138,6 +141,7 @@ BEGIN
         'owner_user_id', w.owner_user_id,
         'title', w.title,
         'description', w.description,
+        'category', w.category,
         'status', w.status,
         'priority', w.priority,
         'hidden', w.hidden,
@@ -169,6 +173,7 @@ CREATE OR REPLACE FUNCTION update_work_item(
     p_work_item_id work_items.work_item_id%TYPE,
     p_title work_items.title%TYPE DEFAULT NULL,
     p_description work_items.description%TYPE DEFAULT NULL,
+    p_category work_items.category%TYPE DEFAULT NULL,
     p_hidden work_items.hidden%TYPE DEFAULT NULL,
     p_status work_items.status%TYPE DEFAULT NULL,
     p_priority work_items.priority%TYPE DEFAULT -1,
@@ -184,6 +189,7 @@ DECLARE
     v_owner_user_email users.email%TYPE;
     v_current_hidden work_items.hidden%TYPE;
     v_old_title work_items.title%TYPE;
+    v_old_category work_items.category%TYPE;
     v_old_status work_items.status%TYPE;
     v_old_progress work_items.progress%TYPE;
 BEGIN
@@ -196,8 +202,8 @@ BEGIN
     END IF;
 
     -- 2. work_item 정보 한 번에 가져오기 (성능 최적화)
-    SELECT owner_node_id, owner_user_id, hidden, title, status, progress
-    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_status, v_old_progress
+    SELECT owner_node_id, owner_user_id, hidden, title, category, status, progress
+    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_category, v_old_status, v_old_progress
     FROM work_items 
     WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
 
@@ -240,6 +246,7 @@ BEGIN
     SET
         title = COALESCE(NULLIF(p_title, ''), title),
         description = COALESCE(NULLIF(p_description, ''), description),
+        category = CASE WHEN p_category IS NOT NULL THEN NULLIF(p_category, '') ELSE category END,
         hidden = COALESCE(p_hidden, hidden),
         status = COALESCE(NULLIF(p_status, ''), status),
         priority = CASE WHEN p_priority >= 1 AND p_priority <= 5 THEN p_priority ELSE priority END,
@@ -249,9 +256,12 @@ BEGIN
         due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date)
     WHERE work_item_id = p_work_item_id;
 
-    -- 7.5 활동 로그 적재 (제목, 상태, 진행률 변경 시 기록)
+    -- 7.5 활동 로그 적재 (제목, 카테고리, 상태, 진행률 변경 시 기록)
     IF p_title <> '' AND p_title <> v_old_title THEN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, p_title, 'updated', 'title', v_old_title, p_title);
+    END IF;
+    IF p_category IS NOT NULL AND p_category <> COALESCE(v_old_category, '') THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'category', v_old_category, p_category);
     END IF;
     IF p_status <> '' AND p_status <> v_old_status THEN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'status', v_old_status, p_status);
@@ -270,6 +280,7 @@ BEGIN
         'owner_user_id', w.owner_user_id,
         'title', w.title,
         'description', w.description,
+        'category', w.category,
         'status', w.status,
         'priority', w.priority,
         'hidden', w.hidden,
@@ -574,6 +585,7 @@ BEGIN
         'owner_user_name', u_owner.name,
         'title', w.title,
         'description', w.description,
+        'category', w.category,
         'status', w.status,
         'priority', w.priority,
         'weight', w.weight,

@@ -84,11 +84,11 @@
 
 4. `work_items`: 업무와 할 일
 
-| work_item_id | title | owner_node_id | parent_id | status | progress | 
-| :---: | :---: | :---: | :---: | :---: | :---: |
-| WI-1 | 2024 신규 서비스 런칭 | 100 | NULL | in_progress | 30% |
-| WI-2 | 인증 api 서버 구축 | 300 | WI-1 | in_progress | 50% |
-| WI-3 | db 스키마 설계 | 999 | WI-2 | done | 100%|
+| work_item_id | title | category | owner_node_id | parent_id | status | progress | 
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| WI-1 | 2024 신규 서비스 런칭 | PROJECT | 100 | NULL | in_progress | 30% |
+| WI-2 | 인증 api 서버 구축 | FEATURE | 300 | WI-1 | in_progress | 50% |
+| WI-3 | db 스키마 설계 | TASK | 999 | WI-2 | done | 100%|
 - 업무의 정보를 저장
 ---
 

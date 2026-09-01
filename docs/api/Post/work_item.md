@@ -8,6 +8,7 @@
     "owner_node_id" : 10,
     "owner_user_email" : "test1234@gmail.com",
     "title" : "테스트 work_item",
+    "category" : "FEATURE",
     "parent_work_item_id" : "WI-110",
     "description" : "테스트용 work_item",
     "status" : "todo",
@@ -41,6 +42,7 @@
 | owner_node_id | Integer | 필수 | work_item이 생성될 노드 id |
 | owner_user_email | String | 필수 | 담당자 유저 email |
 | title | String | 필수 | work_item 이름 |
+| category | String | 선택 | work_item 카테고리 (자유 문자열) |
 | parent_work_item_id | String | 선택 | 부모 work_item_id |
 | description | String | 선택 | work_item 설명 |
 | status | String | 선택 | 현재 상태(todo, in_progress, done 등) |
@@ -67,6 +69,7 @@
             "owner_user_id" : "U-12",
             "title" : "테스트 work_item",
             "description" : "테스트용 work_item",
+            "category" : "FEATURE",
             "status" : "todo",
             "priority" : 3,
             "hidden" : false,
@@ -105,6 +108,7 @@
 | owner_user_id | String | 필수 | 소유자 id |
 | title | String | 필수 | work_item 이름 |
 | description | String | 필수 | work_item 설명 |
+| category | String or Null | 선택 | work_item 카테고리 |
 | status | String | 필수 | work_item 상태 |
 | priority | Integer | 필수 | work_item 우선순위 |
 | hidden | Boolean | 필수 | 숨김 속성 현황 |

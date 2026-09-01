@@ -78,7 +78,8 @@ BEGIN
             p_owner_node_id => v_company_node_id, 
             p_owner_user_email => v_comp_admin_email, 
             p_title => v_companies[c_idx] || ' 핵심 프로젝트 Alpha', 
-            p_description => v_companies[c_idx] || ' 차세대 플래그십 라인업 통합 R&D 개발 프로젝트'
+            p_description => v_companies[c_idx] || ' 차세대 플래그십 라인업 통합 R&D 개발 프로젝트',
+            p_category => 'PROJECT'
         );
         
         v_company_project_id_2 := 'WI-' || v_wi_counter;
@@ -89,7 +90,8 @@ BEGIN
             p_owner_node_id => v_company_node_id, 
             p_owner_user_email => v_comp_admin_email, 
             p_title => v_companies[c_idx] || ' 전사 인프라 최적화', 
-            p_description => v_companies[c_idx] || ' 클라우드 마이그레이션 및 서비스 비용 아키텍처 개선 과제'
+            p_description => v_companies[c_idx] || ' 클라우드 마이그레이션 및 서비스 비용 아키텍처 개선 과제',
+            p_category => 'INFRA'
         );
 
         -- 3. 각 회사별 5개 부서 생성 루프
@@ -124,6 +126,7 @@ BEGIN
                 p_owner_user_email => v_dept_leader_email,
                 p_title => v_depts[d_idx] || ' 세부 구현 스프린트',
                 p_description => v_companies[c_idx] || ' ' || v_depts[d_idx] || '의 세부 마일스톤 기획 및 리소스 설계',
+                p_category => 'FEATURE',
                 p_parent_work_item_id => v_company_project_id_1
             );
             
@@ -136,6 +139,7 @@ BEGIN
                 p_owner_user_email => v_dept_leader_email,
                 p_title => v_depts[d_idx] || ' 품질 및 QA 검증',
                 p_description => v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 보안 무결성 분석 및 릴리즈 전 최종 배포 검증',
+                p_category => 'QA',
                 p_parent_work_item_id => v_company_project_id_2
             );
 
@@ -163,6 +167,7 @@ BEGIN
                     p_owner_user_email => v_member_email,
                     p_title => v_member_name || ' 담당 실무 과제',
                     p_description => v_member_name || '이 수행하는 단위 세부 기능 개발 및 코드 무결성 확보',
+                    p_category => 'TASK',
                     p_parent_work_item_id => v_dept_wi_id_1
                 );
                 v_wi_counter := v_wi_counter + 1;
@@ -186,6 +191,7 @@ BEGIN
                     p_owner_user_email => v_dept_leader_email,
                     p_title => v_depts[d_idx] || ' ' || t_idx || '팀 현안 검토',
                     p_description => v_depts[d_idx] || ' ' || t_idx || '팀원들이 함께 완수할 단기 TODO 스크럼 과제',
+                    p_category => 'MEETING',
                     p_parent_work_item_id => v_dept_wi_id_2
                 );
                 v_wi_counter := v_wi_counter + 1;

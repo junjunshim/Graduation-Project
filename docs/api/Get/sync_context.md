@@ -37,19 +37,28 @@
     "status" : "success",
     "data" : [
         {
-            "type" : "NODE",
-            "id" : 4,
-            "node_type" : "DEPARTMENT",
-            "parent_id" : 1,
-            "title" : "개발 부서",
-            "path" : [1, 4],
+            "type" : "WORK_ITEM",
+            "id" : "WI-1101",
+            "parent_id" : "WI-110",
+            "owner_node_id" : 10,
+            "owner_user_id" : "U-12",
+            "title" : "테스트 work_item",
+            "description" : "테스트용 work_item",
+            "category" : "FEATURE",
+            "status" : "todo",
+            "priority" : 3,
+            "hidden" : false,
+            "weight" : 1,
+            "progress" : 0,
+            "start_date" : "2026-03-01",
+            "due_date" : "2026-03-31",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
             "type" : "WORK_ITEM",
-            "id" : "WI-1101",
+            "id" : "WI-999",
             "status" : "deleted",
-            "updated_at" : "2026-03-19 12:29:24.745634+00"
+            "updated_at" : "2026-03-19 12:35:00.000000+00"
         },
         {
             "type" : "ROLE",
@@ -60,6 +69,12 @@
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
+            "type" : "ROLE",
+            "id" : 15,
+            "status" : "deleted",
+            "updated_at" : "2026-03-19 12:30:00.000000+00"
+        },
+        {
             "type" : "AUTHORITY",
             "id" : 2,
             "node_id" : 4,
@@ -68,14 +83,14 @@
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
-            "type" : "MENTION",
-            "id" : 12,
-            "comment_id" : 101,
-            "work_item_id" : "WI-1101",
-            "message" : "홍길동님이 댓글에서 회원님을 멘션했습니다.",
-            "is_read" : true,
-            "created_at" : "2026-03-19 12:29:24.745634+00",
-            "updated_at" : "2026-03-19 12:35:10.123456+00"
+            "type": "MENTION",
+            "id": 15,
+            "comment_id": 105,
+            "work_item_id": "WI-104",
+            "message": "이순신님이 댓글에서 회원님을 멘션했습니다.",
+            "is_read": false,
+            "created_at": "2026-03-19 12:30:00.000000+00",
+            "updated_at": "2026-03-19 12:30:00.000000+00"
         }
     ]
 }
@@ -92,7 +107,7 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
-| data | Array | 성공 | 조회된 모든 변경 데이터를 담은 배열 |
+| data | Array | 성공 | 동기화 시점 이후 변경/추가/삭제된 엔티티(NODE, WORK_ITEM, ROLE, AUTHORITY, MENTION) 배열 |
 | message | String | 에러 | 요청 관련 메세지 |
 
 - Data Elements
@@ -100,29 +115,30 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 (NODE, WORK_ITEM, ROLE, AUTHORITY, MENTION) |
-| id | String or Integer | 필수 | 데이터 식별 id (NODE/ROLE/AUTHORITY/MENTION은 Integer, WORK_ITEM은 String) |
-| node_type | String | node | 노드의 타입 |
-| parent_id | Integer or String | node or work_item | 상위 노드 id or 상위 work_item id |
-| title | String | node or work_item | 노드의 이름 or work_item 제목 |
-| path | Array | node | 노드의 트리구조 |
-| owner_node_id | Integer | work_item | 소속 노드 id |
-| owner_user_id | String | work_item | 소유자 id |
-| description | String | work_item | work_item 설명 |
-| status | String | work_item or deleted | work_item 상태 (생성/수정 시 상태값, 삭제 시 "deleted") |
-| priority | Integer | work_item | work_item 우선순위 |
-| hidden | Boolean | work_item | 숨김 속성 현황 |
-| weight | Integer | work_item | 가중치 |
-| progress | Integer | work_item | 진행률 |
-| start_date | String | work_item | 시작 날짜 |
-| due_date | String | work_item | 마감 날짜 |
-| node_id | Integer | role or authority | 소속 노드의 id |
-| email | String | role | 역할이 배정된 인원 |
-| role | String | role or authority | 배정된 역할 이름 |
-| authority | String | authority | 역할의 권한 비트 |
-| comment_id | Integer | mention | 멘션이 포함된 댓글 id |
-| work_item_id | String | mention | 멘션이 발생한 work_item id |
-| message | String | mention | 멘션 알림 메시지 |
-| is_read | Boolean | mention | 읽음 상태 여부 |
+| id | String or Integer | 필수 | 데이터 식별 id (NODE/ROLE/AUTHORITY/MENTION: Integer, WORK_ITEM: String) |
+| node_type | String | node | 노드의 타입 (신규/수정 시) |
+| parent_id | String or Integer or Null | node, work_item | 상위 식별 id (노드는 Integer, 업무는 String) |
+| title | String | node, work_item | 노드 이름 또는 업무 제목 |
+| path | Array | node | 노드의 계층 경로 배열 |
+| owner_node_id | Integer | work_item | 업무 소속 노드 id |
+| owner_user_id | String | work_item | 업무 담당자 사용자 id |
+| description | String or Null | work_item | 업무 설명 |
+| category | String or Null | work_item | 업무 카테고리 |
+| status | String | 필수 | 업무 상태 또는 변경 상태 (삭제된 객체인 경우 항상 `"deleted"`) |
+| priority | Integer | work_item | 업무 우선순위 |
+| hidden | Boolean | work_item | 업무 숨김 여부 |
+| weight | Integer | work_item | 업무 가중치 |
+| progress | Integer | work_item | 업무 진행률 |
+| start_date | String or Null | work_item | 업무 시작 일자 |
+| due_date | String or Null | work_item | 업무 마감 일자 |
+| node_id | Integer | role, authority | 소속 노드의 id |
+| email | String | role | 역할이 배정된 사용자 이메일 |
+| role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
+| authority | String | authority | 24비트 권한 문자열 |
+| comment_id | Integer | mention | 멘션이 발생한 댓글 식별 ID |
+| work_item_id | String | mention | 댓글이 작성된 업무 식별 ID |
+| message | String | mention | 멘션 알림 메시지 내용 |
+| is_read | Boolean | mention | 알림 읽음 상태 여부 |
 | created_at | String | mention | 알림 생성 일시 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 

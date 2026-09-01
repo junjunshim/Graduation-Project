@@ -162,14 +162,10 @@ BEGIN
     WHERE user_id = v_target_id AND node_id = p_node_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
-        RAISE;
-        WHEN SQLSTATE 'P0103' THEN
-        RAISE;
-        WHEN SQLSTATE 'P0403' OR SQLSTATE 'P0404' OR SQLSTATE 'P0405' THEN
-        RAISE;
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' OR SQLSTATE 'P0403' OR SQLSTATE 'P0404' OR SQLSTATE 'P0405' THEN
+            RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0406]Failed to update role of user : %, (REASON: %)', p_target_email, SQLERRM
-        USING ERRCODE = 'P0406';
+            RAISE EXCEPTION '[P0406]Failed to update role of user : %, (REASON: %)', p_target_email, SQLERRM
+            USING ERRCODE = 'P0406';
 END;
 $$ LANGUAGE plpgsql;

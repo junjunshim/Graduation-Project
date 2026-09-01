@@ -48,6 +48,11 @@ BEGIN
         p_old_value,
         p_new_value
     );
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0703]Failed to log activity: %, (REASON: %)', p_target_name, SQLERRM
+            USING ERRCODE = 'P0703';
 END;
 $$ LANGUAGE plpgsql;
 

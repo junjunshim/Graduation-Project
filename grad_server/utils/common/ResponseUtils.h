@@ -40,6 +40,15 @@ enum class DbErrorCode {
     InvalidActivityFilter,      // P0701 활동 조회 필터 부적절
     FetchActivitiesFailed,      // P0702 활동 조회 실패
     UpdateUserFailed,           // P0508 사용자 정보 수정 실패
+    ReadMentionFailed,          // P0509 멘션 알림 읽음 처리 실패
+    AddCommentFailed,           // P0607 댓글 등록 실패
+    AddMentionFailed,           // P0608 멘션 등록 실패
+    GetWorkItemDetailFailed,    // P0609 업무 상세 조회 실패
+    AddWorkItemFileFailed,      // P0610 업무 파일 등록 실패
+    DeleteWorkItemFileFailed,   // P0611 업무 파일 삭제 실패
+    GetWorkItemFilesFailed,     // P0612 업무 파일 목록 조회 실패
+    DownloadWorkItemFileFailed, // P0613 업무 파일 다운로드 정보 조회 실패
+    LogActivityFailed,          // P0703 활동 로그 기록 실패
     Unknown                     // 알 수 없는 에러
 };
 

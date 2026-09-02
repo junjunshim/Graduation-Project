@@ -1,18 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
-import { getOrgSnapshot } from '../data/orgService'
+import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
 } from '../data/workspaceDirectorySelection'
+import { formatActivityMessage } from '../../dashboard/model/activityFormatter'
 import { formatWorkspaceMonthDay } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
-import type { RoleMember, WorkItemRecord, WorkItemStatus, WorkspaceOverview } from '../model/types'
+import type { ActivityRecord, RoleMember, WorkItemRecord, WorkItemStatus, WorkspaceOverview } from '../model/types'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import styles from './WorkspacePage.module.css'
 
@@ -24,7 +25,7 @@ type WorkspaceMetric = {
   description: string
   icon?: IconName
   progress?: number
-  tone?: 'brand' | 'warning'
+  tone?: 'brand' | 'warning' | 'info' | 'success' | 'purple' | 'amber'
   variant?: 'primary' | 'standard'
 }
 
@@ -395,7 +396,18 @@ function getWorkItemCounts(workItems: WorkItemRecord[]) {
 function getWorkspaceMetrics(overview: WorkspaceOverview): WorkspaceMetric[] {
   const counts = getWorkItemCounts(overview.visibleWorkItems)
   const averageProgress = clampProgress(overview.summary.averageProgress)
-  const teamMemberCount = Math.max(overview.rootRoleMembers.length, 1)
+  const directMemberCount = overview.rootRoleMembers.length
+  const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : directMemberCount
+
+  const memberValue =
+    totalMemberCount !== directMemberCount && totalMemberCount > 0
+      ? `${directMemberCount} / ${totalMemberCount}`
+      : String(Math.max(directMemberCount, 1))
+
+  const memberDescription =
+    totalMemberCount !== directMemberCount && totalMemberCount > 0
+      ? `직속 ${directMemberCount}명 · 전체 ${totalMemberCount}명`
+      : '현재 워크스페이스 기준'
 
   return [
     {
@@ -405,12 +417,14 @@ function getWorkspaceMetrics(overview: WorkspaceOverview): WorkspaceMetric[] {
       icon: 'trendingUp',
       progress: averageProgress,
       variant: 'primary',
+      tone: 'brand',
     },
     {
       label: '전체 업무',
       value: String(overview.summary.workItemCount),
       description: `완료 ${counts.done} · 진행중 ${counts.inProgress} · 대기 ${counts.todo}`,
       icon: 'page',
+      tone: 'info',
     },
     {
       label: '마감 임박',
@@ -421,17 +435,17 @@ function getWorkspaceMetrics(overview: WorkspaceOverview): WorkspaceMetric[] {
     },
     {
       label: '팀원',
-      value: String(teamMemberCount),
-      description: '루트 공간 기준',
+      value: memberValue,
+      description: memberDescription,
       icon: 'users',
-      tone: 'brand',
+      tone: 'purple',
     },
     {
       label: '내 업무',
       value: String(overview.summary.myWorkItemCount),
       description: '내 담당 업무',
       icon: 'checkSquare',
-      tone: 'brand',
+      tone: 'success',
     },
   ]
 }
@@ -540,18 +554,38 @@ function getTimelineRangeLabel(item: WorkItemRecord) {
 }
 
 export function WorkspacePage() {
-  const snapshot = getOrgSnapshot()
+  const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const currentUser = getCurrentUser(snapshot)
-  const [activeWorkspaceRootId] = useState(
-    () =>
-      getActiveWorkspaceRootId(currentUser?.userId) ??
-      getDefaultWorkspaceRootId(currentUser?.userId),
-  )
   const [searchParams] = useSearchParams()
+  const workspaceRootParam = searchParams.get('rootId') || searchParams.get('nodeId')
+  const activeWorkspaceRootId =
+    workspaceRootParam ??
+    getActiveWorkspaceRootId(currentUser?.userId) ??
+    getDefaultWorkspaceRootId(currentUser?.userId)
   const [statusFilter, setStatusFilter] = useState<WorkspaceStatusFilter>('all')
   const requestedView = searchParams.get('view')
   const activeView: WorkspaceView =
     requestedView === 'tasks' || requestedView === 'timeline' ? requestedView : 'overview'
+
+  useEffect(() => {
+    let isSubscribed = true
+
+    if (activeWorkspaceRootId) {
+      fetchNodeDetail(activeWorkspaceRootId)
+        .then((latestSnapshot) => {
+          if (isSubscribed) {
+            setSnapshot(latestSnapshot)
+          }
+        })
+        .catch((error) => {
+          console.warn('[WorkspacePage] 노드 상세 데이터 조회 실패:', error)
+        })
+    }
+
+    return () => {
+      isSubscribed = false
+    }
+  }, [activeWorkspaceRootId])
 
   if (!currentUser) {
     return null
@@ -559,6 +593,7 @@ export function WorkspacePage() {
 
   const overview = getWorkspaceOverview(currentUser.userId, snapshot, {
     rootNodeId: activeWorkspaceRootId,
+    singleNodeOnly: true,
   })
   const counts = getWorkItemCounts(overview.visibleWorkItems)
   const metrics = getWorkspaceMetrics(overview)
@@ -567,15 +602,29 @@ export function WorkspacePage() {
   const filteredWorkItems = filterWorkItems(todayRelevantWorkItems, statusFilter).slice(0, BOARD_ITEM_LIMIT)
   const timeline = buildTimeline(overview.visibleWorkItems, workspaceToday)
   const todayLinkedWorkItems = todayRelevantWorkItems.slice(0, DOCUMENT_LIMIT)
+  const displayedFiles = (overview.files ?? []).slice(0, DOCUMENT_LIMIT)
+  const workItemsById = new Map(overview.visibleWorkItems.map((item) => [item.workItemId, item]))
+  const displayedActivities: ActivityRecord[] = [...(overview.activities ?? [])]
+    .sort((a, b) => {
+      const timeDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      if (!Number.isNaN(timeDiff) && timeDiff !== 0) {
+        return timeDiff
+      }
+      return b.id - a.id
+    })
+    .slice(0, ACTIVITY_LIMIT)
   const activityItems = todayRelevantWorkItems.slice(0, ACTIVITY_LIMIT)
-  const visibleMembers =
-    overview.rootRoleMembers.length > 0
-      ? overview.rootRoleMembers.slice(0, 4)
+  const displayRoleMembers = overview.rootRoleMembers.length > 0
+    ? overview.rootRoleMembers
+    : overview.allRoleMembers && overview.allRoleMembers.length > 0
+      ? overview.allRoleMembers
       : [{ userId: currentUser.userId, name: currentUser.name, email: '', roleName: 'ADMIN' as const, assignmentId: 0 }]
-  const extraMemberCount = Math.max(0, overview.rootRoleMembers.length - visibleMembers.length)
+  const visibleMembers = displayRoleMembers.slice(0, 4)
+  const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : overview.rootRoleMembers.length
+  const extraMemberCount = Math.max(0, totalMemberCount - visibleMembers.length)
   const statusFilters: Array<{ id: WorkspaceStatusFilter; label: string; count: number }> = [
     { id: 'all', label: '전체', count: counts.all },
-    { id: 'todo', label: 'To do', count: counts.todo },
+    { id: 'todo', label: '예정', count: counts.todo },
     { id: 'in-progress', label: '진행중', count: counts.inProgress },
     { id: 'done', label: '완료', count: counts.done },
   ]
@@ -609,7 +658,15 @@ export function WorkspacePage() {
         </nav>
 
         <div className={styles.headerActions}>
-          <div className={styles.memberStack} aria-label="워크스페이스 멤버">
+          <div
+            className={styles.memberStack}
+            aria-label="워크스페이스 멤버"
+            title={
+              overview.allRoleMembers && overview.allRoleMembers.length !== overview.rootRoleMembers.length
+                ? `직속 팀원 ${overview.rootRoleMembers.length}명 / 하위 포함 전체 ${totalMemberCount}명`
+                : `팀원 ${totalMemberCount}명`
+            }
+          >
             {visibleMembers.map((member) => (
               <span
                 key={`${member.assignmentId}-${member.userId}`}
@@ -619,7 +676,7 @@ export function WorkspacePage() {
                 <span className={styles.memberName}>{member.name}</span>
               </span>
             ))}
-            {extraMemberCount > 0 ? <strong data-member-name={`외 ${extraMemberCount}명`}>+{extraMemberCount}</strong> : null}
+            {extraMemberCount > 0 ? <strong data-member-name={`외 ${extraMemberCount}명 (전체 ${totalMemberCount}명)`}>+{extraMemberCount}</strong> : null}
           </div>
 
           <button type="button" className={styles.secondaryAction}>
@@ -654,6 +711,10 @@ export function WorkspacePage() {
               metric.variant === 'primary' ? styles.metricCardPrimary : '',
               metric.tone === 'brand' ? styles.metricCardBrand : '',
               metric.tone === 'warning' ? styles.metricCardWarning : '',
+              metric.tone === 'info' ? styles.metricCardInfo : '',
+              metric.tone === 'success' ? styles.metricCardSuccess : '',
+              metric.tone === 'purple' ? styles.metricCardPurple : '',
+              metric.tone === 'amber' ? styles.metricCardAmber : '',
             ]
               .filter(Boolean)
               .join(' ')}
@@ -712,10 +773,11 @@ export function WorkspacePage() {
 
             <div className={styles.workTable}>
               <div className={styles.workTableHeader} aria-hidden="true">
-                <span>업무명</span>
-                <span>담당자</span>
-                <span>마감일</span>
-                <span>상태</span>
+                <span className={styles.workTableHeaderCheck} />
+                <span className={styles.workTableHeaderTitle}>업무명</span>
+                <span className={styles.workTableHeaderAssignee}>담당자</span>
+                <span className={styles.workTableHeaderDue}>마감일</span>
+                <span className={styles.workTableHeaderStatus}>상태</span>
               </div>
 
               {filteredWorkItems.length > 0 ? (
@@ -842,7 +904,32 @@ export function WorkspacePage() {
             </div>
 
             <div className={styles.documentList}>
-              {todayLinkedWorkItems.length > 0 ? (
+              {displayedFiles.length > 0 ? (
+                displayedFiles.map((file) => {
+                  const parentWorkItem = workItemsById.get(file.workItemId)
+                  const uploaderName = file.uploaderName || getMemberName(file.uploaderUserId, overview.rootRoleMembers)
+
+                  return (
+                    <Link key={file.id} to={`/work-items/${file.workItemId}`} className={styles.documentItem}>
+                      <span className={styles.documentIcon}>
+                        <Icon name="fileText" size={15} />
+                      </span>
+                      <span className={styles.documentCopy}>
+                        <strong title={file.originalFileName}>{file.originalFileName}</strong>
+                        {parentWorkItem ? (
+                          <span className={styles.documentWorkItemTitle} title={parentWorkItem.title}>
+                            {parentWorkItem.title}
+                          </span>
+                        ) : null}
+                        <small title={`${uploaderName} · ${formatWorkspaceMonthDay(file.createdAt)}`}>
+                          {uploaderName} · {formatWorkspaceMonthDay(file.createdAt)}
+                        </small>
+                      </span>
+                      <Icon name="arrowRight" size={14} />
+                    </Link>
+                  )
+                })
+              ) : todayLinkedWorkItems.length > 0 ? (
                 todayLinkedWorkItems.map((item) => (
                   <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.documentItem}>
                     <span className={styles.documentIcon}>
@@ -859,17 +946,8 @@ export function WorkspacePage() {
                   </Link>
                 ))
               ) : (
-                <p className={styles.emptyCopy}>최근 연결된 업무가 없습니다.</p>
+                <p className={styles.emptyCopy}>최근 공유된 문서가 없습니다.</p>
               )}
-              <Link to="/documents" className={styles.addDocumentItem}>
-                <span className={styles.documentIcon}>
-                  <Icon name="plus" size={15} />
-                </span>
-                <span className={styles.documentCopy}>
-                  <strong>새 문서 추가</strong>
-                  <small>문서 탭으로 이동</small>
-                </span>
-              </Link>
             </div>
           </section>
 
@@ -885,7 +963,38 @@ export function WorkspacePage() {
             </div>
 
             <div className={styles.activityList}>
-              {activityItems.length > 0 ? (
+              {displayedActivities.length > 0 ? (
+                displayedActivities.map((act) => {
+                  const message = formatActivityMessage(act)
+                  const targetWorkItemId = act.entityType.toUpperCase() === 'WORK_ITEM' ? act.entityId : undefined
+
+                  const content = (
+                    <>
+                      <span className={styles.activityAvatar}>
+                        <UserAvatar
+                          name={act.actorName || getMemberName(act.actorUserId, overview.rootRoleMembers)}
+                          userId={act.actorUserId}
+                          size="medium"
+                        />
+                      </span>
+                      <span className={styles.activityCopy}>
+                        <strong title={message}>{message}</strong>
+                        <small>{formatWorkspaceMonthDay(act.createdAt)}</small>
+                      </span>
+                    </>
+                  )
+
+                  return targetWorkItemId ? (
+                    <Link key={act.id} to={`/work-items/${targetWorkItemId}`} className={styles.activityItem}>
+                      {content}
+                    </Link>
+                  ) : (
+                    <div key={act.id} className={styles.activityItem}>
+                      {content}
+                    </div>
+                  )
+                })
+              ) : activityItems.length > 0 ? (
                 activityItems.map((item) => {
                   const activityDisplay = getActivityDisplay(item, workspaceToday)
 

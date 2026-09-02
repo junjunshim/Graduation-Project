@@ -153,6 +153,13 @@ function DirectoryToolbar({
   )
 }
 
+function formatMemberCount(item: WorkspaceDirectoryItem) {
+  if (item.childCount > 0) {
+    return `직속 ${item.directMemberCount}명 (전체 ${item.totalMemberCount}명)`
+  }
+  return `멤버 ${item.directMemberCount || item.memberCount}명`
+}
+
 function HierarchyView({
   root,
   branches,
@@ -178,7 +185,7 @@ function HierarchyView({
             </span>
             <span>{root.description}</span>
             <span>
-              멤버 {root.memberCount}명
+              {formatMemberCount(root)}
               <i aria-hidden="true" />
               하위 {root.childCount}개
             </span>
@@ -218,7 +225,7 @@ function HierarchyView({
                   <h2>{branch.name}</h2>
                   <p>{branch.description}</p>
                   <span>
-                    멤버 {branch.memberCount}명
+                    {formatMemberCount(branch)}
                     <i aria-hidden="true" />
                     하위 {branch.childCount}개
                   </span>
@@ -239,7 +246,7 @@ function HierarchyView({
                         <div className={styles.leafCopy}>
                           <strong>{child.name}</strong>
                           <span>{child.description}</span>
-                          <small>멤버 {child.memberCount}명</small>
+                          <small>{formatMemberCount(child)}</small>
                         </div>
                         <MoreButton label={child.name} />
                       </li>
@@ -333,7 +340,7 @@ function ListView({
 
               <span className={styles.rowMeta}>
                 <Icon name="users" size={17} />
-                멤버&nbsp; {item.memberCount}명
+                {formatMemberCount(item)}
               </span>
 
               <span className={styles.rowMeta}>
@@ -368,26 +375,25 @@ function ListView({
           >
             <Icon name="chevronLeft" size={17} />
           </button>
-          {pageNumbers.map((page) => (
-            <button
-              type="button"
-              key={page}
-              className={currentPage === page ? styles.paginationActive : undefined}
-              aria-current={currentPage === page ? 'page' : undefined}
-              onClick={() => onPageChange(page)}
-            >
-              {page}
-            </button>
-          ))}
+          <ol className={styles.pageList}>
+            {pageNumbers.map((page) => (
+              <li key={page}>
+                <button
+                  type="button"
+                  className={currentPage === page ? styles.currentPageButton : undefined}
+                  aria-current={currentPage === page ? 'page' : undefined}
+                  onClick={() => onPageChange(page)}
+                >
+                  {page}
+                </button>
+              </li>
+            ))}
+          </ol>
           <button
             type="button"
             aria-label="다음 페이지"
             disabled={currentPage === pageNumbers.length}
-            onClick={() =>
-              onPageChange(
-                Math.min(pageNumbers.length, currentPage + 1),
-              )
-            }
+            onClick={() => onPageChange(Math.min(pageNumbers.length, currentPage + 1))}
           >
             <Icon name="chevronRight" size={17} />
           </button>
@@ -538,7 +544,7 @@ function WorkspaceChooserDialog({
                   </span>
                   <span>{root.description}</span>
                   <span>
-                    멤버 {root.memberCount}명
+                    {formatMemberCount(root)}
                     <i aria-hidden="true" />
                     하위 {root.childCount}개
                   </span>

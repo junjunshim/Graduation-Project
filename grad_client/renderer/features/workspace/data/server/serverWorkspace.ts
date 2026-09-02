@@ -243,6 +243,39 @@ export async function syncServerWorkspace(lastSyncedAt = '1970-01-01 00:00:00') 
   return merged
 }
 
+export async function fetchNodeDetailOnServer(nodeId: number | string) {
+  const parsedId = typeof nodeId === 'number' ? nodeId : parseInt(nodeId, 10)
+  if (!Number.isFinite(parsedId) || parsedId <= 0) {
+    return readWorkspaceDb()
+  }
+
+  const response = await apiRequest<unknown>(`/org/nodes?node_id=${parsedId}`)
+
+  if (!isServerStatusResponse(response)) {
+    throw new Error('노드 상세 조회 응답 형식이 올바르지 않습니다.')
+  }
+
+  if (response.status === 'error') {
+    throw new Error(response.message ?? '노드 상세 정보를 불러오지 못했습니다.')
+  }
+
+  const items = parseServerContextItems((response as ServerContextResponse).data)
+  const current = readWorkspaceDb()
+  const { workspace: normalized, issues } = normalizeServerContext(
+    items,
+    getCurrentServerEmail(),
+    { referenceWorkspace: current },
+  )
+
+  if (issues.length > 0) {
+    console.warn('[WorkspaceAdapter] 노드 상세 항목 정규화 이슈:', issues)
+  }
+
+  const merged = mergeServerUpdates(current, normalized)
+  writeServerWorkspaceDb(merged)
+  return merged
+}
+
 export async function signInServerUser(payload: SignInRequest): Promise<SignInResponse> {
   const email = normalizeEmail(payload.email)
   let shouldRollbackSession = false

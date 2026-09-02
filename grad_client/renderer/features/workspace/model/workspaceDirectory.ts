@@ -15,6 +15,8 @@ export type WorkspaceDirectoryItem = {
   name: string
   description: string
   memberCount: number
+  directMemberCount: number
+  totalMemberCount: number
   childCount: number
   createdAt: string
   isRoot: boolean

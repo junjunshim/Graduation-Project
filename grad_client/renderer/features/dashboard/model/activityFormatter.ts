@@ -36,6 +36,63 @@ export function formatActivityMessage(activity: ActivityRecord): string {
   const entityLabel = ENTITY_TYPE_LABELS[activity.entityType.toUpperCase()] ?? activity.entityType
   const target = activity.targetName ? `‘${activity.targetName}’` : '항목'
 
+  const isRoleEntity = activity.entityType.toUpperCase() === 'ROLE'
+  const isCommentEntity = activity.entityType.toUpperCase() === 'COMMENT'
+  const isFileEntity = activity.entityType.toUpperCase() === 'FILE'
+  const roleName = activity.newValue || activity.fieldName || ''
+
+  if (isRoleEntity) {
+    switch (activity.actionType.toLowerCase()) {
+      case 'inserted':
+      case 'created':
+        return roleName
+          ? `${actor}님이 ${target}님에게 ‘${roleName}’ 역할을 부여했습니다.`
+          : `${actor}님이 ${target}님에게 역할을 부여했습니다.`
+      case 'deleted':
+        return roleName
+          ? `${actor}님이 ${target}님의 ‘${roleName}’ 역할을 회수했습니다.`
+          : `${actor}님이 ${target}님의 역할을 회수했습니다.`
+      case 'updated':
+        return activity.oldValue && activity.newValue
+          ? `${actor}님이 ${target}님의 역할을 ‘${activity.oldValue}’에서 ‘${activity.newValue}’(으)로 변경했습니다.`
+          : `${actor}님이 ${target}님의 역할을 변경했습니다.`
+      default:
+        break
+    }
+  }
+
+  if (isCommentEntity) {
+    switch (activity.actionType.toLowerCase()) {
+      case 'inserted':
+      case 'created':
+        return `${actor}님이 댓글을 등록했습니다.`
+      case 'deleted':
+        return `${actor}님이 댓글을 삭제했습니다.`
+      case 'updated':
+        return `${actor}님이 댓글을 수정했습니다.`
+      default:
+        break
+    }
+  }
+
+  if (isFileEntity) {
+    const rawTarget = activity.targetName || '파일'
+    const fileName = rawTarget.replace(/^(Uploaded file:\s*|Deleted file:\s*|Restored file:\s*)/i, '').trim()
+    const formattedFileName = `‘${fileName}’`
+
+    switch (activity.actionType.toLowerCase()) {
+      case 'inserted':
+      case 'created':
+        return `${actor}님이 ${formattedFileName} 파일을 업로드했습니다.`
+      case 'deleted':
+        return `${actor}님이 ${formattedFileName} 파일을 삭제했습니다.`
+      case 'restored':
+        return `${actor}님이 ${formattedFileName} 파일을 복구했습니다.`
+      default:
+        break
+    }
+  }
+
   switch (activity.actionType.toLowerCase()) {
     case 'inserted':
     case 'created':

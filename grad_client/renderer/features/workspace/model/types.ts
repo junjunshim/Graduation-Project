@@ -268,6 +268,9 @@ export type WorkspaceOverview = {
   dueSoonWorkItems: WorkItemRecord[]
   rootNode?: OrganizationNodeRecord
   rootRoleMembers: RoleMember[]
+  allRoleMembers?: RoleMember[]
+  activities?: ActivityRecord[]
+  files?: WorkItemFileRecord[]
   onboardingSteps: OnboardingStep[]
 }
 

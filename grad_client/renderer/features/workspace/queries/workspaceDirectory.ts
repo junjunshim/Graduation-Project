@@ -80,18 +80,58 @@ export function getWorkspaceDirectory(
     childNodesByParentId.set(node.parentNodeId, siblings)
   })
 
+  // 노드별 직접 소속 역할 배정 맵
+  const rolesByNodeId = new Map<number, Set<string>>()
   snapshot.roles.forEach((role) => {
-    if (!visibleNodeIds.has(role.nodeId)) {
+    if (!visibleNodeIds.has(role.nodeId) || role.isDeleted) {
       return
     }
 
-    const memberIds = directMemberIdsByNodeId.get(role.nodeId) ?? new Set<string>()
+    const memberIds = rolesByNodeId.get(role.nodeId) ?? new Set<string>()
     memberIds.add(role.userId)
-    directMemberIdsByNodeId.set(role.nodeId, memberIds)
+    rolesByNodeId.set(role.nodeId, memberIds)
   })
 
-  childNodesByParentId.forEach((children, parentNodeId) => {
-    childNodesByParentId.set(parentNodeId, sortWorkspaceNodes(children))
+  // 각 노드별 직속 멤버: 해당 노드에 역할이 있으면서, 동시에 해당 노드의 하위 자식 노드들에 더 구체적인 역할로 배정(override)되지 않은 멤버
+  visibleNodes.forEach((node) => {
+    const assignedUserIds = rolesByNodeId.get(node.id) ?? new Set<string>()
+    // 하위 자손 노드 ID 목록
+    const descendantIds = new Set<number>()
+    const queue = [...(childNodesByParentId.get(node.id) ?? [])]
+    while (queue.length > 0) {
+      const child = queue.shift()
+      if (child && !descendantIds.has(child.id)) {
+        descendantIds.add(child.id)
+        queue.push(...(childNodesByParentId.get(child.id) ?? []))
+      }
+    }
+
+    const descendantAssignedUsers = new Set<string>()
+    descendantIds.forEach((descId) => {
+      rolesByNodeId.get(descId)?.forEach((uid) => descendantAssignedUsers.add(uid))
+    })
+
+    const directUserIds = new Set<string>()
+    assignedUserIds.forEach((uid) => {
+      // 하위 노드에 구체적으로 배정되지 않은 경우에만 현재 노드의 직속 인원으로 판별
+      if (!descendantAssignedUsers.has(uid)) {
+        directUserIds.add(uid)
+      }
+    })
+
+    // 만약 모든 멤버가 하위에 배정되어 0명이 되는 경우(예: 최상위 관리자도 하위에 배정된 경우 등), 최소한 해당 노드의 ADMIN/소유자는 직속으로 유지
+    if (directUserIds.size === 0 && assignedUserIds.size > 0) {
+      const adminRoles = snapshot.roles.filter((r) => r.nodeId === node.id && r.roleName === 'ADMIN' && !r.isDeleted)
+      if (adminRoles.length > 0) {
+        adminRoles.forEach((r) => directUserIds.add(r.userId))
+      } else {
+        // ADMIN이 없으면 첫 번째 배정자를 직속으로
+        const firstUser = Array.from(assignedUserIds)[0]
+        if (firstUser) directUserIds.add(firstUser)
+      }
+    }
+
+    directMemberIdsByNodeId.set(node.id, directUserIds)
   })
 
   const rootNodes = sortWorkspaceNodes(
@@ -113,7 +153,8 @@ export function getWorkspaceDirectory(
     const childResults = (childNodesByParentId.get(node.id) ?? [])
       .filter((child) => !nextAncestors.has(child.id))
       .map((child) => buildItem(child, rootId, rootTone, nextAncestors))
-    const memberIds = new Set(directMemberIdsByNodeId.get(node.id) ?? [])
+    const directMemberIds = directMemberIdsByNodeId.get(node.id) ?? new Set<string>()
+    const memberIds = new Set(directMemberIds)
 
     childResults.forEach(({ memberIds: childMemberIds }) => {
       childMemberIds.forEach((memberId) => memberIds.add(memberId))
@@ -129,6 +170,8 @@ export function getWorkspaceDirectory(
       name: node.name,
       description: getDescription(node, isRoot),
       memberCount: memberIds.size,
+      directMemberCount: directMemberIds.size,
+      totalMemberCount: memberIds.size,
       childCount: childResults.length,
       createdAt: getCreatedDate(node.createdAt),
       isRoot,

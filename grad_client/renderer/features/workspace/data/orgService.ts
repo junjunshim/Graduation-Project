@@ -13,6 +13,7 @@ import {
   assignRoleOnServer,
   createSubNodeOnServer,
   createTopNodeOnServer,
+  fetchNodeDetailOnServer,
   updateNodeOnServer,
   updateRoleOnServer,
 } from './serverWorkspace'
@@ -106,6 +107,13 @@ export function getOrgSnapshot(): WorkspaceSnapshot {
     activities: (db.activities ?? []).map((act) => ({ ...act })),
     files: (db.files ?? []).map((f) => ({ ...f })),
   }
+}
+
+export async function fetchNodeDetail(nodeId: number | string): Promise<WorkspaceSnapshot> {
+  if (isServerDataSource()) {
+    await fetchNodeDetailOnServer(nodeId)
+  }
+  return getOrgSnapshot()
 }
 
 export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapshot): WorkspaceSummary {

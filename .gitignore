@@ -561,6 +561,12 @@ grad_server/config.yaml
 grad_server/models/model.json
 
 # --- Electron Project (grad_client) ---
+# Environment variables
+grad_client/.env
+grad_client/.env.*
+grad_client/.env.local
+grad_client/.env.*.local
+
 # Logs
 logs
 npm-debug.log*

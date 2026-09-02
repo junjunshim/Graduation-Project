@@ -104,9 +104,12 @@ export function ShellTopActions({
           <p className={styles.shellSubtitle}>{heading.subtitle}</p>
         </div>
       ) : heading.type === 'greeting' ? (
-        <p className={styles.shellGreeting}>
-          안녕하세요.
-        </p>
+        <div className={styles.shellHeading}>
+          <h1 className={styles.shellPageTitle}>
+            안녕하세요, {currentUser.name || '사용자'}님! 👋
+          </h1>
+          <p className={styles.shellSubtitle}>오늘의 워크스페이스 현황을 확인해보세요.</p>
+        </div>
       ) : null}
 
       {actions !== undefined ? (

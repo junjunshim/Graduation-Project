@@ -7,9 +7,9 @@ export const BOARD_COLUMNS: Array<{
   id: WorkItemStatus
   title: string
 }> = [
-  { id: 'todo', title: 'To Do'},
-  { id: 'in-progress', title: 'Doing'},
-  { id: 'done', title: 'Done'},
+  { id: 'todo', title: '예정' },
+  { id: 'in-progress', title: '진행중' },
+  { id: 'done', title: '완료' },
 ]
 
 export const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']

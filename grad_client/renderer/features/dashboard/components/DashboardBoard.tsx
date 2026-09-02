@@ -7,7 +7,7 @@ import { DashboardEmptyState } from './DashboardEmptyState'
 import { DashboardWorkItemCard } from './DashboardWorkItemCard'
 import styles from '../pages/DashboardPage.module.css'
 
-const PREVIEW_ITEM_LIMIT = 4
+const PREVIEW_ITEM_LIMIT = 5
 
 function getColumnHeaderToneClassName(columnId: string) {
   if (columnId === 'in-progress') {
@@ -33,7 +33,7 @@ export function DashboardBoard({ workItems, users }: DashboardBoardProps) {
     <section className={[styles.panel, styles.boardPanel].join(' ')}>
       <div className={styles.sectionHeader}>
         <div>
-          <h3 className={styles.sectionTitle}>워크스페이스</h3>
+          <h3 className={styles.sectionTitle}>업무 현황</h3>
         </div>
         <Link to="/org/manage" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
           전체 보기

@@ -96,7 +96,7 @@ export function DashboardCalendarPanel({ calendar, onMonthChange }: DashboardCal
             ))}
           </div>
         ) : (
-          <p className={styles.calendarPreviewEmpty}>이번 달에 예정된 할 일이 없습니다.</p>
+          <p className={styles.calendarPreviewEmpty}>이번 달에 마감해야할 일이 없습니다.</p>
         )}
       </div>
     </section>

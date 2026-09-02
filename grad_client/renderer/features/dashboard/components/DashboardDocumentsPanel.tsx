@@ -50,10 +50,6 @@ export function DashboardDocumentsPanel({
           <DashboardEmptyState>최근 업로드된 문서가 없습니다.</DashboardEmptyState>
         )}
       </div>
-
-      <Link to="/documents" className={styles.documentAddLink} aria-label="문서 탭으로 이동">
-        <Icon name="plus" size={17} />
-      </Link>
     </section>
   )
 }

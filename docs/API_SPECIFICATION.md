@@ -33,19 +33,29 @@
 | 구분 | Http Method | API Path | 개발현황 | MD링크 |
 | :--- | :--- | :--- | :--- | :--- |
 | 회원가입 | Post | /api/users | 완료 | [link](api/Post/sign_in.md) |
-| user 데이터 조회 | Get | /api/users | 진행중 | [link](api/Get/user.md) |
-| user 데이터 수정 | Patch | /api/users | 진행중 | [link](api/Patch/user.md) |
-| user 데이터 삭제 | Delete | /api/users | 진행중 | [link](api/Delete/user.md) |
+| user 데이터 조회 | Get | /api/users | 완료 | [link](api/Get/user.md) |
+| user 데이터 수정 | Patch | /api/users | 완료 | [link](api/Patch/user.md) |
+| user 데이터 삭제 | Delete | /api/users | 완료 | [link](api/Delete/user.md) |
+| 알림 읽음 처리 | Patch | /api/users/notifications/read | 완료 | [link](api/Patch/notification_read.md) |
+| 로그인 / 토큰 발급 | Post | /api/users/login | 완료 | [link](api/Post/login.md) |
+| 토큰 재발급 | Post | /api/users/refresh | 완료 | [link](api/Post/refresh.md) |
 | Org 최상위 노드 | Post | /api/org/topNodes | 완료 | [link](api/Post/top_nodes.md) |
 | Org 하위 노드 | Post | /api/org/subNodes | 완료 | [link](api/Post/sub_nodes.md) |
 | Org 노드 수정 | Patch | /api/org/nodes | 완료 | [link](api/Patch/node.md) |
-| Org 노드 삭제 | Delete | /api/org/nodes | 진행중 | [link](api/Delete/node.md) |
+| Org 노드 삭제 | Delete | /api/org/nodes | 완료 | [link](api/Delete/node.md) |
+| 활동 기록 조회 | Get | /api/org/activities | 완료 | [link](api/Get/activity.md) |
 | Role 부여 | Post | /api/roles | 완료 | [link](api/Post/role.md) |
 | Role 수정 | Patch | /api/roles | 완료 | [link](api/Patch/role.md) |
+| Role 생성 | Post | /api/roles/definition | 완료 | [link](api/Post/role_definition.md) |
+| Role 권한 수정 | Patch | /api/roles/definition | 완료 | [link](api/Patch/role_definition.md) |
 | work_item 생성 | Post | /api/workItems | 완료 | [link](api/Post/work_item.md) |
 | work_item 수정 | Patch | /api/workItems | 완료 | [link](api/Patch/work_item.md) |
-| work_item 삭제 | Delete | /api/workItems | 진행중 | [link](api/Delete/work_item.md) |
+| work_item 삭제 | Delete | /api/workItems | 완료 | [link](api/Delete/work_item.md) |
+| work_item 상세 조회 | Get | /api/workItems | 완료 | [link](api/Get/work_item.md) |
+| work_item 댓글 작성 | Post | /api/workItems/comments | 완료 | [link](api/Post/comment.md) |
+| work_item 파일 업로드 | Post | /api/workItems/files/upload | 완료 | [link](api/Post/file_upload.md) |
+| work_item 파일 목록 조회 | Get | /api/workItems/files | 완료 | [link](api/Get/files.md) |
+| work_item 파일 다운로드 | Get | /api/workItems/files/download | 완료 | [link](api/Get/file_download.md) |
+| work_item 파일 삭제 | Delete | /api/workItems/files | 완료 | [link](api/Delete/file.md) |
 | 사용자 전체 정보 조회 | Get | /api/context/init | 완료 | [link](api/Get/context_init.md) |
 | 사용자 데이터 동기화 | Get | /api/context/sync | 완료 | [link](api/Get/sync_context.md) |
-| 로그인 / 토큰 발급 | Post | /api/users/login | 완료 | [link](api/Post/login.md) |
-| 활동 기록 조회 | Get | /api/activities | 진행중 | [link](api/Get/activity.md) |

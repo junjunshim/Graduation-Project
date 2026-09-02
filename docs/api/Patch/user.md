@@ -70,10 +70,10 @@
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 |
+| type | String | 필수 | 데이터의 타입 (USER) |
 | id | String | 필수 | 데이터 식별 id |
 | email | String | 필수 | 유저 이메일 |
 | name | String | 필수 | 유저 이름 |
 | personal_node_id | Integer | 필수 | 개인 공간 노드 id |
-| created_at | Array | 필수 | 유저 가입날짜 |
+| created_at | String | 필수 | 유저 가입날짜 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

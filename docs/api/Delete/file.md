@@ -1,16 +1,16 @@
-# work_item 삭제 api
-- 사용자의 work_item을 삭제하는 api
+﻿# work_item 첨부 파일 삭제 api
+- 특정 첨부 파일을 삭제(소프트 딜리트)하는 api
 ## Request
 - Request syntax
 ```json
 {
-    "work_item_id" : "WI-1101"
+    "file_id" : 1
 }
 ```
 
 | Method | URL |
 | :--- | :--- |
-| Delete | http://{서버 url}/api/workItems |
+| Delete | http://{서버 url}/api/workItems/files |
 
 ---
 - Request Header
@@ -18,14 +18,14 @@
 | 파라미터 | 타입 | 필수여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | Content_type | String | 필수 | application/json |
-| Authorization | String | 필수 | Bearer 사용자 토큰 | 
+| Authorization | String | 필수 | Bearer 사용자 토큰 |
 
 ---
 - Request Elements
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| work_item_id | String | 필수 | 식별용 id |
+| file_id | Integer | 필수 | 삭제할 첨부 파일 식별 id |
 
 ---
 
@@ -36,10 +36,9 @@
     "status" : "success",
     "data" : [
         {
-            "type" : "WORK_ITEM",
-            "id" : "WI-1101",
-            "status" : "deleted",
-            "updated_at" : "2026-03-19 12:29:24.745634+00"
+            "file_id" : 1,
+            "work_item_id" : "WI-104",
+            "is_deleted" : true
         }
     ]
 }
@@ -56,14 +55,13 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
-| data | Array | 성공 | 삭제 처리된 work_item 데이터 |
+| data | Array | 성공 | 삭제 처리된 파일 데이터 |
 | message | String | 에러 | 요청 관련 메세지 |
 
 - Data Elements
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | work_item 식별 id|
-| status | String | 필수 | 삭제 성공 메세지 |
-| updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
+| file_id | Integer | 필수 | 삭제된 첨부 파일 식별 id |
+| work_item_id | String | 필수 | 소속 work_item id |
+| is_deleted | Boolean | 필수 | 삭제 여부 (true) |

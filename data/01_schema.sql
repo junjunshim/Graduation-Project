@@ -1,7 +1,5 @@
 -- 0. enum 타입 정의
-DROP TYPE IF EXISTS role_name CASCADE;
 DROP TYPE IF EXISTS history_status CASCADE;
-CREATE TYPE role_name AS ENUM ('ADMIN', 'MANAGER', 'MEMBER', 'VIEWER');
 CREATE TYPE history_status AS ENUM ('inserted', 'updated', 'deleted');
 
 
@@ -39,7 +37,7 @@ CREATE TABLE IF NOT EXISTS role_assignments (
     assignment_id SERIAL PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT unique_assignments UNIQUE (user_id, node_id, role)
@@ -52,7 +50,7 @@ CREATE INDEX idx_assignments_node_id ON role_assignments(node_id);
 CREATE TABLE IF NOT EXISTS role_authorities (
     authority_id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     authority BIT(24) NOT NULL, -- Bitmask 권한 (8 -> 24)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -70,7 +68,7 @@ CREATE TABLE IF NOT EXISTS authority_constants (
 
 -- 4.2 역할별 기본 권한 테이블
 CREATE TABLE IF NOT EXISTS role_defaults (
-    role role_name PRIMARY KEY,
+    role VARCHAR(50) PRIMARY KEY,
     default_authority BIT(24) NOT NULL
 );
 
@@ -82,6 +80,7 @@ CREATE TABLE IF NOT EXISTS work_items (
     owner_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     title VARCHAR(200) NOT NULL,
     description TEXT,
+    category VARCHAR(50),
     hidden BOOLEAN NOT NULL DEFAULT FALSE,
     status  VARCHAR(20) NOT NULL DEFAULT 'todo',
     priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
@@ -147,7 +146,7 @@ CREATE TABLE role_assignment_histories (
     assignment_id INTEGER NOT NULL,
     user_id VARCHAR(50) NOT NULL,
     node_id INTEGER NOT NULL,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     change_status history_status NOT NULL,
@@ -162,7 +161,7 @@ CREATE TABLE role_authority_histories (
     history_id SERIAL PRIMARY KEY,
     authority_id INTEGER NOT NULL,
     node_id INTEGER NOT NULL,
-    role role_name NOT NULL,
+    role VARCHAR(50) NOT NULL,
     authority BIT(24) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -181,6 +180,7 @@ CREATE TABLE work_item_histories (
     owner_user_id VARCHAR(50) NOT NULL,
     title VARCHAR(200) NOT NULL,
     description TEXT,
+    category VARCHAR(50),
     hidden BOOLEAN NOT NULL,
     status VARCHAR(20) NOT NULL,
     priority INTEGER NOT NULL,
@@ -238,3 +238,21 @@ CREATE TABLE IF NOT EXISTS comment_mentions (
 );
 CREATE INDEX idx_mentions_comment_id ON comment_mentions(comment_id);
 CREATE INDEX idx_mentions_user_id ON comment_mentions(mentioned_user_id);
+
+-- 10. 업무 첨부 파일 테이블
+CREATE TABLE IF NOT EXISTS work_item_files (
+    file_id SERIAL PRIMARY KEY,
+    work_item_id VARCHAR(50) NOT NULL REFERENCES work_items(work_item_id) ON DELETE CASCADE,
+    uploader_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    original_file_name VARCHAR(255) NOT NULL,
+    stored_file_name VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size BIGINT NOT NULL,
+    mime_type VARCHAR(100),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_files_work_item_id ON work_item_files(work_item_id);
+CREATE INDEX idx_files_is_deleted ON work_item_files(is_deleted);
+

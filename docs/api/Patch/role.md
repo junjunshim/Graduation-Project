@@ -6,13 +6,13 @@
 {
     "email" : "test1232@gmail.com",
     "node_id" : 2,
-    "node_type" : "ADMIN"
+    "role" : "MEMBER"
 }
 ```
 
 | Method | URL |
 | :--- | :--- |
-| Patch | http://{서버 url}/api/v1/org/roles |
+| Patch | http://{서버 url}/api/roles |
 
 ---
 - Request Header
@@ -29,7 +29,7 @@
 | :--- | :--- | :--- | :--- |
 | email | String | 필수 | 사용자 식별용 email  |
 | node_id | Integer | 필수 | 노드 식별용 id |
-| node_type | String | 선택 | 노드의 타입 |
+| role | String | 필수 | 변경할 역할 이름 |
 
 ---
 
@@ -44,7 +44,7 @@
             "id" : 24,
             "node_id" : 2,
             "email" : "test1232@gmail.com",
-            "role" : "ADMIN",
+            "role" : "MEMBER",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         }
     ]
@@ -69,8 +69,8 @@
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 |
-| id | String | 필수 | 데이터 식별 id |
+| type | String | 필수 | 데이터의 타입 (ROLE) |
+| id | Integer | 필수 | 데이터 식별 id |
 | node_id | Integer | role | 소속 노드의 id |
 | email | String | role | 역할이 배정된 인원 |
 | role | String | role | 배정된 역할 이름 |

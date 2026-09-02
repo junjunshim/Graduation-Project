@@ -116,19 +116,11 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
             // 성공 응답 생성 및 반환
             Json::Value ret;
             ret["status"] = "success";
+            ret["message"] = "로그인 성공";
             ret["access_token"] = access_token;
+            ret["refresh_token"] = refresh_token;
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
-
-            // Refresh Token은 HTTP-Only 쿠키로 주입 (보안 강화)
-            auto refresh_exp = drogon::app().getCustomConfig()["refresh_token_expiry"].asInt();
-            drogon::Cookie cookie("refresh_token", refresh_token);
-            cookie.setPath("/api/users");
-            cookie.setHttpOnly(true);
-            cookie.setMaxAge(refresh_exp);
-            cookie.setSameSite(drogon::Cookie::SameSite::kStrict);
-
-            resp->addCookie(cookie);
             callback(resp);
         },
         // [실패 콜백]
@@ -154,19 +146,21 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
 
 // Access Token 재발급(Refresh) API
 void AuthController::refreshUserToken(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
-    // 1. 쿠키에서 refresh_token 추출
-    std::string refreshToken = req->getCookie("refresh_token");
-    if (refreshToken.empty()) {
+    // 1. JSON Request Body에서 refresh_token 추출
+    auto jsonPtr = req->getJsonObject();
+    if (!validateStrings(jsonPtr, "refresh_token")) {
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "리프레시 토큰이 누락되었습니다.";
+        ret["message"] = "필수 파라미터(refresh_token)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
         callback(resp);
         return;
     }
+
+    std::string refreshToken = (*jsonPtr)["refresh_token"].asString();
 
     // 2. JWT 리프레시 토큰 검증
     auto secret = drogon::app().getCustomConfig()["app"]["jwt_secret"].asString();
@@ -238,26 +232,16 @@ void AuthController::refreshUserToken(const HttpRequestPtr &req, std::function<v
                                     "refresh_token = EXCLUDED.refresh_token, "
                                     "expires_at = EXCLUDED.expires_at";
 
-            auto refresh_exp = drogon::app().getCustomConfig()["refresh_token_expiry"].asInt();
-
             dbClient->execSqlAsync(
                 updateSql,
-                [callback, access_token, new_refresh_token, refresh_exp](const orm::Result &uResult) {
+                [callback, access_token, new_refresh_token](const orm::Result &uResult) {
                     Json::Value ret;
                     ret["status"] = "success";
                     ret["access_token"] = access_token;
+                    ret["refresh_token"] = new_refresh_token;
 
                     auto resp = HttpResponse::newHttpJsonResponse(ret);
                     resp->setStatusCode(k200OK);
-
-                    // 새 Refresh Token을 HTTP-Only 쿠키에 실어 반환
-                    drogon::Cookie cookie("refresh_token", new_refresh_token);
-                    cookie.setPath("/api/users");
-                    cookie.setHttpOnly(true);
-                    cookie.setMaxAge(refresh_exp);
-                    cookie.setSameSite(drogon::Cookie::SameSite::kStrict);
-
-                    resp->addCookie(cookie);
                     callback(resp);
                 },
                 [callback](const orm::DrogonDbException &e) {

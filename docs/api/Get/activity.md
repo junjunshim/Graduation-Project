@@ -9,7 +9,7 @@
 
 | Method | URL |
 | :--- | :--- |
-| Get | http://{서버 url}/org/activities?target_email=target@gmail.com&node_id=13 |
+| Get | http://{서버 url}/api/org/activities?target_email=target@gmail.com&node_id=13 |
 
 ---
 - Request Header
@@ -26,6 +26,8 @@
 | :--- | :--- | :--- | :--- |
 | target_email | String | 선택 | 조회할 사용자 이메일 |
 | node_id | Integer | 선택 | 조회할 노드의 id |
+
+- target_email 또는 node_id 중 최소 하나는 필수
 
 ---
 
@@ -78,7 +80,7 @@
 | actor_user_id | String | 필수 | 활동한 사용자 id |
 | actor_name | String | 필수 | 활동한 사용자 이름 |
 | entity_type | String | 필수 | 객체 타입  |
-| entity_id | String or Interger | 필수 | 객체 식별 id |
+| entity_id | String or Integer | 필수 | 객체 식별 id |
 | target_name | String | 필수 | 객체 이름 |
 | action_type | String | 필수 | 어떤 활동인지 구별 |
 | field_name | String | 선택 | 변경 또는 생성된 필드명 |

@@ -86,6 +86,13 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0404") != std::string::npos) return DbErrorCode::TargetIsAdmin;
     else if (errMsg.find("P0405") != std::string::npos) return DbErrorCode::InvalidRoleChange;
     else if (errMsg.find("P0406") != std::string::npos) return DbErrorCode::RoleChangeFailed;
+    else if (errMsg.find("P0407") != std::string::npos) return DbErrorCode::RoleNotDefined;
+    else if (errMsg.find("P0408") != std::string::npos) return DbErrorCode::RoleNameEmpty;
+    else if (errMsg.find("P0409") != std::string::npos) return DbErrorCode::CannotModifyAdminRole;
+    else if (errMsg.find("P0410") != std::string::npos) return DbErrorCode::InvalidAuthorityBit;
+    else if (errMsg.find("P0411") != std::string::npos) return DbErrorCode::CreateRoleDefinitionFailed;
+    else if (errMsg.find("P0412") != std::string::npos) return DbErrorCode::RoleDefinitionAlreadyExists;
+    else if (errMsg.find("P0413") != std::string::npos) return DbErrorCode::UpdateRoleAuthorityFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
@@ -94,14 +101,23 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0506") != std::string::npos) return DbErrorCode::DeleteUserError;
     else if (errMsg.find("P0507") != std::string::npos) return DbErrorCode::GetUserProfileFailed;
     else if (errMsg.find("P0508") != std::string::npos) return DbErrorCode::UpdateUserFailed;
+    else if (errMsg.find("P0509") != std::string::npos) return DbErrorCode::ReadMentionFailed;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
     else if (errMsg.find("P0604") != std::string::npos) return DbErrorCode::UpdateWorkItemFailed;
     else if (errMsg.find("P0605") != std::string::npos) return DbErrorCode::DeleteWorkItemError;
     else if (errMsg.find("P0606") != std::string::npos) return DbErrorCode::CommentWorkItemNotFound;
+    else if (errMsg.find("P0607") != std::string::npos) return DbErrorCode::AddCommentFailed;
+    else if (errMsg.find("P0608") != std::string::npos) return DbErrorCode::AddMentionFailed;
+    else if (errMsg.find("P0609") != std::string::npos) return DbErrorCode::GetWorkItemDetailFailed;
+    else if (errMsg.find("P0610") != std::string::npos) return DbErrorCode::AddWorkItemFileFailed;
+    else if (errMsg.find("P0611") != std::string::npos) return DbErrorCode::DeleteWorkItemFileFailed;
+    else if (errMsg.find("P0612") != std::string::npos) return DbErrorCode::GetWorkItemFilesFailed;
+    else if (errMsg.find("P0613") != std::string::npos) return DbErrorCode::DownloadWorkItemFileFailed;
     else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
     else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
+    else if (errMsg.find("P0703") != std::string::npos) return DbErrorCode::LogActivityFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -202,6 +218,41 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
+        case DbErrorCode::RoleNotDefined:{
+            ret["message"] = "해당 노드에 정의되지 않은 역할입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RoleNameEmpty:{
+            ret["message"] = "역할 이름이 비어있습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::CannotModifyAdminRole:{
+            ret["message"] = "ADMIN 역할은 임의로 생성하거나 수정할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::InvalidAuthorityBit:{
+            ret["message"] = "유효하지 않은 24비트 권한 비트 문자열입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::CreateRoleDefinitionFailed:{
+            ret["message"] = "역할 정의 생성에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RoleDefinitionAlreadyExists:{
+            ret["message"] = "해당 노드에 이미 존재하는 역할입니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::UpdateRoleAuthorityFailed:{
+            ret["message"] = "역할 권한 수정에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
         case DbErrorCode::EmailAlreadyExists:{
             ret["message"] = "이미 존재하는 이메일입니다.";
             ret["http_code"] = drogon::k400BadRequest;
@@ -272,8 +323,48 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
+        case DbErrorCode::ReadMentionFailed:{
+            ret["message"] = "멘션 알림 읽음 처리에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
         case DbErrorCode::DeleteWorkItemError:{
             ret["message"] = "work item 삭제에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::AddCommentFailed:{
+            ret["message"] = "댓글 작성에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::AddMentionFailed:{
+            ret["message"] = "멘션 알림 등록에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::GetWorkItemDetailFailed:{
+            ret["message"] = "업무 상세 정보 조회에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::AddWorkItemFileFailed:{
+            ret["message"] = "업무 파일 등록에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::DeleteWorkItemFileFailed:{
+            ret["message"] = "업무 파일 삭제에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::GetWorkItemFilesFailed:{
+            ret["message"] = "업무 첨부 파일 목록 조회에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::DownloadWorkItemFileFailed:{
+            ret["message"] = "업무 파일 다운로드 정보 조회에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
@@ -284,6 +375,11 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::FetchActivitiesFailed:{
             ret["message"] = "활동 조회에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::LogActivityFailed:{
+            ret["message"] = "활동 로그 기록에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

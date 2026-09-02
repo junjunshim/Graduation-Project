@@ -21,6 +21,12 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
     ADD_METHOD_TO(WorkItemController::addComment, "/api/workItems/comments", Post, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::getWorkItemDetail, "/api/workItems", Get, "JwtFilter");
     
+    // 파일 관련 API
+    ADD_METHOD_TO(WorkItemController::uploadFile, "/api/workItems/files/upload", Post, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::getFiles, "/api/workItems/files", Get, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::downloadFile, "/api/workItems/files/download", Get, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::deleteFile, "/api/workItems/files", Delete, "JwtFilter");
+    
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
     // void get(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int p1, std::string p2);
@@ -31,5 +37,11 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
     void deleteWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void addComment(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void getWorkItemDetail(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+
+    // 파일 핸들러
+    void uploadFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void getFiles(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void downloadFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void deleteFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 };
 }

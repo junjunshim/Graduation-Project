@@ -17,13 +17,14 @@ class RoleController : public drogon::HttpController<RoleController>
 
     ADD_METHOD_TO(RoleController::addRole, "/api/roles", Post, "JwtFilter");
     ADD_METHOD_TO(RoleController::updateRole, "/api/roles", Patch, "JwtFilter");
+    ADD_METHOD_TO(RoleController::createRoleDefinition, "/api/roles/definition", Post, "JwtFilter");
+    ADD_METHOD_TO(RoleController::updateRoleAuthority, "/api/roles/definition", Patch, "JwtFilter");
 
     METHOD_LIST_END
-    // your declaration of processing function maybe like this:
-    // void get(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int p1, std::string p2);
-    // void your_method_name(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, double p1, int p2) const;
 
     void addRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void updateRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void createRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void updateRoleAuthority(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

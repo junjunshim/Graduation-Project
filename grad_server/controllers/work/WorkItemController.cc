@@ -6,6 +6,8 @@
 #include <json/json.h>
 #include <optional>
 #include <regex>
+#include <filesystem>
+#include <drogon/utils/Utilities.h>
 
 using namespace api;
 using namespace app_utils;
@@ -92,6 +94,7 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
         requester_email, work_item_id, owner_node_id, owner_user_email, title,
         getStrOrNull("parent_work_item_id"),
         getStrOrNull("description"),
+        getStrOrNull("category"),
         getBoolOrNull("hidden", false),
         getStrOrNull("status"),
         getIntOrNull("priority", 3),
@@ -143,7 +146,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
     auto dbClient = drogon::app().getDbClient();
     
     // DB 함수 호출 SQL
-    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)";
+    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
     
     // DB 함수 비동기 실행
     dbClient->execSqlAsync(
@@ -179,6 +182,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         work_item_id,
         getStrOrNull("title"),
         getStrOrNull("description"),
+        getStrOrNull("category"),
         getBoolOrNull("hidden"),
         getStrOrNull("status"),
         getIntOrNull("priority", -1),
@@ -385,5 +389,244 @@ void WorkItemController::getWorkItemDetail(const HttpRequestPtr &req, std::funct
             callback(resp);
         },
         requester_email, work_item_id
+    );
+}
+
+// 파일 업로드 API (multipart/form-data)
+void WorkItemController::uploadFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    // 1. 멀티파트 파서 생성
+    MultiPartParser parser;
+    if (parser.parse(req) != 0) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "멀티파트 요청 파싱에 실패했습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    auto &files = parser.getFiles();
+    auto &parameters = parser.getParameters();
+
+    // 필수 파라미터(work_item_id) 확인
+    auto itWorkItem = parameters.find("work_item_id");
+    if (itWorkItem == parameters.end() || itWorkItem->second.empty() || files.empty()) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "필수 파라미터(work_item_id) 또는 업로드할 파일이 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string work_item_id = itWorkItem->second;
+    const auto &uploadFile = files[0]; // 단일 파일 처리
+
+    std::string original_file_name = uploadFile.getFileName();
+    size_t file_size = uploadFile.fileLength();
+    std::string mime_type = ""; // 추후 확장 가능
+
+    // 2. 디스크 저장 경로 및 고유 파일명 생성
+    std::string uploadDir = "./uploads/work_items/" + work_item_id;
+    try {
+        std::filesystem::create_directories(uploadDir);
+    } catch (const std::exception &e) {
+        LOG_ERROR << "Failed to create directory: " << e.what();
+    }
+
+    // UUID 기반 고유 파일명 생성 (확장자 유지)
+    std::string extension = "";
+    auto dotPos = original_file_name.find_last_of('.');
+    if (dotPos != std::string::npos) {
+        extension = original_file_name.substr(dotPos);
+    }
+    std::string stored_file_name = drogon::utils::getUuid() + extension;
+    std::string full_path = uploadDir + "/" + stored_file_name;
+
+    // 3. 실제 물리 파일 저장
+    if (uploadFile.saveAs(full_path) != 0) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "파일 저장 중 오류가 발생했습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k500InternalServerError);
+        callback(resp);
+        return;
+    }
+
+    // 4. DB 메타데이터 저장 함수 호출 (add_work_item_file)
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM add_work_item_file($1, $2, $3, $4, $5, $6, $7)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k201Created);
+            callback(resp);
+        },
+        [callback, full_path](const orm::DrogonDbException &e) {
+            // DB 저장 실패 시 업로드된 물리 파일 정리(롤백)
+            std::filesystem::remove(full_path);
+
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, work_item_id, original_file_name, stored_file_name, full_path, static_cast<int64_t>(file_size), mime_type
+    );
+}
+
+// 파일 목록 조회 API
+void WorkItemController::getFiles(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    std::string work_item_id = req->getParameter("work_item_id");
+    if (work_item_id.empty()) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "필수 쿼리 파라미터(work_item_id)가 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM get_work_item_files($1, $2)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, work_item_id
+    );
+}
+
+// 파일 다운로드 API (스트리밍 바이너리 반환)
+void WorkItemController::downloadFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    std::string file_id_str = req->getParameter("file_id");
+    if (file_id_str.empty()) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "필수 쿼리 파라미터(file_id)가 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    int file_id = std::stoi(file_id_str);
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    // 1. DB에서 파일 경로 및 권한 검증 (get_work_item_file_download)
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM get_work_item_file_download($1, $2)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            if (result.empty()) {
+                Json::Value ret;
+                ret["status"] = "error";
+                ret["message"] = "파일을 찾을 수 없습니다.";
+                auto resp = HttpResponse::newHttpJsonResponse(ret);
+                resp->setStatusCode(k404NotFound);
+                callback(resp);
+                return;
+            }
+
+            Json::Value parsed = parseIntegratedDataResult(result);
+            auto fileData = parsed["data"][0];
+            std::string file_path = fileData["file_path"].asString();
+            std::string original_file_name = fileData["original_file_name"].asString();
+
+            // 2. 물리 파일 존재 여부 확인
+            if (!std::filesystem::exists(file_path)) {
+                Json::Value ret;
+                ret["status"] = "error";
+                ret["message"] = "서버 디스크에 해당 파일이 존재하지 않습니다.";
+                auto resp = HttpResponse::newHttpJsonResponse(ret);
+                resp->setStatusCode(k404NotFound);
+                callback(resp);
+                return;
+            }
+
+            // 3. 파일 다운로드 스트리밍 응답 반환
+            auto resp = HttpResponse::newFileResponse(file_path, original_file_name, CT_APPLICATION_OCTET_STREAM);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, file_id
+    );
+}
+
+// 파일 삭제 API
+void WorkItemController::deleteFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!validateInts(jsonPtr, "file_id")) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "필수 파라미터(file_id)가 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    int file_id = (*jsonPtr)["file_id"].asInt();
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM delete_work_item_file($1, $2)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, file_id
     );
 }

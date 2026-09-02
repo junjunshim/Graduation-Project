@@ -23,6 +23,13 @@ enum class DbErrorCode {
     TargetIsAdmin,              // P0404 변경할 타켓이 ADMIN
     InvalidRoleChange,          // P0405 변경할 역할이 부적절함
     RoleChangeFailed,           // P0406 사용자 역할 변경 실패
+    RoleNotDefined,             // P0407 노드에 정의되지 않은 역할
+    RoleNameEmpty,              // P0408 역할 이름이 비어있음
+    CannotModifyAdminRole,      // P0409 ADMIN 역할은 생성/수정 불가
+    InvalidAuthorityBit,        // P0410 유효하지 않은 24비트 권한 문자열
+    CreateRoleDefinitionFailed, // P0411 역할 정의 생성 실패
+    RoleDefinitionAlreadyExists,// P0412 노드에 이미 존재하는 역할 정의
+    UpdateRoleAuthorityFailed,  // P0413 역할 권한 수정 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     EmailNotFound,              // P0503 이메일 찾을 수 없음
@@ -40,6 +47,15 @@ enum class DbErrorCode {
     InvalidActivityFilter,      // P0701 활동 조회 필터 부적절
     FetchActivitiesFailed,      // P0702 활동 조회 실패
     UpdateUserFailed,           // P0508 사용자 정보 수정 실패
+    ReadMentionFailed,          // P0509 멘션 알림 읽음 처리 실패
+    AddCommentFailed,           // P0607 댓글 등록 실패
+    AddMentionFailed,           // P0608 멘션 등록 실패
+    GetWorkItemDetailFailed,    // P0609 업무 상세 조회 실패
+    AddWorkItemFileFailed,      // P0610 업무 파일 등록 실패
+    DeleteWorkItemFileFailed,   // P0611 업무 파일 삭제 실패
+    GetWorkItemFilesFailed,     // P0612 업무 파일 목록 조회 실패
+    DownloadWorkItemFileFailed, // P0613 업무 파일 다운로드 정보 조회 실패
+    LogActivityFailed,          // P0703 활동 로그 기록 실패
     Unknown                     // 알 수 없는 에러
 };
 

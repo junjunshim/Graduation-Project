@@ -17,10 +17,11 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 ('NODE_INFO_CHANGE', 12, '노드 정보 변경 가능'),
 ('NODE_SUB_CREATE', 13, '하위 노드 생성 가능'),
 ('NODE_ADD_ROLE', 14,'사용자에게 역할 부여 가능'),
--- (bit 15 reserved)
+('ROLE_CHANGE', 15, '역할 생성 및 권한 변경 가능'),
 -- Integration Bits (16-19)
-('INTEGRATION_GENERAL', 16, '파일 공유, github 연동, vscode 관련 기능'),
--- (bit 17, 18, 19 reserved)
+('FILE_VIEW', 16, '파일 조회 및 다운로드 가능'),
+('FILE_CHANGE', 17, '파일 등록 및 삭제 가능'),
+-- (bit 18, 19 reserved)
 -- History Bits (20-23)
 ('HISTORY_PERSONAL_VIEW', 20, '개인 히스토리 식별 가능'),
 ('HISTORY_ALL_VIEW', 21, '노드의 모든 히스토리 식별 가능'),
@@ -28,14 +29,13 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 ('DENY', 23, '하위 비트 상관없이 모든 권한 X');
 
 -- Role Default Permissions
--- admin => deny 비트 제외 1
--- manager => 0011 0000 0010 1011 0111 1111 (0x302B7F)
--- member_high => 0001 0000 0000 0011 0101 1111 (0x10035F)
--- member_low => 0001 0000 0000 0001 0001 0111 (0x100117)
--- viewer => 0000 0000 0000 0000 0001 0001 (0x00011)
+-- admin => deny 비트(23) 제외 모두 1
+-- manager => bit 0~6, 8~17, 20, 21 ON  -> B'001100111111111101111111'
+-- member  => bit 0~4, 6, 8, 9, 16, 17, 20 ON    -> B'000100110000001101010111'
+-- viewer  => bit 0, 4 ON (파일 권한 제외)       -> B'000000000000000000010001'
 
 INSERT INTO role_defaults (role, default_authority) VALUES
 ('ADMIN',   B'011111111111111111111111'),
-('MANAGER', B'001100000110111101111111'),
-('MEMBER',  B'000100000000001101011111'), -- Using member_high for MEMBER enum
+('MANAGER', B'001100111111111101111111'),
+('MEMBER',  B'000100110000001101010111'),
 ('VIEWER',  B'000000000000000000010001');

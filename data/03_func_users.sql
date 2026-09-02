@@ -334,5 +334,12 @@ BEGIN
     JOIN work_item_comments c ON m.comment_id = c.comment_id
     JOIN users u_author ON c.author_user_id = u_author.user_id
     WHERE m.mention_id = p_mention_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0509]Failed to read comment mention: %, (REASON: %)', p_mention_id, SQLERRM
+            USING ERRCODE = 'P0509';
 END;
 $$ LANGUAGE plpgsql;

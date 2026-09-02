@@ -126,9 +126,10 @@ Graduation-Project/
 | Mock 사용자 세션 | grad-client-mock-session |
 | Server 사용자 식별 세션 | grad-client-server-session-user |
 | Server access token | grad-client-server-access-token |
+| Server refresh token | grad-client-server-refresh-token |
 | Server email | grad-client-server-email |
 
-기존 grad-client-mvp-session 값은 값의 형태에 따라 해당 모드의 키로 한 번 이전한다. 이전 프론트가 사용하던 grad-client-server-refresh-token 값은 로그인 또는 로그아웃 시 제거한다. 현재 서버의 refresh token은 JSON이 아니라 HttpOnly 쿠키 계약이므로 프론트 localStorage에 저장하지 않는다. 서버 사용자 캐시에 비밀번호를 저장하지 않도록 UserRecord.password를 선택 필드로 바꿨다.
+기존 grad-client-mvp-session 값은 값의 형태에 따라 해당 모드의 키로 한 번 이전한다. 서버 로그인 성공 시 JSON 응답의 access token과 refresh token을 각각 위 localStorage 키에 저장하고, 로그아웃 시 두 토큰을 모두 제거한다. 서버 사용자 캐시에 비밀번호를 저장하지 않도록 UserRecord.password를 선택 필드로 바꿨다.
 
 ## 4. 환경변수와 모드 전환
 
@@ -210,7 +211,7 @@ renderer/features/workspace/data/server/apiClient.ts에서 다음을 공통 처�
 
 서버의 status가 success/error인 공통 envelope는 apiTypes.ts에서 런타임 검사한다. HTTP 2xx라도 envelope가 맞지 않거나 context의 data가 배열이 아니면 오류로 처리한다.
 
-현재 `credentials: omit`은 의도적인 임시 설정이다. 체크인된 서버가 `Access-Control-Allow-Origin: *`을 사용하므로 곧바로 credentialed request로 바꾸면 브라우저 CORS 검증에 실패한다. 따라서 현 단계에서는 로그인 JSON의 access token만 사용하며, refresh 쿠키와 자동 토큰 갱신은 서버 CORS·쿠키 정책과 함께 후속 구현해야 한다.
+현재 `credentials: omit`은 서버가 토큰을 쿠키가 아닌 JSON body로 주고받는 계약에 맞춘 설정이다. 로그인 성공 응답의 access token과 refresh token은 모두 localStorage에 저장한다. `/users/refresh`도 저장된 refresh token을 JSON body로 보내 새 토큰 쌍을 받는 endpoint이지만, 프론트의 자동 갱신과 실패 요청 재시도는 아직 연결하지 않았다.
 
 ## 6. API 엔드포인트와 프론트엔드 기능
 
@@ -221,8 +222,8 @@ renderer/features/workspace/data/server/apiClient.ts에서 다음을 공통 처�
 | 프론트 기능 | 메서드/경로 | 주요 요청 필드 | 처리 |
 |---|---|---|---|
 | 회원가입 | POST /users | user_id, email, name, password | 성공 후 로그인 |
-| 로그인 | POST /users/login | email, password | JSON access_token 저장 후 context 초기화; HttpOnly refresh 쿠키는 현재 미사용 |
-| 토큰 갱신 | POST /users/refresh | refresh_token HttpOnly 쿠키 | 서버에는 구현되어 있으나 credentialed CORS가 준비될 때까지 프론트 자동 갱신 미연결 |
+| 로그인 | POST /users/login | email, password | JSON access_token과 refresh_token을 localStorage에 저장한 뒤 context 초기화 |
+| 토큰 갱신 | POST /users/refresh | JSON body의 refresh_token | 새 access_token과 refresh_token을 반환하며 서버에는 구현되어 있으나 프론트 자동 갱신은 미연결 |
 | 초기 데이터 | GET /context/init | 없음 | 응답 정규화 후 서버 캐시 교체 |
 | 증분 데이터 | GET /context/sync?last_synced_at=... | 마지막 동기화 시각 | 정규화 후 캐시 병합; 자동 호출은 아직 미연결 |
 | 최상위 조직 생성 | POST /org/topNodes | node_type, name, role_name | 성공 후 전체 context 재조회 |
@@ -251,7 +252,7 @@ users.user_id와 work_items.work_item_id는 서버 DB의 전역 문자열 기본
 
 RoleName에는 서버 DB 열거형과 맞추기 위해 VIEWER를 추가했고 역할 선택 UI에서도 사용할 수 있게 했다.
 
-로그인 성공 응답은 `{ status: "success", access_token: string }`으로 해석한다. `getServerLoginAccessToken`이 status, 문자열 자료형, 공백 토큰을 검사하며 JSON `refresh_token`은 요구하지 않는다. 서버가 발급하는 refresh token은 `Set-Cookie`의 HttpOnly 쿠키이므로 화면 DTO나 localStorage 모델에 포함하지 않는다.
+로그인 성공 응답은 `{ status: "success", access_token: string, refresh_token: string }`으로 해석한다. `getServerLoginTokens`가 status, 두 토큰의 문자열 자료형과 공백 여부를 함께 검사하며, 하나라도 없거나 비어 있으면 로그인 성공으로 처리하지 않는다. 검증된 두 토큰은 서버 세션 email과 함께 localStorage에 저장한다.
 
 ### 7.2 실제 compact context 변환
 
@@ -373,7 +374,7 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 | renderer/features/workspace/data/mockScenario.ts | default/empty/boundary 목 데이터 생성 |
 | renderer/features/workspace/data/server/workspaceMode.ts | 모드, Base URL, timeout 파싱·검증 |
 | renderer/features/workspace/data/server/apiClient.ts | 공통 fetch, 인증, timeout, 오류 분류 |
-| renderer/features/workspace/data/server/apiTypes.ts | 전송 DTO와 응답 envelope 및 access-token-only 로그인 응답 런타임 검사 |
+| renderer/features/workspace/data/server/apiTypes.ts | 전송 DTO와 응답 envelope 및 access/refresh 로그인 토큰 쌍 런타임 검사 |
 | renderer/features/workspace/data/server/contextAdapter.ts | compact/확장 context의 도메인 정규화 |
 | renderer/features/workspace/data/server/serverId.ts | DB 길이 안의 UUID 기반 server entity ID 생성 |
 | renderer/features/workspace/data/server/serverWorkspace.ts | 실제 endpoint 호출과 payload 변환, 캐시 갱신 |
@@ -384,8 +385,8 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 | renderer/features/workspace/queries/workItemComposer.ts | 모드별 업무 생성 노드·담당자·상위 업무 후보 계산 |
 | renderer/features/workspace/queries/serverWorkItemCreateContract.ts | server 업무 생성 직접 역할 계약의 순수 필터 |
 | tests/all.test.ts | 프론트 단위 테스트 진입점 |
-| tests/apiClient.test.ts | URL/JSON/204/HTTP/parse/network/body timeout/5xx 정보 노출 방지 검증 |
-| tests/apiTypes.test.ts | JSON refresh token 없이 access token만 반환하는 로그인 성공 계약과 잘못된 토큰 검증 |
+| tests/apiClient.test.ts | access/refresh 세션 저장·삭제와 URL/JSON/204/HTTP/parse/network/body timeout/5xx 정보 노출 방지 검증 |
+| tests/apiTypes.test.ts | 로그인 성공 응답의 access/refresh 토큰 쌍 정규화와 누락·공백 토큰 거부 검증 |
 | tests/contextAdapter.test.ts | compact/확장/빈/잘못된 context, AUTHORITY/MENTION 호환 및 partial sync 검증 |
 | tests/localStore.test.ts | compact 미확인 담당자와 expanded ID-only 담당자의 캐시 왕복 보존 검증 |
 | tests/mockScenario.test.ts | 기본 시드 무결성 및 empty/boundary/error 검증 |
@@ -450,9 +451,9 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 7. 각 변경 뒤 /context/init이 재호출되고 화면에 결과가 반영되는지 확인한다.
 8. 네트워크 차단, 401, 500, 빈 context를 각각 확인한다.
 
-### 11.4 access-token-only 로그인 보정 검증 (2026-08-30)
+### 11.4 과거 access-token-only 로그인 보정 기록 (2026-08-30, 현재 계약으로 대체됨)
 
-서버 성공 응답에는 JSON `access_token`만 있고 `refresh_token`은 HttpOnly 쿠키로 오는 현재 계약에 맞춰 프론트 로그인 판정을 보정했다.
+이 절은 2026-08-30 당시 refresh token을 HttpOnly 쿠키로 가정해 access-token-only 응답을 허용했던 과거 검증 기록이다. 현재 체크인된 서버 컨트롤러와 API 문서는 로그인 JSON에 `access_token`과 `refresh_token`을 모두 반환하므로, 현재 프론트는 두 토큰이 모두 유효한 문자열일 때만 로그인 성공으로 판정하고 둘 다 localStorage에 저장한다. 아래 명령 결과는 당시 기록이며 현재 토큰 계약의 검증 결과로 해석하지 않는다.
 
 | 명령 | 결과 |
 |---|---|
@@ -462,7 +463,7 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 | npm run build:bundle:mock / build:bundle:server | 둘 다 선행 tsc에서 위 기존 WorkItemEditPage.tsx 오류로 중단 |
 | npx vite build --mode mock / server | 둘 다 통과, renderer/main/preload 번들 생성 |
 
-실계정 비밀번호를 작업 환경에 제공하거나 저장하지 않았으므로 실제 로그인 재현은 수행하지 않았다. 사용자는 `npm run dev:server`로 실행한 뒤 로그인하고, Network에서 `POST /api/users/login` 다음 `GET /api/context/init`이 호출되며 두 번째 요청에 `Authorization: Bearer ...`가 포함되는지 확인해야 한다. 로그인 다음에 새 오류가 표시되면 인증 판정이 아니라 `/context/init` 응답·정규화 단계로 구분해 진단한다.
+실계정 비밀번호를 작업 환경에 제공하거나 저장하지 않았으므로 실제 로그인 재현은 수행하지 않았다. 사용자는 `npm run dev:server`로 실행한 뒤 로그인하고, Network에서 `POST /api/users/login` 응답에 두 토큰이 모두 있는지, Application의 localStorage에 두 토큰 키가 저장되는지, 이어지는 `GET /api/context/init` 요청에 `Authorization: Bearer ...`가 포함되는지 확인해야 한다. 로그인 다음에 새 오류가 표시되면 토큰 적재 단계와 `/context/init` 응답·정규화 단계를 나눠 진단한다.
 
 ### 11.5 AUTHORITY/MENTION 컨텍스트 호환 보정 (2026-08-30)
 
@@ -480,12 +481,12 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 
 ### 12.1 프론트엔드 제약과 TODO
 
-- 서버의 refresh_token은 HttpOnly 쿠키이고 `/users/refresh`도 존재하지만, 프론트 요청은 현재 `credentials: omit`이라 자동 갱신하지 않는다. access token 만료 시 재로그인이 필요하다.
+- 서버의 `/users/refresh`는 JSON body의 refresh_token으로 새 access/refresh 토큰 쌍을 발급하지만 프론트 자동 갱신에는 아직 연결하지 않았다. 현재는 access token 만료 시 재로그인이 필요하다.
 - AUTHORITY와 MENTION은 현재 workspace 화면 모델에 저장하지 않는다. 권한 비트 기반 UI 제어 및 알림 UI를 구현할 때 전용 도메인·캐시·동기화 계층이 필요하다.
 - /context/sync 구현은 있으나 삭제 tombstone이 없는 현재 응답으로는 안전한 삭제 병합을 보장할 수 없어 자동 동기화에 연결하지 않았다.
 - 업무 담당자 변경/claim API가 없어 서버 모드에서는 해당 동작을 차단한다.
 - 역할/하위 조직 대상 이메일은 직접 입력할 수 있지만 사용자 검색 endpoint는 없다. datalist에는 현재 context에서 알 수 있는 사용자만 표시되며, 신규 이메일의 가입 여부는 제출 후 서버 응답으로 확인한다.
-- 서버 캐시와 access token은 현재 localStorage 기반이다. 장기적으로 access token도 Electron의 더 안전한 저장소 또는 서버의 HttpOnly cookie 정책을 검토해야 한다.
+- 서버 캐시와 access/refresh token은 현재 localStorage 기반이다. 장기적으로 Electron의 더 안전한 저장소 또는 refresh token의 HttpOnly cookie 전환을 포함한 보안 정책을 검토해야 한다.
 - 현재는 시작 시 hydration과 변경 후 전체 재조회 방식이다. 서버 계약이 안정되면 query cache, retry/backoff, focus revalidation을 검토할 수 있다.
 
 ### 12.2 서버 또는 백엔드 측 확인이 필요한 사항
@@ -495,7 +496,7 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 1. 실제 ContextController compact 응답에는 업무 owner 사용자, description, weight, progress, start/due date, created_at이 없다. 화면에 필요한 전체 필드를 반환할지 계약 확정이 필요하다.
 2. 문서의 context 확장 응답과 실제 컨트롤러 응답의 필드명·중첩 구조가 다르다.
 3. 현재 HTTP 컨트롤러 prefix는 /api이지만 일부 기존 문서·프론트 fallback은 /api/v1을 전제로 한다. 배포 API의 최종 prefix를 명세에 고정해야 한다.
-4. HttpOnly refresh 쿠키 기반 갱신을 사용하려면 서버가 `Access-Control-Allow-Origin`을 정확한 프론트 Origin으로 제한하고 `Access-Control-Allow-Credentials: true`를 추가해야 한다. Electron/localhost와 원격 서버 조합에서 `SameSite=Strict`, `Secure`, Origin 정책도 함께 확정해야 한다.
+4. 향후 refresh token을 현재 JSON body 계약에서 HttpOnly 쿠키로 전환한다면 서버가 `Access-Control-Allow-Origin`을 정확한 프론트 Origin으로 제한하고 `Access-Control-Allow-Credentials: true`를 추가해야 한다. Electron/localhost와 원격 서버 조합에서 `SameSite`, `Secure`, Origin 정책도 함께 확정해야 한다.
 5. context sync에 삭제 tombstone이 없어 삭제 전파 방식이 불명확하다.
 6. 업무 담당자 변경/claim 및 사용자 검색·조회 계약이 확인되지 않는다. 조직/역할 endpoint의 이메일 직접 입력은 지원하지만 사전 사용자 검색은 할 수 없다.
 7. 잘못된 JWT가 401 대신 500으로 처리될 가능성이 있어 인증 오류 규약 확인이 필요하다.

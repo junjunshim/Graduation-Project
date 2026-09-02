@@ -3,7 +3,74 @@ import test from 'node:test'
 import {
   ApiClientError,
   apiRequest,
+  clearServerSession,
+  getServerAccessToken,
+  getServerRefreshToken,
+  getServerSessionEmail,
+  hasServerSession,
+  setServerSession,
 } from '../renderer/features/workspace/data/server/apiClient.js'
+
+function createMemoryStorage(): Storage {
+  const values = new Map<string, string>()
+
+  return {
+    get length() {
+      return values.size
+    },
+    clear() {
+      values.clear()
+    },
+    getItem(key) {
+      return values.get(key) ?? null
+    },
+    key(index) {
+      return Array.from(values.keys())[index] ?? null
+    },
+    removeItem(key) {
+      values.delete(key)
+    },
+    setItem(key, value) {
+      values.set(key, value)
+    },
+  }
+}
+
+test('server session stores and clears access and refresh tokens together', () => {
+  const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const localStorage = createMemoryStorage()
+
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { localStorage },
+  })
+
+  try {
+    setServerSession({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      email: 'user@example.com',
+    })
+
+    assert.equal(getServerAccessToken(), 'access-token')
+    assert.equal(getServerRefreshToken(), 'refresh-token')
+    assert.equal(getServerSessionEmail(), 'user@example.com')
+    assert.equal(hasServerSession(), true)
+
+    clearServerSession()
+
+    assert.equal(getServerAccessToken(), null)
+    assert.equal(getServerRefreshToken(), null)
+    assert.equal(getServerSessionEmail(), null)
+    assert.equal(hasServerSession(), false)
+  } finally {
+    if (originalWindowDescriptor) {
+      Object.defineProperty(globalThis, 'window', originalWindowDescriptor)
+    } else {
+      Reflect.deleteProperty(globalThis, 'window')
+    }
+  }
+})
 
 test('api client normalizes the base URL and serializes JSON bodies', async () => {
   const originalFetch = globalThis.fetch

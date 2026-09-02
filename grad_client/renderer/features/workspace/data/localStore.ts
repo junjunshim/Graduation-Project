@@ -162,13 +162,28 @@ function normalizeDb(
       return
     }
 
+    const isDeleted =
+      typeof item.isDeleted === 'boolean'
+        ? item.isDeleted
+        : typeof item.is_deleted === 'boolean'
+          ? item.is_deleted
+          : undefined
+    const updatedAt =
+      typeof item.updatedAt === 'string'
+        ? item.updatedAt
+        : typeof item.updated_at === 'string'
+          ? item.updated_at
+          : undefined
+
     nodes.push({
       id,
       ...(parentNodeId && Number.isFinite(parentNodeId) ? { parentNodeId } : {}),
       nodeType: String(item.nodeType ?? item.node_type ?? 'TEAM') as OrganizationNodeRecord['nodeType'],
       name: String(item.name ?? `Node ${id}`),
       path: Array.isArray(item.path) ? item.path.map(Number).filter(Number.isFinite) : [],
+      ...(isDeleted !== undefined ? { isDeleted } : {}),
       createdAt: String(item.createdAt ?? item.createAt ?? item.create_at ?? getDefaultTimestamp(index)),
+      ...(updatedAt ? { updatedAt } : {}),
     })
   })
 
@@ -197,12 +212,27 @@ function normalizeDb(
         return null
       }
 
+      const isDeleted =
+        typeof item.isDeleted === 'boolean'
+          ? item.isDeleted
+          : typeof item.is_deleted === 'boolean'
+            ? item.is_deleted
+            : undefined
+      const updatedAt =
+        typeof item.updatedAt === 'string'
+          ? item.updatedAt
+          : typeof item.updated_at === 'string'
+            ? item.updated_at
+            : undefined
+
       return {
         id: Number(item.id ?? item.assignment_id ?? index + 1),
         userId,
         nodeId,
         roleName: String(item.roleName ?? item.role_name ?? item.role ?? 'MEMBER') as RoleAssignmentRecord['roleName'],
+        ...(isDeleted !== undefined ? { isDeleted } : {}),
         createdAt: String(item.createdAt ?? item.createAt ?? item.create_at ?? getDefaultTimestamp(index)),
+        ...(updatedAt ? { updatedAt } : {}),
       }
     })
     .filter((entry): entry is RoleAssignmentRecord => Boolean(entry))
@@ -261,6 +291,21 @@ function normalizeDb(
         : typeof item.parent_work_item_id === 'string'
           ? item.parent_work_item_id
           : undefined
+    const category = typeof item.category === 'string' ? item.category.trim() : undefined
+    const hidden = typeof item.hidden === 'boolean' ? item.hidden : undefined
+    const commentCount = Number(item.commentCount ?? item.comment_count)
+    const isDeleted =
+      typeof item.isDeleted === 'boolean'
+        ? item.isDeleted
+        : typeof item.is_deleted === 'boolean'
+          ? item.is_deleted
+          : undefined
+    const updatedAt =
+      typeof item.updatedAt === 'string'
+        ? item.updatedAt
+        : typeof item.updated_at === 'string'
+          ? item.updated_at
+          : undefined
 
     workItems.push({
       workItemId,
@@ -268,14 +313,19 @@ function normalizeDb(
       ownerUserId,
       title: String(item.title ?? workItemId),
       description: String(item.description ?? ''),
+      ...(category ? { category } : {}),
       status: String(item.status ?? 'todo') as WorkItemRecord['status'],
       priority: Number(item.priority ?? 3),
+      ...(hidden !== undefined ? { hidden } : {}),
       weight: Number(item.weight ?? 1),
       progress: Number(item.progress ?? 0),
+      ...(Number.isFinite(commentCount) && commentCount >= 0 ? { commentCount } : {}),
+      ...(isDeleted !== undefined ? { isDeleted } : {}),
       ...(startDate ? { startDate } : {}),
       ...(dueDate ? { dueDate } : {}),
       ...(parentWorkItemId ? { parentWorkItemId } : {}),
       createdAt: String(item.createdAt ?? item.createAt ?? item.create_at ?? getDefaultTimestamp(index)),
+      ...(updatedAt ? { updatedAt } : {}),
     })
   })
 

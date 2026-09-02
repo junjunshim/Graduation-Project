@@ -76,12 +76,18 @@ export function getNodePathLabel(nodeId: number, nodes?: OrganizationNodeRecord[
 
 export function getOrgSnapshot(): WorkspaceSnapshot {
   const db = readWorkspaceDb()
+  const activeNodes = db.nodes.filter((node) => !node.isDeleted)
+  const activeNodeIds = new Set(activeNodes.map((node) => node.id))
 
   return {
     users: db.users.map((user) => ({ ...user })),
-    nodes: db.nodes.map((node) => ({ ...node, path: [...node.path] })),
-    roles: db.roles.map((role) => ({ ...role })),
-    workItems: db.workItems.map((item) => ({ ...item })),
+    nodes: activeNodes.map((node) => ({ ...node, path: [...node.path] })),
+    roles: db.roles
+      .filter((role) => !role.isDeleted && activeNodeIds.has(role.nodeId))
+      .map((role) => ({ ...role })),
+    workItems: db.workItems
+      .filter((item) => !item.isDeleted && activeNodeIds.has(item.ownerNodeId))
+      .map((item) => ({ ...item })),
   }
 }
 

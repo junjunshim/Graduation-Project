@@ -1,7 +1,7 @@
 import { getWorkspaceApiBaseUrl, getWorkspaceApiTimeoutMs } from './workspaceMode.js'
 
 const ACCESS_TOKEN_STORAGE_KEY = 'grad-client-server-access-token'
-const LEGACY_REFRESH_TOKEN_STORAGE_KEY = 'grad-client-server-refresh-token'
+const REFRESH_TOKEN_STORAGE_KEY = 'grad-client-server-refresh-token'
 const SERVER_EMAIL_STORAGE_KEY = 'grad-client-server-email'
 
 export type ApiRequestOptions = {
@@ -134,25 +134,31 @@ export function getServerAccessToken() {
   return readStorageValue(ACCESS_TOKEN_STORAGE_KEY)
 }
 
+export function getServerRefreshToken() {
+  return readStorageValue(REFRESH_TOKEN_STORAGE_KEY)
+}
+
 export function hasServerSession() {
-  return Boolean(getServerAccessToken() && getServerSessionEmail())
+  return Boolean(getServerAccessToken() && getServerRefreshToken() && getServerSessionEmail())
 }
 
 export function setServerSession({
   accessToken,
+  refreshToken,
   email,
 }: {
   accessToken: string
+  refreshToken: string
   email: string
 }) {
   writeStorageValue(ACCESS_TOKEN_STORAGE_KEY, accessToken)
-  writeStorageValue(LEGACY_REFRESH_TOKEN_STORAGE_KEY, null)
+  writeStorageValue(REFRESH_TOKEN_STORAGE_KEY, refreshToken)
   writeStorageValue(SERVER_EMAIL_STORAGE_KEY, email)
 }
 
 export function clearServerSession() {
   writeStorageValue(ACCESS_TOKEN_STORAGE_KEY, null)
-  writeStorageValue(LEGACY_REFRESH_TOKEN_STORAGE_KEY, null)
+  writeStorageValue(REFRESH_TOKEN_STORAGE_KEY, null)
   writeStorageValue(SERVER_EMAIL_STORAGE_KEY, null)
 }
 
@@ -207,9 +213,6 @@ export async function apiRequest<ResponseBody>(path: string, options: ApiRequest
       method: options.method ?? 'GET',
       headers,
       signal: controller.signal,
-      // The checked-in server uses wildcard CORS, which cannot be combined with
-      // credentialed requests. Refresh-cookie support must be enabled together
-      // with the corresponding server CORS and cookie configuration.
       credentials: 'omit',
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     })

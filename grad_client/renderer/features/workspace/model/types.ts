@@ -20,7 +20,9 @@ export type OrganizationNodeRecord = {
   nodeType: NodeType
   name: string
   path: number[]
+  isDeleted?: boolean
   createdAt: string
+  updatedAt?: string
 }
 
 export type RoleAssignmentRecord = {
@@ -28,7 +30,9 @@ export type RoleAssignmentRecord = {
   userId: string
   nodeId: number
   roleName: RoleName
+  isDeleted?: boolean
   createdAt: string
+  updatedAt?: string
 }
 
 export type WorkItemRecord = {
@@ -37,14 +41,19 @@ export type WorkItemRecord = {
   ownerUserId: string
   title: string
   description: string
+  category?: string
   status: WorkItemStatus
   priority: number
+  hidden?: boolean
   weight: number
   progress: number
+  commentCount?: number
+  isDeleted?: boolean
   startDate?: string
   dueDate?: string
   parentWorkItemId?: string
   createdAt: string
+  updatedAt?: string
 }
 
 export type WorkspaceDatabase = {

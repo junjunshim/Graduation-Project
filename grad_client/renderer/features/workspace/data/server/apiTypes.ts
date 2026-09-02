@@ -16,14 +16,31 @@ export type ServerStatusResponse = {
 
 export type ServerLoginResponse = ServerStatusResponse & {
   access_token?: string
+  refresh_token?: string
 }
 
-export function getServerLoginAccessToken(response: ServerLoginResponse) {
-  if (response.status !== 'success' || typeof response.access_token !== 'string') {
+export type ServerLoginTokens = {
+  accessToken: string
+  refreshToken: string
+}
+
+export function getServerLoginTokens(response: ServerLoginResponse): ServerLoginTokens | null {
+  if (
+    response.status !== 'success' ||
+    typeof response.access_token !== 'string' ||
+    typeof response.refresh_token !== 'string'
+  ) {
     return null
   }
 
-  return response.access_token.trim() || null
+  const accessToken = response.access_token.trim()
+  const refreshToken = response.refresh_token.trim()
+
+  if (!accessToken || !refreshToken) {
+    return null
+  }
+
+  return { accessToken, refreshToken }
 }
 
 /**
@@ -53,24 +70,50 @@ export type ServerContextItem = {
   owner_user_id?: string
   owner_user_email?: string
   parent_work_item_id?: string | null
-  description?: string
+  description?: string | null
+  category?: string | null
   weight?: string | number
   progress?: string | number
+  comment_count?: string | number
   start_date?: string | null
   due_date?: string | null
   created_at?: string
   personal_node_id?: string | number | null
   name?: string
   hidden?: boolean
+  is_deleted?: boolean
 
   comment_id?: string | number
   work_item_id?: string
   message?: string
   is_read?: boolean
+
+  actor_user_id?: string
+  actor_name?: string
+  entity_type?: string
+  entity_id?: string
+  target_name?: string
+  action_type?: string
+  field_name?: string | null
+  old_value?: string | null
+  new_value?: string | null
+
+  uploader_user_id?: string
+  uploader_name?: string
+  uploader_email?: string
+  original_file_name?: string
+  file_size?: string | number
+  mime_type?: string | null
 }
 
 export type ServerContextResponse = ServerStatusResponse & {
+  server_time?: unknown
   data?: unknown
+}
+
+export type ParsedServerContextResponse = {
+  serverTime: string
+  items: ServerContextItem[]
 }
 
 export function isServerStatusResponse(value: unknown): value is ServerStatusResponse {
@@ -94,4 +137,25 @@ export function parseServerContextItems(value: unknown): ServerContextItem[] {
 
     return item as ServerContextItem
   })
+}
+
+export function parseServerContextResponse(value: unknown): ParsedServerContextResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('서버 컨텍스트 응답 형식이 올바르지 않습니다.')
+  }
+
+  const response = value as Record<string, unknown>
+
+  if (response.status !== 'success') {
+    throw new Error('서버 컨텍스트 응답이 성공 형식이 아닙니다.')
+  }
+
+  if (typeof response.server_time !== 'string' || !response.server_time.trim()) {
+    throw new Error('서버 컨텍스트 응답의 server_time이 올바르지 않습니다.')
+  }
+
+  return {
+    serverTime: response.server_time.trim(),
+    items: parseServerContextItems(response.data),
+  }
 }

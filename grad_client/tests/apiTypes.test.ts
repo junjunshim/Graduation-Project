@@ -1,23 +1,52 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { getServerLoginAccessToken } from '../renderer/features/workspace/data/server/apiTypes.js'
+import { getServerLoginTokens } from '../renderer/features/workspace/data/server/apiTypes.js'
 
-test('server login accepts an access-token-only success response', () => {
-  assert.equal(
-    getServerLoginAccessToken({
+test('server login accepts and normalizes both tokens from a success response', () => {
+  assert.deepEqual(
+    getServerLoginTokens({
       status: 'success',
-      access_token: 'access-token',
+      access_token: '  access-token  ',
+      refresh_token: '  refresh-token  ',
     }),
-    'access-token',
-  )
-  assert.equal(
-    getServerLoginAccessToken({ status: 'success', access_token: '  access-token  ' }),
-    'access-token',
+    {
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    },
   )
 })
 
-test('server login rejects error responses and missing access tokens', () => {
-  assert.equal(getServerLoginAccessToken({ status: 'error', access_token: 'access-token' }), null)
-  assert.equal(getServerLoginAccessToken({ status: 'success' }), null)
-  assert.equal(getServerLoginAccessToken({ status: 'success', access_token: '   ' }), null)
+test('server login rejects error responses and missing or blank tokens', () => {
+  assert.equal(
+    getServerLoginTokens({
+      status: 'error',
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+    }),
+    null,
+  )
+  assert.equal(
+    getServerLoginTokens({ status: 'success', access_token: 'access-token' }),
+    null,
+  )
+  assert.equal(
+    getServerLoginTokens({ status: 'success', refresh_token: 'refresh-token' }),
+    null,
+  )
+  assert.equal(
+    getServerLoginTokens({
+      status: 'success',
+      access_token: '   ',
+      refresh_token: 'refresh-token',
+    }),
+    null,
+  )
+  assert.equal(
+    getServerLoginTokens({
+      status: 'success',
+      access_token: 'access-token',
+      refresh_token: '   ',
+    }),
+    null,
+  )
 })

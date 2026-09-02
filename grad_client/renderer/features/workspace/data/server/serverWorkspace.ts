@@ -21,7 +21,7 @@ import {
   type ApiRequestOptions,
 } from './apiClient'
 import {
-  getServerLoginAccessToken,
+  getServerLoginTokens,
   isServerStatusResponse,
   parseServerContextItems,
   type ServerContextResponse,
@@ -203,18 +203,21 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
       },
       includeToken: false,
     })) as ServerLoginResponse
-    const accessToken = getServerLoginAccessToken(response)
+    const tokens = getServerLoginTokens(response)
 
-    if (!accessToken) {
+    if (!tokens) {
       return {
         status: 'error',
-        message: response.message ?? '로그인에 실패했습니다.',
+        message:
+          response.status === 'error'
+            ? response.message ?? '로그인에 실패했습니다.'
+            : '서버 로그인 응답에 인증 토큰이 누락되었습니다.',
       }
     }
 
     shouldRollbackSession = true
     setServerSession({
-      accessToken,
+      ...tokens,
       email,
     })
     setCurrentSessionUserId(email)

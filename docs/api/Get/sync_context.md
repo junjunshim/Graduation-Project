@@ -35,6 +35,7 @@
 ```json
 {
     "status" : "success",
+    "server_time" : "2026-03-19 12:35:10.123456+00",
     "data" : [
         {
             "type" : "WORK_ITEM",
@@ -107,6 +108,7 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
+| server_time | String | 성공 | 서버의 현재 시간 (이후 증분 동기화 `last_synced_at` 파라미터로 사용) |
 | data | Array | 성공 | 동기화 시점 이후 변경/추가/삭제된 엔티티(NODE, WORK_ITEM, ROLE, AUTHORITY, MENTION) 배열 |
 | message | String | 에러 | 요청 관련 메세지 |
 

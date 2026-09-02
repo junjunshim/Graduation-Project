@@ -32,12 +32,13 @@
 ```json
 {
     "status" : "success",
+    "server_time" : "2026-03-19 12:29:24.745634+00",
     "data" : [
         {
             "type" : "NODE",
             "id" : 4,
             "node_type" : "DEPARTMENT",
-            "parent_id" : "1",
+            "parent_id" : 1,
             "title" : "개발 부서",
             "path" : [1, 4],
             "updated_at" : "2026-03-19 12:29:24.745634+00"
@@ -101,6 +102,7 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
+| server_time | String | 성공 | 서버의 현재 시간 (이후 증분 동기화 `last_synced_at` 파라미터로 사용) |
 | data | Array | 성공 | 사용자가 속한 조직 구조, 업무, 역할, 권한 및 멘션 알림 데이터 통합 리스트 |
 | message | String | 에러 | 요청 관련 메세지 |
 

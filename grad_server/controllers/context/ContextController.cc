@@ -27,6 +27,7 @@ void ContextController::getInitialContext(const HttpRequestPtr &req, std::functi
         [callback](const orm::Result &result){
             // DB 결과를 프론트엔드 응답용 JSON으로 변환
             Json::Value ret = parseIntegratedDataResult(result);
+            ret["server_time"] = trantor::Date::now().toFormattedString(true);
             
             // HTTP 응답 생성 및 반환
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -80,6 +81,7 @@ void ContextController::syncContext(const HttpRequestPtr &req, std::function<voi
         // [성공 콜백]
         [callback](const orm::Result &result){
             Json::Value ret = parseIntegratedDataResult(result);
+            ret["server_time"] = trantor::Date::now().toFormattedString(true);
 
             // HTTP 응답 생성 및 반환
             auto resp = HttpResponse::newHttpJsonResponse(ret);

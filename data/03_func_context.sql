@@ -168,6 +168,23 @@ BEGIN
 
     UNION ALL
 
+    -- USER 데이터 반환 (접근 권한 있는 노드에 소속된 모든 사용자 정보)
+    SELECT DISTINCT ON (u.user_id) jsonb_build_object(
+        'type', 'USER',
+        'id', u.user_id,
+        'email', u.email,
+        'name', u.name,
+        'created_at', u.created_at,
+        'updated_at', u.updated_at
+    )
+    FROM role_assignments ra
+    JOIN users u ON ra.user_id = u.user_id
+    JOIN filtered_nodes fn ON ra.node_id = fn.node_id
+    WHERE (fn.effective_authority & v_node_members_view) = v_node_members_view
+      AND u.is_deleted = FALSE
+
+    UNION ALL
+
     -- AUTHORITY 데이터 반환
     SELECT jsonb_build_object(
         'type', 'AUTHORITY',
@@ -488,6 +505,27 @@ BEGIN
     JOIN filtered_nodes fn ON ra.node_id = fn.node_id
     WHERE ra.updated_at > p_last_synced_at
         AND (fn.effective_authority & v_node_members_view) = v_node_members_view -- Bit 1: NODE_MEMBERS_VIEW
+
+    UNION ALL
+
+    -- 5.5 신규/수정 USER 데이터 반환
+    SELECT DISTINCT ON (u.user_id) jsonb_build_object(
+        'type', 'USER',
+        'id', u.user_id,
+        'email', u.email,
+        'name', u.name,
+        'created_at', u.created_at,
+        'updated_at', u.updated_at
+    )
+    FROM users u
+    WHERE u.updated_at > p_last_synced_at
+      AND u.is_deleted = FALSE
+      AND u.user_id IN (
+          SELECT ra.user_id 
+          FROM role_assignments ra 
+          JOIN filtered_nodes fn ON ra.node_id = fn.node_id 
+          WHERE (fn.effective_authority & v_node_members_view) = v_node_members_view
+      )
 
     UNION ALL
 

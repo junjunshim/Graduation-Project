@@ -63,12 +63,15 @@ BEGIN
         'type', 'ROLE',
         'id', r.assignment_id,
         'node_id', r.node_id,
-        'email', p_target_email,
+        'user_id', r.user_id,
+        'user_name', u.name,
+        'email', u.email,
         'role', r.role,
         'updated_at', r.updated_at
     )
     FROM role_assignments r
-    WHERE assignment_id = v_new_id;
+    JOIN users u ON r.user_id = u.user_id
+    WHERE r.assignment_id = v_new_id;
 
     EXCEPTION
         WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' THEN
@@ -165,12 +168,15 @@ BEGIN
         'type', 'ROLE',
         'id', r.assignment_id,
         'node_id', r.node_id,
-        'email', p_target_email,
+        'user_id', r.user_id,
+        'user_name', u.name,
+        'email', u.email,
         'role', r.role,
         'updated_at', r.updated_at
     )
     FROM role_assignments r
-    WHERE user_id = v_target_id AND node_id = p_node_id;
+    JOIN users u ON r.user_id = u.user_id
+    WHERE r.user_id = v_target_id AND r.node_id = p_node_id;
 
     EXCEPTION
         WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' OR SQLSTATE 'P0403' OR SQLSTATE 'P0404' OR SQLSTATE 'P0405' OR SQLSTATE 'P0407' THEN

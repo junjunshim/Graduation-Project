@@ -428,13 +428,15 @@ BEGIN
     FROM organization_nodes n
     WHERE n.node_id = p_node_id;
 
-    -- 4-2. 노드 멤버 역할 목록 (ROLE) - NODE_MEMBERS_VIEW 권한 보유 시 반환
+    -- 4-2. 노드 멤버 역할 목록 (ROLE) 및 사용자 정보 (USER) - NODE_MEMBERS_VIEW 권한 보유 시 반환
     IF (v_authority & v_node_members_view) = v_node_members_view THEN
         RETURN QUERY
         SELECT jsonb_build_object(
             'type', 'ROLE',
             'id', ra.assignment_id,
             'node_id', ra.node_id,
+            'user_id', ra.user_id,
+            'user_name', u.name,
             'email', u.email,
             'role', ra.role,
             'updated_at', ra.updated_at
@@ -442,6 +444,19 @@ BEGIN
         FROM role_assignments ra
         JOIN users u ON ra.user_id = u.user_id
         WHERE ra.node_id = p_node_id;
+
+        RETURN QUERY
+        SELECT DISTINCT ON (u.user_id) jsonb_build_object(
+            'type', 'USER',
+            'id', u.user_id,
+            'email', u.email,
+            'name', u.name,
+            'created_at', u.created_at,
+            'updated_at', u.updated_at
+        )
+        FROM role_assignments ra
+        JOIN users u ON ra.user_id = u.user_id
+        WHERE ra.node_id = p_node_id AND u.is_deleted = FALSE;
     END IF;
 
     -- 4-3. 노드 역할별 권한 정의 목록 (AUTHORITY)

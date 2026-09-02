@@ -7,8 +7,8 @@ import type {
   WorkspaceDirectoryTone,
 } from '../model/workspaceDirectory'
 
-type OrganizationNodeType = Exclude<NodeType, 'USER'>
-type OrganizationNode = OrganizationNodeRecord & { nodeType: OrganizationNodeType }
+type OrganizationNodeType = NodeType
+type OrganizationNode = OrganizationNodeRecord
 
 type DirectoryVisualMetadata = Pick<WorkspaceDirectoryItem, 'iconName' | 'tone'>
 
@@ -30,6 +30,7 @@ const ROOT_TONES: WorkspaceDirectoryTone[] = [
 ]
 
 const NODE_VISUAL_METADATA: Record<OrganizationNodeType, DirectoryVisualMetadata> = {
+  USER: { tone: 'violet', iconName: 'folder' },
   COMPANY: { tone: 'indigo', iconName: 'building' },
   DIVISION: { tone: 'blue', iconName: 'orgChart' },
   DEPARTMENT: { tone: 'teal', iconName: 'folder' },
@@ -42,11 +43,10 @@ function getCreatedDate(createdAt: string) {
 }
 
 function getDescription(node: OrganizationNodeRecord, isRoot: boolean) {
+  if (node.nodeType === 'USER') {
+    return '개인 워크스페이스'
+  }
   return isRoot ? '전체 조직 최상위 워크스페이스' : `${getNodeTypeLabel(node.nodeType)} 워크스페이스`
-}
-
-function isOrganizationNode(node: OrganizationNodeRecord): node is OrganizationNode {
-  return node.nodeType !== 'USER'
 }
 
 export function getWorkspaceDirectory(
@@ -65,7 +65,7 @@ export function getWorkspaceDirectory(
   const accessibleNodeIds = new Set(getAccessibleNodeIdsForUser(userId, snapshot))
   const visibleNodes = sortWorkspaceNodes(
     snapshot.nodes.filter((node) => accessibleNodeIds.has(node.id)),
-  ).filter(isOrganizationNode)
+  )
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id))
   const childNodesByParentId = new Map<number, OrganizationNode[]>()
   const directMemberIdsByNodeId = new Map<number, Set<string>>()
@@ -91,14 +91,14 @@ export function getWorkspaceDirectory(
   })
 
   childNodesByParentId.forEach((children, parentNodeId) => {
-    childNodesByParentId.set(parentNodeId, sortWorkspaceNodes(children).filter(isOrganizationNode))
+    childNodesByParentId.set(parentNodeId, sortWorkspaceNodes(children))
   })
 
   const rootNodes = sortWorkspaceNodes(
     visibleNodes.filter(
       (node) => node.parentNodeId === undefined || !visibleNodeIds.has(node.parentNodeId),
     ),
-  ).filter(isOrganizationNode)
+  )
   const itemsByNodeId = new Map<number, WorkspaceDirectoryItem>()
 
   function buildItem(

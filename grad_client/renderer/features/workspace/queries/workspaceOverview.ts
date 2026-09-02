@@ -195,12 +195,11 @@ export function getWorkspaceOverview(
     snapshot.nodes.filter((node) => allAccessibleNodeIdSet.has(node.id) && !node.isDeleted),
   )
   const visibleOrganizationNodeIds = new Set(
-    allVisibleNodes.filter((node) => node.nodeType !== 'USER').map((node) => node.id),
+    allVisibleNodes.map((node) => node.id),
   )
   const accessibleRootNodes = allVisibleNodes.filter(
     (node) =>
-      node.nodeType !== 'USER' &&
-      (node.parentNodeId === undefined || !visibleOrganizationNodeIds.has(node.parentNodeId)),
+      node.parentNodeId === undefined || !visibleOrganizationNodeIds.has(node.parentNodeId),
   )
   const requestedRootNodeId = parseRootNodeId(options?.rootNodeId)
   const scopedRootNode = options

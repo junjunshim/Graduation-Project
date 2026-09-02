@@ -170,7 +170,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
   return [
     {
       label: '워크 스페이스',
-      value: String(overview.summary.orgNodeCount),
+      value: String(overview.summary.nodeCount),
       description: '접근 가능한 워크스페이스',
       icon: 'trendingUp',
       tone: 'blue',

@@ -13,6 +13,9 @@ DECLARE
     v_node_parent_view BIT(24);
     v_wi_public_view BIT(24);
     v_wi_hidden_view BIT(24);
+    v_file_view BIT(24);
+    v_history_personal_view BIT(24);
+    v_history_all_view BIT(24);
     v_deny BIT(24);
 BEGIN
     -- 0. 권한 비트 한 번에 로드
@@ -23,14 +26,19 @@ BEGIN
         BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view, v_node_sub_view, v_node_parent_view,
-        v_wi_public_view, v_wi_hidden_view, v_deny
+        v_wi_public_view, v_wi_hidden_view, v_file_view,
+        v_history_personal_view, v_history_all_view, v_deny
     FROM authority_constants
     WHERE name IN (
         'NODE_INFO_VIEW', 'NODE_MEMBERS_VIEW', 'NODE_SUB_VIEW', 'NODE_PARENT_VIEW',
-        'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'DENY'
+        'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'FILE_VIEW',
+        'HISTORY_PERSONAL_VIEW', 'HISTORY_ALL_VIEW', 'DENY'
     );
 
     -- 1. 유저 존재 여부 확인 및 id 가져오기
@@ -181,7 +189,85 @@ BEGIN
     FROM comment_mentions m
     JOIN work_item_comments c ON m.comment_id = c.comment_id
     JOIN users u_author ON c.author_user_id = u_author.user_id
-    WHERE m.mentioned_user_id = v_user_id AND m.is_read = FALSE;
+    WHERE m.mentioned_user_id = v_user_id AND m.is_read = FALSE
+
+    UNION ALL
+
+    -- ACTIVITY 데이터 반환 (접근 권한 있는 노드의 최신 활동 5개)
+    SELECT jsonb_build_object(
+        'type', 'ACTIVITY',
+        'id', latest_act.log_id,
+        'node_id', latest_act.node_id,
+        'actor_user_id', latest_act.actor_user_id,
+        'actor_name', latest_act.actor_name,
+        'entity_type', latest_act.entity_type,
+        'entity_id', latest_act.entity_id,
+        'target_name', latest_act.target_name,
+        'action_type', latest_act.action_type,
+        'field_name', latest_act.field_name,
+        'old_value', latest_act.old_value,
+        'new_value', latest_act.new_value,
+        'created_at', latest_act.created_at
+    )
+    FROM (
+        SELECT al.*
+        FROM activity_logs al
+        JOIN filtered_nodes fn ON al.node_id = fn.node_id
+        WHERE 
+            -- 전체 히스토리 권한이 있거나, 본인의 활동인 경우
+            ((fn.effective_authority & v_history_all_view) = v_history_all_view)
+            OR
+            (((fn.effective_authority & v_history_personal_view) = v_history_personal_view) AND al.actor_user_id = v_user_id)
+        ORDER BY al.created_at DESC
+        LIMIT 5
+    ) latest_act
+
+    UNION ALL
+
+    -- FILE 데이터 반환 (접근 권한 있는 업무의 최신 첨부파일 5개)
+    SELECT jsonb_build_object(
+        'type', 'FILE',
+        'id', latest_f.file_id,
+        'work_item_id', latest_f.work_item_id,
+        'uploader_user_id', latest_f.uploader_user_id,
+        'uploader_name', latest_f.uploader_name,
+        'uploader_email', latest_f.uploader_email,
+        'original_file_name', latest_f.original_file_name,
+        'file_size', latest_f.file_size,
+        'mime_type', latest_f.mime_type,
+        'created_at', latest_f.created_at,
+        'updated_at', latest_f.updated_at
+    )
+    FROM (
+        SELECT 
+            f.file_id,
+            f.work_item_id,
+            f.uploader_user_id,
+            u.name AS uploader_name,
+            u.email AS uploader_email,
+            f.original_file_name,
+            f.file_size,
+            f.mime_type,
+            f.created_at,
+            f.updated_at
+        FROM work_item_files f
+        JOIN work_items w ON f.work_item_id = w.work_item_id
+        JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
+        JOIN users u ON f.uploader_user_id = u.user_id
+        WHERE f.is_deleted = FALSE
+            AND w.is_deleted = FALSE
+            AND (
+                (w.owner_user_id = v_user_id)
+                OR
+                ((fn.effective_authority & v_file_view) = v_file_view AND (
+                    (w.hidden = FALSE AND (fn.effective_authority & v_wi_public_view) = v_wi_public_view)
+                    OR
+                    (w.hidden = TRUE AND (fn.effective_authority & v_wi_hidden_view) = v_wi_hidden_view)
+                ))
+            )
+        ORDER BY f.created_at DESC
+        LIMIT 5
+    ) latest_f;
 
     EXCEPTION 
         WHEN SQLSTATE 'P0001' THEN
@@ -207,6 +293,9 @@ DECLARE
     v_node_parent_view BIT(24);
     v_wi_public_view BIT(24);
     v_wi_hidden_view BIT(24);
+    v_file_view BIT(24);
+    v_history_personal_view BIT(24);
+    v_history_all_view BIT(24);
     v_deny BIT(24);
 BEGIN
     -- 0. 권한 비트 한 번에 로드
@@ -217,14 +306,19 @@ BEGIN
         BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
         BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view, v_node_sub_view, v_node_parent_view,
-        v_wi_public_view, v_wi_hidden_view, v_deny
+        v_wi_public_view, v_wi_hidden_view, v_file_view,
+        v_history_personal_view, v_history_all_view, v_deny
     FROM authority_constants
     WHERE name IN (
         'NODE_INFO_VIEW', 'NODE_MEMBERS_VIEW', 'NODE_SUB_VIEW', 'NODE_PARENT_VIEW',
-        'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'DENY'
+        'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'FILE_VIEW',
+        'HISTORY_PERSONAL_VIEW', 'HISTORY_ALL_VIEW', 'DENY'
     );
 
     -- 1. 유저 존재 여부 확인 및 id 가져오기
@@ -438,7 +532,107 @@ BEGIN
     JOIN work_item_comments c ON m.comment_id = c.comment_id
     JOIN users u_author ON c.author_user_id = u_author.user_id
     WHERE m.mentioned_user_id = v_user_id
-        AND m.updated_at > p_last_synced_at;
+        AND m.updated_at > p_last_synced_at
+
+    UNION ALL
+
+    -- 10. ACTIVITY 데이터 반환 (동기화 시점 이후의 신규 활동 최신 5개)
+    SELECT jsonb_build_object(
+        'type', 'ACTIVITY',
+        'id', latest_act.log_id,
+        'node_id', latest_act.node_id,
+        'actor_user_id', latest_act.actor_user_id,
+        'actor_name', latest_act.actor_name,
+        'entity_type', latest_act.entity_type,
+        'entity_id', latest_act.entity_id,
+        'target_name', latest_act.target_name,
+        'action_type', latest_act.action_type,
+        'field_name', latest_act.field_name,
+        'old_value', latest_act.old_value,
+        'new_value', latest_act.new_value,
+        'created_at', latest_act.created_at
+    )
+    FROM (
+        SELECT al.*
+        FROM activity_logs al
+        JOIN filtered_nodes fn ON al.node_id = fn.node_id
+        WHERE al.created_at > p_last_synced_at
+            AND (
+                ((fn.effective_authority & v_history_all_view) = v_history_all_view)
+                OR
+                (((fn.effective_authority & v_history_personal_view) = v_history_personal_view) AND al.actor_user_id = v_user_id)
+            )
+        ORDER BY al.created_at DESC
+        LIMIT 5
+    ) latest_act
+
+    UNION ALL
+
+    -- 11. 신규/수정 FILE 데이터 반환 (동기화 시점 이후의 신규/수정 첨부파일 최신 5개)
+    SELECT jsonb_build_object(
+        'type', 'FILE',
+        'id', latest_f.file_id,
+        'work_item_id', latest_f.work_item_id,
+        'uploader_user_id', latest_f.uploader_user_id,
+        'uploader_name', latest_f.uploader_name,
+        'uploader_email', latest_f.uploader_email,
+        'original_file_name', latest_f.original_file_name,
+        'file_size', latest_f.file_size,
+        'mime_type', latest_f.mime_type,
+        'created_at', latest_f.created_at,
+        'updated_at', latest_f.updated_at
+    )
+    FROM (
+        SELECT 
+            f.file_id,
+            f.work_item_id,
+            f.uploader_user_id,
+            u.name AS uploader_name,
+            u.email AS uploader_email,
+            f.original_file_name,
+            f.file_size,
+            f.mime_type,
+            f.created_at,
+            f.updated_at
+        FROM work_item_files f
+        JOIN work_items w ON f.work_item_id = w.work_item_id
+        JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
+        JOIN users u ON f.uploader_user_id = u.user_id
+        WHERE f.is_deleted = FALSE
+            AND w.is_deleted = FALSE
+            AND f.updated_at > p_last_synced_at
+            AND (
+                (w.owner_user_id = v_user_id)
+                OR
+                ((fn.effective_authority & v_file_view) = v_file_view AND (
+                    (w.hidden = FALSE AND (fn.effective_authority & v_wi_public_view) = v_wi_public_view)
+                    OR
+                    (w.hidden = TRUE AND (fn.effective_authority & v_wi_hidden_view) = v_wi_hidden_view)
+                ))
+            )
+        ORDER BY f.created_at DESC
+        LIMIT 5
+    ) latest_f
+
+    UNION ALL
+
+    -- 12. 삭제된 FILE 데이터 반환 (동기화 시점 이후 삭제된 파일)
+    SELECT jsonb_build_object(
+        'type', 'FILE',
+        'id', f.file_id,
+        'status', 'deleted',
+        'updated_at', f.updated_at
+    )
+    FROM work_item_files f
+    JOIN work_items w ON f.work_item_id = w.work_item_id
+    JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
+    WHERE f.is_deleted = TRUE
+        AND f.updated_at > p_last_synced_at
+        AND (
+            (w.owner_user_id = v_user_id)
+            OR
+            ((fn.effective_authority & v_file_view) = v_file_view)
+        );
 
     EXCEPTION 
         WHEN SQLSTATE 'P0001' THEN

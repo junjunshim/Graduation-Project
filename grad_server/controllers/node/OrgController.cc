@@ -365,3 +365,61 @@ void OrgController::getActivities(const HttpRequestPtr &req, std::function<void(
     );
 }
 
+// 노드 상세 조회 api (GET /api/org/nodes?node_id=...)
+void OrgController::getNodeDetail(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 요청자 이메일 및 쿼리 파라미터 파싱
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    std::string node_id_str = req->getParameter("node_id");
+
+    if(node_id_str.empty()){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 쿼리 파라미터(node_id)가 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    int node_id = -1;
+    try {
+        node_id = std::stoi(node_id_str);
+    } catch (...) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "node_id는 유효한 숫자 형태여야 합니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    // 2. 비즈니스 로직 - DB 함수 호출
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM get_node_detail($1, $2)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email,
+        node_id
+    );
+}
+
+

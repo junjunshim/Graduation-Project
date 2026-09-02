@@ -49,6 +49,7 @@
 | Org 하위 노드 | Post | /api/org/subNodes | 완료 | [link](api/Post/sub_nodes.md) |
 | Org 노드 수정 | Patch | /api/org/nodes | 완료 | [link](api/Patch/node.md) |
 | Org 노드 삭제 | Delete | /api/org/nodes | 완료 | [link](api/Delete/node.md) |
+| Org 노드 상세 조회 | Get | /api/org/nodes | 완료 | [link](api/Get/node_detail.md) |
 | 활동 기록 조회 | Get | /api/org/activities | 완료 | [link](api/Get/activity.md) |
 | Role 부여 | Post | /api/roles | 완료 | [link](api/Post/role.md) |
 | Role 수정 | Patch | /api/roles | 완료 | [link](api/Patch/role.md) |

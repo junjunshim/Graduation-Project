@@ -57,6 +57,7 @@
             "hidden" : false,
             "weight" : 1,
             "progress" : 0,
+            "comment_count" : 2,
             "start_date" : "2026-03-01",
             "due_date" : "2026-03-31",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
@@ -153,6 +154,7 @@
 | hidden | Boolean | work_item | 업무 숨김 여부 |
 | weight | Integer | work_item | 업무 가중치 |
 | progress | Integer | work_item | 업무 진행률 |
+| comment_count | Integer | work_item | 업무에 등록된 댓글 총 개수 |
 | start_date | String or Null | work_item | 업무 시작 일자 |
 | due_date | String or Null | work_item | 업무 마감 일자 |
 | node_id | Integer | role, authority, activity | 소속 노드의 id |

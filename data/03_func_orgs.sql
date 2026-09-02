@@ -349,3 +349,231 @@ BEGIN
         USING ERRCODE = 'P0304';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- OrgController::getNodeDetail
+CREATE OR REPLACE FUNCTION get_node_detail(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_authority BIT(24);
+    
+    -- 권한 비트 상수 캐싱용
+    v_node_info_view BIT(24);
+    v_node_members_view BIT(24);
+    v_wi_public_view BIT(24);
+    v_wi_hidden_view BIT(24);
+    v_file_view BIT(24);
+    v_history_personal_view BIT(24);
+    v_history_all_view BIT(24);
+    v_deny BIT(24);
+BEGIN
+    -- 0. 권한 상수 로드
+    SELECT 
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+    INTO 
+        v_node_info_view, v_node_members_view,
+        v_wi_public_view, v_wi_hidden_view, v_file_view,
+        v_history_personal_view, v_history_all_view, v_deny
+    FROM authority_constants
+    WHERE name IN (
+        'NODE_INFO_VIEW', 'NODE_MEMBERS_VIEW',
+        'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'FILE_VIEW',
+        'HISTORY_PERSONAL_VIEW', 'HISTORY_ALL_VIEW', 'DENY'
+    );
+
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 노드 존재 여부 확인
+    IF NOT EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = p_node_id AND is_deleted = FALSE) THEN
+        RAISE EXCEPTION '[P0002]Target node does not exist or already deleted: %', p_node_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 유효 권한 계산 및 기본 조회 권한(NODE_INFO_VIEW) 검증
+    v_authority := get_effective_authority(v_requester_id, p_node_id);
+
+    IF v_authority IS NULL OR (v_authority & v_deny) = v_deny OR (v_authority & v_node_info_view) != v_node_info_view THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions to view node. NODE_INFO_VIEW authority required. requester: %', p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 통합 데이터 반환
+    -- 4-1. 대상 노드 자체 메타데이터 (NODE)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'updated_at', n.updated_at
+    )
+    FROM organization_nodes n
+    WHERE n.node_id = p_node_id;
+
+    -- 4-2. 노드 멤버 역할 목록 (ROLE) - NODE_MEMBERS_VIEW 권한 보유 시 반환
+    IF (v_authority & v_node_members_view) = v_node_members_view THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'ROLE',
+            'id', ra.assignment_id,
+            'node_id', ra.node_id,
+            'email', u.email,
+            'role', ra.role,
+            'updated_at', ra.updated_at
+        )
+        FROM role_assignments ra
+        JOIN users u ON ra.user_id = u.user_id
+        WHERE ra.node_id = p_node_id;
+    END IF;
+
+    -- 4-3. 노드 역할별 권한 정의 목록 (AUTHORITY)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', a.authority_id,
+        'node_id', a.node_id,
+        'role', a.role,
+        'authority', a.authority::TEXT,
+        'updated_at', a.updated_at
+    )
+    FROM role_authorities a
+    WHERE a.node_id = p_node_id;
+
+    -- 4-4. 노드 소속 업무 목록 (WORK_ITEM)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', w.work_item_id,
+        'parent_id', w.parent_work_item_id,
+        'owner_node_id', w.owner_node_id,
+        'owner_user_id', w.owner_user_id,
+        'title', w.title,
+        'description', w.description,
+        'category', w.category,
+        'status', w.status,
+        'priority', w.priority,
+        'hidden', w.hidden,
+        'weight', w.weight,
+        'progress', w.progress,
+        'comment_count', COALESCE(cc.cnt, 0),
+        'start_date', w.start_date,
+        'due_date', w.due_date,
+        'updated_at', w.updated_at
+    )
+    FROM work_items w
+    LEFT JOIN (
+        SELECT work_item_id, COUNT(*)::INT as cnt
+        FROM work_item_comments
+        GROUP BY work_item_id
+    ) cc ON w.work_item_id = cc.work_item_id
+    WHERE w.owner_node_id = p_node_id AND w.is_deleted = FALSE
+      AND (
+          -- 공개 업무
+          ((v_authority & v_wi_public_view) = v_wi_public_view AND w.hidden = FALSE)
+          OR
+          -- 숨김 업무
+          ((v_authority & v_wi_hidden_view) = v_wi_hidden_view)
+          OR
+          -- 본인 담당 업무
+          (w.owner_user_id = v_requester_id)
+      );
+
+    -- 4-5. 노드 소속 업무에 공유된 파일 목록 (FILE)
+    IF (v_authority & v_file_view) = v_file_view THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'FILE',
+            'id', f.file_id,
+            'work_item_id', f.work_item_id,
+            'uploader_user_id', f.uploader_user_id,
+            'uploader_name', u.name,
+            'uploader_email', u.email,
+            'original_file_name', f.original_file_name,
+            'file_size', f.file_size,
+            'mime_type', f.mime_type,
+            'created_at', f.created_at,
+            'updated_at', f.updated_at
+        )
+        FROM work_item_files f
+        JOIN work_items w ON f.work_item_id = w.work_item_id
+        JOIN users u ON f.uploader_user_id = u.user_id
+        WHERE w.owner_node_id = p_node_id AND f.is_deleted = FALSE AND w.is_deleted = FALSE
+          AND (
+              ((v_authority & v_wi_public_view) = v_wi_public_view AND w.hidden = FALSE)
+              OR
+              ((v_authority & v_wi_hidden_view) = v_wi_hidden_view)
+              OR
+              (w.owner_user_id = v_requester_id)
+          );
+    END IF;
+
+    -- 4-6. 해당 노드에서 일어난 활동 이력 전체 (ACTIVITY)
+    IF (v_authority & v_history_all_view) = v_history_all_view THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'ACTIVITY',
+            'id', a.log_id,
+            'node_id', a.node_id,
+            'actor_user_id', a.actor_user_id,
+            'actor_name', u.name,
+            'entity_type', a.entity_type,
+            'entity_id', a.entity_id,
+            'target_name', a.target_name,
+            'action_type', a.action_type,
+            'field_name', a.field_name,
+            'old_value', a.old_value,
+            'new_value', a.new_value,
+            'created_at', a.created_at
+        )
+        FROM activity_logs a
+        JOIN users u ON a.actor_user_id = u.user_id
+        WHERE a.node_id = p_node_id
+        ORDER BY a.created_at DESC;
+    ELSIF (v_authority & v_history_personal_view) = v_history_personal_view THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'ACTIVITY',
+            'id', a.log_id,
+            'node_id', a.node_id,
+            'actor_user_id', a.actor_user_id,
+            'actor_name', u.name,
+            'entity_type', a.entity_type,
+            'entity_id', a.entity_id,
+            'target_name', a.target_name,
+            'action_type', a.action_type,
+            'field_name', a.field_name,
+            'old_value', a.old_value,
+            'new_value', a.new_value,
+            'created_at', a.created_at
+        )
+        FROM activity_logs a
+        JOIN users u ON a.actor_user_id = u.user_id
+        WHERE a.node_id = p_node_id AND a.actor_user_id = v_requester_id
+        ORDER BY a.created_at DESC;
+    END IF;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0305]Error retrieving node detail: %, requester: % (REASON: %)', p_node_id, p_requester_email, SQLERRM
+            USING ERRCODE = 'P0305';
+END;
+$$ LANGUAGE plpgsql;

@@ -126,12 +126,18 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'comment_count', COALESCE(cc.cnt, 0),
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
     )
     FROM work_items w
     JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
+    LEFT JOIN (
+        SELECT work_item_id, COUNT(*)::INT as cnt
+        FROM work_item_comments
+        GROUP BY work_item_id
+    ) cc ON w.work_item_id = cc.work_item_id
     WHERE 
         -- 공개 WI (Bit 4: WI_PUBLIC_VIEW)
         ((fn.effective_authority & v_wi_public_view) = v_wi_public_view AND w.hidden = FALSE)
@@ -422,12 +428,18 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'comment_count', COALESCE(cc.cnt, 0),
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
     )
     FROM work_items w
     JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
+    LEFT JOIN (
+        SELECT work_item_id, COUNT(*)::INT as cnt
+        FROM work_item_comments
+        GROUP BY work_item_id
+    ) cc ON w.work_item_id = cc.work_item_id
     WHERE w.updated_at > p_last_synced_at
         AND (
             -- 공개 WI (Bit 4: WI_PUBLIC_VIEW)

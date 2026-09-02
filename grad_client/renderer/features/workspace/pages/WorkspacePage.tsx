@@ -645,17 +645,6 @@ export function WorkspacePage() {
         />
       ) : (
         <>
-      {overview.summary.orgNodeCount === 0 ? (
-        <section className={styles.emptyPanel}>
-          <p className={styles.panelEyebrow}>Workspace Setup</p>
-          <h3>공유 공간을 먼저 만들어 주세요.</h3>
-          <p>팀이나 프로젝트 공간을 만들면 업무 보드와 타임라인을 워크스페이스 기준으로 묶어 볼 수 있습니다.</p>
-          <Link to="/setup/top-node" className={styles.primaryAction}>
-            공유 공간 만들기
-          </Link>
-        </section>
-      ) : null}
-
       <section className={styles.metricGrid} aria-label="워크스페이스 요약">
         {metrics.map((metric) => (
           <article

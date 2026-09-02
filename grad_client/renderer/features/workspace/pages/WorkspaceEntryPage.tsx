@@ -157,19 +157,19 @@ function HierarchyView({
   root,
   branches,
   favoriteIds,
-  onOpenChooser,
+  onOpenWorkspace,
   onToggleFavorite,
 }: {
   root: WorkspaceDirectoryItem
   branches: WorkspaceDirectoryItem[]
   favoriteIds: ReadonlySet<string>
-  onOpenChooser: (rootId: string) => void
+  onOpenWorkspace: (rootId: string) => void
   onToggleFavorite: (id: string) => void
 }) {
   return (
     <div className={styles.treeViewport}>
       <section className={styles.treeCanvas} aria-label={`${root.name} 워크스페이스 계층도`}>
-        <button type="button" className={styles.rootCard} onClick={() => onOpenChooser(root.id)}>
+        <button type="button" className={styles.rootCard} onClick={() => onOpenWorkspace(root.id)}>
           <WorkspaceGlyph item={root} variant="root" />
           <span className={styles.rootCardCopy}>
             <span className={styles.rootNameLine}>
@@ -291,7 +291,6 @@ function ListView({
   currentPage,
   pageNumbers,
   totalCount,
-  onOpenChooser,
   onOpenWorkspace,
   onPageChange,
   onToggleFavorite,
@@ -301,7 +300,6 @@ function ListView({
   currentPage: number
   pageNumbers: number[]
   totalCount: number
-  onOpenChooser: (rootId: string) => void
   onOpenWorkspace: (rootId: string) => void
   onPageChange: (page: number) => void
   onToggleFavorite: (id: string) => void
@@ -321,7 +319,7 @@ function ListView({
               <button
                 type="button"
                 className={styles.rowIdentity}
-                onClick={item.isRoot ? () => onOpenChooser(item.id) : () => onOpenWorkspace(item.rootId)}
+                onClick={() => onOpenWorkspace(item.id)}
               >
                 <WorkspaceGlyph item={item} variant="list" />
                 <span className={styles.rowCopy}>
@@ -403,20 +401,16 @@ function WorkspaceChooserDialog({
   isOpen,
   rootOptions,
   selectedRootId,
-  skipNextTime,
   onCancel,
   onConfirm,
   onSelectRoot,
-  onSkipNextTimeChange,
 }: {
   isOpen: boolean
   rootOptions: WorkspaceDirectoryItem[]
   selectedRootId: string
-  skipNextTime: boolean
   onCancel: () => void
   onConfirm: () => void
   onSelectRoot: (id: string) => void
-  onSkipNextTimeChange: (checked: boolean) => void
 }) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const selectedRadioRef = useRef<HTMLInputElement>(null)
@@ -558,23 +552,12 @@ function WorkspaceChooserDialog({
         </fieldset>
 
         <footer className={styles.dialogFooter}>
-          <label className={styles.skipChoice}>
-            <input
-              type="checkbox"
-              checked={skipNextTime}
-              onChange={(event) => onSkipNextTimeChange(event.target.checked)}
-            />
-            <span>
-              다음부터 선택하지 않기
-              <small>설정에서 변경할 수 있습니다.</small>
-            </span>
-          </label>
           <div className={styles.dialogActions}>
-            <Button variant="secondary" className={styles.dialogButton} onClick={onCancel}>
-              취소
-            </Button>
             <Button variant="primary" className={styles.dialogButton} onClick={onConfirm}>
               확인
+            </Button>
+            <Button variant="secondary" className={styles.dialogButton} onClick={onCancel}>
+              취소
             </Button>
           </div>
         </footer>
@@ -592,7 +575,9 @@ export function WorkspaceEntryPage() {
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const workspaceDirectory = getWorkspaceDirectory(currentUser?.userId, snapshot)
-  const activeRootId = getActiveWorkspaceRootId(currentUser?.userId)
+  const [activeRootId, setActiveRootId] = useState(
+    () => getActiveWorkspaceRootId(currentUser?.userId),
+  )
   const defaultRootId = getDefaultWorkspaceRootId(currentUser?.userId)
   const activeRoot = workspaceDirectory.rootOptions.find((root) => root.id === activeRootId)
   const defaultRoot = workspaceDirectory.rootOptions.find((root) => root.id === defaultRootId)
@@ -607,9 +592,6 @@ export function WorkspaceEntryPage() {
   const [isChooserOpen, setIsChooserOpen] = useState(shouldOpenChooserInitially)
   const [selectedRootId, setSelectedRootId] = useState(
     () => hierarchyRoot?.id ?? workspaceDirectory.defaultRootId ?? '',
-  )
-  const [skipNextTime, setSkipNextTime] = useState(
-    () => Boolean(defaultRoot && defaultRoot.id === hierarchyRoot?.id),
   )
   const [currentPage, setCurrentPage] = useState(1)
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(
@@ -636,7 +618,12 @@ export function WorkspaceEntryPage() {
           return matchingChildren.length > 0 ? [{ ...branch, children: matchingChildren }] : []
         })
     : []
-  const filteredListRows = workspaceDirectory.listItems.filter((item) =>
+  const scopedListItems = hierarchyRoot
+    ? workspaceDirectory.listItems.filter(
+        (item) => item.rootId === hierarchyRoot.id || item.id === hierarchyRoot.id,
+      )
+    : workspaceDirectory.listItems
+  const filteredListRows = scopedListItems.filter((item) =>
     matchesWorkspace(item, normalizedQuery),
   )
   const listPageCount = Math.max(1, Math.ceil(filteredListRows.length / WORKSPACE_LIST_PAGE_SIZE))
@@ -684,8 +671,9 @@ export function WorkspaceEntryPage() {
       return
     }
 
-    selectWorkspaceRoot(selectedRootId, skipNextTime, currentUser?.userId)
-    navigate('/workspace')
+    selectWorkspaceRoot(selectedRootId, false, currentUser?.userId)
+    setActiveRootId(selectedRootId)
+    setIsChooserOpen(false)
   }
 
   const closeChooser = useCallback(() => {
@@ -698,7 +686,6 @@ export function WorkspaceEntryPage() {
     }
 
     setSelectedRootId(rootId)
-    setSkipNextTime(getDefaultWorkspaceRootId(currentUser?.userId) === rootId)
     setIsChooserOpen(true)
   }
 
@@ -729,14 +716,18 @@ export function WorkspaceEntryPage() {
           )
         : null}
 
-      <WorkspaceEntryViewToggle view={view} onChange={handleViewChange} />
+      <WorkspaceEntryViewToggle
+        view={view}
+        onChange={handleViewChange}
+        onOpenChooser={() => openChooser()}
+      />
 
       {view === 'hierarchy' && hierarchyRoot ? (
         <HierarchyView
           root={hierarchyRoot}
           branches={hierarchyBranches}
           favoriteIds={favoriteIds}
-          onOpenChooser={openChooser}
+          onOpenWorkspace={openWorkspace}
           onToggleFavorite={toggleFavorite}
         />
       ) : view === 'list' ? (
@@ -746,7 +737,6 @@ export function WorkspaceEntryPage() {
           currentPage={currentPage}
           pageNumbers={listPageNumbers}
           totalCount={filteredListRows.length}
-          onOpenChooser={openChooser}
           onOpenWorkspace={openWorkspace}
           onPageChange={setCurrentPage}
           onToggleFavorite={toggleFavorite}
@@ -761,11 +751,9 @@ export function WorkspaceEntryPage() {
         isOpen={isChooserOpen}
         rootOptions={workspaceDirectory.rootOptions}
         selectedRootId={selectedRootId}
-        skipNextTime={skipNextTime}
         onCancel={closeChooser}
         onConfirm={handleConfirmWorkspace}
         onSelectRoot={setSelectedRootId}
-        onSkipNextTimeChange={setSkipNextTime}
       />
     </div>
   )

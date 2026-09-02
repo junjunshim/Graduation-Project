@@ -1004,43 +1004,12 @@
 
 .dialogFooter {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-end;
   gap: 1.25rem;
   margin-top: 1.75rem;
   padding-top: 1.15rem;
   border-top: 1px solid var(--axis-dialog-divider);
-}
-
-.skipChoice {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  min-width: 0;
-  color: var(--entry-text-secondary);
-  cursor: pointer;
-}
-
-.skipChoice input {
-  width: 1rem;
-  height: 1rem;
-  flex: 0 0 1rem;
-  margin: 0.12rem 0 0;
-  accent-color: var(--entry-primary);
-}
-
-.skipChoice > span {
-  display: grid;
-  gap: 0.28rem;
-  font-size: 0.76rem;
-  font-weight: 600;
-  line-height: 1.25;
-}
-
-.skipChoice small {
-  color: var(--entry-text-muted);
-  font-size: 0.69rem;
-  font-weight: 500;
 }
 
 .dialogActions {

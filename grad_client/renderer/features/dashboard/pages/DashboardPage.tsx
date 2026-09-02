@@ -28,9 +28,8 @@ export function DashboardPage() {
 
   const overview = getWorkspaceOverview(currentUser.userId, snapshot)
   const users = snapshot.users
-  const activityItems = [...overview.visibleWorkItems]
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .slice(0, 5)
+  const recentFiles = snapshot.files ?? []
+  const recentActivities = snapshot.activities ?? []
   const calendar = buildDashboardCalendar(overview.visibleWorkItems, calendarMonthOffset)
   const metrics = getDashboardMetrics(overview)
 
@@ -48,8 +47,8 @@ export function DashboardPage() {
           calendar={calendar}
           onMonthChange={handleCalendarMonthChange}
         />
-        <DashboardDocumentsPanel recentDocuments={overview.recentWorkItems} users={users} />
-        <DashboardActivityPanel activityItems={activityItems} users={users} />
+        <DashboardDocumentsPanel files={recentFiles} />
+        <DashboardActivityPanel activities={recentActivities} />
       </div>
 
     </section>

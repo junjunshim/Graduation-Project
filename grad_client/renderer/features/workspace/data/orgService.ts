@@ -54,8 +54,21 @@ function getDescendantNodeIds(rootIds: number[], nodes: OrganizationNodeRecord[]
 
 export function getAccessibleNodeIdsForUser(userId: string, snapshot?: WorkspaceSnapshot) {
   const workspace = snapshot ?? readWorkspaceDb()
-  const directNodeIds = workspace.roles.filter((role) => role.userId === userId).map((role) => role.nodeId)
-  const personalNodeId = workspace.users.find((user) => user.userId === userId)?.personalNodeId
+
+  // 서버 모드에서는 GET /context/init이 이미 권한 계산을 거친 접근 가능한 노드들만 전달하므로,
+  // 로컬에 존재하는 노드들을 그대로 접근 가능한 노드로 취급합니다.
+  if (isServerDataSource()) {
+    return workspace.nodes.map((node) => node.id)
+  }
+
+  const user = workspace.users.find((candidate) => candidate.userId === userId || candidate.email === userId)
+  const resolvedUserId = user?.userId ?? userId
+  const resolvedEmail = user?.email?.toLowerCase()
+
+  const directNodeIds = workspace.roles
+    .filter((role) => role.userId === resolvedUserId || (resolvedEmail && role.userId === resolvedEmail))
+    .map((role) => role.nodeId)
+  const personalNodeId = user?.personalNodeId
   const rootIds = Array.from(new Set([...directNodeIds, ...(personalNodeId ? [personalNodeId] : [])]))
   return getDescendantNodeIds(rootIds, workspace.nodes)
 }
@@ -88,6 +101,10 @@ export function getOrgSnapshot(): WorkspaceSnapshot {
     workItems: db.workItems
       .filter((item) => !item.isDeleted && activeNodeIds.has(item.ownerNodeId))
       .map((item) => ({ ...item })),
+    authorities: (db.authorities ?? []).map((auth) => ({ ...auth })),
+    mentions: (db.mentions ?? []).map((m) => ({ ...m })),
+    activities: (db.activities ?? []).map((act) => ({ ...act })),
+    files: (db.files ?? []).map((f) => ({ ...f })),
   }
 }
 
@@ -112,8 +129,10 @@ export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapsho
   const workspace = snapshot ?? readWorkspaceDb()
   const visibleNodeIds = getAccessibleNodeIdsForUser(userId, workspace)
   const visibleNodeIdSet = new Set(visibleNodeIds)
-  const visibleWorkItems = workspace.workItems.filter((item) => visibleNodeIdSet.has(item.ownerNodeId))
-  const visibleNodes = workspace.nodes.filter((node) => visibleNodeIdSet.has(node.id))
+  const visibleWorkItems = workspace.workItems.filter(
+    (item) => visibleNodeIdSet.has(item.ownerNodeId) && !item.isDeleted,
+  )
+  const visibleNodes = workspace.nodes.filter((node) => visibleNodeIdSet.has(node.id) && !node.isDeleted)
   const now = new Date()
   const dueSoonThreshold = new Date(now)
   dueSoonThreshold.setDate(now.getDate() + 7)

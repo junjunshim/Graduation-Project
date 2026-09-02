@@ -192,7 +192,7 @@ export function getWorkspaceOverview(
   const allAccessibleNodeIds = resolvedUserId ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot) : []
   const allAccessibleNodeIdSet = new Set(allAccessibleNodeIds)
   const allVisibleNodes = sortWorkspaceNodes(
-    snapshot.nodes.filter((node) => allAccessibleNodeIdSet.has(node.id)),
+    snapshot.nodes.filter((node) => allAccessibleNodeIdSet.has(node.id) && !node.isDeleted),
   )
   const visibleOrganizationNodeIds = new Set(
     allVisibleNodes.filter((node) => node.nodeType !== 'USER').map((node) => node.id),
@@ -211,9 +211,11 @@ export function getWorkspaceOverview(
     : allAccessibleNodeIdSet
   const accessibleNodeIds = allAccessibleNodeIds.filter((nodeId) => scopedNodeIdSet.has(nodeId))
   const accessibleNodeIdSet = new Set(accessibleNodeIds)
-  const visibleNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id)))
+  const visibleNodes = sortWorkspaceNodes(
+    snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id) && !node.isDeleted),
+  )
   const visibleWorkItems = sortWorkspaceWorkItems(
-    snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId)),
+    snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId) && !item.isDeleted),
   )
   const summarySnapshot = scopedRootNode
     ? {

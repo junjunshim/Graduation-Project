@@ -2,22 +2,18 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
-import { getWorkItemStatusLabel } from '../../workspace/model/labels'
-import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
+import type { ActivityRecord } from '../../workspace/model/types'
+import { formatActivityMessage } from '../model/activityFormatter'
 import { DashboardEmptyState } from './DashboardEmptyState'
 import styles from '../pages/DashboardPage.module.css'
 
-function getOwnerName(ownerUserId: string, users: UserRecord[]) {
-  return users.find((user) => user.userId === ownerUserId)?.name ?? ownerUserId
-}
-
 export function DashboardActivityPanel({
-  activityItems,
-  users,
+  activities,
 }: {
-  activityItems: WorkItemRecord[]
-  users: UserRecord[]
+  activities: ActivityRecord[]
 }) {
+  const recentActivities = activities.slice(0, 5)
+
   return (
     <section className={[styles.panel, styles.activityPanel].join(' ')}>
       <div className={styles.sectionHeader}>
@@ -31,25 +27,29 @@ export function DashboardActivityPanel({
       </div>
 
       <div className={styles.activityList}>
-        {activityItems.length > 0 ? (
-          activityItems.map((item) => (
-            <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.activityItem}>
-              <UserAvatar
-                name={getOwnerName(item.ownerUserId, users)}
-                userId={item.ownerUserId}
-                size="medium"
-              />
-              <div className={styles.activityCopy}>
-                <p>
-                  <strong>{getOwnerName(item.ownerUserId, users)}</strong> 님이 <strong>{item.title}</strong> 업무를{' '}
-                  {getWorkItemStatusLabel(item.status)} 상태로 업데이트했습니다.
-                </p>
-              </div>
-              <time className={styles.activityDate} dateTime={item.createdAt}>
-                {formatWorkspaceShortDate(item.createdAt)}
-              </time>
-            </Link>
-          ))
+        {recentActivities.length > 0 ? (
+          recentActivities.map((activity) => {
+            const linkTarget =
+              activity.entityType.toUpperCase() === 'WORK_ITEM'
+                ? `/work-items/${activity.entityId}`
+                : '/org/manage'
+
+            return (
+              <Link key={activity.id} to={linkTarget} className={styles.activityItem}>
+                <UserAvatar
+                  name={activity.actorName || activity.actorUserId}
+                  userId={activity.actorUserId}
+                  size="medium"
+                />
+                <div className={styles.activityCopy}>
+                  <p>{formatActivityMessage(activity)}</p>
+                </div>
+                <time className={styles.activityDate} dateTime={activity.createdAt}>
+                  {formatWorkspaceShortDate(activity.createdAt)}
+                </time>
+              </Link>
+            )
+          })
         ) : (
           <DashboardEmptyState>표시할 활동이 없습니다.</DashboardEmptyState>
         )}
@@ -57,3 +57,4 @@ export function DashboardActivityPanel({
     </section>
   )
 }
+

@@ -98,11 +98,19 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
   const rolesById = new Map(current.roles.map((role) => [role.id, role]))
   const workItemsById = new Map(current.workItems.map((item) => [item.workItemId, item]))
   const usersById = new Map(current.users.map((user) => [user.userId, user]))
+  const authoritiesById = new Map((current.authorities ?? []).map((auth) => [auth.id, auth]))
+  const mentionsById = new Map((current.mentions ?? []).map((m) => [m.id, m]))
+  const activitiesById = new Map((current.activities ?? []).map((act) => [act.id, act]))
+  const filesById = new Map((current.files ?? []).map((f) => [f.id, f]))
 
   updates.users.forEach((user) => usersById.set(user.userId, user))
   updates.nodes.forEach((node) => nodesById.set(node.id, node))
   updates.roles.forEach((role) => rolesById.set(role.id, role))
   updates.workItems.forEach((item) => workItemsById.set(item.workItemId, item))
+  ;(updates.authorities ?? []).forEach((auth) => authoritiesById.set(auth.id, auth))
+  ;(updates.mentions ?? []).forEach((m) => mentionsById.set(m.id, m))
+  ;(updates.activities ?? []).forEach((act) => activitiesById.set(act.id, act))
+  ;(updates.files ?? []).forEach((f) => filesById.set(f.id, f))
 
   const nodes = Array.from(nodesById.values())
   const roles = Array.from(rolesById.values())
@@ -113,6 +121,10 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
     nodes,
     roles,
     workItems: Array.from(workItemsById.values()),
+    authorities: Array.from(authoritiesById.values()),
+    mentions: Array.from(mentionsById.values()),
+    activities: Array.from(activitiesById.values()),
+    files: Array.from(filesById.values()),
     counters: {
       node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
       role: Math.max(0, ...roles.map((role) => role.id)) + 1,
@@ -146,7 +158,7 @@ export async function loadServerWorkspace(email = getCurrentServerEmail()) {
   const { workspace: db, issues } = normalizeServerContext(items, email)
 
   if (issues.length > 0) {
-    throw new Error(`서버 컨텍스트 일부를 변환하지 못했습니다: ${issues[0].message}`)
+    console.warn('[WorkspaceAdapter] 일부 컨텍스트 항목 정규화 이슈:', issues)
   }
 
   writeServerWorkspaceDb(db)
@@ -175,7 +187,7 @@ export async function syncServerWorkspace(lastSyncedAt = '1970-01-01 00:00:00') 
   )
 
   if (issues.length > 0) {
-    throw new Error(`서버 동기화 데이터 일부를 변환하지 못했습니다: ${issues[0].message}`)
+    console.warn('[WorkspaceAdapter] 일부 동기화 항목 정규화 이슈:', issues)
   }
 
   const merged = mergeServerUpdates(current, normalized)

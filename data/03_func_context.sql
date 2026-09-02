@@ -104,6 +104,7 @@ BEGIN
         'parent_id', n.parent_node_id,
         'title', n.name,
         'path', n.path,
+        'is_deleted', n.is_deleted,
         'updated_at', n.updated_at
     )
     FROM organization_nodes n
@@ -127,6 +128,7 @@ BEGIN
         'weight', w.weight,
         'progress', w.progress,
         'comment_count', COALESCE(cc.cnt, 0),
+        'is_deleted', w.is_deleted,
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
@@ -241,6 +243,7 @@ BEGIN
         'original_file_name', latest_f.original_file_name,
         'file_size', latest_f.file_size,
         'mime_type', latest_f.mime_type,
+        'is_deleted', latest_f.is_deleted,
         'created_at', latest_f.created_at,
         'updated_at', latest_f.updated_at
     )
@@ -254,15 +257,14 @@ BEGIN
             f.original_file_name,
             f.file_size,
             f.mime_type,
+            f.is_deleted,
             f.created_at,
             f.updated_at
         FROM work_item_files f
         JOIN work_items w ON f.work_item_id = w.work_item_id
         JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
         JOIN users u ON f.uploader_user_id = u.user_id
-        WHERE f.is_deleted = FALSE
-            AND w.is_deleted = FALSE
-            AND (
+        WHERE (
                 (w.owner_user_id = v_user_id)
                 OR
                 ((fn.effective_authority & v_file_view) = v_file_view AND (
@@ -388,6 +390,7 @@ BEGIN
         'parent_id', n.parent_node_id,
         'title', n.name,
         'path', n.path,
+        'is_deleted', n.is_deleted,
         'updated_at', n.updated_at
     )
     FROM organization_nodes n
@@ -401,6 +404,7 @@ BEGIN
         'type', 'NODE',
         'id', h.node_id,
         'status', 'deleted',
+        'is_deleted', true,
         'updated_at', h.history_created_at
     )
     FROM organization_node_histories h
@@ -429,6 +433,7 @@ BEGIN
         'weight', w.weight,
         'progress', w.progress,
         'comment_count', COALESCE(cc.cnt, 0),
+        'is_deleted', w.is_deleted,
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
@@ -459,6 +464,7 @@ BEGIN
         'type', 'WORK_ITEM',
         'id', h.work_item_id,
         'status', 'deleted',
+        'is_deleted', true,
         'updated_at', h.history_created_at
     )
     FROM work_item_histories h
@@ -591,6 +597,7 @@ BEGIN
         'original_file_name', latest_f.original_file_name,
         'file_size', latest_f.file_size,
         'mime_type', latest_f.mime_type,
+        'is_deleted', latest_f.is_deleted,
         'created_at', latest_f.created_at,
         'updated_at', latest_f.updated_at
     )
@@ -604,15 +611,14 @@ BEGIN
             f.original_file_name,
             f.file_size,
             f.mime_type,
+            f.is_deleted,
             f.created_at,
             f.updated_at
         FROM work_item_files f
         JOIN work_items w ON f.work_item_id = w.work_item_id
         JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
         JOIN users u ON f.uploader_user_id = u.user_id
-        WHERE f.is_deleted = FALSE
-            AND w.is_deleted = FALSE
-            AND f.updated_at > p_last_synced_at
+        WHERE f.updated_at > p_last_synced_at
             AND (
                 (w.owner_user_id = v_user_id)
                 OR
@@ -633,6 +639,7 @@ BEGIN
         'type', 'FILE',
         'id', f.file_id,
         'status', 'deleted',
+        'is_deleted', true,
         'updated_at', f.updated_at
     )
     FROM work_item_files f

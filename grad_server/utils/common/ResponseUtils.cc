@@ -80,6 +80,9 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0302") != std::string::npos) return DbErrorCode::CreateSubNodeError;
     else if (errMsg.find("P0303") != std::string::npos) return DbErrorCode::UpdateNodeError;
     else if (errMsg.find("P0304") != std::string::npos) return DbErrorCode::DeleteNodeError;
+    else if (errMsg.find("P0305") != std::string::npos) return DbErrorCode::GetNodeDetailFailed;
+    else if (errMsg.find("P0306") != std::string::npos) return DbErrorCode::ParentNodeIsDeleted;
+    else if (errMsg.find("P0307") != std::string::npos) return DbErrorCode::RestoreNodeFailed;
     else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
     else if (errMsg.find("P0403") != std::string::npos) return DbErrorCode::TargetHasNoRole;
@@ -115,6 +118,12 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0611") != std::string::npos) return DbErrorCode::DeleteWorkItemFileFailed;
     else if (errMsg.find("P0612") != std::string::npos) return DbErrorCode::GetWorkItemFilesFailed;
     else if (errMsg.find("P0613") != std::string::npos) return DbErrorCode::DownloadWorkItemFileFailed;
+    else if (errMsg.find("P0614") != std::string::npos) return DbErrorCode::OwnerNodeIsDeleted;
+    else if (errMsg.find("P0615") != std::string::npos) return DbErrorCode::NewParentWorkItemDeleted;
+    else if (errMsg.find("P0616") != std::string::npos) return DbErrorCode::ParentWorkItemIsDeleted;
+    else if (errMsg.find("P0617") != std::string::npos) return DbErrorCode::RestoreWorkItemFailed;
+    else if (errMsg.find("P0618") != std::string::npos) return DbErrorCode::WorkItemIsDeletedForFile;
+    else if (errMsg.find("P0619") != std::string::npos) return DbErrorCode::RestoreWorkItemFileFailed;
     else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
     else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
     else if (errMsg.find("P0703") != std::string::npos) return DbErrorCode::LogActivityFailed;
@@ -365,6 +374,51 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::DownloadWorkItemFileFailed:{
             ret["message"] = "업무 파일 다운로드 정보 조회에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::GetNodeDetailFailed:{
+            ret["message"] = "노드 상세 정보 조회에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::ParentNodeIsDeleted:{
+            ret["message"] = "상위 노드가 삭제된 상태여서 복구할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RestoreNodeFailed:{
+            ret["message"] = "노드 복구에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::OwnerNodeIsDeleted:{
+            ret["message"] = "소속 노드가 삭제된 상태여서 업무를 복구할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::NewParentWorkItemDeleted:{
+            ret["message"] = "새로 지정한 부모 업무가 존재하지 않거나 삭제된 상태입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::ParentWorkItemIsDeleted:{
+            ret["message"] = "상위 부모 업무가 삭제된 상태여서 복구할 수 없습니다. 새 부모 업무를 지정하거나 상위 업무를 먼저 복구해주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RestoreWorkItemFailed:{
+            ret["message"] = "업무 복구에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::WorkItemIsDeletedForFile:{
+            ret["message"] = "소속 업무가 삭제된 상태여서 파일을 복구할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RestoreWorkItemFileFailed:{
+            ret["message"] = "파일 복구에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

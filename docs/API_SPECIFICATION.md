@@ -49,6 +49,7 @@
 | Org 하위 노드 | Post | /api/org/subNodes | 완료 | [link](api/Post/sub_nodes.md) |
 | Org 노드 수정 | Patch | /api/org/nodes | 완료 | [link](api/Patch/node.md) |
 | Org 노드 삭제 | Delete | /api/org/nodes | 완료 | [link](api/Delete/node.md) |
+| Org 노드 복구 | Patch | /api/org/nodes/restore | 완료 | [link](api/Patch/node_restore.md) |
 | Org 노드 상세 조회 | Get | /api/org/nodes | 완료 | [link](api/Get/node_detail.md) |
 | 활동 기록 조회 | Get | /api/org/activities | 완료 | [link](api/Get/activity.md) |
 | Role 부여 | Post | /api/roles | 완료 | [link](api/Post/role.md) |
@@ -58,11 +59,13 @@
 | work_item 생성 | Post | /api/workItems | 완료 | [link](api/Post/work_item.md) |
 | work_item 수정 | Patch | /api/workItems | 완료 | [link](api/Patch/work_item.md) |
 | work_item 삭제 | Delete | /api/workItems | 완료 | [link](api/Delete/work_item.md) |
+| work_item 복구 | Patch | /api/workItems/restore | 완료 | [link](api/Patch/work_item_restore.md) |
 | work_item 상세 조회 | Get | /api/workItems | 완료 | [link](api/Get/work_item.md) |
 | work_item 댓글 작성 | Post | /api/workItems/comments | 완료 | [link](api/Post/comment.md) |
 | work_item 파일 업로드 | Post | /api/workItems/files/upload | 완료 | [link](api/Post/file_upload.md) |
 | work_item 파일 목록 조회 | Get | /api/workItems/files | 완료 | [link](api/Get/files.md) |
 | work_item 파일 다운로드 | Get | /api/workItems/files/download | 완료 | [link](api/Get/file_download.md) |
 | work_item 파일 삭제 | Delete | /api/workItems/files | 완료 | [link](api/Delete/file.md) |
+| work_item 파일 복구 | Patch | /api/workItems/files/restore | 완료 | [link](api/Patch/file_restore.md) |
 | 사용자 전체 정보 조회 | Get | /api/context/init | 완료 | [link](api/Get/context_init.md) |
 | 사용자 데이터 동기화 | Get | /api/context/sync | 완료 | [link](api/Get/sync_context.md) |

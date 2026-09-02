@@ -65,17 +65,17 @@ RETURNS TRIGGER AS $$
 BEGIN
     -- 1) 소프트 딜리트 연쇄 반응 (is_deleted: FALSE -> TRUE)
     IF NEW.is_deleted = TRUE AND OLD.is_deleted = FALSE THEN
+        -- 하위 하위 업무들 연쇄 소프트 딜리트
         UPDATE work_items
         SET is_deleted = TRUE
         WHERE parent_work_item_id = NEW.work_item_id
           AND is_deleted = FALSE;
 
-    -- 2) 복구 연쇄 반응 (is_deleted: TRUE -> FALSE)
-    ELSIF NEW.is_deleted = FALSE AND OLD.is_deleted = TRUE THEN
-        UPDATE work_items
-        SET is_deleted = FALSE
-        WHERE parent_work_item_id = NEW.work_item_id
-          AND is_deleted = TRUE;
+        -- 소속 첨부파일들 연쇄 소프트 딜리트
+        UPDATE work_item_files
+        SET is_deleted = TRUE
+        WHERE work_item_id = NEW.work_item_id
+          AND is_deleted = FALSE;
     END IF;
 
     RETURN NEW;
@@ -94,7 +94,7 @@ RETURNS TRIGGER AS $$
 BEGIN
     -- 1) 소프트 딜리트 연쇄 반응 (is_deleted: FALSE -> TRUE)
     IF NEW.is_deleted = TRUE AND OLD.is_deleted = FALSE THEN
-        -- 소속 업무들 연쇄 소프트 딜리트
+        -- 소속 업무들 연쇄 소프트 딜리트 (업무 트리거가 파일까지 연쇄 딜리트 처리)
         UPDATE work_items
         SET is_deleted = TRUE
         WHERE owner_node_id = NEW.node_id
@@ -105,20 +105,6 @@ BEGIN
         SET is_deleted = TRUE
         WHERE parent_node_id = NEW.node_id
           AND is_deleted = FALSE;
-
-    -- 2) 복구 연쇄 반응 (is_deleted: TRUE -> FALSE)
-    ELSIF NEW.is_deleted = FALSE AND OLD.is_deleted = TRUE THEN
-        -- 소속 업무들 연쇄 복구
-        UPDATE work_items
-        SET is_deleted = FALSE
-        WHERE owner_node_id = NEW.node_id
-          AND is_deleted = TRUE;
-
-        -- 하위 자식 노드들 연쇄 복구
-        UPDATE organization_nodes
-        SET is_deleted = FALSE
-        WHERE parent_node_id = NEW.node_id
-          AND is_deleted = TRUE;
     END IF;
 
     RETURN NEW;
@@ -150,22 +136,6 @@ BEGIN
         SET is_deleted = TRUE
         WHERE owner_user_id = NEW.user_id
           AND is_deleted = FALSE;
-
-    -- 2) 복구 연쇄 반응 (is_deleted: TRUE -> FALSE)
-    ELSIF NEW.is_deleted = FALSE AND OLD.is_deleted = TRUE THEN
-        -- 유저의 개인 전용 공간 노드 복구
-        IF NEW.personal_node_id IS NOT NULL THEN
-            UPDATE organization_nodes
-            SET is_deleted = FALSE
-            WHERE node_id = NEW.personal_node_id
-              AND is_deleted = TRUE;
-        END IF;
-
-        -- 유저가 담당하던 업무 복구
-        UPDATE work_items
-        SET is_deleted = FALSE
-        WHERE owner_user_id = NEW.user_id
-          AND is_deleted = TRUE;
     END IF;
 
     RETURN NEW;

@@ -422,4 +422,54 @@ void OrgController::getNodeDetail(const HttpRequestPtr &req, std::function<void(
     );
 }
 
+// 노드 복구 api (PATCH /api/org/nodes/restore)
+void OrgController::restoreNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!validateInts(jsonPtr, "node_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(node_id)가 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    bool cascade = false;
+    if(jsonPtr->isMember("cascade") && (*jsonPtr)["cascade"].isBool()){
+        cascade = (*jsonPtr)["cascade"].asBool();
+    }
+
+    // 2. 비즈니스 로직 - DB 함수 호출
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM restore_node($1, $2, $3)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email,
+        node_id,
+        cascade
+    );
+}
+
+
 

@@ -107,6 +107,34 @@ int main() {
         accb();
     });
 
+    // 4. 휴지통 15일 만료 데이터 자동 영구 삭제(Hard Delete & 물리 파일 삭제) 백그라운드 스케줄러 등록
+    // 24시간(86400초)마다 1회 실행
+    drogon::app().getLoop()->runEvery(86400.0, []() {
+        LOG_INFO << "[Scheduler] Starting 15-day expired deleted data cleanup...";
+        auto dbClient = drogon::app().getDbClient();
+        dbClient->execSqlAsync(
+            "SELECT * FROM cleanup_expired_deleted_data()",
+            [](const drogon::orm::Result &result) {
+                size_t deletedCount = 0;
+                for (const auto &row : result) {
+                    std::string filePath = row["deleted_file_path"].as<std::string>();
+                    if (!filePath.empty() && std::filesystem::exists(filePath)) {
+                        std::error_code ec;
+                        if (std::filesystem::remove(filePath, ec)) {
+                            deletedCount++;
+                        } else {
+                            LOG_WARN << "[Scheduler] Failed to remove physical file: " << filePath << " (" << ec.message() << ")";
+                        }
+                    }
+                }
+                LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed physical files: " << deletedCount;
+            },
+            [](const drogon::orm::DrogonDbException &e) {
+                LOG_ERROR << "[Scheduler] Expired data cleanup DB error: " << e.base().what();
+            }
+        );
+    });
+
     //Run HTTP framework,the method will block in the internal event loop
     drogon::app().run();
     return 0;

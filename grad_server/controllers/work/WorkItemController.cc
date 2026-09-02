@@ -630,3 +630,97 @@ void WorkItemController::deleteFile(const HttpRequestPtr &req, std::function<voi
         requester_email, file_id
     );
 }
+
+// 업무 복구 API (PATCH /api/workItems/restore)
+void WorkItemController::restoreWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!validateStrings(jsonPtr, "work_item_id")) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "필수 파라미터(work_item_id)가 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string work_item_id = (*jsonPtr)["work_item_id"].asString();
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    std::optional<std::string> new_parent_id = std::nullopt;
+    if (jsonPtr->isMember("parent_id") && (*jsonPtr)["parent_id"].isString()) {
+        new_parent_id = (*jsonPtr)["parent_id"].asString();
+    }
+
+    bool cascade = false;
+    if (jsonPtr->isMember("cascade") && (*jsonPtr)["cascade"].isBool()) {
+        cascade = (*jsonPtr)["cascade"].asBool();
+    }
+
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM restore_work_item($1, $2, $3, $4)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email,
+        work_item_id,
+        new_parent_id,
+        cascade
+    );
+}
+
+// 파일 복구 API (PATCH /api/workItems/files/restore)
+void WorkItemController::restoreFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!validateInts(jsonPtr, "file_id")) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["message"] = "필수 파라미터(file_id)가 누락되었습니다.";
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    int file_id = (*jsonPtr)["file_id"].asInt();
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM restore_work_item_file($1, $2)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email,
+        file_id
+    );
+}

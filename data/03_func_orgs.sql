@@ -398,9 +398,9 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 대상 노드 존재 여부 확인
-    IF NOT EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = p_node_id AND is_deleted = FALSE) THEN
-        RAISE EXCEPTION '[P0002]Target node does not exist or already deleted: %', p_node_id
+    -- 2. 대상 노드 존재 여부 확인 (삭제된 노드 포함 조회 가능)
+    IF NOT EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = p_node_id) THEN
+        RAISE EXCEPTION '[P0002]Target node does not exist: %', p_node_id
         USING ERRCODE = 'P0002';
     END IF;
 
@@ -422,6 +422,7 @@ BEGIN
         'parent_id', n.parent_node_id,
         'title', n.name,
         'path', n.path,
+        'is_deleted', n.is_deleted,
         'updated_at', n.updated_at
     )
     FROM organization_nodes n
@@ -473,6 +474,7 @@ BEGIN
         'weight', w.weight,
         'progress', w.progress,
         'comment_count', COALESCE(cc.cnt, 0),
+        'is_deleted', w.is_deleted,
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
@@ -483,7 +485,7 @@ BEGIN
         FROM work_item_comments
         GROUP BY work_item_id
     ) cc ON w.work_item_id = cc.work_item_id
-    WHERE w.owner_node_id = p_node_id AND w.is_deleted = FALSE
+    WHERE w.owner_node_id = p_node_id
       AND (
           -- 공개 업무
           ((v_authority & v_wi_public_view) = v_wi_public_view AND w.hidden = FALSE)
@@ -508,13 +510,14 @@ BEGIN
             'original_file_name', f.original_file_name,
             'file_size', f.file_size,
             'mime_type', f.mime_type,
+            'is_deleted', f.is_deleted,
             'created_at', f.created_at,
             'updated_at', f.updated_at
         )
         FROM work_item_files f
         JOIN work_items w ON f.work_item_id = w.work_item_id
         JOIN users u ON f.uploader_user_id = u.user_id
-        WHERE w.owner_node_id = p_node_id AND f.is_deleted = FALSE AND w.is_deleted = FALSE
+        WHERE w.owner_node_id = p_node_id
           AND (
               ((v_authority & v_wi_public_view) = v_wi_public_view AND w.hidden = FALSE)
               OR
@@ -575,5 +578,103 @@ BEGIN
         WHEN OTHERS THEN
             RAISE EXCEPTION '[P0305]Error retrieving node detail: %, requester: % (REASON: %)', p_node_id, p_requester_email, SQLERRM
             USING ERRCODE = 'P0305';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- OrgController::restoreNode (선택적 / 일괄 복구)
+CREATE OR REPLACE FUNCTION restore_node(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_cascade BOOLEAN DEFAULT FALSE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_parent_id organization_nodes.parent_node_id%TYPE;
+    v_node_name organization_nodes.name%TYPE;
+BEGIN
+    -- 1. 요청자 id 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 노드 확인 (삭제된 노드 대상)
+    SELECT parent_node_id, name INTO v_parent_id, v_node_name
+    FROM organization_nodes
+    WHERE node_id = p_node_id AND is_deleted = TRUE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]Target node does not exist in deleted items: %', p_node_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 상위 부모 노드 생존 여부 검증 (부모가 살아있어야 복구 가능)
+    IF v_parent_id IS NOT NULL THEN
+        IF EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = v_parent_id AND is_deleted = TRUE) THEN
+            RAISE EXCEPTION '[P0306]Cannot restore node because its parent node is still deleted. Parent node ID: %', v_parent_id
+            USING ERRCODE = 'P0306';
+        END IF;
+    END IF;
+
+    -- 4. 권한 체크 (NODE_INFO_CHANGE 필요)
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_INFO_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions to restore node. NODE_INFO_CHANGE authority required. requester: %', p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 5. 복구 수행
+    -- 5-1. 대상 노드 복구
+    UPDATE organization_nodes
+    SET is_deleted = FALSE
+    WHERE node_id = p_node_id;
+
+    -- 5-2. 일괄 복구(cascade = TRUE)인 경우: 모든 후손 노드, 소속 업무, 첨부파일 함께 복구
+    IF p_cascade = TRUE THEN
+        -- 하위 모든 자식 노드 복구
+        UPDATE organization_nodes
+        SET is_deleted = FALSE
+        WHERE path @> ARRAY[p_node_id] AND is_deleted = TRUE;
+
+        -- 해당 노드 및 하위 모든 노드에 소속된 업무 복구
+        UPDATE work_items
+        SET is_deleted = FALSE
+        WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+          AND is_deleted = TRUE;
+
+        -- 복구된 업무들에 소속된 첨부파일 복구
+        UPDATE work_item_files
+        SET is_deleted = FALSE
+        WHERE work_item_id IN (
+            SELECT work_item_id FROM work_items 
+            WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+        ) AND is_deleted = TRUE;
+    END IF;
+
+    -- 6. 활동 로그 기록
+    PERFORM log_activity(p_node_id, p_requester_email, 'NODE', p_node_id::VARCHAR, v_node_name, 'restored');
+
+    -- 7. 복구된 노드 데이터 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'is_deleted', n.is_deleted,
+        'updated_at', n.updated_at
+    )
+    FROM organization_nodes n
+    WHERE n.node_id = p_node_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' OR SQLSTATE 'P0306' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0307]Error restoring node: %, requester: % (REASON: %)', p_node_id, p_requester_email, SQLERRM
+            USING ERRCODE = 'P0307';
 END;
 $$ LANGUAGE plpgsql;

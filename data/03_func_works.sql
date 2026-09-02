@@ -535,13 +535,13 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 대상 업무 조회 및 소유자, 노드, 숨김 상태 확인
+    -- 2. 대상 업무 조회 및 소유자, 노드, 숨김 상태 확인 (삭제된 업무도 조회 가능)
     SELECT owner_node_id, owner_user_id, hidden INTO v_owner_node_id, v_owner_user_id, v_hidden
     FROM work_items 
-    WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
+    WHERE work_item_id = p_work_item_id;
     
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0606]Work item does not exist or already deleted: %', p_work_item_id
+        RAISE EXCEPTION '[P0606]Work item does not exist: %', p_work_item_id
         USING ERRCODE = 'P0606';
     END IF;
 
@@ -591,6 +591,7 @@ BEGIN
         'weight', w.weight,
         'progress', w.progress,
         'hidden', w.hidden,
+        'is_deleted', w.is_deleted,
         'start_date', w.start_date,
         'due_date', w.due_date,
         'created_at', w.created_at,
@@ -624,12 +625,13 @@ BEGIN
                             'original_file_name', f.original_file_name,
                             'file_size', f.file_size,
                             'mime_type', f.mime_type,
+                            'is_deleted', f.is_deleted,
                             'created_at', f.created_at
                         ) ORDER BY f.created_at ASC
                     )
                     FROM work_item_files f
                     JOIN users u_uploader ON f.uploader_user_id = u_uploader.user_id
-                    WHERE f.work_item_id = w.work_item_id AND f.is_deleted = FALSE
+                    WHERE f.work_item_id = w.work_item_id
                 ), '[]'::jsonb
             )
         ELSE '[]'::jsonb END
@@ -935,5 +937,264 @@ BEGIN
         WHEN OTHERS THEN
             RAISE EXCEPTION '[P0613]Failed to get work item file download: %, (REASON: %)', p_file_id, SQLERRM
             USING ERRCODE = 'P0613';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- WorkItemController::restoreWorkItem (선택적 / 일괄 복구 + 부모 변경 복구 지원)
+CREATE OR REPLACE FUNCTION restore_work_item(
+    p_requester_email users.email%TYPE,
+    p_work_item_id work_items.work_item_id%TYPE,
+    p_new_parent_id work_items.parent_work_item_id%TYPE DEFAULT NULL,
+    p_cascade BOOLEAN DEFAULT FALSE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_owner_user_id users.user_id%TYPE;
+    v_parent_id work_items.parent_work_item_id%TYPE;
+    v_title work_items.title%TYPE;
+    v_effective_parent_id work_items.parent_work_item_id%TYPE;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 대상 업무 확인 (삭제된 업무)
+    SELECT owner_node_id, owner_user_id, parent_work_item_id, title
+    INTO v_owner_node_id, v_owner_user_id, v_parent_id, v_title
+    FROM work_items
+    WHERE work_item_id = p_work_item_id AND is_deleted = TRUE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0606]Work item does not exist in deleted items: %', p_work_item_id
+        USING ERRCODE = 'P0606';
+    END IF;
+
+    -- 3. 소속 노드 생존 여부 검증 (노드가 살아있어야 업무 복구 가능)
+    IF EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = v_owner_node_id AND is_deleted = TRUE) THEN
+        RAISE EXCEPTION '[P0614]Cannot restore work item because its owner node is still deleted. Node ID: %', v_owner_node_id
+        USING ERRCODE = 'P0614';
+    END IF;
+
+    -- 4. 부모 업무 생존 여부 검증 및 새 부모 설정
+    IF p_new_parent_id IS NOT NULL AND p_new_parent_id != '' THEN
+        -- 새로운 부모가 정상 생존해 있는지 확인
+        IF NOT EXISTS (SELECT 1 FROM work_items WHERE work_item_id = p_new_parent_id AND is_deleted = FALSE) THEN
+            RAISE EXCEPTION '[P0615]Specified new parent work item does not exist or is deleted: %', p_new_parent_id
+            USING ERRCODE = 'P0615';
+        END IF;
+        v_effective_parent_id := p_new_parent_id;
+    ELSE
+        -- 기존 부모가 있는 경우, 기존 부모가 삭제 상태인지 확인
+        IF v_parent_id IS NOT NULL THEN
+            IF EXISTS (SELECT 1 FROM work_items WHERE work_item_id = v_parent_id AND is_deleted = TRUE) THEN
+                RAISE EXCEPTION '[P0616]Cannot restore work item because its parent work item is still deleted. Please specify a new parent or restore the parent first. Parent ID: %', v_parent_id
+                USING ERRCODE = 'P0616';
+            END IF;
+        END IF;
+        v_effective_parent_id := v_parent_id;
+    END IF;
+
+    -- 5. 권한 체크 (WI_PERSONAL_CHANGE 또는 WI_OTHERS_CHANGE)
+    IF v_owner_user_id = v_requester_id THEN
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to restore personal work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    ELSE
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_OTHERS_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to restore other user work item. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 6. 복구 수행
+    UPDATE work_items
+    SET is_deleted = FALSE,
+        parent_work_item_id = v_effective_parent_id
+    WHERE work_item_id = p_work_item_id;
+
+    -- 6-1. 일괄 복구(cascade = TRUE)인 경우: 하위 하위 업무 및 첨부파일 함께 복구
+    IF p_cascade = TRUE THEN
+        -- 하위 모든 하위 업무 재귀적 복구 (CTE 활용)
+        WITH RECURSIVE descendants AS (
+            SELECT work_item_id FROM work_items WHERE parent_work_item_id = p_work_item_id
+            UNION ALL
+            SELECT w.work_item_id FROM work_items w
+            JOIN descendants d ON w.parent_work_item_id = d.work_item_id
+        )
+        UPDATE work_items
+        SET is_deleted = FALSE
+        WHERE work_item_id IN (SELECT work_item_id FROM descendants) AND is_deleted = TRUE;
+
+        -- 소속 첨부파일들 복구
+        WITH RECURSIVE all_restored_wi AS (
+            SELECT p_work_item_id as work_item_id
+            UNION ALL
+            SELECT w.work_item_id FROM work_items w
+            JOIN all_restored_wi rw ON w.parent_work_item_id = rw.work_item_id
+        )
+        UPDATE work_item_files
+        SET is_deleted = FALSE
+        WHERE work_item_id IN (SELECT work_item_id FROM all_restored_wi) AND is_deleted = TRUE;
+    END IF;
+
+    -- 7. 활동 로그 기록
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, v_title, 'restored');
+
+    -- 8. 복구된 업무 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'WORK_ITEM',
+        'id', w.work_item_id,
+        'parent_id', w.parent_work_item_id,
+        'owner_node_id', w.owner_node_id,
+        'owner_user_id', w.owner_user_id,
+        'title', w.title,
+        'description', w.description,
+        'category', w.category,
+        'status', w.status,
+        'priority', w.priority,
+        'hidden', w.hidden,
+        'weight', w.weight,
+        'progress', w.progress,
+        'comment_count', COALESCE(cc.cnt, 0),
+        'is_deleted', w.is_deleted,
+        'start_date', w.start_date,
+        'due_date', w.due_date,
+        'updated_at', w.updated_at
+    )
+    FROM work_items w
+    LEFT JOIN (
+        SELECT work_item_id, COUNT(*)::INT as cnt
+        FROM work_item_comments
+        GROUP BY work_item_id
+    ) cc ON w.work_item_id = cc.work_item_id
+    WHERE w.work_item_id = p_work_item_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0606' OR SQLSTATE 'P0614' OR SQLSTATE 'P0615' OR SQLSTATE 'P0616' OR SQLSTATE 'P0103' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0617]Failed to restore work item: %, (REASON: %)', p_work_item_id, SQLERRM
+            USING ERRCODE = 'P0617';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- WorkItemController::restoreWorkItemFile
+CREATE OR REPLACE FUNCTION restore_work_item_file(
+    p_requester_email users.email%TYPE,
+    p_file_id INT
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_owner_node_id organization_nodes.node_id%TYPE;
+    v_uploader_user_id users.user_id%TYPE;
+    v_work_item_id work_items.work_item_id%TYPE;
+    v_original_file_name VARCHAR(255);
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 파일 확인 (삭제된 파일)
+    SELECT f.uploader_user_id, f.work_item_id, f.original_file_name, w.owner_node_id
+    INTO v_uploader_user_id, v_work_item_id, v_original_file_name, v_owner_node_id
+    FROM work_item_files f
+    JOIN work_items w ON f.work_item_id = w.work_item_id
+    WHERE f.file_id = p_file_id AND f.is_deleted = TRUE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]File does not exist in deleted items: %', p_file_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 소속 업무 생존 여부 검증 (업무가 살아있어야 파일 복구 가능)
+    IF EXISTS (SELECT 1 FROM work_items WHERE work_item_id = v_work_item_id AND is_deleted = TRUE) THEN
+        RAISE EXCEPTION '[P0618]Cannot restore file because its work item is still deleted. Work item ID: %', v_work_item_id
+        USING ERRCODE = 'P0618';
+    END IF;
+
+    -- 4. 권한 체크 (업로더 본인이거나 FILE_CHANGE 권한 보유)
+    IF v_uploader_user_id <> v_requester_id THEN
+        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'FILE_CHANGE') THEN
+            RAISE EXCEPTION '[P0103]Insufficient permissions to restore file on this node. requester: %', p_requester_email
+            USING ERRCODE = 'P0103';
+        END IF;
+    END IF;
+
+    -- 5. 복구 수행
+    UPDATE work_item_files
+    SET is_deleted = FALSE
+    WHERE file_id = p_file_id;
+
+    -- 6. 활동 로그 기록
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'FILE', p_file_id::VARCHAR, 'Restored file: ' || v_original_file_name, 'restored');
+
+    -- 7. 결과 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'FILE',
+        'id', f.file_id,
+        'work_item_id', f.work_item_id,
+        'uploader_user_id', f.uploader_user_id,
+        'uploader_name', u.name,
+        'uploader_email', u.email,
+        'original_file_name', f.original_file_name,
+        'file_size', f.file_size,
+        'mime_type', f.mime_type,
+        'is_deleted', f.is_deleted,
+        'created_at', f.created_at,
+        'updated_at', f.updated_at
+    )
+    FROM work_item_files f
+    JOIN users u ON f.uploader_user_id = u.user_id
+    WHERE f.file_id = p_file_id;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0618' OR SQLSTATE 'P0103' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0619]Failed to restore work item file: %, (REASON: %)', p_file_id, SQLERRM
+            USING ERRCODE = 'P0619';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Cron/Scheduler::cleanup_expired_deleted_data (15일 지난 삭제 데이터 하드 딜리트 및 파일 경로 반환)
+CREATE OR REPLACE FUNCTION cleanup_expired_deleted_data()
+RETURNS TABLE (deleted_file_path VARCHAR(500)) AS $$
+BEGIN
+    -- 1. 15일 이상 지난 삭제 대상 파일들의 실제 물리 경로 수집하여 반환 테이블에 적재
+    RETURN QUERY
+    SELECT f.file_path
+    FROM work_item_files f
+    WHERE f.is_deleted = TRUE 
+      AND f.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
+      AND f.file_path IS NOT NULL AND f.file_path <> '';
+
+    -- 2. 15일 지난 파일 DB 레코드 영구 삭제
+    DELETE FROM work_item_files
+    WHERE is_deleted = TRUE 
+      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
+
+    -- 3. 15일 지난 업무 DB 레코드 영구 삭제 (연관 댓글, 멘션, 파일은 ON DELETE CASCADE로 함께 영구 삭제)
+    DELETE FROM work_items
+    WHERE is_deleted = TRUE 
+      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
+
+    -- 4. 15일 지난 노드 DB 레코드 영구 삭제 (연관 역할, 권한, 업무는 ON DELETE CASCADE로 함께 영구 삭제)
+    DELETE FROM organization_nodes
+    WHERE is_deleted = TRUE 
+      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
+
 END;
 $$ LANGUAGE plpgsql;

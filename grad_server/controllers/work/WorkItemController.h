@@ -18,6 +18,7 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
     ADD_METHOD_TO(WorkItemController::createWorkItem, "/api/workItems", Post, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::updateWorkItem, "/api/workItems", Patch, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::deleteWorkItem, "/api/workItems", Delete, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::restoreWorkItem, "/api/workItems/restore", Patch, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::addComment, "/api/workItems/comments", Post, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::getWorkItemDetail, "/api/workItems", Get, "JwtFilter");
     
@@ -26,6 +27,7 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
     ADD_METHOD_TO(WorkItemController::getFiles, "/api/workItems/files", Get, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::downloadFile, "/api/workItems/files/download", Get, "JwtFilter");
     ADD_METHOD_TO(WorkItemController::deleteFile, "/api/workItems/files", Delete, "JwtFilter");
+    ADD_METHOD_TO(WorkItemController::restoreFile, "/api/workItems/files/restore", Patch, "JwtFilter");
     
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -35,6 +37,7 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
     void createWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void updateWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void deleteWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void restoreWorkItem(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void addComment(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void getWorkItemDetail(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 
@@ -43,5 +46,6 @@ class WorkItemController : public drogon::HttpController<WorkItemController>
     void getFiles(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void downloadFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
     void deleteFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
+    void restoreFile(const HttpRequestPtr &req, std::function<void (const HttpResponsePtr &)> &&callback);
 };
 }

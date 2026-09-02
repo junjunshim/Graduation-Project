@@ -227,11 +227,24 @@ export function getWorkspaceOverview(
     : snapshot
   const summary = getWorkspaceSummary(resolvedUserId, summarySnapshot)
   const roots = buildWorkspaceTree(visibleNodes, visibleWorkItems)
+
+  const resolvedUser = snapshot.users.find(
+    (user) => user.userId === resolvedUserId || user.email === resolvedUserId,
+  )
+  const myUserId = resolvedUser?.userId ?? resolvedUserId
+  const myEmail = resolvedUser?.email?.toLowerCase()
+
+  const isMyWorkItem = (item: WorkItemRecord) => {
+    if (item.ownerUserId === myUserId) return true
+    if (myEmail && item.ownerUserId.toLowerCase() === myEmail) return true
+    return false
+  }
+
   const myWorkItems = sortWorkspaceWorkItems(
-    visibleWorkItems.filter((item) => item.ownerUserId === resolvedUserId),
+    visibleWorkItems.filter(isMyWorkItem),
   )
   const teamPoolWorkItems = sortWorkspaceWorkItems(
-    visibleWorkItems.filter((item) => item.ownerUserId !== resolvedUserId && item.status !== 'done'),
+    visibleWorkItems.filter((item) => !isMyWorkItem(item) && item.status !== 'done'),
   )
   const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isDueSoon))
   const urgentWorkItemIds = new Set<string>()

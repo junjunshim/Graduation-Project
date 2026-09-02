@@ -302,7 +302,11 @@ export function normalizeServerContext(
         }
       }
     } else if (itemType === 'ROLE') {
-      ensureUserByEmail(item.email ?? item.user_email)
+      if (item.user_id) {
+        ensureUserById(item.user_id, item.email ?? item.user_email, item.user_name ?? item.name)
+      } else {
+        ensureUserByEmail(item.email ?? item.user_email, item.user_name ?? item.name)
+      }
     } else if (itemType === 'WORK_ITEM') {
       if (item.owner_user_id) {
         ensureUserById(item.owner_user_id, item.owner_user_email)

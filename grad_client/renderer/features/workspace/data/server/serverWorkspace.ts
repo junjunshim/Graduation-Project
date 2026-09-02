@@ -143,7 +143,43 @@ export function getCurrentServerUser(snapshot?: Pick<WorkspaceDatabase, 'users'>
   return users.find((user) => user.userId === email || user.email === email) ?? null
 }
 
+export async function fetchServerUserProfile(email = getCurrentServerEmail()): Promise<UserRecord | null> {
+  const normalizedEmail = normalizeEmail(email)
+  if (!normalizedEmail) return null
+
+  try {
+    const response = await apiRequest<unknown>(`/users?target_email=${encodeURIComponent(normalizedEmail)}`)
+    if (!isServerStatusResponse(response) || response.status === 'error') {
+      return null
+    }
+
+    const data = (response as { data?: unknown }).data
+    const items = Array.isArray(data) ? data : []
+    const profile = items.find(
+      (item) => typeof item === 'object' && item !== null && (item as Record<string, unknown>).type === 'USER',
+    ) as Record<string, unknown> | undefined
+
+    if (!profile) return null
+
+    const userId = typeof profile.id === 'string' && profile.id.trim() ? profile.id.trim() : normalizedEmail
+    const name = typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : normalizedEmail
+    const personalNodeId = typeof profile.personal_node_id === 'number' ? profile.personal_node_id : undefined
+
+    return {
+      userId,
+      email: normalizedEmail,
+      name,
+      createdAt: typeof profile.created_at === 'string' ? profile.created_at : new Date().toISOString(),
+      ...(personalNodeId !== undefined ? { personalNodeId } : {}),
+    }
+  } catch (error) {
+    console.warn('[WorkspaceAdapter] 사용자 프로필 조회 실패:', error)
+    return null
+  }
+}
+
 export async function loadServerWorkspace(email = getCurrentServerEmail()) {
+  const profilePromise = fetchServerUserProfile(email)
   const response = await apiRequest<unknown>('/context/init')
 
   if (!isServerStatusResponse(response)) {
@@ -156,6 +192,18 @@ export async function loadServerWorkspace(email = getCurrentServerEmail()) {
 
   const items = parseServerContextItems((response as ServerContextResponse).data)
   const { workspace: db, issues } = normalizeServerContext(items, email)
+
+  // 사용자 프로필 정보가 조회되었으면 db.users 및 세션 동기화
+  const profile = await profilePromise
+  if (profile) {
+    const existingIndex = db.users.findIndex((u) => u.email === profile.email || u.userId === profile.userId)
+    if (existingIndex >= 0) {
+      db.users[existingIndex] = { ...db.users[existingIndex], ...profile }
+    } else {
+      db.users.push(profile)
+    }
+    setCurrentSessionUserId(profile.userId)
+  }
 
   if (issues.length > 0) {
     console.warn('[WorkspaceAdapter] 일부 컨텍스트 항목 정규화 이슈:', issues)
@@ -233,9 +281,9 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
       email,
     })
     setCurrentSessionUserId(email)
-    await loadServerWorkspace(email)
+    const db = await loadServerWorkspace(email)
 
-    const user = getCurrentServerUser() ?? createServerSessionUser(email)
+    const user = getCurrentServerUser(db) ?? createServerSessionUser(email)
 
     return {
       status: 'success',

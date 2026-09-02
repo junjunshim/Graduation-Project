@@ -151,9 +151,21 @@ export function getDueSoonOpenWorkItems(overview: WorkspaceOverview) {
 }
 
 export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetric[] {
-  const completedWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'done')
-  const dueSoonOpenWorkItems = getDueSoonOpenWorkItems(overview)
-  const teamMemberCount = overview.rootRoleMembers.length || overview.summary.roleCount
+  // 전체 업무 기준
+  const totalInProgressWorkItems = overview.visibleWorkItems.filter(
+    (item) => item.status === 'in-progress' || (item.status as string) === 'in_progress',
+  )
+  const totalDueSoonOpenWorkItems = getDueSoonOpenWorkItems(overview)
+  const totalCompletedWorkItems = overview.visibleWorkItems.filter((item) => item.status === 'done')
+
+  // 내 담당 업무(myWorkItems) 기준
+  const myInProgressWorkItems = overview.myWorkItems.filter(
+    (item) => item.status === 'in-progress' || (item.status as string) === 'in_progress',
+  )
+  const myDueSoonOpenWorkItems = overview.myWorkItems.filter(
+    (item) => item.status !== 'done' && overview.dueSoonWorkItems.some((due) => due.workItemId === item.workItemId),
+  )
+  const myCompletedWorkItems = overview.myWorkItems.filter((item) => item.status === 'done')
 
   return [
     {
@@ -164,25 +176,25 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       tone: 'blue',
     },
     {
+      label: '진행 중인 업무',
+      value: `${totalInProgressWorkItems.length} / ${myInProgressWorkItems.length}`,
+      description: '전체 진행 중 / 내 진행 중',
+      icon: 'clock',
+      tone: 'neutral',
+    },
+    {
       label: '마감 임박',
-      value: String(dueSoonOpenWorkItems.length),
-      description: '7일 이내 확인 필요',
+      value: `${totalDueSoonOpenWorkItems.length} / ${myDueSoonOpenWorkItems.length}`,
+      description: '전체 마감 임박 / 내 마감 임박',
       icon: 'alertTriangle',
       tone: 'amber',
     },
     {
       label: '완료한 업무',
-      value: String(completedWorkItems.length),
-      description: '완료 처리된 항목',
+      value: `${totalCompletedWorkItems.length} / ${myCompletedWorkItems.length}`,
+      description: '전체 완료 / 내 완료',
       icon: 'checkCircle',
       tone: 'green',
-    },
-    {
-      label: '팀원',
-      value: String(teamMemberCount),
-      description: '참여 중인 구성원',
-      icon: 'users',
-      tone: 'neutral',
     },
   ]
 }

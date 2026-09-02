@@ -47,6 +47,8 @@ int main() {
         }
 
         drogon::app().loadConfigJson(config);
+        drogon::app().enableGzip(true);
+        drogon::app().enableBrotli(true);
     } catch (const std::exception& e) {
         LOG_ERROR << "Error loading configuration: " << e.what();
         return 1;

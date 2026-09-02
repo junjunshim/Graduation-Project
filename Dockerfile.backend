@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     gcc g++ cmake git \
     gettext \
     libssl-dev \
-    libjsoncpp-dev uuid-dev zlib1g-dev \
+    libjsoncpp-dev uuid-dev zlib1g-dev libbrotli-dev \
     libpq-dev postgresql-client \
     libyaml-cpp-dev \
     build-essential \

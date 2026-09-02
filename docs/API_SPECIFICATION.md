@@ -1,19 +1,25 @@
 # 📄 API 명세서
 
 ## 공통 응답/요청 방식 정의
-- **api 요청 형식** : application/json 으로 제한
-- **성공/실패** 여부는 HTTP 상태코드를 통해서 제공
+- **API 요청 형식** : `application/json` (파일 업로드는 `multipart/form-data`)
+- **최대 요청 본문 크기** : `100MB` (대용량 첨부파일 업로드 지원)
+- **HTTP 응답 압축 (Response Compression)** :
+  - 서버는 **Brotli(`br`)** 및 **Gzip(`gzip`)** 압축 알고리즘을 기본 지원합니다.
+  - **클라이언트 앱(React/Electron/Axios)**: Chromium/브라우저 네트워크 계층에서 `Accept-Encoding: gzip, deflate, br`을 자동으로 전송하고 응답을 자동 압축 해제하므로 별도의 헤더 설정이나 해제 코드가 필요하지 않습니다.
+  - **터미널(curl 테스트)**: `--compressed` 옵션을 사용하면 자동으로 압축 해제된 JSON을 확인할 수 있습니다.
+- **성공/실패 여부** : HTTP 상태 코드를 통해서 제공
 
 | HTTP Status | Code | Message | Description |
 | :--- | :--- | :--- | :--- |
 | OK | 200 | 성공 | 요청이 성공적으로 처리됨 |
-| Created | 201 | 생성됨 | 새로운 조직 노드가 성공적으로 생성됨 |
+| Created | 201 | 생성됨 | 새로운 리소스가 성공적으로 생성됨 |
 | No Content | 204 | 내용 없음 | 삭제 요청 성공 (반환할 본문 없음) |
 | Bad Request | 400 | 부적절한 요청 | 필수 파라미터 누락 또는 데이터 형식 오류 |
 | Unauthorized | 401 | 권한 없음 | 인증이 필요하거나 유효하지 않은 토큰 |
-| Forbidden | 403 | 접근 거부 | 해당 노드에 대한 수정/삭제 권한 없음 |
-| Not Found | 404 | 찾을 수 없음 | 존재하지 않는 노드 ID 참조 |
+| Forbidden | 403 | 접근 거부 | 해당 노드/업무에 대한 수정/삭제/조회 권한 없음 |
+| Not Found | 404 | 찾을 수 없음 | 존재하지 않는 노드/업무/파일 ID 참조 |
 | Conflict | 409 | 충돌 | 중복된 데이터 또는 비즈니스 로직 충돌 |
+| Payload Too Large | 413 | 요청 본문 초과 | 업로드 파일 크기가 100MB를 초과함 |
 | Internal Server Error | 500 | 서버 오류 | DB 연결 실패 또는 서버 내부 로직 오류 |
 
 - **공통 에러 응답 객체**

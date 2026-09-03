@@ -1,4 +1,5 @@
-export type RoleName = 'ADMIN' | 'MANAGER' | 'MEMBER' | 'VIEWER'
+export type StandardRoleName = 'ADMIN' | 'MANAGER' | 'MEMBER' | 'VIEWER'
+export type RoleName = StandardRoleName | (string & {})
 export type StandardNodeType = 'USER' | 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM' | 'PROJECT'
 export type NodeType = StandardNodeType | (string & {})
 

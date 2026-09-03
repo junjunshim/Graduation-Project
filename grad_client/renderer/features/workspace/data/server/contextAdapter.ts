@@ -92,7 +92,7 @@ function normalizeNodeType(value: unknown): NodeType {
 }
 
 function normalizeRoleName(value: unknown): RoleName {
-  const normalized = toStringValue(value).toUpperCase()
+  const normalized = toStringValue(value).trim().toUpperCase()
 
   if (
     normalized === 'ADMIN' ||
@@ -101,6 +101,11 @@ function normalizeRoleName(value: unknown): RoleName {
     normalized === 'VIEWER'
   ) {
     return normalized
+  }
+
+  // 커스텀 역할 이름이 있으면 대문자/원형 그대로 유지
+  if (normalized) {
+    return normalized as RoleName
   }
 
   return 'MEMBER'

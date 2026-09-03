@@ -546,3 +546,81 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
     return { status: 'success' as const, workItemId: payload.workItemId }
   }, '업무를 수정하지 못했습니다.')
 }
+
+export type UpdateRoleAuthorityRequest = {
+  nodeId: number
+  roleName: string
+  authority: string
+}
+
+export async function updateRoleAuthorityOnServer(payload: UpdateRoleAuthorityRequest) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/roles/definition', {
+      method: 'PATCH',
+      body: {
+        node_id: payload.nodeId,
+        role_name: payload.roleName,
+        authority: payload.authority,
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할 권한을 변경하지 못했습니다.' }
+    }
+
+    await refreshWorkspaceAfterCommittedMutation()
+    return { status: 'success' as const }
+  }, '역할 권한을 변경하지 못했습니다.')
+}
+
+export type CreateRoleDefinitionRequest = {
+  nodeId: number
+  roleName: string
+  authority: string
+}
+
+export async function createRoleDefinitionOnServer(payload: CreateRoleDefinitionRequest) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/roles/definition', {
+      method: 'POST',
+      body: {
+        node_id: payload.nodeId,
+        role_name: payload.roleName,
+        authority: payload.authority,
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '새 역할을 생성하지 못했습니다.' }
+    }
+
+    await refreshWorkspaceAfterCommittedMutation()
+    return { status: 'success' as const }
+  }, '새 역할을 생성하지 못했습니다.')
+}
+
+export type RenameRoleDefinitionRequest = {
+  nodeId: number
+  oldRoleName: string
+  newRoleName: string
+}
+
+export async function renameRoleDefinitionOnServer(payload: RenameRoleDefinitionRequest) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/roles/rename', {
+      method: 'PATCH',
+      body: {
+        node_id: payload.nodeId,
+        old_role_name: payload.oldRoleName,
+        new_role_name: payload.newRoleName,
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할 이름을 변경하지 못했습니다.' }
+    }
+
+    await refreshWorkspaceAfterCommittedMutation()
+    return { status: 'success' as const }
+  }, '역할 이름을 변경하지 못했습니다.')
+}

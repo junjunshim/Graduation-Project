@@ -1,4 +1,4 @@
-import type { RoleName } from './types'
+import type { StandardRoleName } from './types'
 
 export type AuthorityBitInfo = {
   bit: number
@@ -206,7 +206,7 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
   },
 ]
 
-export const DEFAULT_ROLE_AUTHORITIES: Record<RoleName, string> = {
+export const DEFAULT_ROLE_AUTHORITIES: Record<StandardRoleName, string> = {
   ADMIN: '011111111111111111111111',
   MANAGER: '001100111111111101111111',
   MEMBER: '000100110000001101010111',

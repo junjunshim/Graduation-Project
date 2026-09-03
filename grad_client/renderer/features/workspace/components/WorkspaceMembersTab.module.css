@@ -73,25 +73,208 @@
   gap: 10px;
 }
 
+.addMemberBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 0.95rem;
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  background: var(--accent-purple, #6366f1);
+  border: none;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-purple, #6366f1) 35%, transparent);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.addMemberBtn:hover {
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 85%, #000);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent-purple, #6366f1) 45%, transparent);
+  transform: translateY(-1px);
+}
+
+.addMemberBtn:active {
+  transform: translateY(0);
+}
+
 .searchBox {
   width: 220px;
 }
 
-.roleSelect {
-  height: 36px;
-  padding: 0 0.8rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel);
-  color: var(--text-primary);
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  outline: none;
+.roleDropdownWrapper {
+  position: relative;
 }
 
-.roleSelect:focus {
-  border-color: var(--line-strong);
+.roleTriggerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 0.85rem;
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.roleTriggerBtn:hover {
+  background: var(--surface-panel-subtle);
+  border-color: var(--accent-purple, #6366f1);
+}
+
+.roleTriggerBtnActive {
+  background: var(--surface-panel-subtle);
+  border-color: var(--accent-purple, #6366f1);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-purple, #6366f1) 25%, transparent);
+}
+
+.roleTriggerLabel {
+  color: var(--text-primary);
+}
+
+.roleTriggerCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-full, 999px);
+  background: var(--surface-panel-subtle);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 850;
+}
+
+.roleChevron {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  margin-left: 2px;
+}
+
+.roleChevronOpen {
+  transform: rotate(180deg);
+}
+
+.roleDropdownMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 200px;
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  padding: 0.35rem;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: dropdownFadeIn 0.15s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.roleDropdownHeader {
+  padding: 0.35rem 0.55rem 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 850;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--line-default);
+  margin-bottom: 2px;
+}
+
+.roleDropdownItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.42rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.roleDropdownItem:hover {
+  background: var(--surface-hover);
+}
+
+.roleDropdownItemActive {
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 12%, var(--surface-panel-subtle));
+}
+
+.roleItemName {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.roleItemCount {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.roleBadgeSmall {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.roleBadgeSmall[data-role='ADMIN'] {
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 18%, var(--surface-panel));
+  color: var(--accent-red, #ef4444);
+  border: 1px solid color-mix(in srgb, var(--accent-red, #ef4444) 30%, transparent);
+}
+
+.roleBadgeSmall[data-role='MANAGER'] {
+  background: color-mix(in srgb, var(--accent-purple, #8b5cf6) 18%, var(--surface-panel));
+  color: var(--accent-purple, #8b5cf6);
+  border: 1px solid color-mix(in srgb, var(--accent-purple, #8b5cf6) 30%, transparent);
+}
+
+.roleBadgeSmall[data-role='MEMBER'] {
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 18%, var(--surface-panel));
+  color: var(--accent-blue, #3b82f6);
+  border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 30%, transparent);
+}
+
+.roleBadgeSmall[data-role='VIEWER'] {
+  background: var(--surface-panel-muted);
+  color: var(--text-muted);
+  border: 1px solid var(--line-default);
+}
+
+.roleBadgeSmall[data-role='CUSTOM'] {
+  background: color-mix(in srgb, var(--accent-emerald, #10b981) 18%, var(--surface-panel));
+  color: var(--accent-emerald, #10b981);
+  border: 1px solid color-mix(in srgb, var(--accent-emerald, #10b981) 30%, transparent);
 }
 
 /* 오버라이드 안내 배너 */
@@ -132,11 +315,17 @@
   background: var(--surface-panel);
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  min-height: 620px;
 }
 
 .tableResponsive {
   width: 100%;
   overflow-x: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .memberTable {
@@ -238,6 +427,12 @@
   border: 1px solid var(--line-default);
 }
 
+.roleBadge[data-role='CUSTOM'] {
+  background: color-mix(in srgb, var(--accent-emerald, #10b981) 18%, var(--surface-panel));
+  color: var(--accent-emerald, #10b981);
+  border: 1px solid color-mix(in srgb, var(--accent-emerald, #10b981) 30%, transparent);
+}
+
 /* 소속 형태 뱃지 */
 .directBadge {
   display: inline-flex;
@@ -299,7 +494,7 @@
 }
 
 .emptyCell {
-  padding: 4rem 2rem;
+  padding: 8rem 2rem;
   text-align: center;
   color: var(--text-muted);
 }
@@ -307,4 +502,133 @@
 .emptyCell p {
   margin: 8px 0 0 0;
   font-size: 0.8rem;
+}
+
+/* 페이징 푸터 */
+.paginationFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--line-default);
+  background: var(--surface-panel-subtle);
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.paginationInfo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.paginationInfo strong {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.pageSizeSelectWrapper {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pageSizeSelect {
+  height: 28px;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-default);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+}
+
+.pageSizeSelect:focus {
+  border-color: var(--accent-purple, #6366f1);
+}
+
+.paginationNav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pageBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.pageBtn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--line-strong);
+}
+
+.pageBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pageNumberGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 4px;
+}
+
+.pageNumberBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 0.35rem;
+  box-sizing: border-box;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.pageNumberBtn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.pageNumberBtnActive {
+  background: var(--accent-purple, #6366f1);
+  border-color: var(--accent-purple, #6366f1);
+  color: #ffffff;
+  font-weight: 850;
+}
+
+.pageNumberBtnActive:hover {
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 85%, #000);
+  color: #ffffff;
+}
+
+.pageEllipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
 }

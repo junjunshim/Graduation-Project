@@ -62,12 +62,35 @@
 }
 
 .sidebarHeader {
-  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
   border-bottom: 1px solid var(--line-default);
   background: var(--surface-panel-subtle);
   font-size: 0.76rem;
   font-weight: 800;
   color: var(--text-muted);
+}
+
+.addRoleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 750;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-purple, #6366f1) 30%, transparent);
+  color: var(--accent-purple, #6366f1);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.addRoleBtn:hover {
+  background: var(--accent-purple, #6366f1);
+  color: #fff;
 }
 
 .roleList {
@@ -97,6 +120,11 @@
 .roleItemActive {
   background: var(--surface-panel-muted);
   border-color: var(--line-strong);
+}
+
+.roleItemCreating {
+  border: 1px dashed var(--accent-purple, #6366f1);
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 8%, var(--surface-panel));
 }
 
 .roleItemTop {
@@ -153,6 +181,12 @@
   border: 1px solid var(--line-default);
 }
 
+.roleBadge[data-role='CUSTOM'] {
+  background: color-mix(in srgb, var(--accent-emerald, #10b981) 18%, var(--surface-panel));
+  color: var(--accent-emerald, #10b981);
+  border: 1px solid color-mix(in srgb, var(--accent-emerald, #10b981) 30%, transparent);
+}
+
 .roleHex {
   font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: 0.65rem;
@@ -203,6 +237,117 @@
   font-weight: 850;
   color: var(--text-primary);
   line-height: 1.2;
+}
+
+.roleNameInputWrapper {
+  display: inline-flex;
+  align-items: center;
+}
+
+.roleRenameWrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.roleTitleWithEdit {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editRoleNameBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel-subtle);
+  border: 1px solid var(--line-default);
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.editRoleNameBtn:hover {
+  background: var(--surface-hover);
+  color: var(--accent-purple, #6366f1);
+  border-color: var(--accent-purple, #6366f1);
+}
+
+.renameActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-green, #10b981);
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.renameActionBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-green, #10b981) 85%, #000);
+}
+
+.renameCancelBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel-subtle);
+  border: 1px solid var(--line-default);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.renameCancelBtn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.roleNameInput {
+  height: 32px;
+  width: 220px;
+  padding: 0 0.65rem;
+  font-size: 0.84rem;
+  font-weight: 750;
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel-subtle);
+  border: 1px solid var(--accent-purple, #6366f1);
+  color: var(--text-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-purple, #6366f1) 20%, transparent);
+  transition: all 0.15s ease;
+}
+
+.roleNameInput:focus {
+  background: var(--surface-panel);
+  border-color: var(--accent-purple, #6366f1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-purple, #6366f1) 30%, transparent);
+}
+
+.creatingPill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 18%, var(--surface-panel));
+  color: var(--accent-purple, #6366f1);
+  font-size: 0.66rem;
+  font-weight: 850;
+  line-height: 1;
 }
 
 .activePill {

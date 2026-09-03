@@ -1,16 +1,26 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
+import {
+  AUTHORITY_BITS,
+  DEFAULT_ROLE_AUTHORITIES,
+  parseAuthorityBitSet,
+} from '../model/authorityDefinitions'
+import { getRoleBadgeStyle } from '../model/labels'
+import { assignRoleOnServer } from '../data/server/serverWorkspace'
 import type {
   AuthorityRecord,
   OrganizationNodeRecord,
   RoleAssignmentRecord,
   RoleMember,
   RoleName,
+  StandardRoleName,
   UserRecord,
 } from '../model/types'
+import { AddMemberModal } from './AddMemberModal'
+import { ToastAlertModal, type AlertType } from '../../../design-system/primitives/ToastAlertModal'
 import styles from './WorkspaceMembersTab.module.css'
 
 export type MemberSegmentType = 'all' | 'direct' | 'overridden'
@@ -39,26 +49,158 @@ type WorkspaceMembersTabProps = {
   allRoleMembers?: RoleMember[]
 }
 
-const ROLE_PRIORITY: Record<RoleName, number> = {
-  ADMIN: 4,
-  MANAGER: 3,
-  MEMBER: 2,
-  VIEWER: 1,
-}
+const PRESET_ROLES: StandardRoleName[] = ['ADMIN', 'MANAGER', 'MEMBER', 'VIEWER']
 
 export function WorkspaceMembersTab({
   rootNode,
   nodes = [],
   roles = [],
   users = [],
+  authorities = [],
   allRoleMembers = [],
 }: WorkspaceMembersTabProps) {
   const [activeSegment, setActiveSegment] = useState<MemberSegmentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | RoleName>('all')
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false)
+  const roleDropdownRef = useRef<HTMLDivElement>(null)
+
+  // 페이징 상태 (10명 고정)
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 10
+
+  // 사용자 추가 모달 상태
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [isAddingMember, setIsAddingMember] = useState(false)
+
+  // 모던 알림/에러 모달 상태
+  const [alertInfo, setAlertInfo] = useState<{ isOpen: boolean; message: string; title?: string; type?: AlertType }>({
+    isOpen: false,
+    message: '',
+  })
+  const showAlert = (message: string, title?: string, type: AlertType = 'error') => {
+    setAlertInfo({ isOpen: true, message, title, type })
+  }
+
+  // 사용자 추가 확정 핸들러
+  const handleAddMember = async (targetEmail: string, targetRole: RoleName) => {
+    if (!rootNode) return
+    setIsAddingMember(true)
+    try {
+      const result = await assignRoleOnServer({
+        nodeId: rootNode.id,
+        email: targetEmail,
+        roleName: targetRole,
+      })
+
+      if (result.status === 'error') {
+        showAlert(result.message || '사용자 추가에 실패했습니다.', '사용자 추가 실패', 'error')
+        return
+      }
+
+      setIsAddModalOpen(false)
+      showAlert(`${targetEmail} 사용자를 ${targetRole} 역할로 추가했습니다.`, '추가 완료', 'success')
+    } catch (err) {
+      console.error('[WorkspaceMembersTab] 사용자 추가 실패:', err)
+      showAlert('서버 통신 중 오류가 발생했습니다.', '통신 오류', 'error')
+    } finally {
+      setIsAddingMember(false)
+    }
+  }
+
+  // 필터나 검색어, 세그먼트가 변경되면 1페이지로 리셋
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeSegment, searchQuery, roleFilter])
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(e.target as Node)) {
+        setIsRoleDropdownOpen(false)
+      }
+    }
+    if (isRoleDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isRoleDropdownOpen])
 
   const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
   const usersById = useMemo(() => new Map(users.map((u) => [u.userId, u])), [users])
+
+  // 현재 노드 기준 역할별 권한 비트맵 (DB authorities 기준)
+  const roleBitmaskMap = useMemo(() => {
+    const map = new Map<RoleName, string>()
+    const nodeAuthorities = authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
+
+    if (nodeAuthorities.length === 0) {
+      PRESET_ROLES.forEach((r) => map.set(r, DEFAULT_ROLE_AUTHORITIES[r]))
+    } else {
+      map.set('ADMIN', DEFAULT_ROLE_AUTHORITIES.ADMIN)
+      nodeAuthorities.forEach((a) => {
+        if (a.roleName) map.set(a.roleName, a.authority)
+      })
+    }
+
+    return map
+  }, [authorities, rootNode])
+
+  // 역할 우선순위 점수 계산 함수 (서열 기반)
+  const getRolePriority = useMemo(() => {
+    return (role: string): number => {
+      if (role === 'ADMIN') return 999999
+      const mask = roleBitmaskMap.get(role) || (role in DEFAULT_ROLE_AUTHORITIES ? DEFAULT_ROLE_AUTHORITIES[role as keyof typeof DEFAULT_ROLE_AUTHORITIES] : '000100110000001101010111')
+      const bitSet = parseAuthorityBitSet(mask)
+
+      let score = 0
+      if (bitSet.has(15)) score += 10000 // ROLE_CHANGE
+      if (bitSet.has(14)) score += 5000  // ROLE_ASSIGN
+      if (bitSet.has(13)) score += 3000  // NODE_DELETE
+      if (bitSet.has(12)) score += 2000  // NODE_UPDATE
+      if (bitSet.has(11)) score += 1000  // NODE_CREATE
+      if (bitSet.has(21)) score += 800   // HISTORY_ALL_VIEW
+      if (bitSet.has(9))  score += 500   // WI_OTHERS_CHANGE
+      if (bitSet.has(10)) score += 300   // WI_ASSIGN
+      if (bitSet.has(17)) score += 200   // FILE_CHANGE
+      if (bitSet.has(6))  score += 150   // WI_HIDDEN_VIEW
+
+      const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== 23 && bitSet.has(b.bit)).length
+      score += activeCount * 10
+      return score
+    }
+  }, [roleBitmaskMap])
+
+  // 필터 드롭다운에 표시할 모든 고유 역할 목록 (서열 순 정렬)
+  const availableRoles = useMemo(() => {
+    const nodeAuthorities = authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
+    const roleSet = new Set<string>()
+
+    if (nodeAuthorities.length === 0) {
+      PRESET_ROLES.forEach((r) => roleSet.add(r))
+    } else {
+      roleSet.add('ADMIN')
+      nodeAuthorities.forEach((a) => {
+        if (a.roleName) roleSet.add(a.roleName)
+      })
+    }
+
+    // 소속 멤버들에게 부여된 역할도 포함
+    roles
+      .filter((r) => !r.isDeleted && (!rootNode || r.nodeId === rootNode.id))
+      .forEach((r) => {
+        if (r.roleName) roleSet.add(r.roleName)
+      })
+
+    return (Array.from(roleSet) as RoleName[]).sort((a, b) => {
+      const scoreA = getRolePriority(a)
+      const scoreB = getRolePriority(b)
+      if (scoreA !== scoreB) return scoreB - scoreA
+      return a.localeCompare(b)
+    })
+  }, [authorities, getRolePriority, roles, rootNode])
 
   // 전체 멤버들의 상속 및 오버라이드 상태 분석
   const memberDetails = useMemo(() => {
@@ -106,7 +248,7 @@ export function WorkspaceMembersTab({
       const inheritedRole =
         ancestorRoles.length > 0
           ? ancestorRoles.reduce((prev, curr) =>
-              ROLE_PRIORITY[curr.roleName] > ROLE_PRIORITY[prev.roleName] ? curr : prev,
+              getRolePriority(curr.roleName) > getRolePriority(prev.roleName) ? curr : prev,
             )
           : null
 
@@ -147,11 +289,11 @@ export function WorkspaceMembersTab({
 
     // 기본 정렬: 역할 우선순위 -> 이름순
     return result.sort((a, b) => {
-      const priorityDiff = ROLE_PRIORITY[b.effectiveRoleName] - ROLE_PRIORITY[a.effectiveRoleName]
+      const priorityDiff = getRolePriority(b.effectiveRoleName) - getRolePriority(a.effectiveRoleName)
       if (priorityDiff !== 0) return priorityDiff
       return a.name.localeCompare(b.name, 'ko')
     })
-  }, [allRoleMembers, nodesById, roles, rootNode, usersById])
+  }, [allRoleMembers, getRolePriority, nodesById, roles, rootNode, usersById])
 
   // 세그먼트별 집계
   const directMembers = useMemo(() => memberDetails.filter((m) => m.isDirect), [memberDetails])
@@ -184,6 +326,17 @@ export function WorkspaceMembersTab({
 
     return list
   }, [roleFilter, searchQuery, segmentItems])
+
+  // 페이징 계산 (10명 고정)
+  const totalItems = filteredItems.length
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE))
+  const safeCurrentPage = Math.min(currentPage, totalPages)
+  const startIndex = (safeCurrentPage - 1) * PAGE_SIZE
+  const endIndex = Math.min(startIndex + PAGE_SIZE, totalItems)
+  const paginatedItems = useMemo(
+    () => filteredItems.slice(startIndex, startIndex + PAGE_SIZE),
+    [filteredItems, startIndex],
+  )
 
   return (
     <div className={styles.container}>
@@ -236,18 +389,87 @@ export function WorkspaceMembersTab({
             containerClassName={styles.searchBox}
           />
 
-          <select
-            className={styles.roleSelect}
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as 'all' | RoleName)}
-            aria-label="역할 필터"
+          {/* 커스텀 역할 필터 드롭다운 */}
+          <div className={styles.roleDropdownWrapper} ref={roleDropdownRef}>
+            <button
+              type="button"
+              className={[styles.roleTriggerBtn, isRoleDropdownOpen ? styles.roleTriggerBtnActive : ''].join(' ')}
+              onClick={() => setIsRoleDropdownOpen((prev) => !prev)}
+              aria-label="역할 필터"
+            >
+              <span className={styles.roleTriggerLabel}>
+                {roleFilter === 'all' ? '모든 역할' : roleFilter}
+              </span>
+              <span className={styles.roleTriggerCount}>
+                {roleFilter === 'all'
+                  ? memberDetails.length
+                  : memberDetails.filter((m) => m.effectiveRoleName === roleFilter).length}
+              </span>
+              <Icon
+                name="chevronDown"
+                size={12}
+                className={[styles.roleChevron, isRoleDropdownOpen ? styles.roleChevronOpen : ''].join(' ')}
+              />
+            </button>
+
+            {isRoleDropdownOpen ? (
+              <div className={styles.roleDropdownMenu}>
+                <div className={styles.roleDropdownHeader}>역할별 필터</div>
+                <button
+                  type="button"
+                  className={[
+                    styles.roleDropdownItem,
+                    roleFilter === 'all' ? styles.roleDropdownItemActive : '',
+                  ].join(' ')}
+                  onClick={() => {
+                    setRoleFilter('all')
+                    setIsRoleDropdownOpen(false)
+                  }}
+                >
+                  <span className={styles.roleItemName}>모든 역할</span>
+                  <span className={styles.roleItemCount}>{memberDetails.length}</span>
+                </button>
+
+                {availableRoles.map((role) => {
+                  const count = memberDetails.filter((m) => m.effectiveRoleName === role).length
+                  const isSelected = roleFilter === role
+
+                  return (
+                    <button
+                      key={role}
+                      type="button"
+                      className={[
+                        styles.roleDropdownItem,
+                        isSelected ? styles.roleDropdownItemActive : '',
+                      ].join(' ')}
+                      onClick={() => {
+                        setRoleFilter(role)
+                        setIsRoleDropdownOpen(false)
+                      }}
+                    >
+                      <span
+                        className={styles.roleBadgeSmall}
+                        style={getRoleBadgeStyle(role)}
+                      >
+                        {role}
+                      </span>
+                      <span className={styles.roleItemCount}>{count}명</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          {/* 사용자 추가 버튼 */}
+          <button
+            type="button"
+            className={styles.addMemberBtn}
+            onClick={() => setIsAddModalOpen(true)}
           >
-            <option value="all">모든 역할</option>
-            <option value="ADMIN">ADMIN (관리자)</option>
-            <option value="MANAGER">MANAGER (매니저)</option>
-            <option value="MEMBER">MEMBER (멤버)</option>
-            <option value="VIEWER">VIEWER (조회자)</option>
-          </select>
+            <Icon name="plus" size={14} />
+            <span>사용자 추가</span>
+          </button>
         </div>
       </div>
 
@@ -278,7 +500,7 @@ export function WorkspaceMembersTab({
               </tr>
             </thead>
             <tbody>
-              {filteredItems.length === 0 ? (
+              {paginatedItems.length === 0 ? (
                 <tr>
                   <td colSpan={5} className={styles.emptyCell}>
                     <Icon name="users" size={28} />
@@ -286,7 +508,7 @@ export function WorkspaceMembersTab({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((member) => (
+                paginatedItems.map((member) => (
                   <tr key={member.userId} className={styles.memberRow}>
                     {/* 사용자 프로필 */}
                     <td className={styles.tdUser}>
@@ -301,7 +523,10 @@ export function WorkspaceMembersTab({
 
                     {/* 역할 뱃지 */}
                     <td className={styles.tdRole}>
-                      <span className={styles.roleBadge} data-role={member.effectiveRoleName}>
+                      <span
+                        className={styles.roleBadge}
+                        style={getRoleBadgeStyle(member.effectiveRoleName)}
+                      >
                         {member.effectiveRoleName}
                       </span>
                     </td>
@@ -341,7 +566,107 @@ export function WorkspaceMembersTab({
             </tbody>
           </table>
         </div>
+
+        {/* 테이블 하단: 페이징 네비게이션 */}
+        {totalItems > 0 ? (
+          <footer className={styles.paginationFooter}>
+            <div className={styles.paginationInfo}>
+              <span>
+                총 <strong>{totalItems}</strong>명 중 <strong>{startIndex + 1}</strong> - <strong>{endIndex}</strong>명 표시 (페이지당 10명)
+              </span>
+            </div>
+
+            <div className={styles.paginationNav}>
+              {/* 첫 페이지 버튼 */}
+              <button
+                type="button"
+                className={styles.pageBtn}
+                onClick={() => setCurrentPage(1)}
+                disabled={safeCurrentPage <= 1}
+                title="첫 페이지"
+              >
+                <Icon name="firstPage" size={14} />
+              </button>
+
+              {/* 이전 페이지 버튼 */}
+              <button
+                type="button"
+                className={styles.pageBtn}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={safeCurrentPage <= 1}
+                title="이전 페이지"
+              >
+                <Icon name="chevronLeft" size={14} />
+              </button>
+
+              {/* 페이지 번호 목록 */}
+              <div className={styles.pageNumberGroup}>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => {
+                    // 현재 페이지 주변 2개 및 처음/끝 페이지만 노출
+                    return p === 1 || p === totalPages || Math.abs(p - safeCurrentPage) <= 1
+                  })
+                  .reduce<number[]>((acc, p) => {
+                    if (acc.length > 0 && p - acc[acc.length - 1] > 1) {
+                      acc.push(-1) // ellipsis 마커
+                    }
+                    acc.push(p)
+                    return acc
+                  }, [])
+                  .map((p, idx) => {
+                    if (p === -1) {
+                      return (
+                        <span key={`ellipsis-${idx}`} className={styles.pageEllipsis}>
+                          …
+                        </span>
+                      )
+                    }
+                    const isActive = p === safeCurrentPage
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        className={[styles.pageNumberBtn, isActive ? styles.pageNumberBtnActive : ''].join(' ')}
+                        onClick={() => setCurrentPage(p)}
+                      >
+                        {p}
+                      </button>
+                    )
+                  })}
+              </div>
+
+              {/* 다음 페이지 버튼 */}
+              <button
+                type="button"
+                className={styles.pageBtn}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safeCurrentPage >= totalPages}
+                title="다음 페이지"
+              >
+                <Icon name="chevronRight" size={14} />
+              </button>
+            </div>
+          </footer>
+        ) : null}
       </div>
+
+      {/* 사용자 추가 모달 */}
+      <AddMemberModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onConfirm={handleAddMember}
+        availableRoles={availableRoles}
+        isSubmitting={isAddingMember}
+      />
+
+      {/* 모던 알림/에러 모달 */}
+      <ToastAlertModal
+        isOpen={alertInfo.isOpen}
+        onClose={() => setAlertInfo((prev) => ({ ...prev, isOpen: false }))}
+        title={alertInfo.title}
+        message={alertInfo.message}
+        type={alertInfo.type}
+      />
     </div>
   )
 }

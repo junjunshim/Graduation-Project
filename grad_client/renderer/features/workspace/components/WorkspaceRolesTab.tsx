@@ -12,14 +12,22 @@ import {
   type AuthorityBitInfo,
   type AuthorityPreset,
 } from '../model/authorityDefinitions'
+import { getRoleBadgeStyle } from '../model/labels'
 import type {
   AuthorityRecord,
   OrganizationNodeRecord,
   RoleAssignmentRecord,
   RoleName,
+  StandardRoleName,
   UserRecord,
 } from '../model/types'
+import {
+  createRoleDefinitionOnServer,
+  renameRoleDefinitionOnServer,
+  updateRoleAuthorityOnServer,
+} from '../data/server/serverWorkspace'
 import { RoleSaveConfirmModal } from './RoleSaveConfirmModal'
+import { ToastAlertModal, type AlertType } from '../../../design-system/primitives/ToastAlertModal'
 import styles from './WorkspaceRolesTab.module.css'
 
 type WorkspaceRolesTabProps = {
@@ -30,7 +38,7 @@ type WorkspaceRolesTabProps = {
   currentUser?: UserRecord | null
 }
 
-const PRESET_ROLES: RoleName[] = ['ADMIN', 'MANAGER', 'MEMBER', 'VIEWER']
+const PRESET_ROLES: StandardRoleName[] = ['ADMIN', 'MANAGER', 'MEMBER', 'VIEWER']
 
 export function WorkspaceRolesTab({
   rootNode,
@@ -44,6 +52,24 @@ export function WorkspaceRolesTab({
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [isPresetOpen, setIsPresetOpen] = useState(false)
   const presetDropdownRef = useRef<HTMLDivElement>(null)
+
+  // 모던 알림/에러 모달 상태
+  const [alertInfo, setAlertInfo] = useState<{ isOpen: boolean; message: string; title?: string; type?: AlertType }>({
+    isOpen: false,
+    message: '',
+  })
+  const showAlert = (message: string, title?: string, type: AlertType = 'error') => {
+    setAlertInfo({ isOpen: true, message, title, type })
+  }
+
+  // 신규 역할 생성 모드 상태
+  const [isCreatingRole, setIsCreatingRole] = useState(false)
+  const [newRoleName, setNewRoleName] = useState('')
+  const [newRoleBitmask, setNewRoleBitmask] = useState('000100110000001101010111') // 기본 MEMBER 프리셋
+
+  // 역할 이름 변경 모드 상태
+  const [isRenamingRole, setIsRenamingRole] = useState(false)
+  const [editRoleName, setEditRoleName] = useState('')
 
   // 외부 클릭 시 프리셋 메뉴 닫기
   useEffect(() => {
@@ -63,31 +89,105 @@ export function WorkspaceRolesTab({
   // 호버 중인 비트 및 그로 인해 영향받는 연쇄 비트 집합 (UX 안내 하이라이트)
   const [hoveredBit, setHoveredBit] = useState<number | null>(null)
 
-  // 현재 노드 기준 역할별 권한 매핑
+  // 현재 노드 기준 역할별 권한 매핑 (DB authorities가 단일 진실 공급원)
   const roleBitmaskMap = useMemo(() => {
     const map = new Map<RoleName, string>()
-    PRESET_ROLES.forEach((r) => map.set(r, DEFAULT_ROLE_AUTHORITIES[r]))
+    const nodeAuthorities = authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
 
-    authorities
-      .filter((a) => !rootNode || a.nodeId === rootNode.id)
-      .forEach((a) => map.set(a.roleName, a.authority))
+    if (nodeAuthorities.length === 0) {
+      PRESET_ROLES.forEach((r) => map.set(r, DEFAULT_ROLE_AUTHORITIES[r]))
+    } else {
+      map.set('ADMIN', DEFAULT_ROLE_AUTHORITIES.ADMIN)
+      nodeAuthorities.forEach((a) => {
+        if (a.roleName) map.set(a.roleName, a.authority)
+      })
+    }
 
     return map
   }, [authorities, rootNode])
+
+  // 현재 노드에 실제로 정의된 역할 목록을 '권한 레벨(서열)' 순으로 정렬
+  // 1. ADMIN은 항상 최상위 고정
+  // 2. 관리자급 권한(ROLE_CHANGE, NODE_MANAGE 등 주요 관리 비트) 가중치 계산
+  // 3. 활성화된 비트 개수(높은 순)
+  // 4. 이름 알파벳 순
+  const allRoleNames = useMemo(() => {
+    const nodeAuthorities = authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
+    const roleSet = new Set<string>()
+
+    if (nodeAuthorities.length === 0) {
+      PRESET_ROLES.forEach((r) => roleSet.add(r))
+    } else {
+      roleSet.add('ADMIN')
+      nodeAuthorities.forEach((a) => {
+        if (a.roleName) roleSet.add(a.roleName)
+      })
+    }
+
+    const getRoleHierarchyScore = (role: string): number => {
+      if (role === 'ADMIN') return 999999
+      const mask = roleBitmaskMap.get(role) || (role in DEFAULT_ROLE_AUTHORITIES ? DEFAULT_ROLE_AUTHORITIES[role as keyof typeof DEFAULT_ROLE_AUTHORITIES] : '000100110000001101010111')
+      const bitSet = parseAuthorityBitSet(mask)
+
+      let score = 0
+      // 주요 관리자 핵심 비트 가중치
+      if (bitSet.has(15)) score += 10000 // ROLE_CHANGE
+      if (bitSet.has(14)) score += 5000  // ROLE_ASSIGN
+      if (bitSet.has(13)) score += 3000  // NODE_DELETE
+      if (bitSet.has(12)) score += 2000  // NODE_UPDATE
+      if (bitSet.has(11)) score += 1000  // NODE_CREATE
+      if (bitSet.has(21)) score += 800   // HISTORY_ALL_VIEW
+      if (bitSet.has(9))  score += 500   // WI_OTHERS_CHANGE
+      if (bitSet.has(10)) score += 300   // WI_ASSIGN
+      if (bitSet.has(17)) score += 200   // FILE_CHANGE
+      if (bitSet.has(6))  score += 150   // WI_HIDDEN_VIEW
+
+      // 총 활성 권한 개수 추가
+      const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== 23 && bitSet.has(b.bit)).length
+      score += activeCount * 10
+
+      return score
+    }
+
+    return (Array.from(roleSet) as RoleName[]).sort((a, b) => {
+      const scoreA = getRoleHierarchyScore(a)
+      const scoreB = getRoleHierarchyScore(b)
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA // 높은 점수 우선
+      }
+      return a.localeCompare(b)
+    })
+  }, [authorities, rootNode, roleBitmaskMap])
 
   // 실제 저장된(반영된) 권한 상태
   const [savedBitmaskMap, setSavedBitmaskMap] = useState<Map<RoleName, string>>(
     () => new Map(roleBitmaskMap),
   )
 
+  // 서버 authorities가 갱신될 때 동기화
+  useEffect(() => {
+    setSavedBitmaskMap(new Map(roleBitmaskMap))
+  }, [roleBitmaskMap])
+
   // 현재 편집 중(Draft)인 권한 상태
   const [draftBitmaskMap, setDraftBitmaskMap] = useState<Map<RoleName, string>>(
     () => new Map(roleBitmaskMap),
   )
 
-  const currentBitmaskStr = draftBitmaskMap.get(selectedRole) || DEFAULT_ROLE_AUTHORITIES[selectedRole]
-  const savedBitmaskStr = savedBitmaskMap.get(selectedRole) || DEFAULT_ROLE_AUTHORITIES[selectedRole]
-  const isDirty = currentBitmaskStr !== savedBitmaskStr
+  const getDefaultAuthority = (role: RoleName): string => {
+    if (role in DEFAULT_ROLE_AUTHORITIES) {
+      return DEFAULT_ROLE_AUTHORITIES[role as keyof typeof DEFAULT_ROLE_AUTHORITIES]
+    }
+    return '000100110000001101010111' // 커스텀 역할 기본값 (MEMBER 프리셋)
+  }
+
+  const currentBitmaskStr = isCreatingRole
+    ? newRoleBitmask
+    : draftBitmaskMap.get(selectedRole) || getDefaultAuthority(selectedRole)
+  const savedBitmaskStr = isCreatingRole
+    ? '000000000000000000000000'
+    : savedBitmaskMap.get(selectedRole) || getDefaultAuthority(selectedRole)
+  const isDirty = isCreatingRole ? true : currentBitmaskStr !== savedBitmaskStr
 
   const currentBitSet = useMemo(() => parseAuthorityBitSet(currentBitmaskStr), [currentBitmaskStr])
   const savedBitSet = useMemo(() => parseAuthorityBitSet(savedBitmaskStr), [savedBitmaskStr])
@@ -106,12 +206,12 @@ export function WorkspaceRolesTab({
     if (!currentUserId || !rootNode || !currentUserRole) return false
     if (currentUserRole === 'ADMIN') return true
 
-    const myBitmask = savedBitmaskMap.get(currentUserRole) || DEFAULT_ROLE_AUTHORITIES[currentUserRole]
+    const myBitmask = savedBitmaskMap.get(currentUserRole) || getDefaultAuthority(currentUserRole)
     const myBitSet = parseAuthorityBitSet(myBitmask)
     return myBitSet.has(15) // Bit 15: ROLE_CHANGE
   }, [currentUserId, currentUserRole, rootNode, savedBitmaskMap])
 
-  const isSelectedAdmin = selectedRole === 'ADMIN'
+  const isSelectedAdmin = !isCreatingRole && selectedRole === 'ADMIN'
   const isEditable = canManageRoles && !isSelectedAdmin
 
   // 자신이 소속된 역할(예: MANAGER)의 '역할 권한 정의/수정(ROLE_CHANGE)'을 끄려고 하는지 여부
@@ -146,16 +246,26 @@ export function WorkspaceRolesTab({
     const nextSet = toggleAuthorityBit(currentBitSet, bit, targetValue)
     const nextBitmaskStr = stringifyAuthorityBitSet(nextSet)
 
-    setDraftBitmaskMap((prev) => {
-      const nextMap = new Map(prev)
-      nextMap.set(selectedRole, nextBitmaskStr)
-      return nextMap
-    })
+    if (isCreatingRole) {
+      setNewRoleBitmask(nextBitmaskStr)
+    } else {
+      setDraftBitmaskMap((prev) => {
+        const nextMap = new Map(prev)
+        nextMap.set(selectedRole, nextBitmaskStr)
+        return nextMap
+      })
+    }
     setSaveSuccess(false)
   }
 
-  // 수정 취소 (원래 저장 상태로 되돌리기)
+  // 수정 취소 (원래 저장 상태로 되돌리기 / 신규 생성 취소)
   const handleRevertChanges = () => {
+    if (isCreatingRole) {
+      setIsCreatingRole(false)
+      setNewRoleName('')
+      setSelectedRole('MANAGER')
+      return
+    }
     if (!isEditable || !isDirty) return
     setDraftBitmaskMap((prev) => {
       const nextMap = new Map(prev)
@@ -173,29 +283,129 @@ export function WorkspaceRolesTab({
     if (!isCurrentUserAdmin && bitmask[0] === '1') {
       bitmask = '0' + bitmask.slice(1)
     }
-    setDraftBitmaskMap((prev) => {
-      const nextMap = new Map(prev)
-      nextMap.set(selectedRole, bitmask)
-      return nextMap
-    })
+    if (isCreatingRole) {
+      setNewRoleBitmask(bitmask)
+    } else {
+      setDraftBitmaskMap((prev) => {
+        const nextMap = new Map(prev)
+        nextMap.set(selectedRole, bitmask)
+        return nextMap
+      })
+    }
     setSaveSuccess(false)
   }
 
   // 변경사항 저장 모달 열기
   const handleOpenSaveConfirm = () => {
-    if (!isEditable || !isDirty) return
+    if (!isEditable) return
+    if (isCreatingRole) {
+      const trimmed = newRoleName.trim()
+      if (!trimmed) {
+        showAlert('역할 이름을 입력해주세요.', '입력 확인', 'warning')
+        return
+      }
+      if (allRoleNames.includes(trimmed)) {
+        showAlert('이미 존재하는 역할 이름입니다.', '중복 확인', 'warning')
+        return
+      }
+      setIsConfirmModalOpen(true)
+      return
+    }
+    if (!isDirty) return
     setIsConfirmModalOpen(true)
   }
 
-  // 최종 저장 확정 처리
+  // 최종 저장 확정 처리 (생성 또는 수정)
   const handleConfirmSave = async () => {
+    if (!rootNode) return
     setIsSaving(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      setSavedBitmaskMap(new Map(draftBitmaskMap))
+      const targetBitmask = currentBitmaskStr
+
+      if (isCreatingRole) {
+        const trimmedName = newRoleName.trim()
+        const result = await createRoleDefinitionOnServer({
+          nodeId: rootNode.id,
+          roleName: trimmedName,
+          authority: targetBitmask,
+        })
+
+        if (result.status === 'error') {
+          showAlert(result.message || '새 역할을 생성하지 못했습니다.', '역할 생성 실패', 'error')
+          return
+        }
+
+        setIsCreatingRole(false)
+        setSelectedRole(trimmedName)
+        setNewRoleName('')
+      } else {
+        const result = await updateRoleAuthorityOnServer({
+          nodeId: rootNode.id,
+          roleName: selectedRole,
+          authority: targetBitmask,
+        })
+
+        if (result.status === 'error') {
+          showAlert(result.message || '역할 권한을 저장하지 못했습니다.', '권한 저장 실패', 'error')
+          return
+        }
+
+        setSavedBitmaskMap(new Map(draftBitmaskMap))
+      }
+
       setSaveSuccess(true)
       setIsConfirmModalOpen(false)
       setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err) {
+      console.error('[WorkspaceRolesTab] 권한 저장 실패:', err)
+      showAlert('서버 통신 중 오류가 발생했습니다.', '통신 오류', 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // 역할 이름 변경 확정 핸들러
+  const handleRenameRole = async () => {
+    if (!rootNode) return
+    const trimmed = editRoleName.trim()
+    if (!trimmed) {
+      showAlert('변경할 역할 이름을 입력해주세요.', '입력 확인', 'warning')
+      return
+    }
+    if (trimmed.toUpperCase() === 'ADMIN') {
+      showAlert('ADMIN으로는 이름을 변경할 수 없습니다.', '변경 불가', 'warning')
+      return
+    }
+    if (trimmed === selectedRole) {
+      setIsRenamingRole(false)
+      return
+    }
+    if (allRoleNames.includes(trimmed)) {
+      showAlert('이미 존재하는 역할 이름입니다.', '중복 확인', 'warning')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const result = await renameRoleDefinitionOnServer({
+        nodeId: rootNode.id,
+        oldRoleName: selectedRole,
+        newRoleName: trimmed,
+      })
+
+      if (result.status === 'error') {
+        showAlert(result.message || '역할 이름을 변경하지 못했습니다.', '이름 변경 실패', 'error')
+        return
+      }
+
+      // 상태 갱신
+      setIsRenamingRole(false)
+      setSelectedRole(trimmed)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+    } catch (err) {
+      console.error('[WorkspaceRolesTab] 역할 이름 변경 실패:', err)
+      showAlert('서버 통신 중 오류가 발생했습니다.', '통신 오류', 'error')
     } finally {
       setIsSaving(false)
     }
@@ -380,14 +590,48 @@ export function WorkspaceRolesTab({
         <aside className={styles.roleSidebar} aria-label="역할 목록">
           <div className={styles.sidebarHeader}>
             <span>워크스페이스 역할</span>
+            {canManageRoles && !isCreatingRole ? (
+              <button
+                type="button"
+                className={styles.addRoleBtn}
+                onClick={() => {
+                  setIsCreatingRole(true)
+                  setIsRenamingRole(false)
+                  setEditRoleName('')
+                  setNewRoleName('')
+                  setNewRoleBitmask('000100110000001101010111') // 기본 MEMBER 프리셋
+                }}
+                title="이 워크스페이스에 새로운 역할을 추가합니다."
+              >
+                <Icon name="plus" size={13} />
+                <span>역할 추가</span>
+              </button>
+            ) : null}
           </div>
 
           <div className={styles.roleList}>
-            {PRESET_ROLES.map((role) => {
-              const isSelected = selectedRole === role
-              const savedMask = savedBitmaskMap.get(role) || DEFAULT_ROLE_AUTHORITIES[role]
-              const draftMask = draftBitmaskMap.get(role) || DEFAULT_ROLE_AUTHORITIES[role]
-              const hasUnsavedChanges = savedMask !== draftMask
+            {/* 신규 역할 생성 진행 중 카드 */}
+            {isCreatingRole ? (
+              <div className={[styles.roleItem, styles.roleItemActive, styles.roleItemCreating].join(' ')}>
+                <div className={styles.roleItemTop}>
+                  <div className={styles.roleItemBadgeRow}>
+                    <span className={styles.roleBadge} data-role="CUSTOM">
+                      {newRoleName.trim() || '새 역할'}
+                    </span>
+                    <span className={styles.unsavedDot} title="생성 중 (미저장)" />
+                  </div>
+                </div>
+                <div className={styles.roleMeta}>
+                  <span>{activeCount} / {totalCount}개 권한 설정 중</span>
+                </div>
+              </div>
+            ) : null}
+
+            {allRoleNames.map((role) => {
+              const isSelected = !isCreatingRole && selectedRole === role
+              const savedMask = savedBitmaskMap.get(role) || getDefaultAuthority(role)
+              const draftMask = draftBitmaskMap.get(role) || getDefaultAuthority(role)
+              const hasUnsavedChanges = !isCreatingRole && savedMask !== draftMask
 
               const bSet = parseAuthorityBitSet(savedMask)
               const count = AUTHORITY_BITS.filter((b) => b.bit !== 23 && bSet.has(b.bit)).length
@@ -398,12 +642,21 @@ export function WorkspaceRolesTab({
                   type="button"
                   className={[styles.roleItem, isSelected ? styles.roleItemActive : ''].join(' ')}
                   onClick={() => {
+                    if (isCreatingRole) {
+                      setIsCreatingRole(false)
+                      setNewRoleName('')
+                    }
+                    setIsRenamingRole(false)
+                    setEditRoleName('')
                     setSelectedRole(role)
                   }}
                 >
                   <div className={styles.roleItemTop}>
                     <div className={styles.roleItemBadgeRow}>
-                      <span className={styles.roleBadge} data-role={role}>
+                      <span
+                        className={styles.roleBadge}
+                        style={getRoleBadgeStyle(role)}
+                      >
                         {role}
                       </span>
                       {hasUnsavedChanges ? (
@@ -426,20 +679,90 @@ export function WorkspaceRolesTab({
         <main className={styles.permissionMain} aria-label="세부 권한 설정">
           <header className={styles.mainHeader}>
             <div className={styles.mainHeaderLeft}>
-              <div className={styles.titleRow}>
-                <h2>{selectedRole} 역할 세부 권한</h2>
-                <span className={styles.activePill}>
-                  {activeCount} / {totalCount} 활성화
-                </span>
-                {isSelectedAdmin ? (
-                  <span className={styles.systemPill}>
-                    <Icon name="lock" size={12} />
-                    시스템 불변 역할
+              {isCreatingRole ? (
+                <div className={styles.titleRow}>
+                  <div className={styles.roleNameInputWrapper}>
+                    <input
+                      type="text"
+                      className={styles.roleNameInput}
+                      placeholder="새 역할 이름 (예: 디자이너, QA)"
+                      value={newRoleName}
+                      onChange={(e) => setNewRoleName(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <span className={styles.creatingPill}>신규 역할 생성 모드</span>
+                  <span className={styles.activePill}>
+                    {activeCount} / {totalCount} 활성화
                   </span>
-                ) : isDirty ? (
-                  <span className={styles.dirtyPill}>수정 중 (미저장)</span>
-                ) : null}
-              </div>
+                </div>
+              ) : (
+                <div className={styles.titleRow}>
+                  {isRenamingRole ? (
+                    <div className={styles.roleRenameWrapper}>
+                      <input
+                        type="text"
+                        className={styles.roleNameInput}
+                        value={editRoleName}
+                        onChange={(e) => setEditRoleName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameRole()
+                          if (e.key === 'Escape') setIsRenamingRole(false)
+                        }}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className={styles.renameActionBtn}
+                        onClick={handleRenameRole}
+                        disabled={isSaving}
+                        title="이름 변경 저장 (Enter)"
+                      >
+                        <Icon name="checkCircle" size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.renameCancelBtn}
+                        onClick={() => setIsRenamingRole(false)}
+                        disabled={isSaving}
+                        title="취소 (Esc)"
+                      >
+                        <Icon name="close" size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={styles.roleTitleWithEdit}>
+                      <h2>{selectedRole} 역할 세부 권한</h2>
+                      {canManageRoles && !isSelectedAdmin ? (
+                        <button
+                          type="button"
+                          className={styles.editRoleNameBtn}
+                          onClick={() => {
+                            setEditRoleName(selectedRole)
+                            setIsRenamingRole(true)
+                          }}
+                          title="역할 이름 변경"
+                        >
+                          <Icon name="gear" size={13} />
+                          <span>이름 변경</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+
+                  <span className={styles.activePill}>
+                    {activeCount} / {totalCount} 활성화
+                  </span>
+                  {isSelectedAdmin ? (
+                    <span className={styles.systemPill}>
+                      <Icon name="lock" size={12} />
+                      시스템 불변 역할
+                    </span>
+                  ) : isDirty ? (
+                    <span className={styles.dirtyPill}>수정 중 (미저장)</span>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             <div className={styles.mainHeaderRight}>
@@ -484,24 +807,28 @@ export function WorkspaceRolesTab({
                     ) : null}
                   </div>
 
-                  {/* 수정 취소 (되돌리기) 버튼 */}
+                  {/* 수정 취소 / 생성 취소 버튼 */}
                   <Button
                     variant="secondary"
                     onClick={handleRevertChanges}
-                    disabled={isSaving || !isDirty}
+                    disabled={isSaving || (!isCreatingRole && !isDirty)}
                     className={styles.resetBtn}
-                    title="저장되지 않은 변경사항을 취소하고 원래 상태로 되돌립니다."
+                    title={isCreatingRole ? '역할 생성을 취소합니다.' : '저장되지 않은 변경사항을 취소하고 원래 상태로 되돌립니다.'}
                   >
-                    수정 취소
+                    {isCreatingRole ? '생성 취소' : '수정 취소'}
                   </Button>
 
-                  {/* 변경사항 저장 버튼 */}
+                  {/* 변경사항 저장 / 역할 생성 저장 버튼 */}
                   <Button
                     variant="primary"
                     onClick={handleOpenSaveConfirm}
-                    disabled={isSaving || !isDirty}
+                    disabled={isSaving || (!isCreatingRole && !isDirty)}
                   >
-                    {isSaving ? '저장 중...' : saveSuccess ? '저장 완료!' : '변경사항 저장'}
+                    {isSaving
+                      ? (isCreatingRole ? '생성 중...' : '저장 중...')
+                      : saveSuccess
+                      ? (isCreatingRole ? '생성 완료!' : '저장 완료!')
+                      : (isCreatingRole ? '역할 생성 저장' : '변경사항 저장')}
                   </Button>
                 </>
               ) : null}
@@ -528,11 +855,21 @@ export function WorkspaceRolesTab({
         isOpen={isConfirmModalOpen}
         onClose={() => setIsConfirmModalOpen(false)}
         onConfirm={handleConfirmSave}
-        roleName={selectedRole}
+        roleName={isCreatingRole ? newRoleName.trim() || '새 역할' : selectedRole}
         savedBitmask={savedBitmaskStr}
         draftBitmask={currentBitmaskStr}
         isSaving={isSaving}
-        isDisablingOwnRoleChange={isDisablingOwnRoleChange}
+        isDisablingOwnRoleChange={!isCreatingRole && isDisablingOwnRoleChange}
+        isCreating={isCreatingRole}
+      />
+
+      {/* 모던 알림/에러 모달 */}
+      <ToastAlertModal
+        isOpen={alertInfo.isOpen}
+        onClose={() => setAlertInfo((prev) => ({ ...prev, isOpen: false }))}
+        title={alertInfo.title}
+        message={alertInfo.message}
+        type={alertInfo.type}
       />
     </div>
   )

@@ -9,6 +9,7 @@ import { WorkspaceRolesTab } from '../components/WorkspaceRolesTab'
 import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
+import { subscribeToWorkspaceCache } from '../data/workspaceCacheEvents'
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
@@ -590,10 +591,20 @@ export function WorkspacePage() {
         .catch((error) => {
           console.warn('[WorkspacePage] 노드 상세 데이터 조회 실패:', error)
         })
+    } else {
+      setSnapshot(getOrgSnapshot())
     }
+
+    // 캐시 변경 이벤트(다른 mutation 발생 시)에는 네트워크 재요청 대신 메모리/로컬 DB 스냅샷만 즉시 동기화
+    const unsubscribe = subscribeToWorkspaceCache(() => {
+      if (isSubscribed) {
+        setSnapshot(getOrgSnapshot())
+      }
+    })
 
     return () => {
       isSubscribed = false
+      unsubscribe()
     }
   }, [activeWorkspaceRootId])
 

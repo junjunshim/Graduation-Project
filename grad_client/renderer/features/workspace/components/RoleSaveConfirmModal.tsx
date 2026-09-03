@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import {
@@ -18,6 +19,7 @@ export type RoleSaveConfirmModalProps = {
   draftBitmask: string
   isSaving?: boolean
   isDisablingOwnRoleChange?: boolean
+  isCreating?: boolean
 }
 
 export function RoleSaveConfirmModal({
@@ -29,6 +31,7 @@ export function RoleSaveConfirmModal({
   draftBitmask,
   isSaving,
   isDisablingOwnRoleChange,
+  isCreating = false,
 }: RoleSaveConfirmModalProps) {
   const [acknowledgedLockout, setAcknowledgedLockout] = useState(false)
 
@@ -39,25 +42,31 @@ export function RoleSaveConfirmModal({
 
   const addedBits: AuthorityBitInfo[] = []
   const removedBits: AuthorityBitInfo[] = []
+  const currentActiveBits: AuthorityBitInfo[] = []
 
   AUTHORITY_BITS.forEach((b) => {
     if (b.bit === 23) return // DENY
     const wasOn = savedSet.has(b.bit)
     const isOn = draftSet.has(b.bit)
+    if (isOn) currentActiveBits.push(b)
     if (!wasOn && isOn) addedBits.push(b)
     if (wasOn && !isOn) removedBits.push(b)
   })
 
-  return (
+  return createPortal(
     <div className={styles.overlay} onClick={onClose} role="dialog" aria-modal="true">
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <header className={styles.header}>
           <div className={styles.titleGroup}>
             <Icon name="checkSquare" size={20} className={styles.headerIcon} />
             <div>
-              <h3 className={styles.title}>{roleName} 역할 권한 변경 확인</h3>
+              <h3 className={styles.title}>
+                {isCreating ? `'${roleName}' 역할 신규 생성 확인` : `${roleName} 역할 권한 변경 확인`}
+              </h3>
               <p className={styles.subtitle}>
-                아래 변경사항을 적용하시겠습니까? 저장 후 즉시 워크스페이스에 반영됩니다.
+                {isCreating
+                  ? '아래 설정된 권한으로 새로운 역할을 생성하시겠습니까? 저장 후 즉시 멤버에게 부여할 수 있습니다.'
+                  : '아래 변경사항을 적용하시겠습니까? 저장 후 즉시 워크스페이스에 반영됩니다.'}
               </p>
             </div>
           </div>
@@ -95,14 +104,14 @@ export function RoleSaveConfirmModal({
           {/* 상단 권한 수치 비교 요약 */}
           <div className={styles.diffSummaryCard}>
             <div className={styles.diffSummaryColumn}>
-              <span className={styles.summaryLabel}>기존 권한</span>
+              <span className={styles.summaryLabel}>{isCreating ? '생성 모드' : '기존 권한'}</span>
               <span className={styles.summaryCount}>
-                <strong>{savedSet.size}</strong> / 22개 활성화
+                <strong>{isCreating ? 0 : savedSet.size}</strong> / 22개 활성화
               </span>
             </div>
             <Icon name="arrowRight" size={18} className={styles.summaryArrow} />
             <div className={styles.diffSummaryColumn}>
-              <span className={styles.summaryLabel}>변경 후 적용 권한</span>
+              <span className={styles.summaryLabel}>신규 부여 권한</span>
               <span className={styles.summaryCountNew}>
                 <strong>{draftSet.size}</strong> / 22개 활성화
               </span>
@@ -112,35 +121,49 @@ export function RoleSaveConfirmModal({
           {/* 변경 내역 리스트 */}
           <div className={styles.changeSection}>
             <h4 className={styles.changeHeading}>
-              <span>세부 변경 내역</span>
+              <span>{isCreating ? '포함되는 권한 목록' : '세부 변경 내역'}</span>
               <span className={styles.changeCountBadge}>
-                +{addedBits.length} 추가, -{removedBits.length} 제거
+                {isCreating ? `${currentActiveBits.length}개 권한 부여` : `+${addedBits.length} 추가, -${removedBits.length} 제거`}
               </span>
             </h4>
 
             <div className={styles.changeList}>
-              {addedBits.map((b) => (
-                <div key={`add-${b.bit}`} className={styles.changeItemAdd}>
-                  <span className={styles.badgeAdd}>+ 활성화</span>
-                  <div className={styles.changeInfo}>
-                    <strong>{b.label}</strong>
-                    <span>[{b.categoryLabel}] {b.description}</span>
+              {isCreating ? (
+                currentActiveBits.map((b) => (
+                  <div key={`init-${b.bit}`} className={styles.changeItemAdd}>
+                    <span className={styles.badgeAdd}>포함</span>
+                    <div className={styles.changeInfo}>
+                      <strong>{b.label}</strong>
+                      <span>[{b.categoryLabel}] {b.description}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <>
+                  {addedBits.map((b) => (
+                    <div key={`add-${b.bit}`} className={styles.changeItemAdd}>
+                      <span className={styles.badgeAdd}>+ 활성화</span>
+                      <div className={styles.changeInfo}>
+                        <strong>{b.label}</strong>
+                        <span>[{b.categoryLabel}] {b.description}</span>
+                      </div>
+                    </div>
+                  ))}
 
-              {removedBits.map((b) => (
-                <div key={`remove-${b.bit}`} className={styles.changeItemRemove}>
-                  <span className={styles.badgeRemove}>- 비활성화</span>
-                  <div className={styles.changeInfo}>
-                    <strong>{b.label}</strong>
-                    <span>[{b.categoryLabel}] {b.description}</span>
-                  </div>
-                </div>
-              ))}
+                  {removedBits.map((b) => (
+                    <div key={`remove-${b.bit}`} className={styles.changeItemRemove}>
+                      <span className={styles.badgeRemove}>- 비활성화</span>
+                      <div className={styles.changeInfo}>
+                        <strong>{b.label}</strong>
+                        <span>[{b.categoryLabel}] {b.description}</span>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
 
-              {addedBits.length === 0 && removedBits.length === 0 ? (
-                <p className={styles.emptyNotice}>변경사항이 없습니다.</p>
+              {(!isCreating && addedBits.length === 0 && removedBits.length === 0) || (isCreating && currentActiveBits.length === 0) ? (
+                <p className={styles.emptyNotice}>설정된 권한이 없습니다.</p>
               ) : null}
             </div>
           </div>
@@ -155,10 +178,11 @@ export function RoleSaveConfirmModal({
             onClick={onConfirm}
             disabled={isSaving || (isDisablingOwnRoleChange && !acknowledgedLockout)}
           >
-            {isSaving ? '적용 저장 중...' : '확인 및 최종 저장'}
+            {isSaving ? (isCreating ? '역할 생성 중...' : '적용 저장 중...') : (isCreating ? '역할 생성 확정' : '확인 및 최종 저장')}
           </Button>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

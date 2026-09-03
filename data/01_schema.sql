@@ -1,4 +1,6 @@
--- 0. enum 타입 정의
+-- 0. 확장 프로그램 및 enum 타입 정의
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 DROP TYPE IF EXISTS history_status CASCADE;
 CREATE TYPE history_status AS ENUM ('inserted', 'updated', 'deleted');
 

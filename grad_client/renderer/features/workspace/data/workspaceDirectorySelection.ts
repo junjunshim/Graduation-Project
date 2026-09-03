@@ -45,3 +45,39 @@ export function selectWorkspaceRoot(
     window.localStorage.removeItem(defaultStorageKey)
   }
 }
+
+const FAVORITE_WORKSPACES_KEY = 'grad-client-favorite-workspaces'
+
+export function getFavoriteWorkspaceIds(userId?: string): Set<string> {
+  const storageKey = getUserStorageKey(FAVORITE_WORKSPACES_KEY, userId)
+
+  if (typeof window === 'undefined' || !storageKey) {
+    return new Set()
+  }
+
+  try {
+    const raw = window.localStorage.getItem(storageKey)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? new Set(parsed) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+export function toggleFavoriteWorkspaceId(id: string, userId?: string): Set<string> {
+  const currentFavorites = getFavoriteWorkspaceIds(userId)
+  const storageKey = getUserStorageKey(FAVORITE_WORKSPACES_KEY, userId)
+
+  if (currentFavorites.has(id)) {
+    currentFavorites.delete(id)
+  } else {
+    currentFavorites.add(id)
+  }
+
+  if (typeof window !== 'undefined' && storageKey) {
+    window.localStorage.setItem(storageKey, JSON.stringify(Array.from(currentFavorites)))
+  }
+
+  return currentFavorites
+}

@@ -1,39 +1,97 @@
-.viewToggle {
+.viewToggleBar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.viewSegmentGroup {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem;
+  border: 1px solid var(--axis-line-default, #e0e0e0);
+  border-radius: var(--axis-radius-surface, 8px);
+  background: var(--axis-surface-muted, #f4f5f7);
+  gap: 0.2rem;
+}
+
+.viewSegmentButton {
+  --axis-button-height: 2.25rem;
+  --axis-button-padding: 0 0.88rem;
+  --axis-button-radius: calc(var(--axis-radius-surface, 8px) - 2px);
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border: 0;
+  box-shadow: none;
+}
+
+.viewSegmentButton:not(.viewSegmentActive) {
+  background: transparent;
+  color: var(--axis-text-secondary, #5e6c84);
+}
+
+.viewSegmentButton:not(.viewSegmentActive):hover {
+  background: color-mix(in srgb, var(--axis-surface-panel, #ffffff) 65%, transparent);
+  color: var(--axis-text-primary, #172b4d);
+}
+
+.viewSegmentActive {
+  background: var(--axis-surface-panel, #ffffff);
+  color: var(--axis-brand-primary, #5e35b1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.actionGroup {
+  display: inline-flex;
+  align-items: center;
   gap: 0.65rem;
-  flex: 0 0 auto;
-}
-
-.viewButton {
-  --axis-button-height: 2.62rem;
-  --axis-button-padding: 0 1rem;
-  --axis-button-radius: var(--axis-radius-surface);
-  gap: 0.6rem;
-  min-width: 7.8rem;
-  font-size: 0.84rem;
-}
-
-.viewButton:first-child {
-  min-width: 8.7rem;
 }
 
 .chooserButton {
-  min-width: 11.5rem;
+  --axis-button-height: 2.62rem;
+  --axis-button-padding: 0 1rem;
+  --axis-button-radius: var(--axis-radius-surface, 8px);
+  gap: 0.5rem;
+  min-width: 11.2rem;
+  font-size: 0.84rem;
+  font-weight: 600;
 }
 
-@media (max-width: 760px) {
-  .viewToggle {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    width: 100%;
+.createButton {
+  --axis-button-height: 2.62rem;
+  --axis-button-padding: 0 1.1rem;
+  --axis-button-radius: var(--axis-radius-surface, 8px);
+  gap: 0.45rem;
+  min-width: 9rem;
+  font-size: 0.84rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.createButton:hover {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 860px) {
+  .viewToggleBar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
   }
 
-  .viewButton,
-  .viewButton:first-child {
-    min-width: 0;
+  .viewSegmentGroup,
+  .actionGroup {
     width: 100%;
-    --axis-button-padding: 0 0.65rem;
+    justify-content: stretch;
+  }
+
+  .viewSegmentButton,
+  .chooserButton,
+  .createButton {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }

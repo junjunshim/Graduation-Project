@@ -25,6 +25,11 @@ export function getWorkItemStatusTone(status: WorkItemStatus) {
 }
 
 export function getNodeTypeLabel(nodeType: NodeType) {
+  if (typeof nodeType === 'string' && nodeType.startsWith('CUSTOM:')) {
+    const parts = nodeType.split(':')
+    return parts[1] || '사용자 지정'
+  }
+
   switch (nodeType) {
     case 'USER':
       return '개인공간'

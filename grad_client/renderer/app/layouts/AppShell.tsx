@@ -46,8 +46,6 @@ export function AppShell() {
   const currentUser = getCurrentUser(snapshot)
   const hasCustomTitleBar = hasCustomWindowControls()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
-  const [workspaceEntryHeaderActionsTarget, setWorkspaceEntryHeaderActionsTarget] =
-    useState<HTMLDivElement | null>(null)
 
   useBodyScrollSurface('workspace')
 
@@ -86,7 +84,14 @@ export function AppShell() {
     ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
     : null
   const workItemCategory = workItemDetail ? getWorkItemTag(workItemDetail.item) : null
-  const shellHeading: ShellTopActionsHeading = isWorkspaceSelectRoute
+  const shellHeading: ShellTopActionsHeading = location.pathname === '/setup/top-node'
+    ? {
+        type: 'breadcrumb',
+        label: '워크스페이스',
+        title: '루트 워크스페이스 생성',
+        subtitle: '회사, 본부, 프로젝트 등 전체 조직 계층 트리의 기준이 될 최상위 루트 워크스페이스를 등록합니다.',
+      }
+    : isWorkspaceSelectRoute
     ? {
         type: 'page',
         title: isWorkspaceSelectListView ? '워크스페이스' : '워크스페이스 진입점',
@@ -159,12 +164,14 @@ export function AppShell() {
       <div
         className={[
           styles.workspace,
-          hasCustomTitleBar || isWorkspaceSelectRoute ? styles.workspaceWithoutPageBar : '',
+          hasCustomTitleBar || isWorkspaceSelectRoute || location.pathname === '/setup/top-node'
+            ? styles.workspaceWithoutPageBar
+            : '',
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {!hasCustomTitleBar && !isWorkspaceSelectRoute ? (
+        {!hasCustomTitleBar && !isWorkspaceSelectRoute && location.pathname !== '/setup/top-node' ? (
           <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} />
         ) : null}
 
@@ -181,14 +188,6 @@ export function AppShell() {
             currentUser={currentUser}
             heading={shellHeading}
             inset="standard"
-            actions={
-              isWorkspaceSelectRoute ? (
-                <div
-                  ref={setWorkspaceEntryHeaderActionsTarget}
-                  className={styles.workspaceEntryHeaderActionsHost}
-                />
-              ) : undefined
-            }
           />
 
           <main
@@ -200,7 +199,7 @@ export function AppShell() {
               .filter(Boolean)
               .join(' ')}
           >
-            <Outlet context={{ workspaceEntryHeaderActionsTarget }} />
+            <Outlet />
           </main>
         </div>
       </div>

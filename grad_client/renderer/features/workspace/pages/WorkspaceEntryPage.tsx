@@ -1,27 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
-import { Button, ButtonLink } from '../../../design-system/primitives/Button'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { Panel } from '../../../design-system/primitives/Panel'
-import { SearchField } from '../../../design-system/primitives/SearchField'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceEntryViewToggle } from '../components/WorkspaceEntryViewToggle'
 import { getOrgSnapshot } from '../data/orgService'
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
+  getFavoriteWorkspaceIds,
   selectWorkspaceRoot,
+  toggleFavoriteWorkspaceId,
 } from '../data/workspaceDirectorySelection'
 import type { WorkspaceDirectoryItem, WorkspaceDirectoryTone } from '../model/workspaceDirectory'
 import { getWorkspaceDirectory } from '../queries/workspaceDirectory'
 import styles from './WorkspaceEntryPage.module.css'
 
 const WORKSPACE_LIST_PAGE_SIZE = 10
-
-type WorkspaceEntryOutletContext = {
-  workspaceEntryHeaderActionsTarget: HTMLDivElement | null
-}
 
 const toneClassNames: Record<WorkspaceDirectoryTone, string> = {
   indigo: styles.toneIndigo,
@@ -31,14 +28,6 @@ const toneClassNames: Record<WorkspaceDirectoryTone, string> = {
   violet: styles.toneViolet,
   orange: styles.toneOrange,
   pink: styles.tonePink,
-}
-
-function matchesWorkspace(item: WorkspaceDirectoryItem, query: string) {
-  if (!query) {
-    return true
-  }
-
-  return `${item.name} ${item.description}`.toLocaleLowerCase('ko-KR').includes(query)
 }
 
 function formatCreatedAt(createdAt: string) {
@@ -103,56 +92,6 @@ function MoreButton({ label }: { label: string }) {
   )
 }
 
-function DirectoryToolbar({
-  query,
-  isHelpOpen,
-  onQueryChange,
-  onToggleHelp,
-}: {
-  query: string
-  isHelpOpen: boolean
-  onQueryChange: (query: string) => void
-  onToggleHelp: () => void
-}) {
-  return (
-    <div className={styles.utilityBar}>
-      <SearchField
-        containerClassName={styles.searchBox}
-        label="워크스페이스 검색"
-        value={query}
-        onChange={(event) => onQueryChange(event.target.value)}
-        placeholder="워크스페이스 검색"
-      />
-
-      <div className={styles.helpAnchor}>
-        <Button
-          variant="icon"
-          aria-label="워크스페이스 진입점 도움말"
-          aria-controls="workspace-entry-help"
-          aria-expanded={isHelpOpen}
-          onClick={onToggleHelp}
-        >
-          <Icon name="helpCircle" size={22} />
-        </Button>
-        {isHelpOpen ? (
-          <Panel
-            id="workspace-entry-help"
-            className={styles.helpPopover}
-            variant="popover"
-            role="status"
-          >
-            계층도나 목록에서 조직을 확인한 뒤 최상위 워크스페이스를 선택해 진입하세요.
-          </Panel>
-        ) : null}
-      </div>
-
-      <ButtonLink to="/setup/top-node" className={styles.createButton} variant="primary">
-        워크스페이스 생성
-      </ButtonLink>
-    </div>
-  )
-}
-
 function formatMemberCount(item: WorkspaceDirectoryItem) {
   if (item.childCount > 0) {
     return `직속 ${item.directMemberCount}명 (전체 ${item.totalMemberCount}명)`
@@ -176,22 +115,31 @@ function HierarchyView({
   return (
     <div className={styles.treeViewport}>
       <section className={styles.treeCanvas} aria-label={`${root.name} 워크스페이스 계층도`}>
-        <button type="button" className={styles.rootCard} onClick={() => onOpenWorkspace(root.id)}>
-          <WorkspaceGlyph item={root} variant="root" />
-          <span className={styles.rootCardCopy}>
-            <span className={styles.rootNameLine}>
-              <strong>{root.name}</strong>
-              <RootBadge />
+        <div className={styles.rootCardWrapper}>
+          <button type="button" className={styles.rootCard} onClick={() => onOpenWorkspace(root.id)}>
+            <WorkspaceGlyph item={root} variant="root" />
+            <span className={styles.rootCardCopy}>
+              <span className={styles.rootNameLine}>
+                <strong>{root.name}</strong>
+                <RootBadge />
+              </span>
+              <span>{root.description}</span>
+              <span>
+                {formatMemberCount(root)}
+                <i aria-hidden="true" />
+                하위 {root.childCount}개
+              </span>
             </span>
-            <span>{root.description}</span>
-            <span>
-              {formatMemberCount(root)}
-              <i aria-hidden="true" />
-              하위 {root.childCount}개
-            </span>
-          </span>
-          <Icon name="chevronRight" size={20} />
-        </button>
+            <Icon name="chevronRight" size={20} />
+          </button>
+          <div className={styles.rootFavorite}>
+            <FavoriteButton
+              isFavorite={favoriteIds.has(root.id)}
+              label={root.name}
+              onToggle={() => onToggleFavorite(root.id)}
+            />
+          </div>
+        </div>
 
         {branches.length > 0 ? (
           <ol
@@ -576,8 +524,6 @@ function WorkspaceChooserDialog({
 export function WorkspaceEntryPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { workspaceEntryHeaderActionsTarget } =
-    useOutletContext<WorkspaceEntryOutletContext>()
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const workspaceDirectory = getWorkspaceDirectory(currentUser?.userId, snapshot)
@@ -593,45 +539,35 @@ export function WorkspaceEntryPage() {
     hierarchyRoot && !activeRoot && !defaultRoot,
   )
   const view = searchParams.get('view') === 'list' ? 'list' : 'hierarchy'
-  const [query, setQuery] = useState('')
-  const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [isChooserOpen, setIsChooserOpen] = useState(shouldOpenChooserInitially)
   const [selectedRootId, setSelectedRootId] = useState(
     () => hierarchyRoot?.id ?? workspaceDirectory.defaultRootId ?? '',
   )
   const [currentPage, setCurrentPage] = useState(1)
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(
-    () =>
-      new Set(
-        workspaceDirectory.listItems
-          .filter((item) => item.isFavorite)
-          .map((item) => item.id),
-      ),
+    () => getFavoriteWorkspaceIds(currentUser?.userId),
   )
 
-  const normalizedQuery = query.trim().toLocaleLowerCase('ko-KR')
-  const hierarchyBranches = hierarchyRoot
-    ? !normalizedQuery || matchesWorkspace(hierarchyRoot, normalizedQuery)
-      ? hierarchyRoot.children
-      : hierarchyRoot.children.flatMap((branch) => {
-          if (matchesWorkspace(branch, normalizedQuery)) {
-            return [branch]
-          }
+  const sortedRootOptions = [...workspaceDirectory.rootOptions].sort((a, b) => {
+    const aFav = favoriteIds.has(a.id) ? 1 : 0
+    const bFav = favoriteIds.has(b.id) ? 1 : 0
+    return bFav - aFav
+  })
 
-          const matchingChildren = branch.children.filter((child) =>
-            matchesWorkspace(child, normalizedQuery),
-          )
-          return matchingChildren.length > 0 ? [{ ...branch, children: matchingChildren }] : []
-        })
-    : []
+  const hierarchyBranches = hierarchyRoot ? hierarchyRoot.children : []
   const scopedListItems = hierarchyRoot
     ? workspaceDirectory.listItems.filter(
         (item) => item.rootId === hierarchyRoot.id || item.id === hierarchyRoot.id,
       )
     : workspaceDirectory.listItems
-  const filteredListRows = scopedListItems.filter((item) =>
-    matchesWorkspace(item, normalizedQuery),
-  )
+
+  // 즐겨찾기된 워크스페이스가 목록의 맨 앞에 우선 배치되도록 정렬
+  const filteredListRows = [...scopedListItems].sort((a, b) => {
+    const aFav = favoriteIds.has(a.id) ? 1 : 0
+    const bFav = favoriteIds.has(b.id) ? 1 : 0
+    return bFav - aFav
+  })
+
   const listPageCount = Math.max(1, Math.ceil(filteredListRows.length / WORKSPACE_LIST_PAGE_SIZE))
   const listPageNumbers = Array.from({ length: listPageCount }, (_, index) => index + 1)
   const listPageStart = (currentPage - 1) * WORKSPACE_LIST_PAGE_SIZE
@@ -653,23 +589,9 @@ export function WorkspaceEntryPage() {
     setSearchParams(nextSearchParams, { replace: true })
   }
 
-  function handleQueryChange(nextQuery: string) {
-    setQuery(nextQuery)
-    setCurrentPage(1)
-  }
-
   function toggleFavorite(id: string) {
-    setFavoriteIds((currentIds) => {
-      const nextIds = new Set(currentIds)
-
-      if (nextIds.has(id)) {
-        nextIds.delete(id)
-      } else {
-        nextIds.add(id)
-      }
-
-      return nextIds
-    })
+    const updated = toggleFavoriteWorkspaceId(id, currentUser?.userId)
+    setFavoriteIds(new Set(updated))
   }
 
   function handleConfirmWorkspace() {
@@ -710,18 +632,6 @@ export function WorkspaceEntryPage() {
 
   return (
     <div className={styles.page}>
-      {workspaceEntryHeaderActionsTarget
-        ? createPortal(
-            <DirectoryToolbar
-              query={query}
-              isHelpOpen={isHelpOpen}
-              onQueryChange={handleQueryChange}
-              onToggleHelp={() => setIsHelpOpen((current) => !current)}
-            />,
-            workspaceEntryHeaderActionsTarget,
-          )
-        : null}
-
       <WorkspaceEntryViewToggle
         view={view}
         onChange={handleViewChange}
@@ -755,7 +665,7 @@ export function WorkspaceEntryPage() {
 
       <WorkspaceChooserDialog
         isOpen={isChooserOpen}
-        rootOptions={workspaceDirectory.rootOptions}
+        rootOptions={sortedRootOptions}
         selectedRootId={selectedRootId}
         onCancel={closeChooser}
         onConfirm={handleConfirmWorkspace}

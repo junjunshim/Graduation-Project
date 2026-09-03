@@ -1,6 +1,6 @@
 export type RoleName = 'ADMIN' | 'MANAGER' | 'MEMBER' | 'VIEWER'
-
-export type NodeType = 'USER' | 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM' | 'PROJECT'
+export type StandardNodeType = 'USER' | 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM' | 'PROJECT'
+export type NodeType = StandardNodeType | (string & {})
 
 export type WorkItemStatus = 'todo' | 'in-progress' | 'done'
 

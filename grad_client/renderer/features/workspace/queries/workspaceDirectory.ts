@@ -1,13 +1,13 @@
 import { getAccessibleNodeIdsForUser } from '../data/orgService'
 import { getNodeTypeLabel } from '../model/labels'
 import { sortWorkspaceNodes } from '../model/sorters'
-import type { NodeType, OrganizationNodeRecord, WorkspaceSnapshot } from '../model/types'
+import type { IconName } from '../../../design-system/primitives/Icon'
+import type { OrganizationNodeRecord, WorkspaceSnapshot } from '../model/types'
 import type {
   WorkspaceDirectoryItem,
   WorkspaceDirectoryTone,
 } from '../model/workspaceDirectory'
 
-type OrganizationNodeType = NodeType
 type OrganizationNode = OrganizationNodeRecord
 
 type DirectoryVisualMetadata = Pick<WorkspaceDirectoryItem, 'iconName' | 'tone'>
@@ -29,13 +29,23 @@ const ROOT_TONES: WorkspaceDirectoryTone[] = [
   'pink',
 ]
 
-const NODE_VISUAL_METADATA: Record<OrganizationNodeType, DirectoryVisualMetadata> = {
+const NODE_VISUAL_METADATA: Record<string, DirectoryVisualMetadata> = {
   USER: { tone: 'violet', iconName: 'folder' },
   COMPANY: { tone: 'indigo', iconName: 'building' },
   DIVISION: { tone: 'blue', iconName: 'orgChart' },
   DEPARTMENT: { tone: 'teal', iconName: 'folder' },
   TEAM: { tone: 'green', iconName: 'users' },
   PROJECT: { tone: 'violet', iconName: 'cube' },
+}
+
+export function getNodeVisualMetadata(nodeType: string): DirectoryVisualMetadata {
+  if (typeof nodeType === 'string' && nodeType.startsWith('CUSTOM:')) {
+    const parts = nodeType.split(':')
+    const customIcon = (parts[2] as IconName) || 'sparkles'
+    return { tone: 'orange', iconName: customIcon }
+  }
+
+  return NODE_VISUAL_METADATA[nodeType] ?? { tone: 'orange', iconName: 'sparkles' }
 }
 
 function getCreatedDate(createdAt: string) {
@@ -161,9 +171,10 @@ export function getWorkspaceDirectory(
     })
 
     const isRoot = node.id.toString() === rootId
+    const baseVisualMetadata = getNodeVisualMetadata(node.nodeType)
     const visualMetadata = isRoot
-      ? { tone: rootTone, iconName: 'building' as const }
-      : NODE_VISUAL_METADATA[node.nodeType]
+      ? { tone: rootTone, iconName: baseVisualMetadata.iconName }
+      : baseVisualMetadata
     const item: WorkspaceDirectoryItem = {
       id: node.id.toString(),
       rootId,

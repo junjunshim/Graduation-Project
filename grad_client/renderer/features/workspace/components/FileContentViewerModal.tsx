@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { MarkdownViewer } from './MarkdownViewer'
 import styles from './FileContentViewerModal.module.css'
 
 export type FileContentViewerProps = {
@@ -41,7 +42,18 @@ export function FileContentViewerModal({
   if (!isOpen) return null
 
   const lines = content.split('\n')
-  const ext = fileName.split('.').pop()?.toUpperCase() ?? 'FILE'
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? 'txt'
+  const isMarkdown = ext === 'md' || ext === 'markdown'
+  const isJson = ext === 'json'
+
+  let formattedJson = ''
+  if (isJson) {
+    try {
+      formattedJson = JSON.stringify(JSON.parse(content), null, 2)
+    } catch {
+      formattedJson = content
+    }
+  }
 
   const handleCopy = async () => {
     try {
@@ -64,7 +76,7 @@ export function FileContentViewerModal({
               <div className={styles.fileTitleInfo}>
                 <div className={styles.fileTitleRow}>
                   <h3 className={styles.fileName}>{fileName}</h3>
-                  <span className={styles.extBadge}>{ext}</span>
+                  <span className={styles.extBadge}>{ext.toUpperCase()}</span>
                   {fromCache ? <span className={styles.cacheBadge}>캐시됨 (304)</span> : null}
                 </div>
                 <div className={styles.fileMetaRow}>
@@ -146,8 +158,20 @@ export function FileContentViewerModal({
                 </tbody>
               </table>
             </div>
+          ) : isMarkdown ? (
+            /* Preview 포매팅 뷰: 마크다운 렌더링 */
+            <div className={styles.previewContainer}>
+              <MarkdownViewer content={content} />
+            </div>
+          ) : isJson ? (
+            /* Preview 포매팅 뷰: JSON 들여쓰기 렌더링 */
+            <div className={styles.previewContainer}>
+              <pre className={styles.previewCodeBlock}>
+                <code>{formattedJson}</code>
+              </pre>
+            </div>
           ) : (
-            /* Preview 포매팅 뷰 */
+            /* Preview 포매팅 뷰: 일반 텍스트 문서 */
             <div className={styles.previewContainer}>
               <pre className={styles.previewText}>{content}</pre>
             </div>

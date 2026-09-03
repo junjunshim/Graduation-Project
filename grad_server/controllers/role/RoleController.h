@@ -19,6 +19,7 @@ class RoleController : public drogon::HttpController<RoleController>
     ADD_METHOD_TO(RoleController::updateRole, "/api/roles", Patch, "JwtFilter");
     ADD_METHOD_TO(RoleController::createRoleDefinition, "/api/roles/definition", Post, "JwtFilter");
     ADD_METHOD_TO(RoleController::updateRoleAuthority, "/api/roles/definition", Patch, "JwtFilter");
+    ADD_METHOD_TO(RoleController::renameRoleDefinition, "/api/roles/rename", Patch, "JwtFilter");
 
     METHOD_LIST_END
 
@@ -26,5 +27,6 @@ class RoleController : public drogon::HttpController<RoleController>
     void updateRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void createRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void updateRoleAuthority(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void renameRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

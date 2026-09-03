@@ -30,6 +30,7 @@ enum class DbErrorCode {
     CreateRoleDefinitionFailed, // P0411 역할 정의 생성 실패
     RoleDefinitionAlreadyExists,// P0412 노드에 이미 존재하는 역할 정의
     UpdateRoleAuthorityFailed,  // P0413 역할 권한 수정 실패
+    RenameRoleDefinitionFailed, // P0414 역할 이름 변경 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     EmailNotFound,              // P0503 이메일 찾을 수 없음

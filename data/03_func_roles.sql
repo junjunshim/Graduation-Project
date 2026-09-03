@@ -351,3 +351,124 @@ BEGIN
             USING ERRCODE = 'P0413';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- RoleController::rename_role_definition (노드별 역할명 변경)
+CREATE OR REPLACE FUNCTION rename_role_definition(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_old_role_name role_authorities.role%TYPE,
+    p_new_role_name role_authorities.role%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_authority_id role_authorities.authority_id%TYPE;
+    v_authority_bit BIT(24);
+BEGIN
+    -- 0. 입력값 검증
+    IF p_old_role_name IS NULL OR TRIM(p_old_role_name) = '' THEN
+        RAISE EXCEPTION '[P0408]Old role name cannot be empty'
+        USING ERRCODE = 'P0408';
+    END IF;
+
+    IF p_new_role_name IS NULL OR TRIM(p_new_role_name) = '' THEN
+        RAISE EXCEPTION '[P0408]New role name cannot be empty'
+        USING ERRCODE = 'P0408';
+    END IF;
+
+    -- ADMIN 역할은 이름 변경 불가 및 ADMIN으로의 변경도 불가
+    IF UPPER(p_old_role_name) = 'ADMIN' OR UPPER(p_new_role_name) = 'ADMIN' THEN
+        RAISE EXCEPTION '[P0409]Cannot rename ADMIN role'
+        USING ERRCODE = 'P0409';
+    END IF;
+
+    IF p_old_role_name = p_new_role_name THEN
+        RETURN QUERY SELECT jsonb_build_object(
+            'type', 'AUTHORITY',
+            'id', a.authority_id,
+            'node_id', a.node_id,
+            'role', a.role,
+            'authority', a.authority::TEXT,
+            'updated_at', a.updated_at
+        )
+        FROM role_authorities a
+        WHERE node_id = p_node_id AND role = p_old_role_name;
+        RETURN;
+    END IF;
+
+    -- 1. 요청자 id 가져오기 및 존재 여부 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 요청자 권한 체크 (ROLE_CHANGE: bit 15 필요)
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have ROLE_CHANGE authority on node : %', p_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 3. 기존 역할 정의 조회
+    SELECT authority_id, authority INTO v_authority_id, v_authority_bit 
+    FROM role_authorities 
+    WHERE node_id = p_node_id AND role = p_old_role_name;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0407]Role is not defined on this node: %', p_old_role_name
+        USING ERRCODE = 'P0407';
+    END IF;
+
+    -- 4. 신규 역할명이 이미 해당 노드에 존재하는지 확인 (중복 방지)
+    IF EXISTS (SELECT 1 FROM role_authorities WHERE node_id = p_node_id AND role = p_new_role_name) THEN
+        RAISE EXCEPTION '[P0412]Role already exists on this node: %', p_new_role_name
+        USING ERRCODE = 'P0412';
+    END IF;
+
+    -- 5. role_authorities 테이블에서 역할명 갱신
+    UPDATE role_authorities
+    SET role = p_new_role_name
+    WHERE authority_id = v_authority_id;
+
+    -- 6. 해당 노드의 role_assignments 테이블에서도 기존 역할을 새 역할명으로 일괄 갱신
+    UPDATE role_assignments
+    SET role = p_new_role_name
+    WHERE node_id = p_node_id AND role = p_old_role_name;
+
+    -- 7. 최근 활동 피드 로깅
+    PERFORM log_activity(p_node_id, p_requester_email, 'AUTHORITY', v_authority_id::VARCHAR, p_old_role_name, 'updated', 'role', p_old_role_name, p_new_role_name);
+
+    -- 8. 갱신된 권한 객체 및 할당 객체 반환
+    RETURN QUERY 
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', a.authority_id,
+        'node_id', a.node_id,
+        'role', a.role,
+        'authority', a.authority::TEXT,
+        'updated_at', a.updated_at
+    )
+    FROM role_authorities a
+    WHERE authority_id = v_authority_id
+    UNION ALL
+    SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', r.assignment_id,
+        'node_id', r.node_id,
+        'email', u.email,
+        'role', r.role,
+        'updated_at', r.updated_at
+    )
+    FROM role_assignments r
+    JOIN users u ON r.user_id = u.user_id
+    WHERE r.node_id = p_node_id AND r.role = p_new_role_name;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0407' OR SQLSTATE 'P0408' OR SQLSTATE 'P0409' OR SQLSTATE 'P0412' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0414]Failed to rename role : % to %, (REASON: %)', p_old_role_name, p_new_role_name, SQLERRM
+            USING ERRCODE = 'P0414';
+END;
+$$ LANGUAGE plpgsql;
+

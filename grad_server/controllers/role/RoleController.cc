@@ -259,3 +259,49 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
         requester_email, node_id, role_name, authority
     );
 }
+
+// 노드별 역할명 변경 api
+void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!validateStrings(jsonPtr, "old_role_name", "new_role_name") || !validateInts(jsonPtr, "node_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(node_id, old_role_name, new_role_name)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    std::string old_role_name = (*jsonPtr)["old_role_name"].asString();
+    std::string new_role_name = (*jsonPtr)["new_role_name"].asString();
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM rename_role_definition($1, $2, $3, $4)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, node_id, old_role_name, new_role_name
+    );
+}

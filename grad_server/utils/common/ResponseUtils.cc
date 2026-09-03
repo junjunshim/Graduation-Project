@@ -96,6 +96,7 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0411") != std::string::npos) return DbErrorCode::CreateRoleDefinitionFailed;
     else if (errMsg.find("P0412") != std::string::npos) return DbErrorCode::RoleDefinitionAlreadyExists;
     else if (errMsg.find("P0413") != std::string::npos) return DbErrorCode::UpdateRoleAuthorityFailed;
+    else if (errMsg.find("P0414") != std::string::npos) return DbErrorCode::RenameRoleDefinitionFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
@@ -259,6 +260,11 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::UpdateRoleAuthorityFailed:{
             ret["message"] = "역할 권한 수정에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RenameRoleDefinitionFailed:{
+            ret["message"] = "역할 이름 변경에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

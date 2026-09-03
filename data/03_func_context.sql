@@ -167,6 +167,7 @@ BEGIN
     JOIN users u ON ra.user_id = u.user_id
     JOIN filtered_nodes fn ON ra.node_id = fn.node_id
     WHERE (fn.effective_authority & v_node_members_view) = v_node_members_view -- Bit 1: NODE_MEMBERS_VIEW
+        OR (ra.user_id = v_user_id) -- 본인 역할은 권한에 관계없이 항상 반환
 
     UNION ALL
 
@@ -498,7 +499,9 @@ BEGIN
         'type', 'ROLE',
         'id', ra.assignment_id,
         'node_id', ra.node_id,
+        'user_id', ra.user_id,
         'email', u.email,
+        'user_name', u.name,
         'role', ra.role,
         'updated_at', ra.updated_at
     )
@@ -506,7 +509,7 @@ BEGIN
     JOIN users u ON ra.user_id = u.user_id
     JOIN filtered_nodes fn ON ra.node_id = fn.node_id
     WHERE ra.updated_at > p_last_synced_at
-        AND (fn.effective_authority & v_node_members_view) = v_node_members_view -- Bit 1: NODE_MEMBERS_VIEW
+        AND ((fn.effective_authority & v_node_members_view) = v_node_members_view OR ra.user_id = v_user_id) -- Bit 1: NODE_MEMBERS_VIEW 또는 본인 역할
 
     UNION ALL
 

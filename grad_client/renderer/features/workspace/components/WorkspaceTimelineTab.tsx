@@ -667,17 +667,19 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
     setIsMonthMenuOpen(false)
     centerDate(
       currentToday + MS_PER_DAY / 2,
-      DEFAULT_PIXELS_PER_DAY,
+      pixelsPerDayRef.current,
       'smooth',
-      DEFAULT_VERTICAL_SCALE,
-      0,
     )
   }
 
   const handleMonthSelect = (month: TimelineMonthOption) => {
     setSelectedMonthStart(month.start)
     setIsMonthMenuOpen(false)
-    centerDate(month.start + (month.end - month.start) / 2, DEFAULT_PIXELS_PER_DAY, 'smooth')
+    centerDate(
+      month.start + (month.end - month.start) / 2,
+      pixelsPerDayRef.current,
+      'smooth',
+    )
     monthButtonRef.current?.focus()
   }
 
@@ -977,44 +979,52 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
                       <div className={styles.gridTrack} aria-hidden="true" />
                     </div>
 
-                    <div id={groupEntriesId} className={styles.groupEntries} hidden={isCollapsed}>
-                      {!isCollapsed
-                        ? group.entries.map((entry) => {
-                            const left = ((entry.start - range.start) / MS_PER_DAY) * pixelsPerDay
-                            const width = Math.max(
-                              18,
-                              ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
-                            )
-                            const memberName = getMemberName(entry.item.ownerUserId, members)
+                    <div
+                      id={groupEntriesId}
+                      className={[
+                        styles.groupEntries,
+                        isCollapsed ? styles.groupEntriesCollapsed : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      <div className={styles.groupEntriesInner}>
+                        {group.entries.map((entry) => {
+                          const left = ((entry.start - range.start) / MS_PER_DAY) * pixelsPerDay
+                          const width = Math.max(
+                            18,
+                            ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
+                          )
+                          const memberName = getMemberName(entry.item.ownerUserId, members)
 
-                            return (
-                              <div key={entry.item.workItemId} className={styles.taskRow}>
+                          return (
+                            <div key={entry.item.workItemId} className={styles.taskRow}>
+                              <Link
+                                to={`/work-items/${entry.item.workItemId}`}
+                                className={[styles.taskLabel, styles.stickyLabel].join(' ')}
+                                aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}`}
+                              >
+                                <span className={styles.taskIcon} aria-hidden="true">
+                                  <Icon name="checkCircle" size={timelineIconSize} />
+                                </span>
+                                <span className={styles.taskCopy}>
+                                  <strong>{entry.item.title}</strong>
+                                </span>
+                              </Link>
+                              <div className={styles.gridTrack}>
                                 <Link
                                   to={`/work-items/${entry.item.workItemId}`}
-                                  className={[styles.taskLabel, styles.stickyLabel].join(' ')}
-                                  aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}`}
+                                  className={styles.timelineBar}
+                                  style={{ left, width }}
+                                  aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}`}
                                 >
-                                  <span className={styles.taskIcon} aria-hidden="true">
-                                    <Icon name="checkCircle" size={timelineIconSize} />
-                                  </span>
-                                  <span className={styles.taskCopy}>
-                                    <strong>{entry.item.title}</strong>
-                                  </span>
+                                  <span>{`${entry.item.title} · ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>
                                 </Link>
-                                <div className={styles.gridTrack}>
-                                  <Link
-                                    to={`/work-items/${entry.item.workItemId}`}
-                                    className={styles.timelineBar}
-                                    style={{ left, width }}
-                                    aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}`}
-                                  >
-                                    <span>{`${entry.item.title} · ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>
-                                  </Link>
-                                </div>
                               </div>
-                            )
-                          })
-                        : null}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   </section>
                 )

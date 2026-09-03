@@ -612,18 +612,28 @@
   line-height: 1;
 }
 
-.groupHeader .gridTrack {
-  background-color: transparent;
-}
-
 .groupEntries {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
+  width: calc(var(--timeline-label-width) + var(--timeline-track-width));
+  min-width: 100%;
 }
 
-.groupEntries[hidden] {
-  display: none;
+.groupEntriesInner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 2000px;
+  opacity: 1;
+  transition: max-height 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease;
+}
+
+.groupEntriesCollapsed .groupEntriesInner {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .taskRow {

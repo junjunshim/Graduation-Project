@@ -42,8 +42,6 @@
   --workspace-soft-line: color-mix(in srgb, var(--axis-line-default) 58%, transparent);
   --timeline-label-column: clamp(6.25rem, 20%, 7.5rem);
   --timeline-track-gap: 0.75rem;
-  gap: clamp(1rem, 1.8vh, 1.25rem);
-  padding: 0.7rem var(--space-page-x) var(--space-page-bottom);
 }
 
 .page.timelinePage {
@@ -52,7 +50,6 @@
   --surface-hover: var(--surface-panel);
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
-  padding-bottom: 0.75rem;
   overflow: hidden;
 }
 

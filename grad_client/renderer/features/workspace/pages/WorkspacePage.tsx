@@ -76,7 +76,6 @@ const workspaceTabs: WorkspaceTab[] = [
   { label: '개요', to: '/workspace', view: 'overview' },
   { label: '업무', to: '/workspace?view=tasks', view: 'tasks' },
   { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
-  { label: '문서', to: '/documents' },
   { label: '파일', to: '/files' },
   { label: '설정', to: '/settings' },
 ]

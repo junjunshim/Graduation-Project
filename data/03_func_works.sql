@@ -926,7 +926,8 @@ BEGIN
         'stored_file_name', f.stored_file_name,
         'file_path', f.file_path,
         'file_size', f.file_size,
-        'mime_type', f.mime_type
+        'mime_type', f.mime_type,
+        'updated_at', f.updated_at
     )::jsonb AS out_data
     FROM work_item_files f
     WHERE f.file_id = p_file_id;

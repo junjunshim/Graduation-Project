@@ -541,13 +541,18 @@ void WorkItemController::downloadFile(const HttpRequestPtr &req, std::function<v
     int file_id = std::stoi(file_id_str);
     std::string requester_email = req->attributes()->get<std::string>("user_email");
 
+    std::string if_modified_since = req->getHeader("If-Modified-Since");
+    if (if_modified_since.empty()) {
+        if_modified_since = req->getParameter("if_modified_since");
+    }
+
     // 1. DB에서 파일 경로 및 권한 검증 (get_work_item_file_download)
     auto dbClient = drogon::app().getDbClient();
     std::string sql = "SELECT * FROM get_work_item_file_download($1, $2)";
 
     dbClient->execSqlAsync(
         sql,
-        [callback](const orm::Result &result) {
+        [callback, if_modified_since](const orm::Result &result) {
             if (result.empty()) {
                 Json::Value ret;
                 ret["status"] = "error";
@@ -562,6 +567,7 @@ void WorkItemController::downloadFile(const HttpRequestPtr &req, std::function<v
             auto fileData = parsed["data"][0];
             std::string file_path = fileData["file_path"].asString();
             std::string original_file_name = fileData["original_file_name"].asString();
+            std::string updated_at = fileData.isMember("updated_at") ? fileData["updated_at"].asString() : "";
 
             // 2. 물리 파일 존재 여부 확인
             if (!std::filesystem::exists(file_path)) {
@@ -574,8 +580,38 @@ void WorkItemController::downloadFile(const HttpRequestPtr &req, std::function<v
                 return;
             }
 
-            // 3. 파일 다운로드 스트리밍 응답 반환
+            // 3. 조건부 요청 (304 Not Modified) 검사
+            if (!if_modified_since.empty()) {
+                bool not_modified = false;
+                if (!updated_at.empty() && if_modified_since == updated_at) {
+                    not_modified = true;
+                } else {
+                    // 파일 mtime 기반 추가 검사
+                    try {
+                        auto ftime = std::filesystem::last_write_time(file_path);
+                        auto s_time = std::chrono::duration_cast<std::chrono::seconds>(ftime.time_since_epoch()).count();
+                        if (if_modified_since == std::to_string(s_time)) {
+                            not_modified = true;
+                        }
+                    } catch (...) {}
+                }
+
+                if (not_modified) {
+                    auto resp = HttpResponse::newHttpResponse();
+                    resp->setStatusCode(k304NotModified);
+                    if (!updated_at.empty()) {
+                        resp->addHeader("Last-Modified", updated_at);
+                    }
+                    callback(resp);
+                    return;
+                }
+            }
+
+            // 4. 파일 다운로드 스트리밍 응답 반환
             auto resp = HttpResponse::newFileResponse(file_path, original_file_name, CT_APPLICATION_OCTET_STREAM);
+            if (!updated_at.empty()) {
+                resp->addHeader("Last-Modified", updated_at);
+            }
             callback(resp);
         },
         [callback](const orm::DrogonDbException &e) {

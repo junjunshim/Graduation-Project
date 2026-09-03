@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
+import { fetchWorkItemFileContent, type FetchFileContentResult } from '../data/fileService'
 import { formatWorkspaceDate, formatWorkspaceShortDate } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { WorkItemFileRecord, WorkItemRecord } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
+import { FileContentViewerModal } from './FileContentViewerModal'
 import styles from './WorkspaceFilesTab.module.css'
 
 type WorkspaceFilesTabProps = {
@@ -47,9 +49,9 @@ function getMockFilesForWorkItem(item: WorkItemRecord): WorkItemFileRecord[] {
     {
       id: Number(item.workItemId.replace(/\D/g, '') || '1') * 100 + 1,
       workItemId: item.workItemId,
-      originalFileName: `[${tagLabel}] ${item.title}_요구사항정의서.pdf`,
+      originalFileName: `[${tagLabel}] ${item.title}_요구사항정의서.md`,
       fileSize: 1024 * 450 + (item.title.length * 1024 * 25),
-      mimeType: 'application/pdf',
+      mimeType: 'text/markdown',
       uploaderName: '담당자',
       uploaderUserId: item.ownerUserId,
       uploaderEmail: '',
@@ -58,9 +60,9 @@ function getMockFilesForWorkItem(item: WorkItemRecord): WorkItemFileRecord[] {
     {
       id: Number(item.workItemId.replace(/\D/g, '') || '1') * 100 + 2,
       workItemId: item.workItemId,
-      originalFileName: `${item.title}_산출물_v1.0.docx`,
+      originalFileName: `${item.title}_산출물_명세서.txt`,
       fileSize: 1024 * 180 + (item.title.length * 1024 * 12),
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      mimeType: 'text/plain',
       uploaderName: '담당자',
       uploaderUserId: item.ownerUserId,
       uploaderEmail: '',
@@ -69,10 +71,44 @@ function getMockFilesForWorkItem(item: WorkItemRecord): WorkItemFileRecord[] {
   ]
 }
 
+function getSampleDocumentContent(fileName: string, itemTitle: string) {
+  return `# ${fileName}
+
+## 1. 개요
+- **대상 업무**: ${itemTitle}
+- **작성일시**: ${new Date().toLocaleDateString('ko-KR')}
+- **문서 버전**: v1.0.0
+- **상태**: 검토 완료
+
+---
+
+## 2. 주요 요구사항 및 상세 내역
+1. **시스템 아키텍처 연동**
+   - 계층형 조직 노드 및 업무 객체와 실시간 동기화
+   - 파일 다운로드 및 HTTP 304 조건부 캐시 처리 지원
+2. **산출물 명세**
+   - 사용자 인터페이스: GitHub 스타일 뷰어 (Preview / Raw 토글 지원)
+   - 줄 번호(Line Numbers) 및 원시 데이터 복사 기능 내장
+
+---
+
+## 3. 변경 이력 (Changelog)
+| 버전 | 변경 내용 | 작성자 | 일자 |
+| :--- | :--- | :--- | :--- |
+| v1.0.0 | 초안 작성 및 시스템 요구사항 정의 | 담당자 | ${new Date().toLocaleDateString('ko-KR')} |
+`
+}
+
 export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(() => workItems[0]?.workItemId ?? null)
   const [viewLayout, setViewLayout] = useState<'grid' | 'table'>('grid')
+
+  // 파일 뷰어 모달 상태
+  const [viewerFile, setViewerFile] = useState<WorkItemFileRecord | null>(null)
+  const [fileContentData, setFileContentData] = useState<FetchFileContentResult | null>(null)
+  const [isLoadingFile, setIsLoadingFile] = useState(false)
+  const [fileError, setFileError] = useState<string | null>(null)
 
   // 각 업무별로 실제 등록된 파일 또는 모의 파일 매핑
   const filesByWorkItem = useMemo(() => {
@@ -133,6 +169,32 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
     })
     return total
   }, [filesByWorkItem])
+
+  const handleOpenFile = async (file: WorkItemFileRecord) => {
+    setViewerFile(file)
+    setIsLoadingFile(true)
+    setFileError(null)
+
+    const fallbackSample = getSampleDocumentContent(
+      file.originalFileName,
+      selectedWorkItem?.title || '업무',
+    )
+
+    try {
+      const res = await fetchWorkItemFileContent(file.id, fallbackSample)
+      setFileContentData(res)
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : '파일 내용을 불러오지 못했습니다.')
+    } finally {
+      setIsLoadingFile(false)
+    }
+  }
+
+  const handleCloseViewer = () => {
+    setViewerFile(null)
+    setFileContentData(null)
+    setFileError(null)
+  }
 
   return (
     <div className={styles.container}>
@@ -275,7 +337,19 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                   const iconName = getFileIcon(file.originalFileName)
 
                   return (
-                    <div key={file.id} className={styles.fileCard}>
+                    <div
+                      key={file.id}
+                      className={styles.fileCard}
+                      onClick={() => handleOpenFile(file)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleOpenFile(file)
+                        }
+                      }}
+                    >
                       <div className={styles.fileCardPreview}>
                         <Icon name={iconName} size={30} className={styles.filePreviewIcon} />
                         <span className={styles.fileBadge}>{ext}</span>
@@ -309,7 +383,12 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                       const iconName = getFileIcon(file.originalFileName)
 
                       return (
-                        <tr key={file.id} className={styles.fileTableRow}>
+                        <tr
+                          key={file.id}
+                          className={styles.fileTableRow}
+                          onClick={() => handleOpenFile(file)}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <td className={styles.tdName}>
                             <Icon name={iconName} size={16} className={styles.tableFileIcon} />
                             <span className={styles.tableFileName} title={file.originalFileName}>
@@ -329,6 +408,22 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
           </div>
         </main>
       </div>
+
+      {/* GitHub 스타일 파일 뷰어 모달 */}
+      {viewerFile ? (
+        <FileContentViewerModal
+          isOpen={Boolean(viewerFile)}
+          onClose={handleCloseViewer}
+          fileName={viewerFile.originalFileName}
+          content={fileContentData?.content ?? ''}
+          fileSize={viewerFile.fileSize}
+          lastModified={fileContentData?.lastModified || viewerFile.createdAt}
+          fromCache={fileContentData?.fromCache}
+          isLoading={isLoadingFile}
+          error={fileError}
+          sourceLabel={`업무: ${selectedWorkItem?.title || ''}`}
+        />
+      ) : null}
     </div>
   )
 }

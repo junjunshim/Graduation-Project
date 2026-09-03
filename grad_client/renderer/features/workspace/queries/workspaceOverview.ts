@@ -314,10 +314,15 @@ export function getWorkspaceOverview(
             .sort((left, right) => left.name.localeCompare(right.name, 'ko')))
     : []
 
-  // 하위 포함 고유 팀원 목록 (전체 합계)
+  // 현재 선택된 트리의 전체 노드 ID 집합 (rootNode 및 그 모든 자손 노드들만 포함)
+  const scopedTreeIds = rootNode
+    ? new Set<number>([rootNode.id, ...Array.from(descendantNodeIds)])
+    : accessibleNodeIdSet
+
+  // 하위 포함 고유 팀원 목록 (현재 트리에 속한 역할만 집계)
   const allRoleMemberMap = new Map<string, RoleMember>()
   snapshot.roles
-    .filter((role) => !role.isDeleted && accessibleNodeIdSet.has(role.nodeId))
+    .filter((role) => !role.isDeleted && scopedTreeIds.has(role.nodeId))
     .forEach((role) => {
       if (!allRoleMemberMap.has(role.userId)) {
         allRoleMemberMap.set(role.userId, toRoleMember(role.id, role.userId, role.roleName, usersById))

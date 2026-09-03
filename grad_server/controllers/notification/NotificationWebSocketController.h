@@ -3,6 +3,7 @@
 #include <drogon/WebSocketController.h>
 #include <shared_mutex>
 #include <unordered_map>
+#include <vector>
 #include <array>
 #include <string>
 
@@ -23,14 +24,14 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
     WS_PATH_ADD("/api/v1/notification/ws");
     WS_PATH_LIST_END
 
-    // 특정 유저에게 실시간 메시지를 발송하는 정적 함수
+    // 특정 유저의 모든 연결 세션으로 실시간 메시지를 발송하는 정적 함수
     static bool sendNotificationToUser(const std::string &user_email, const std::string &message);
 
   private:
-    // 샤드 1개를 구성하는 구조체 (독립된 Mutex와 Map)
+    // 샤드 1개를 구성하는 구조체 (독립된 Mutex와 Multi-Connection Map)
     struct ConnectionShard {
         mutable std::shared_mutex mutex;
-        std::unordered_map<std::string, WebSocketConnectionPtr> connections;
+        std::unordered_map<std::string, std::vector<WebSocketConnectionPtr>> connections;
     };
 
     // 32개의 독립된 샤드로 분할 관리

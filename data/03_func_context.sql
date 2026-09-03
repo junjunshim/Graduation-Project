@@ -157,7 +157,9 @@ BEGIN
         'type', 'ROLE',
         'id', ra.assignment_id,
         'node_id', ra.node_id,
+        'user_id', ra.user_id,
         'email', u.email,
+        'user_name', u.name,
         'role', ra.role,
         'updated_at', ra.updated_at
     )

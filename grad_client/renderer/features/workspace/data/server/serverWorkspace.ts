@@ -15,8 +15,10 @@ import type {
 import {
   apiRequest,
   clearServerSession,
+  getServerAccessToken,
   getServerSessionEmail,
   hasServerSession,
+  refreshServerTokens,
   setServerSession,
   type ApiRequestOptions,
 } from './apiClient'
@@ -28,6 +30,7 @@ import {
   type ServerLoginResponse,
 } from './apiTypes'
 import { normalizeServerContext } from './contextAdapter'
+import { getWorkspaceApiBaseUrl } from './workspaceMode'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore'
 import { setCurrentSessionUserId } from '../session'
 import { notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents'
@@ -314,6 +317,17 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
       email,
     })
     setCurrentSessionUserId(email)
+
+    // 동기화 이전에 실시간 알림 웹소켓 채널 연결 (최대 1.5초 타임아웃으로 로그인 블로킹 방지)
+    if (tokens.accessToken) {
+      Promise.race([
+        connectNotificationWebSocket(tokens.accessToken),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('WebSocket connection timeout')), 1500)),
+      ]).catch((wsError) => {
+        console.warn('[WorkspaceAdapter] WebSocket 백그라운드 연결 진행:', wsError)
+      })
+    }
+
     const db = await loadServerWorkspace(email)
 
     const user = getCurrentServerUser(db) ?? createServerSessionUser(email)
@@ -324,6 +338,7 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
     }
   } catch (error) {
     if (shouldRollbackSession) {
+      disconnectNotificationWebSocket()
       clearServerSession()
       clearServerWorkspaceDb()
       setCurrentSessionUserId(null)
@@ -624,3 +639,150 @@ export async function renameRoleDefinitionOnServer(payload: RenameRoleDefinition
     return { status: 'success' as const }
   }, '역할 이름을 변경하지 못했습니다.')
 }
+
+// ----------------------------------------------------
+// 실시간 알림 WebSocket 클라이언트 매니저 (지수 백오프 자동 재연결 포함)
+// ----------------------------------------------------
+let notificationSocket: WebSocket | null = null
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let reconnectAttempts = 0
+let isIntentionalDisconnect = false
+const MAX_RECONNECT_DELAY_MS = 30_000
+const INITIAL_RECONNECT_DELAY_MS = 1_000
+
+export function getNotificationWebSocketUrl(token: string): string {
+  const apiBaseUrl = getWorkspaceApiBaseUrl()
+  const wsProtocol = apiBaseUrl.startsWith('https') ? 'wss:' : 'ws:'
+  const urlObj = new URL(apiBaseUrl)
+  urlObj.protocol = wsProtocol
+  urlObj.pathname = `${urlObj.pathname.replace(/\/+$/, '')}/notification/ws`
+  urlObj.searchParams.set('token', token)
+  return urlObj.toString()
+}
+
+function scheduleWebSocketReconnect() {
+  if (isIntentionalDisconnect || !hasServerSession()) {
+    return
+  }
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+  }
+
+  // 지수 백오프: 1s, 2s, 4s, 8s, 16s... (최대 30s) + 20% 지터
+  const baseDelay = Math.min(INITIAL_RECONNECT_DELAY_MS * Math.pow(1.5, reconnectAttempts), MAX_RECONNECT_DELAY_MS)
+  const jitter = baseDelay * (0.8 + Math.random() * 0.4)
+  const delay = Math.round(jitter)
+
+  console.info(`[WebSocket] ${delay}ms 후 실시간 알림 서버 재연결을 시도합니다. (시도 ${reconnectAttempts + 1}회)`)
+
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null
+    let token = getServerAccessToken()
+    if (!token && hasServerSession()) {
+      token = await refreshServerTokens()
+    }
+
+    if (!token || isIntentionalDisconnect) {
+      return
+    }
+
+    try {
+      reconnectAttempts += 1
+      await connectNotificationWebSocket(token)
+    } catch (err) {
+      console.warn('[WebSocket] 자동 재연결 실패 -> 토큰 재발급 후 재시도 검토:', err)
+      // 토큰 만료 가능성이 있으므로 리프레시 시도
+      await refreshServerTokens()
+      scheduleWebSocketReconnect()
+    }
+  }, delay)
+}
+
+export function connectNotificationWebSocket(token?: string | null): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const accessToken = token ?? getServerAccessToken()
+    if (!accessToken) {
+      reject(new Error('WebSocket 연결을 위한 인증 토큰이 없습니다.'))
+      return
+    }
+
+    isIntentionalDisconnect = false
+
+    if (notificationSocket && notificationSocket.readyState === WebSocket.OPEN) {
+      resolve(notificationSocket)
+      return
+    }
+
+    if (notificationSocket) {
+      notificationSocket.close()
+      notificationSocket = null
+    }
+
+    try {
+      const wsUrl = getNotificationWebSocketUrl(accessToken)
+      const socket = new WebSocket(wsUrl)
+      notificationSocket = socket
+
+      const timeoutId = setTimeout(() => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          socket.close()
+          reject(new Error('실시간 알림 서버(WebSocket) 연결 시간이 초과되었습니다.'))
+        }
+      }, 5000)
+
+      socket.onopen = () => {
+        clearTimeout(timeoutId)
+        reconnectAttempts = 0
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer)
+          reconnectTimer = null
+        }
+        console.info('[WebSocket] 실시간 알림 서버 연결 성공')
+        resolve(socket)
+      }
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          console.debug('[WebSocket] 수신 알림:', payload)
+        } catch {
+          console.debug('[WebSocket] 수신 메시지:', event.data)
+        }
+      }
+
+      socket.onerror = (error) => {
+        clearTimeout(timeoutId)
+        console.warn('[WebSocket] 실시간 알림 서버 연결 오류:', error)
+      }
+
+      socket.onclose = (event) => {
+        console.info(`[WebSocket] 실시간 알림 서버 연결 종료 (코드: ${event.code})`)
+        if (notificationSocket === socket) {
+          notificationSocket = null
+        }
+
+        // 의도적인 로그아웃/종료가 아니면 자동 재연결 예약
+        if (!isIntentionalDisconnect && hasServerSession()) {
+          scheduleWebSocketReconnect()
+        }
+      }
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+export function disconnectNotificationWebSocket() {
+  isIntentionalDisconnect = true
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  reconnectAttempts = 0
+  if (notificationSocket) {
+    notificationSocket.close()
+    notificationSocket = null
+  }
+}
+

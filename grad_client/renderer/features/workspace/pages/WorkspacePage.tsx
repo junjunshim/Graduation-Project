@@ -578,24 +578,53 @@ export function WorkspacePage() {
       ? requestedView
       : 'overview'
 
+  const [isLoading, setIsLoading] = useState(false)
+  const [errorInfo, setErrorInfo] = useState<string | null>(null)
+  const [reloadTrigger, setReloadTrigger] = useState(0)
+
   useEffect(() => {
     let isSubscribed = true
 
     if (activeWorkspaceRootId) {
+      const currentSnapshot = getOrgSnapshot()
+      const hasNodeInSnapshot = currentSnapshot.nodes.some(
+        (node) => String(node.id) === String(activeWorkspaceRootId),
+      )
+
+      // 캐시된 노드가 없는 첫 진입 시에만 스켈레톤/로딩 상태 활성화
+      if (!hasNodeInSnapshot) {
+        setIsLoading(true)
+      }
+      setErrorInfo(null)
+
       fetchNodeDetail(activeWorkspaceRootId)
         .then((latestSnapshot) => {
           if (isSubscribed) {
             setSnapshot(latestSnapshot)
+            setErrorInfo(null)
           }
         })
         .catch((error) => {
           console.warn('[WorkspacePage] 노드 상세 데이터 조회 실패:', error)
+          if (isSubscribed) {
+            // 캐시 데이터조차 없는 경우 에러 화면 표시
+            if (!hasNodeInSnapshot) {
+              setErrorInfo(error instanceof Error ? error.message : '노드 상세 정보를 불러오지 못했습니다.')
+            }
+          }
+        })
+        .finally(() => {
+          if (isSubscribed) {
+            setIsLoading(false)
+          }
         })
     } else {
       setSnapshot(getOrgSnapshot())
+      setIsLoading(false)
+      setErrorInfo(null)
     }
 
-    // 캐시 변경 이벤트(다른 mutation 발생 시)에는 네트워크 재요청 대신 메모리/로컬 DB 스냅샷만 즉시 동기화
+    // 캐시 변경 이벤트(다른 mutation 발생 시)에는 메모리/로컬 DB 스냅샷만 즉시 부드럽게 동기화
     const unsubscribe = subscribeToWorkspaceCache(() => {
       if (isSubscribed) {
         setSnapshot(getOrgSnapshot())
@@ -606,10 +635,43 @@ export function WorkspacePage() {
       isSubscribed = false
       unsubscribe()
     }
-  }, [activeWorkspaceRootId])
+  }, [activeWorkspaceRootId, reloadTrigger])
 
   if (!currentUser) {
     return null
+  }
+
+  // 1. 첫 진입 로딩 화면
+  if (isLoading) {
+    return (
+      <section className={styles.page}>
+        <div className={styles.loadingStateContainer} role="status">
+          <div className={styles.spinnerLarge} aria-hidden="true" />
+          <p className={styles.loadingStateText}>워크스페이스 데이터를 불러오는 중입니다...</p>
+        </div>
+      </section>
+    )
+  }
+
+  // 2. 진입 실패 에러 화면 (권한 없음, 서버 장애 등)
+  if (errorInfo) {
+    return (
+      <section className={styles.page}>
+        <div className={styles.errorStateContainer} role="alert">
+          <Icon name="alertTriangle" size={40} className={styles.errorStateIcon} />
+          <h2 className={styles.errorStateTitle}>워크스페이스 로드 실패</h2>
+          <p className={styles.errorStateMessage}>{errorInfo}</p>
+          <button
+            type="button"
+            className={styles.retryButton}
+            onClick={() => setReloadTrigger((count) => count + 1)}
+          >
+            <Icon name="sparkles" size={16} />
+            다시 시도
+          </button>
+        </div>
+      </section>
+    )
   }
 
   const overview = getWorkspaceOverview(currentUser.userId, snapshot, {

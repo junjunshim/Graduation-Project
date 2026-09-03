@@ -37,6 +37,7 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(Boolean(rememberedEmail))
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [syncPhase, setSyncPhase] = useState<'auth' | 'ws' | 'sync' | 'parse'>('auth')
   const [feedback, setFeedback] = useState<Feedback | null>(() => {
     const state = location.state
 
@@ -62,9 +63,12 @@ export function LoginPage() {
     }
 
     setSubmitting(true)
+    setSyncPhase('auth')
     setFeedback(null)
 
     try {
+      // 1. 사용자 계정 인증
+      setSyncPhase('auth')
       const response = await signIn({
         email: form.email,
         password: form.password,
@@ -74,6 +78,15 @@ export function LoginPage() {
         setFeedback({ tone: 'error', message: response.message })
         return
       }
+
+      // 2. 실시간 알림 채널(WebSocket) 연결
+      setSyncPhase('ws')
+
+      // 3. 워크스페이스 데이터 초기 동기화
+      setSyncPhase('sync')
+
+      // 4. 워크스페이스 데이터 준비 완료
+      setSyncPhase('parse')
 
       if (rememberEmail) {
         window.localStorage.setItem(REMEMBERED_EMAIL_KEY, form.email.trim())
@@ -85,7 +98,7 @@ export function LoginPage() {
     } catch (error) {
       setFeedback({
         tone: 'error',
-        message: error instanceof Error ? error.message : '로그인 요청을 처리하지 못했습니다.',
+        message: error instanceof Error ? error.message : '로그인 및 데이터 동기화에 실패했습니다.',
       })
     } finally {
       setSubmitting(false)
@@ -116,6 +129,33 @@ export function LoginPage() {
       ) : null}
 
       <div className={styles.surface}>
+        {/* 로그인 및 초기 데이터 동기화 로딩 오버레이 */}
+        {submitting ? (
+          <div className={styles.loadingOverlay} role="status" aria-live="polite">
+            <div className={styles.loadingModal}>
+              <div className={styles.spinner} aria-hidden="true" />
+              <h3 className={styles.loadingTitle}>
+                {syncPhase === 'auth'
+                  ? '사용자 인증 중...'
+                  : syncPhase === 'ws'
+                  ? '실시간 알림 채널 연결 중...'
+                  : syncPhase === 'sync'
+                  ? '데이터 동기화 중...'
+                  : '워크스페이스 준비 중...'}
+              </h3>
+              <p className={styles.loadingMessage}>
+                {syncPhase === 'auth'
+                  ? '서버와 안전하게 계정 정보를 확인하고 있습니다.'
+                  : syncPhase === 'ws'
+                  ? '실시간 업데이트 및 알림 소켓을 연결하고 있습니다.'
+                  : syncPhase === 'sync'
+                  ? '조직 구조 및 권한 데이터를 불러오고 있습니다.'
+                  : '대시보드와 작업 공간을 구성하고 있습니다.'}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
         <div className={styles.backgroundDecor} aria-hidden="true">
           <span className={styles.topGlow} />
           <span className={styles.waveBack} />

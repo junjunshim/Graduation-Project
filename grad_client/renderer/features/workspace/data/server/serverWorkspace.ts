@@ -397,6 +397,7 @@ export async function signUpServerUser(payload: SignUpRequest) {
 }
 
 export function signOutServerUser() {
+  disconnectNotificationWebSocket()
   clearServerSession()
   clearServerWorkspaceDb()
   setCurrentSessionUserId(null)

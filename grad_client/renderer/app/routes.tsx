@@ -2,6 +2,14 @@ import { Navigate, Outlet, RouterProvider, createHashRouter, useRouteError } fro
 import { getCurrentUser } from '../features/auth/api'
 import { AppShell } from './layouts/AppShell'
 import { ShellPlaceholderPage } from './layouts/ShellPlaceholderPage'
+import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
+import { WorkspacePage } from '../features/workspace/pages/WorkspacePage'
+import { WorkspaceEntryPage } from '../features/workspace/pages/WorkspaceEntryPage'
+import { OrgManagePage } from '../features/org/pages/OrgManagePage'
+import { WorkItemsPage } from '../features/work-item/pages/WorkItemsPage'
+import { WorkItemDetailPage } from '../features/work-item/pages/WorkItemDetailPage'
+import { LoginPage } from '../features/auth/pages/LoginPage'
+import { SignupPage } from '../features/auth/pages/SignupPage'
 import styles from './RouteState.module.css'
 
 function RootEntry() {
@@ -71,17 +79,11 @@ const router = createHashRouter([
     children: [
       {
         path: '/login',
-        lazy: async () => {
-          const { LoginPage } = await import('../features/auth/pages/LoginPage')
-          return { Component: LoginPage }
-        },
+        element: <LoginPage />,
       },
       {
         path: '/signup',
-        lazy: async () => {
-          const { SignupPage } = await import('../features/auth/pages/SignupPage')
-          return { Component: SignupPage }
-        },
+        element: <SignupPage />,
       },
     ],
   },
@@ -96,24 +98,15 @@ const router = createHashRouter([
         children: [
           {
             path: '/dashboard',
-            lazy: async () => {
-              const { DashboardPage } = await import('../features/dashboard/pages/DashboardPage')
-              return { Component: DashboardPage }
-            },
+            element: <DashboardPage />,
           },
           {
             path: '/workspace/select',
-            lazy: async () => {
-              const { WorkspaceEntryPage } = await import('../features/workspace/pages/WorkspaceEntryPage')
-              return { Component: WorkspaceEntryPage }
-            },
+            element: <WorkspaceEntryPage />,
           },
           {
             path: '/workspace',
-            lazy: async () => {
-              const { WorkspacePage } = await import('../features/workspace/pages/WorkspacePage')
-              return { Component: WorkspacePage }
-            },
+            element: <WorkspacePage />,
           },
           {
             path: '/setup/top-node',
@@ -124,17 +117,11 @@ const router = createHashRouter([
           },
           {
             path: '/org/manage',
-            lazy: async () => {
-              const { OrgManagePage } = await import('../features/org/pages/OrgManagePage')
-              return { Component: OrgManagePage }
-            },
+            element: <OrgManagePage />,
           },
           {
             path: '/work-items',
-            lazy: async () => {
-              const { WorkItemsPage } = await import('../features/work-item/pages/WorkItemsPage')
-              return { Component: WorkItemsPage }
-            },
+            element: <WorkItemsPage />,
           },
           {
             path: '/work-items/new',
@@ -145,10 +132,7 @@ const router = createHashRouter([
           },
           {
             path: '/work-items/:workItemId',
-            lazy: async () => {
-              const { WorkItemDetailPage } = await import('../features/work-item/pages/WorkItemDetailPage')
-              return { Component: WorkItemDetailPage }
-            },
+            element: <WorkItemDetailPage />,
           },
           {
             path: '/work-items/:workItemId/edit',

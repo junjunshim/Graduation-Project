@@ -57,10 +57,11 @@ void JwtFilter::doFilter(const HttpRequestPtr &req,
         //Check failed
         Json::Value ret;
         ret["status"] = "error";
+        ret["code"] = "401";
         ret["message"] = "유효하지 않거나 만료된 토큰입니다.";
 
         auto res = drogon::HttpResponse::newHttpJsonResponse(ret);
-        res->setStatusCode(k500InternalServerError);
+        res->setStatusCode(k401Unauthorized);
         fcb(res);
     }
 }

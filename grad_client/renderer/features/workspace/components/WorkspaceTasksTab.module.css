@@ -458,7 +458,7 @@
 }
 
 .contentGrid {
-  --tasks-card-height: clamp(30rem, calc(100dvh - 14rem), 39rem);
+  --tasks-card-height: clamp(32rem, calc(100dvh - 12rem), 44rem);
   display: grid;
   grid-template-columns: minmax(0, 1fr) 194px;
   align-items: start;

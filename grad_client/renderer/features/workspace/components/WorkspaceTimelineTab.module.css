@@ -1,10 +1,9 @@
 .panel {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
   min-width: 0;
+  min-height: 0;
+  height: clamp(36rem, calc(100dvh - 9rem), 50rem);
   overflow: hidden;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-lg);
@@ -475,10 +474,17 @@
 .timelineBody {
   position: relative;
   display: flex;
-  flex: 1 0 auto;
+  flex: 1 1 auto;
   flex-direction: column;
   width: calc(var(--timeline-label-width) + var(--timeline-track-width));
   min-width: 100%;
+  min-height: calc(100% - var(--timeline-date-header-height));
+  background-image:
+    linear-gradient(to right, var(--surface-panel) var(--timeline-label-width), transparent var(--timeline-label-width)),
+    linear-gradient(to right, var(--line-default) 1px, transparent 1px);
+  background-position: 0 0, var(--timeline-label-width) 0;
+  background-size: 100% 100%, var(--timeline-grid-step) 100%;
+  background-repeat: no-repeat, repeat;
 }
 
 .todayLine {
@@ -524,8 +530,7 @@
 .group {
   position: relative;
   display: flex;
-  flex-basis: auto;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   flex-direction: column;
   border-bottom: 1px solid var(--line-default);
 }
@@ -535,6 +540,7 @@
   top: var(--timeline-date-header-height);
   z-index: 8;
   flex: 0 0 var(--timeline-group-row-height);
+  height: var(--timeline-group-row-height);
   min-height: var(--timeline-group-row-height);
   background: transparent;
 }
@@ -612,7 +618,7 @@
 
 .groupEntries {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-direction: column;
 }
 
@@ -621,8 +627,23 @@
 }
 
 .taskRow {
-  flex: 1 1 var(--timeline-task-row-height);
+  flex: 0 0 var(--timeline-task-row-height);
+  height: var(--timeline-task-row-height);
   min-height: var(--timeline-task-row-height);
+}
+
+.emptyFillerRow {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: var(--timeline-label-width) var(--timeline-track-width);
+  width: calc(var(--timeline-label-width) + var(--timeline-track-width));
+  min-width: 100%;
+  min-height: 0;
+}
+
+.emptyFillerLabel {
+  border-right: 1px solid var(--line-default);
+  background: var(--surface-panel);
 }
 
 .taskLabel {

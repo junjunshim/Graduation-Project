@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
+import { WorkspaceFilesTab } from '../components/WorkspaceFilesTab'
 import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
@@ -64,7 +65,7 @@ type TimelineView = {
   todayLeft: number
 }
 
-type WorkspaceView = 'overview' | 'tasks' | 'timeline'
+type WorkspaceView = 'overview' | 'tasks' | 'timeline' | 'files'
 
 type WorkspaceTab = {
   label: string
@@ -76,7 +77,7 @@ const workspaceTabs: WorkspaceTab[] = [
   { label: '개요', to: '/workspace', view: 'overview' },
   { label: '업무', to: '/workspace?view=tasks', view: 'tasks' },
   { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
-  { label: '파일', to: '/files' },
+  { label: '파일', to: '/workspace?view=files', view: 'files' },
   { label: '설정', to: '/settings' },
 ]
 
@@ -564,7 +565,9 @@ export function WorkspacePage() {
   const [statusFilter, setStatusFilter] = useState<WorkspaceStatusFilter>('all')
   const requestedView = searchParams.get('view')
   const activeView: WorkspaceView =
-    requestedView === 'tasks' || requestedView === 'timeline' ? requestedView : 'overview'
+    requestedView === 'tasks' || requestedView === 'timeline' || requestedView === 'files'
+      ? requestedView
+      : 'overview'
 
   useEffect(() => {
     let isSubscribed = true
@@ -698,6 +701,11 @@ export function WorkspacePage() {
         <WorkspaceTasksTab
           workItems={overview.visibleWorkItems}
           members={overview.rootRoleMembers}
+        />
+      ) : activeView === 'files' ? (
+        <WorkspaceFilesTab
+          workItems={overview.visibleWorkItems}
+          files={overview.files}
         />
       ) : (
         <>

@@ -163,11 +163,11 @@ const router = createHashRouter([
           },
           {
             path: '/documents',
-            element: <ShellPlaceholderPage />,
+            element: <Navigate to="/workspace?view=files" replace />,
           },
           {
             path: '/files',
-            element: <ShellPlaceholderPage />,
+            element: <Navigate to="/workspace?view=files" replace />,
           },
           {
             path: '/settings',

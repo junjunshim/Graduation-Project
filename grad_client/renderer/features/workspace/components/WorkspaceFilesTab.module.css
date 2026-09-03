@@ -1,0 +1,488 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.rootCrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+.crumbArrow {
+  color: var(--text-muted);
+}
+
+.activeCrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.countBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full, 999px);
+  background: var(--surface-panel-muted);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.searchBox {
+  width: 220px;
+}
+
+.viewToggleGroup {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-panel);
+}
+
+.viewToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.viewToggleBtn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.viewToggleBtnActive {
+  background: var(--surface-panel-muted);
+  color: var(--text-primary);
+}
+
+/* 2열 탐색기 레이아웃 */
+.explorerGrid {
+  --files-card-height: clamp(32rem, calc(100dvh - 12rem), 44rem);
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  height: var(--files-card-height);
+  min-height: 0;
+}
+
+/* 좌측 폴더 사이드바 */
+.folderSidebar {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--line-default);
+  background: var(--surface-panel-subtle);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.sidebarTotalFiles {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.folderList {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.folderItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.folderItem:hover {
+  background: var(--surface-hover);
+}
+
+.folderItemActive {
+  background: var(--surface-panel-muted);
+  border-color: var(--line-strong);
+}
+
+.folderIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-purple, #6366f1);
+  flex: 0 0 auto;
+}
+
+.folderInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.folderName {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folderMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.tagBadge {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-xs);
+  background: var(--surface-panel-subtle);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.emptyFolderList {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* 우측 파일 뷰포트 */
+.filesViewport {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.folderDetailHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line-default);
+  background: var(--surface-panel-subtle);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.folderDetailTitle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.folderHeaderIcon {
+  color: var(--accent-purple, #6366f1);
+  flex: 0 0 auto;
+}
+
+.folderDetailHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.folderDetailHeading h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.66rem;
+  font-weight: 800;
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.statusPill[data-tone='success'] {
+  background: color-mix(in srgb, var(--accent-green) 16%, var(--surface-panel));
+  color: var(--accent-green);
+}
+
+.statusPill[data-tone='info'] {
+  background: color-mix(in srgb, var(--accent-blue) 16%, var(--surface-panel));
+  color: var(--accent-blue);
+}
+
+.statusPill[data-tone='warning'] {
+  background: color-mix(in srgb, var(--accent-amber) 16%, var(--surface-panel));
+  color: var(--accent-amber);
+}
+
+.folderDetailSub {
+  margin: 3px 0 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.openTaskLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 140ms ease;
+}
+
+.openTaskLink:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--line-strong);
+}
+
+.filesContent {
+  padding: 1.25rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.emptyFilesState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  gap: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.emptyFilesState p {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+/* 그리드 뷰 */
+.fileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.fileCard {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-panel);
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  cursor: pointer;
+}
+
+.fileCard:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-sm, 0 4px 12px rgba(0, 0, 0, 0.05));
+}
+
+.fileCardPreview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 90px;
+  background: var(--surface-panel-subtle);
+  border-bottom: 1px solid var(--line-default);
+}
+
+.filePreviewIcon {
+  color: var(--text-secondary);
+}
+
+.fileBadge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-xs);
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.fileCardBody {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
+  gap: 4px;
+}
+
+.fileName {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+/* 테이블 뷰 */
+.fileTableContainer {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.fileTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+  text-align: left;
+}
+
+.fileTable th {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--line-default);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.72rem;
+  background: var(--surface-panel-subtle);
+}
+
+.thName {
+  width: 45%;
+}
+
+.thSize {
+  width: 15%;
+}
+
+.thDate {
+  width: 25%;
+}
+
+.thUploader {
+  width: 15%;
+}
+
+.fileTableRow {
+  border-bottom: 1px solid var(--line-default);
+  transition: background 140ms ease;
+}
+
+.fileTableRow:hover {
+  background: var(--surface-hover);
+}
+
+.fileTableRow td {
+  padding: 0.65rem 0.85rem;
+  color: var(--text-secondary);
+}
+
+.tdName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary) !important;
+  font-weight: 700;
+}
+
+.tableFileIcon {
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+}
+
+.tableFileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

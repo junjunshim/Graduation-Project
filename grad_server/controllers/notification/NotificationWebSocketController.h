@@ -20,8 +20,8 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
     void handleConnectionClosed(const WebSocketConnectionPtr &wsConnPtr) override;
 
     WS_PATH_LIST_BEGIN
-    // 웹소켓 접근 경로 설정 (예: ws://localhost:8080/api/v1/notification/ws)
-    WS_PATH_ADD("/api/v1/notification/ws");
+    // 웹소켓 접근 경로 설정 (예: ws://localhost:8080/api/notification/ws)
+    WS_PATH_ADD("/api/notification/ws");
     WS_PATH_LIST_END
 
     // 특정 유저의 모든 연결 세션으로 실시간 메시지를 발송하는 정적 함수

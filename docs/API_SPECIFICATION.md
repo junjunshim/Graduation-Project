@@ -69,3 +69,4 @@
 | work_item 파일 복구 | Patch | /api/workItems/files/restore | 완료 | [link](api/Patch/file_restore.md) |
 | 사용자 전체 정보 조회 | Get | /api/context/init | 완료 | [link](api/Get/context_init.md) |
 | 사용자 데이터 동기화 | Get | /api/context/sync | 완료 | [link](api/Get/sync_context.md) |
+| 실시간 알림 WebSocket | WebSocket (Get) | /api/notification/ws | 완료 | [link](api/Get/websocket_notification.md) |

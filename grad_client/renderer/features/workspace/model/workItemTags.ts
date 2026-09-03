@@ -29,6 +29,30 @@ export const TEMPORARY_WORK_ITEM_TAGS: Partial<Record<string, WorkItemTagId>> = 
 }
 
 export function getWorkItemTag(item: WorkItemRecord) {
+  if (item.category && item.category.trim()) {
+    const rawCategory = item.category.trim().toLowerCase()
+    // 직접 매칭되는 태그 키 확인
+    if (rawCategory in WORK_ITEM_TAGS) {
+      const key = rawCategory as WorkItemTagId
+      return { id: key, ...WORK_ITEM_TAGS[key] }
+    }
+
+    // 한글 레이블 매칭 확인
+    const foundEntry = Object.entries(WORK_ITEM_TAGS).find(
+      ([, tag]) => tag.label === item.category?.trim(),
+    )
+    if (foundEntry) {
+      return { id: foundEntry[0] as WorkItemTagId, ...foundEntry[1] }
+    }
+
+    // 커스텀 카테고리 문자열인 경우 기본 태그 톤 반환
+    return {
+      id: rawCategory as WorkItemTagId,
+      label: item.category.trim(),
+      tone: 'blue' as const,
+    }
+  }
+
   const tagId = TEMPORARY_WORK_ITEM_TAGS[item.workItemId]
 
   if (!tagId) {

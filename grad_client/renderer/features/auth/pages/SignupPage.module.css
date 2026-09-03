@@ -41,16 +41,16 @@
   position: relative;
   isolation: isolate;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-width: 0;
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 2rem 2.75rem 3rem;
-  overflow-x: clip;
+  padding: 2.75rem 2.75rem 2.35rem;
+  overflow: hidden;
+  border-radius: 1.75rem;
   background:
     radial-gradient(circle at 52% 44%, rgba(255, 255, 255, 0.96), transparent 37%),
     var(--signup-bg);
-  border-radius: 1.75rem;
 }
 
 :global([data-theme='dark']) .surface {
@@ -145,21 +145,49 @@
   position: relative;
   z-index: 2;
   display: flex;
-  min-height: 2.8rem;
-  align-items: center;
   justify-content: flex-end;
+  min-height: 2.9rem;
+}
+
+.utilityActions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.languageChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.72rem;
+  justify-content: center;
+  min-width: 9.3rem;
+  min-height: 2.9rem;
+  padding: 0 0.95rem;
+  border: 1px solid var(--signup-border);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--signup-surface) 88%, transparent);
+  box-shadow: 0 8px 24px rgba(64, 53, 134, 0.03);
+  color: var(--signup-text);
+  font-size: 1.125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  backdrop-filter: blur(14px);
+}
+
+.languageChip > svg {
+  color: var(--signup-muted);
 }
 
 .content {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 29rem 33.875rem;
-  gap: 4.625rem;
+  grid-template-columns: 25.5rem 31.5rem;
+  gap: 5rem;
   align-items: center;
-  width: min(100%, 67.5rem);
+  width: min(100%, 62rem);
   margin: 0 auto;
-  padding: 1rem 0;
+  padding: 0.65rem 0 1rem;
 }
 
 .visualPanel {
@@ -167,7 +195,6 @@
   min-width: 0;
   flex-direction: column;
   align-items: flex-start;
-  transform: translate(1.5rem, 1.25rem);
 }
 
 .axisBrand {
@@ -323,9 +350,9 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 51.625rem;
+  min-height: 48rem;
   flex-direction: column;
-  padding: 4rem 4.55rem 3rem;
+  padding: 3rem 3.5rem 2.5rem;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 1.45rem;
   background: color-mix(in srgb, var(--signup-surface) 97%, transparent);
@@ -352,17 +379,17 @@
 }
 
 .cardHeader p {
-  margin: 0.6rem 0 0;
+  margin: 0.5rem 0 0;
   color: var(--signup-muted);
-  font-size: 1.125rem;
-  line-height: 1.55;
+  font-size: 1.05rem;
+  line-height: 1.45;
   letter-spacing: -0.018em;
 }
 
 .form {
   display: grid;
-  gap: 2rem;
-  margin-top: 2.25rem;
+  gap: 1.35rem;
+  margin-top: 1.75rem;
 }
 
 .field {
@@ -589,6 +616,25 @@
 
 .actionDivider {
   color: var(--signup-border);
+}
+
+.footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  min-height: 1.5rem;
+  color: var(--signup-muted);
+  font-size: 0.9rem;
+}
+
+.footerDivider {
+  width: 1px;
+  height: 0.8rem;
+  background: var(--signup-border);
 }
 
 @media (max-width: 1200px) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
@@ -9,10 +9,11 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
 import { isMockDataSource } from '../../workspace/data/workspaceMode'
 import signupHeroUrl from '../assets/signup-collaboration-hero.png'
-import { enterDemoWorkspace, getCurrentUser, getSuggestedUserId, signUp } from '../api'
+import { enterDemoWorkspace, getCurrentUser, signUp } from '../api'
 import styles from './SignupPage.module.css'
 
 const initialForm = {
+  userId: '',
   email: '',
   name: '',
   password: '',
@@ -26,7 +27,6 @@ export function SignupPage() {
   const navigate = useNavigate()
   const currentUser = getCurrentUser()
   const isMockMode = isMockDataSource()
-  const suggestedUserId = useMemo(() => getSuggestedUserId(), [])
   const hasCustomTitleBar = hasCustomWindowControls()
   const [form, setForm] = useState(initialForm)
   const [showPassword, setShowPassword] = useState(false)
@@ -57,7 +57,7 @@ export function SignupPage() {
 
     setFeedback(null)
 
-    if (!form.email.trim() || !form.name.trim() || !form.password.trim()) {
+    if (!form.userId.trim() || !form.email.trim() || !form.name.trim() || !form.password.trim()) {
       setFeedback({ message: '필수 정보를 모두 입력해 주세요.' })
       return
     }
@@ -66,9 +66,9 @@ export function SignupPage() {
 
     try {
       const response = await signUp({
-        userId: suggestedUserId,
-        email: form.email,
-        name: form.name,
+        userId: form.userId.trim(),
+        email: form.email.trim(),
+        name: form.name.trim(),
         password: form.password,
       })
 
@@ -139,11 +139,15 @@ export function SignupPage() {
           <span className={`${styles.decorDot} ${styles.dotThree}`} />
         </div>
 
-        {!hasCustomTitleBar ? (
-          <header className={styles.utilityBar}>
-            <ThemeToggle compact />
-          </header>
-        ) : null}
+        <header className={styles.utilityBar}>
+          <div className={styles.utilityActions}>
+            {!hasCustomTitleBar ? <ThemeToggle compact /> : null}
+            <div className={styles.languageChip}>
+              <Icon name="globe" size={20} />
+              <span lang="ko">한국어</span>
+            </div>
+          </div>
+        </header>
 
         <div className={styles.content}>
           <aside className={styles.visualPanel} aria-label="Axis 소개">
@@ -214,6 +218,28 @@ export function SignupPage() {
             </header>
 
             <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting}>
+              <div className={styles.field}>
+                <label htmlFor="signup-userid" className={styles.label}>
+                  아이디
+                </label>
+                <div className={styles.inputShell}>
+                  <Icon name="user" size={21} className={styles.fieldIcon} aria-hidden="true" />
+                  <input
+                    id="signup-userid"
+                    autoComplete="username"
+                    required
+                    disabled={submitting}
+                    value={form.userId}
+                    onChange={(event) => {
+                      setFeedback(null)
+                      setForm((current) => ({ ...current, userId: event.target.value }))
+                    }}
+                    className={styles.input}
+                    placeholder="사용자 아이디를 입력하세요"
+                  />
+                </div>
+              </div>
+
               <div className={styles.field}>
                 <label htmlFor="signup-email" className={styles.label}>
                   이메일
@@ -349,6 +375,14 @@ export function SignupPage() {
             </div>
           </section>
         </div>
+
+        <footer className={styles.footer}>
+          <span>© 2026 Axis. All rights reserved.</span>
+          <span className={styles.footerDivider} aria-hidden="true" />
+          <span>이용약관</span>
+          <span className={styles.footerDivider} aria-hidden="true" />
+          <span>개인정보처리방침</span>
+        </footer>
       </section>
     </main>
   )

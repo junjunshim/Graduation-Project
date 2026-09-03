@@ -1,0 +1,769 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* 읽기 전용 모드 배너 */
+.readonlyBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0.85rem 1.15rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel-muted);
+  color: var(--text-primary);
+}
+
+.readonlyIcon {
+  color: var(--accent-amber, #f59e0b);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.readonlyBanner strong {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.readonlyBanner p {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.readonlyBanner code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-xs);
+}
+
+/* 2열 레이아웃 */
+.layoutGrid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* 좌측 역할 사이드바 */
+.roleSidebar {
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.sidebarHeader {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--line-default);
+  background: var(--surface-panel-subtle);
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.roleList {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 4px;
+}
+
+.roleItem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: all 140ms ease;
+}
+
+.roleItem:hover {
+  background: var(--surface-hover);
+}
+
+.roleItemActive {
+  background: var(--surface-panel-muted);
+  border-color: var(--line-strong);
+}
+
+.roleItemTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.roleItemBadgeRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.unsavedDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-amber, #f59e0b);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.5rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+}
+
+.roleBadge[data-role='ADMIN'] {
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 18%, var(--surface-panel));
+  color: var(--accent-red, #ef4444);
+  border: 1px solid color-mix(in srgb, var(--accent-red, #ef4444) 30%, transparent);
+}
+
+.roleBadge[data-role='MANAGER'] {
+  background: color-mix(in srgb, var(--accent-purple, #8b5cf6) 18%, var(--surface-panel));
+  color: var(--accent-purple, #8b5cf6);
+  border: 1px solid color-mix(in srgb, var(--accent-purple, #8b5cf6) 30%, transparent);
+}
+
+.roleBadge[data-role='MEMBER'] {
+  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 18%, var(--surface-panel));
+  color: var(--accent-blue, #3b82f6);
+  border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 30%, transparent);
+}
+
+.roleBadge[data-role='VIEWER'] {
+  background: var(--surface-panel-muted);
+  color: var(--text-muted);
+  border: 1px solid var(--line-default);
+}
+
+.roleHex {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.roleMeta {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
+/* 우측 권한 매트릭스 본문 */
+.permissionMain {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mainHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0.85rem 1.4rem;
+  min-height: 64px;
+  box-sizing: border-box;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+}
+
+.mainHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1;
+}
+
+.titleRow h2 {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 850;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.activePill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--accent-green, #10b981) 18%, var(--surface-panel));
+  color: var(--accent-green, #10b981);
+  font-size: 0.66rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.systemPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 18%, var(--surface-panel));
+  color: var(--accent-red, #ef4444);
+  font-size: 0.66rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.dirtyPill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--accent-amber, #f59e0b) 18%, var(--surface-panel));
+  color: var(--accent-amber, #f59e0b);
+  font-size: 0.66rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.adminOnlyBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 14%, var(--surface-panel));
+  color: var(--accent-red, #ef4444);
+  font-size: 0.62rem;
+  font-weight: 850;
+  border: 1px solid color-mix(in srgb, var(--accent-red, #ef4444) 28%, transparent);
+}
+
+.adminLockNotice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 0.85rem;
+  box-sizing: border-box;
+  border-radius: var(--radius-md);
+  background: var(--surface-panel-subtle);
+  border: 1px solid var(--line-default);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.techMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 4px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.techMetaRow code {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.68rem;
+  color: var(--text-primary);
+}
+
+.mainHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+}
+
+.presetDropdownWrapper {
+  position: relative;
+  display: inline-flex;
+  height: 36px;
+}
+
+.presetTriggerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1;
+  border-radius: var(--radius-md);
+  background: var(--surface-panel-subtle);
+  border: 1px solid var(--line-default);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.presetTriggerBtn:hover {
+  background: var(--surface-panel);
+  border-color: var(--accent-purple, #6366f1);
+  color: var(--accent-purple, #6366f1);
+}
+
+.presetTriggerBtnActive {
+  background: var(--surface-panel);
+  border-color: var(--accent-purple, #6366f1);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-purple, #6366f1) 25%, transparent);
+}
+
+.presetTriggerIcon {
+  color: var(--text-muted);
+}
+
+.presetTriggerBtn:hover .presetTriggerIcon {
+  color: var(--accent-purple, #6366f1);
+}
+
+.presetChevron {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  margin-left: 2px;
+}
+
+.presetChevronOpen {
+  transform: rotate(180deg);
+}
+
+.presetMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 260px;
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  padding: 0.35rem;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: dropdownFadeIn 0.15s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.presetMenuHeader {
+  padding: 0.35rem 0.55rem 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 850;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--line-default);
+  margin-bottom: 2px;
+}
+
+.presetMenuItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.presetMenuItem:hover {
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 12%, var(--surface-panel-subtle));
+}
+
+.presetItemTitle {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.presetMenuItem:hover .presetItemTitle {
+  color: var(--accent-purple, #6366f1);
+}
+
+.presetItemDesc {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.resetBtn {
+  font-size: 0.75rem;
+}
+
+/* 도메인별 2열 격자 카드 레이아웃 */
+.groupGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.gridColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 1100px) {
+  .groupGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.groupCard {
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1rem;
+  background: var(--surface-panel-subtle);
+  border-bottom: 1px solid var(--line-default);
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 850;
+  color: var(--text-primary);
+}
+
+.groupActiveBadge {
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-full, 999px);
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.bitList {
+  display: flex;
+  flex-direction: column;
+}
+
+.bitRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--line-default);
+  gap: 12px;
+  transition: all 140ms ease;
+}
+
+.bitRow:last-child {
+  border-bottom: 0;
+}
+
+.bitRow:hover {
+  background: var(--surface-hover);
+}
+
+.bitRowDeny {
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 6%, transparent);
+}
+
+.bitRowDisabled {
+  opacity: 0.85;
+}
+
+.bitLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bitTitleBlock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bitLabel {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.bitKeyBadge {
+  padding: 0.08rem 0.3rem;
+  border-radius: var(--radius-xs);
+  background: var(--surface-panel-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.bitConstant {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+}
+
+.bitDesc {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.prereqRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  color: var(--accent-purple, #8b5cf6);
+  font-weight: 700;
+  flex-wrap: wrap;
+}
+
+.prereqArrow {
+  flex-shrink: 0;
+}
+
+.bitRight {
+  flex-shrink: 0;
+}
+
+/* 커스텀 토글 스위치 */
+.switchLabel {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.switchInput {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switchSlider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--surface-panel-muted, #334155);
+  border: 1px solid var(--line-default);
+  border-radius: 24px;
+  transition: all 200ms ease;
+}
+
+.switchSlider:before {
+  position: absolute;
+  content: '';
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: transform 200ms ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.switchInput:checked + .switchSlider {
+  background-color: var(--accent-purple, #6366f1);
+  border-color: var(--accent-purple, #6366f1);
+}
+
+.switchInput:checked + .switchSlider:before {
+  transform: translateX(20px);
+}
+
+.switchInput:disabled + .switchSlider {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 연계 토글 피드백 배너 */
+.feedbackBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.75rem 1.15rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-purple, #6366f1) 14%, var(--surface-panel));
+  border: 1px solid color-mix(in srgb, var(--accent-purple, #6366f1) 36%, transparent);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  animation: fadeIn 180ms ease;
+}
+
+.feedbackIcon {
+  color: var(--accent-purple, #8b5cf6);
+  flex-shrink: 0;
+}
+
+.feedbackClose {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.feedbackClose:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+/* 실시간 Diff 뱃지 */
+.diffBadgeAdd {
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent-green, #10b981) 20%, var(--surface-panel));
+  color: var(--accent-green, #10b981);
+  font-size: 0.62rem;
+  font-weight: 850;
+  border: 1px solid color-mix(in srgb, var(--accent-green, #10b981) 35%, transparent);
+}
+
+.diffBadgeRemove {
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 20%, var(--surface-panel));
+  color: var(--accent-red, #ef4444);
+  font-size: 0.62rem;
+  font-weight: 850;
+  border: 1px solid color-mix(in srgb, var(--accent-red, #ef4444) 35%, transparent);
+}
+
+/* 호버 시 연쇄 영향 힌트 & 행 하이라이트 */
+.cascadeHintAdd {
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-xs);
+  background: var(--accent-green, #10b981);
+  color: #ffffff;
+  font-size: 0.6rem;
+  font-weight: 900;
+  animation: pulse 1s infinite alternate;
+}
+
+.cascadeHintRemove {
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-xs);
+  background: var(--accent-red, #ef4444);
+  color: #ffffff;
+  font-size: 0.6rem;
+  font-weight: 900;
+  animation: pulse 1s infinite alternate;
+}
+
+.bitRowCascadeAdd {
+  background: color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent-green, #10b981) 40%, transparent);
+}
+
+.bitRowCascadeRemove {
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--accent-red, #ef4444) 40%, transparent);
+}
+
+/* 선행 조건 버튼 태그 */
+.prereqBadgeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.12rem 0.45rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.64rem;
+  font-weight: 750;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 140ms ease;
+  background: transparent;
+}
+
+.prereqMet {
+  background: color-mix(in srgb, var(--accent-green, #10b981) 14%, var(--surface-panel));
+  color: var(--accent-green, #10b981);
+  border-color: color-mix(in srgb, var(--accent-green, #10b981) 28%, transparent);
+}
+
+.prereqUnmet {
+  background: color-mix(in srgb, var(--accent-amber, #f59e0b) 14%, var(--surface-panel));
+  color: var(--accent-amber, #f59e0b);
+  border-color: color-mix(in srgb, var(--accent-amber, #f59e0b) 32%, transparent);
+}
+
+.prereqUnmet:hover {
+  background: color-mix(in srgb, var(--accent-amber, #f59e0b) 28%, var(--surface-panel));
+}
+
+.prereqBadgeBtn:disabled {
+  cursor: default;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  from { opacity: 0.85; }
+  to { opacity: 1; transform: scale(1.03); }
+}

@@ -4,6 +4,8 @@ import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceFilesTab } from '../components/WorkspaceFilesTab'
+import { WorkspaceMembersTab } from '../components/WorkspaceMembersTab'
+import { WorkspaceRolesTab } from '../components/WorkspaceRolesTab'
 import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
@@ -65,7 +67,7 @@ type TimelineView = {
   todayLeft: number
 }
 
-type WorkspaceView = 'overview' | 'tasks' | 'timeline' | 'files'
+type WorkspaceView = 'overview' | 'tasks' | 'timeline' | 'files' | 'members' | 'roles'
 
 type WorkspaceTab = {
   label: string
@@ -78,6 +80,8 @@ const workspaceTabs: WorkspaceTab[] = [
   { label: '업무', to: '/workspace?view=tasks', view: 'tasks' },
   { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
   { label: '파일', to: '/workspace?view=files', view: 'files' },
+  { label: '사용자', to: '/workspace?view=members', view: 'members' },
+  { label: '역할/권한', to: '/workspace?view=roles', view: 'roles' },
   { label: '설정', to: '/settings' },
 ]
 
@@ -565,7 +569,11 @@ export function WorkspacePage() {
   const [statusFilter, setStatusFilter] = useState<WorkspaceStatusFilter>('all')
   const requestedView = searchParams.get('view')
   const activeView: WorkspaceView =
-    requestedView === 'tasks' || requestedView === 'timeline' || requestedView === 'files'
+    requestedView === 'tasks' ||
+    requestedView === 'timeline' ||
+    requestedView === 'files' ||
+    requestedView === 'members' ||
+    requestedView === 'roles'
       ? requestedView
       : 'overview'
 
@@ -706,6 +714,24 @@ export function WorkspacePage() {
         <WorkspaceFilesTab
           workItems={overview.visibleWorkItems}
           files={overview.files}
+        />
+      ) : activeView === 'members' ? (
+        <WorkspaceMembersTab
+          rootNode={overview.rootNode}
+          nodes={overview.visibleNodes}
+          roles={snapshot.roles}
+          users={snapshot.users}
+          authorities={snapshot.authorities}
+          rootRoleMembers={overview.rootRoleMembers}
+          allRoleMembers={overview.allRoleMembers}
+        />
+      ) : activeView === 'roles' ? (
+        <WorkspaceRolesTab
+          rootNode={overview.rootNode}
+          authorities={snapshot.authorities}
+          roles={snapshot.roles}
+          currentUserId={currentUser.userId}
+          currentUser={currentUser}
         />
       ) : (
         <>

@@ -428,47 +428,15 @@ BEGIN
     FROM organization_nodes n
     WHERE n.node_id = p_node_id;
 
-<<<<<<< Updated upstream
-    -- 4-2. 노드 멤버 역할 목록 (ROLE) 및 사용자 정보 (USER) - NODE_MEMBERS_VIEW 권한 보유 시 반환
-    IF (v_authority & v_node_members_view) = v_node_members_view THEN
-        RETURN QUERY
-        SELECT jsonb_build_object(
-            'type', 'ROLE',
-            'id', ra.assignment_id,
-            'node_id', ra.node_id,
-            'user_id', ra.user_id,
-            'user_name', u.name,
-            'email', u.email,
-            'role', ra.role,
-            'updated_at', ra.updated_at
-        )
-        FROM role_assignments ra
-        JOIN users u ON ra.user_id = u.user_id
-        WHERE ra.node_id = p_node_id;
-
-        RETURN QUERY
-        SELECT DISTINCT ON (u.user_id) jsonb_build_object(
-            'type', 'USER',
-            'id', u.user_id,
-            'email', u.email,
-            'name', u.name,
-            'created_at', u.created_at,
-            'updated_at', u.updated_at
-        )
-        FROM role_assignments ra
-        JOIN users u ON ra.user_id = u.user_id
-        WHERE ra.node_id = p_node_id AND u.is_deleted = FALSE;
-    END IF;
-=======
-    -- 4-2. 노드 멤버 역할 목록 (ROLE) - NODE_MEMBERS_VIEW 권한 보유 시 전체 반환, 없더라도 본인 역할은 반환
+    -- 4-2. 노드 멤버 역할 목록 (ROLE) 및 사용자 정보 (USER) - NODE_MEMBERS_VIEW 권한 보유 시 전체 반환, 없더라도 본인 역할은 반환
     RETURN QUERY
     SELECT jsonb_build_object(
         'type', 'ROLE',
         'id', ra.assignment_id,
         'node_id', ra.node_id,
         'user_id', ra.user_id,
-        'email', u.email,
         'user_name', u.name,
+        'email', u.email,
         'role', ra.role,
         'updated_at', ra.updated_at
     )
@@ -476,7 +444,21 @@ BEGIN
     JOIN users u ON ra.user_id = u.user_id
     WHERE ra.node_id = p_node_id
         AND ((v_authority & v_node_members_view) = v_node_members_view OR ra.user_id = v_requester_id);
->>>>>>> Stashed changes
+
+    -- NODE_MEMBERS_VIEW 권한 보유 시 또는 본인 사용자 정보 반환
+    RETURN QUERY
+    SELECT DISTINCT ON (u.user_id) jsonb_build_object(
+        'type', 'USER',
+        'id', u.user_id,
+        'email', u.email,
+        'name', u.name,
+        'created_at', u.created_at,
+        'updated_at', u.updated_at
+    )
+    FROM role_assignments ra
+    JOIN users u ON ra.user_id = u.user_id
+    WHERE ra.node_id = p_node_id AND u.is_deleted = FALSE
+        AND ((v_authority & v_node_members_view) = v_node_members_view OR ra.user_id = v_requester_id);
 
     -- 4-3. 노드 역할별 권한 정의 목록 (AUTHORITY)
     RETURN QUERY

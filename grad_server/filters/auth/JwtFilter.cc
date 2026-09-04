@@ -72,10 +72,7 @@ void JwtFilter::doFilter(const HttpRequestPtr &req,
 
         auto res = drogon::HttpResponse::newHttpJsonResponse(ret);
         res->setStatusCode(k401Unauthorized);
-<<<<<<< Updated upstream
-=======
         addCorsHeaders(res);
->>>>>>> Stashed changes
         fcb(res);
     }
 }

@@ -46,8 +46,6 @@ export function AppShell() {
   const currentUser = getCurrentUser(snapshot)
   const hasCustomTitleBar = hasCustomWindowControls()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
-  const [workspaceEntryHeaderActionsTarget, setWorkspaceEntryHeaderActionsTarget] =
-    useState<HTMLDivElement | null>(null)
 
   useBodyScrollSurface('workspace')
 
@@ -63,10 +61,13 @@ export function AppShell() {
     return null
   }
 
+  const workspaceRootParam = searchParams.get('rootId') || searchParams.get('nodeId')
   const overview = getWorkspaceOverview(currentUser.userId, snapshot, {
     rootNodeId:
+      workspaceRootParam ??
       getActiveWorkspaceRootId(currentUser.userId) ??
       getDefaultWorkspaceRootId(currentUser.userId),
+    singleNodeOnly: true,
   })
   const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0
@@ -86,7 +87,28 @@ export function AppShell() {
     ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
     : null
   const workItemCategory = workItemDetail ? getWorkItemTag(workItemDetail.item) : null
-  const shellHeading: ShellTopActionsHeading = isWorkspaceSelectRoute
+  const parentNodeParam = searchParams.get('parentNodeId')
+  const parentNodeForHeading = parentNodeParam
+    ? snapshot.nodes.find((n) => n.id === parseInt(parentNodeParam, 10))
+    : null
+
+  const shellHeading: ShellTopActionsHeading = location.pathname === '/setup/sub-node'
+    ? {
+        type: 'breadcrumb',
+        label: '워크스페이스',
+        title: '하위 워크스페이스 생성',
+        subtitle: parentNodeForHeading
+          ? `${parentNodeForHeading.name}의 하위 워크스페이스를 등록합니다.`
+          : '부모 워크스페이스의 하위 워크스페이스를 등록합니다.',
+      }
+    : location.pathname === '/setup/top-node'
+    ? {
+        type: 'breadcrumb',
+        label: '워크스페이스',
+        title: '루트 워크스페이스 생성',
+        subtitle: '회사, 본부, 프로젝트 등 전체 조직 계층 트리의 기준이 될 최상위 루트 워크스페이스를 등록합니다.',
+      }
+    : isWorkspaceSelectRoute
     ? {
         type: 'page',
         title: isWorkspaceSelectListView ? '워크스페이스' : '워크스페이스 진입점',
@@ -98,7 +120,7 @@ export function AppShell() {
     : isWorkspaceRoute
       ? {
           type: 'breadcrumb',
-          label: '워크 스페이스',
+          label: '워크스페이스',
           title: workspaceLabel,
           subtitle: '공동작업을 위한 워크스페이스',
         }
@@ -159,12 +181,14 @@ export function AppShell() {
       <div
         className={[
           styles.workspace,
-          hasCustomTitleBar || isWorkspaceSelectRoute ? styles.workspaceWithoutPageBar : '',
+          hasCustomTitleBar || isWorkspaceSelectRoute || location.pathname === '/setup/top-node' || location.pathname === '/setup/sub-node'
+            ? styles.workspaceWithoutPageBar
+            : '',
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {!hasCustomTitleBar && !isWorkspaceSelectRoute ? (
+        {!hasCustomTitleBar && !isWorkspaceSelectRoute && location.pathname !== '/setup/top-node' && location.pathname !== '/setup/sub-node' ? (
           <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} />
         ) : null}
 
@@ -181,14 +205,6 @@ export function AppShell() {
             currentUser={currentUser}
             heading={shellHeading}
             inset="standard"
-            actions={
-              isWorkspaceSelectRoute ? (
-                <div
-                  ref={setWorkspaceEntryHeaderActionsTarget}
-                  className={styles.workspaceEntryHeaderActionsHost}
-                />
-              ) : undefined
-            }
           />
 
           <main
@@ -200,7 +216,7 @@ export function AppShell() {
               .filter(Boolean)
               .join(' ')}
           >
-            <Outlet context={{ workspaceEntryHeaderActionsTarget }} />
+            <Outlet />
           </main>
         </div>
       </div>

@@ -61,6 +61,8 @@ export type ServerContextItem = {
   updated_at?: string
 
   path?: unknown
+  user_id?: string
+  user_name?: string
   email?: string
   user_email?: string
   role?: string

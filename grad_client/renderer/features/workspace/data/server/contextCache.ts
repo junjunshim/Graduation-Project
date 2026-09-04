@@ -1,18 +1,18 @@
 import type {
-  ServerActivityRecord,
-  ServerAuthorityRecord,
-  ServerFileRecord,
-  ServerMentionRecord,
-} from './contextAdapter.js'
+  ActivityRecord,
+  AuthorityRecord,
+  MentionRecord,
+  WorkItemFileRecord,
+} from '../../model/types'
 
 const SERVER_CONTEXT_STORAGE_KEY = 'grad-client-server-context'
 
 export type ServerContextSnapshot = {
   serverTime: string
-  authorities: ServerAuthorityRecord[]
-  mentions: ServerMentionRecord[]
-  activities: ServerActivityRecord[]
-  files: ServerFileRecord[]
+  authorities: AuthorityRecord[]
+  mentions: MentionRecord[]
+  activities: ActivityRecord[]
+  files: WorkItemFileRecord[]
 }
 
 function getStorage() {

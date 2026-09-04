@@ -162,7 +162,75 @@ export function clearServerSession() {
   writeStorageValue(SERVER_EMAIL_STORAGE_KEY, null)
 }
 
-export async function apiRequest<ResponseBody>(path: string, options: ApiRequestOptions = {}) {
+// ----------------------------------------------------
+// 토큰 재발급 관리자 (동시 다발적 401 발생 시 단 1회만 재발급)
+// ----------------------------------------------------
+let isRefreshing = false
+let refreshPromise: Promise<string | null> | null = null
+
+export async function refreshServerTokens(): Promise<string | null> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise
+  }
+
+  const refreshToken = getServerRefreshToken()
+  if (!refreshToken) {
+    clearServerSession()
+    return null
+  }
+
+  isRefreshing = true
+  refreshPromise = (async () => {
+    try {
+      const url = createRequestUrl('/users/refresh')
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+        credentials: 'omit',
+      })
+
+      if (!response.ok) {
+        clearServerSession()
+        return null
+      }
+
+      const payload = (await response.json()) as {
+        status?: string
+        access_token?: string
+        refresh_token?: string
+      }
+
+      if (payload.status === 'success' && payload.access_token) {
+        writeStorageValue(ACCESS_TOKEN_STORAGE_KEY, payload.access_token)
+        if (payload.refresh_token) {
+          writeStorageValue(REFRESH_TOKEN_STORAGE_KEY, payload.refresh_token)
+        }
+        return payload.access_token
+      }
+
+      clearServerSession()
+      return null
+    } catch (error) {
+      console.warn('[ApiClient] 토큰 갱신 실패:', error)
+      return null
+    } finally {
+      isRefreshing = false
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
+export async function apiRequest<ResponseBody>(
+  path: string,
+  options: ApiRequestOptions = {},
+  isRetry = false,
+): Promise<ResponseBody> {
   const headers = new Headers()
   headers.set('Accept', 'application/json')
 
@@ -243,6 +311,22 @@ export async function apiRequest<ResponseBody>(path: string, options: ApiRequest
   } finally {
     globalThis.clearTimeout(timeoutId)
     options.signal?.removeEventListener('abort', handleExternalAbort)
+  }
+
+  // 401 Unauthorized 발생 시: access_token 만료 가능성 -> 1회 자동 refresh 및 재요청
+  const cleanPath = path.replace(/^\/+/, '')
+  if (
+    response.status === 401 &&
+    !isRetry &&
+    options.includeToken !== false &&
+    !cleanPath.startsWith('users/refresh') &&
+    !cleanPath.startsWith('users/login')
+  ) {
+    console.info('[ApiClient] 토큰 만료 감지 -> 토큰 재발급 및 재요청 시도')
+    const newAccessToken = await refreshServerTokens()
+    if (newAccessToken) {
+      return apiRequest<ResponseBody>(path, options, true)
+    }
   }
 
   if (!response.ok) {

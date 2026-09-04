@@ -197,7 +197,19 @@
   box-shadow: var(--shadow-panel);
   background: var(--surface-panel);
   color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
   overflow: hidden;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.kpiCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px -4px rgba(16, 23, 45, 0.12);
+  border-color: var(--line-strong, #c5cedd);
 }
 
 .kpiValueRow {
@@ -512,12 +524,12 @@
 }
 
 .columnHeaderTodo {
-  background: var(--accent-amber-soft);
-  color: var(--accent-amber);
+  background: var(--accent-purple-soft);
+  color: var(--accent-purple);
 }
 
 .columnHeaderTodo strong {
-  background: color-mix(in srgb, var(--accent-amber) 18%, var(--accent-amber-soft));
+  background: color-mix(in srgb, var(--accent-purple) 18%, var(--accent-purple-soft));
 }
 
 .columnHeaderDone {
@@ -820,15 +832,23 @@
 }
 
 .calendarDay {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   position: relative;
   height: 100%;
-  border: 1px solid transparent;
-  border-radius: var(--radius-xs);
+  border-radius: var(--axis-radius-action, 6px);
   color: var(--text-secondary);
-  font-size: 0.8rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: default;
+  transition: background 140ms ease, color 140ms ease;
+  user-select: none;
+}
+
+.calendarDay:hover {
+  background: var(--surface-hover);
 }
 
 .calendarDaySunday {
@@ -839,65 +859,83 @@
   color: var(--accent-blue);
 }
 
-.calendarDayActive {
-  border-color: var(--line-selected);
-  background: var(--surface-selected);
-  color: var(--text-primary);
-}
-
 .calendarDayMuted {
   color: var(--text-muted);
-  opacity: 0.45;
+  opacity: 0.35;
 }
 
-.calendarToday {
-  border-color: var(--text-primary);
-  border-radius: var(--radius-sm);
-  background: var(--text-primary);
-  color: var(--surface-page);
-}
-
-.calendarToday strong {
-  background: var(--surface-page);
-  color: var(--text-primary);
-}
-
-.calendarDay strong {
-  position: absolute;
-  right: 0.2rem;
-  bottom: 0.15rem;
+.calendarDayNumber {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 0.95rem;
-  height: 0.95rem;
-  border-radius: 999px;
-  background: var(--accent-blue);
-  color: var(--text-inverse);
-  font-size: 0.58rem;
-  line-height: 1;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 50%;
+  transition: all 140ms ease;
 }
 
-.calendarDay.calendarToday strong {
-  width: 0.95rem;
-  height: 0.95rem;
-  background: var(--surface-page);
-  color: var(--text-primary);
+/* 오늘 날짜 (Today) - 세련된 솔리드 서클 강조 */
+.calendarToday .calendarDayNumber {
+  background: var(--axis-brand-primary, #625cf2);
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(98, 92, 242, 0.35);
+}
+
+/* 마감 업무가 있는 날 - 오늘 날짜와 대칭되면서도 명확히 구분되는 아웃라인 링 & 소프트 배경 */
+.calendarDayHasItems .calendarDayNumber {
+  background: var(--axis-brand-primary-soft, #f0efff);
+  color: var(--axis-brand-primary, #625cf2);
+  font-weight: 750;
+  border: 1.5px solid var(--axis-brand-primary, #625cf2);
+}
+
+/* 오늘이면서 마감 업무도 있는 날 - 솔리드 배경 + 흰색 링 */
+.calendarToday.calendarDayHasItems .calendarDayNumber {
+  background: var(--axis-brand-primary, #625cf2);
+  color: #ffffff !important;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 0 0 1.5px var(--axis-brand-primary, #625cf2), 0 2px 6px rgba(98, 92, 242, 0.35);
+}
+
+/* 날짜 우측 위에 붙는 마감 업무 개수 미니 뱃지 */
+.calendarDayTopCount {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.22rem;
+  border-radius: var(--axis-radius-pill, 999px);
+  background: #ea580c;
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgba(234, 88, 12, 0.3);
+  z-index: 2;
 }
 
 .calendarPreview {
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   min-width: 0;
-  min-height: 0;
+  height: 7.1rem;
+  min-height: 7.1rem;
+  max-height: 7.1rem;
   overflow: hidden;
-  padding-top: 1.2rem;
+  padding: 0;
 }
 
 .calendarPreviewList {
   display: grid;
-  gap: 0.32rem;
+  gap: 0.35rem;
   min-width: 0;
+  align-content: start;
 }
 
 .calendarPreviewItem {
@@ -960,12 +998,33 @@
   white-space: nowrap;
 }
 
+.statusTodo {
+  background: var(--accent-purple-soft);
+  color: var(--accent-purple);
+}
+
+.statusInProgress {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.statusDone {
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
 .calendarPreviewEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
   margin: 0;
-  padding: 0.4rem 0.45rem;
+  padding: 0;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   line-height: 1.45;
+  text-align: center;
 }
 
 .documentRow,
@@ -1458,7 +1517,7 @@
 
 .calendarPanel {
   grid-column: span 4;
-  grid-template-rows: auto auto minmax(12rem, 1fr) auto;
+  grid-template-rows: auto auto minmax(14.5rem, 1fr) 7.1rem;
   min-height: 0;
   height: auto;
 }
@@ -1510,17 +1569,27 @@
 }
 
 .columnHeader {
+  display: inline-flex;
+  align-items: center;
   gap: 0.45rem;
-  padding: 0;
-  background: transparent;
-  color: var(--dashboard-text);
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  width: fit-content;
 }
 
-.columnHeaderInProgress,
-.columnHeaderTodo,
+.columnHeaderTodo {
+  background: var(--accent-purple-soft);
+  color: var(--accent-purple);
+}
+
+.columnHeaderInProgress {
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
 .columnHeaderDone {
-  background: transparent;
-  color: var(--dashboard-text);
+  background: var(--accent-green-soft);
+  color: var(--accent-green);
 }
 
 .columnHeader h4 {
@@ -1528,16 +1597,28 @@
   font-weight: 700;
 }
 
-.columnHeader strong,
-.columnHeaderInProgress strong,
-.columnHeaderTodo strong,
-.columnHeaderDone strong {
+.columnHeader strong {
   min-width: 1.25rem;
   height: 1.25rem;
   padding: 0 0.35rem;
-  background: var(--dashboard-panel-muted);
-  color: var(--dashboard-text-secondary);
+  border-radius: 999px;
   font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.columnHeaderTodo strong {
+  background: color-mix(in srgb, var(--accent-purple) 20%, transparent);
+  color: var(--accent-purple);
+}
+
+.columnHeaderInProgress strong {
+  background: color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  color: var(--accent-blue);
+}
+
+.columnHeaderDone strong {
+  background: color-mix(in srgb, var(--accent-green) 20%, transparent);
+  color: var(--accent-green);
 }
 
 .taskStack {
@@ -1735,6 +1816,77 @@
   font-size: 0.76rem;
 }
 
+.boardEmptyFullWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 14rem;
+  padding: 2rem 1rem;
+}
+
+.emptyStateBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.45rem;
+  padding: 1.5rem 1.25rem;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--axis-radius-surface);
+}
+
+.emptyStateBoxCompact {
+  padding: 1.25rem 0.75rem;
+  border: 1px dashed var(--axis-line-default);
+  background: var(--axis-surface-muted);
+  gap: 0.3rem;
+}
+
+.emptyStateIconWrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+  margin-bottom: 0.25rem;
+}
+
+.emptyStateBoxCompact .emptyStateIconWrapper {
+  width: 2.2rem;
+  height: 2.2rem;
+  background: transparent;
+  color: var(--axis-text-muted);
+  margin-bottom: 0;
+}
+
+.emptyStateTitle {
+  color: var(--axis-text-primary);
+  font-size: 0.95rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.emptyStateBoxCompact .emptyStateTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--axis-text-muted);
+}
+
+.emptyStateDesc {
+  margin: 0;
+  color: var(--axis-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  max-width: 22rem;
+}
+
 @media (max-width: 1080px) {
   .kpiGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1791,21 +1943,25 @@
    content rows to use the available desktop height. */
 @media (min-width: 1081px) {
   .page {
-    grid-template-rows: auto auto;
-    align-content: start;
-    gap: 1rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    gap: 1.25rem;
     width: 100%;
     max-width: none;
-    min-height: auto;
+    min-height: 0;
     margin-inline: 0;
     padding: 1.55rem var(--space-page-x) 2rem;
   }
 
   .dashboardGrid {
-    grid-template-rows:
-      clamp(27rem, 48vh, 30rem)
-      clamp(12rem, 29vh, 21rem);
-    height: auto;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr);
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    gap: 1.7rem;
   }
 
   .boardPanel,
@@ -1813,24 +1969,82 @@
   .documentsPanel,
   .activityPanel {
     height: 100%;
+    min-height: 0;
+  }
+
+  .boardPanel {
+    display: flex;
+    flex-direction: column;
+    padding-top: 0.2rem;
+  }
+
+  .boardColumns {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .boardColumn {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .taskStack {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .taskCard {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .calendarPanel {
-    grid-template-rows: auto auto minmax(12rem, 1fr) auto;
+    grid-template-rows: auto auto 1fr 7.1rem;
   }
 
   .calendarGrid {
-    grid-template-rows: repeat(6, minmax(2rem, 1fr));
+    grid-template-rows: repeat(6, minmax(0, 1fr));
     height: 100%;
+    min-height: 0;
   }
 
-  .documentsPanel {
-    grid-template-rows: auto minmax(0, 1fr) auto;
+  .calendarPreview {
+    height: 7.1rem;
+    min-height: 7.1rem;
+    max-height: 7.1rem;
+  }
+
+  .documentsPanel,
+  .activityPanel {
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .documentList,
   .activityList {
-    align-content: stretch;
-    grid-auto-rows: minmax(2.15rem, 1fr);
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    gap: 0.4rem;
+  }
+
+  .documentRow,
+  .activityItem {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 }

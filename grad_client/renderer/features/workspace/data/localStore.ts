@@ -335,6 +335,11 @@ function normalizeDb(
     }
   })
 
+  const authorities = Array.isArray(rawDb.authorities) ? rawDb.authorities : []
+  const mentions = Array.isArray(rawDb.mentions) ? rawDb.mentions : []
+  const activities = Array.isArray(rawDb.activities) ? rawDb.activities : []
+  const files = Array.isArray(rawDb.files) ? rawDb.files : []
+
   return {
     datasetId: options.allowExternalDataset
       ? datasetId || SERVER_DATASET_ID
@@ -348,6 +353,10 @@ function normalizeDb(
     nodes,
     roles,
     workItems,
+    authorities: authorities as WorkspaceDatabase['authorities'],
+    mentions: mentions as WorkspaceDatabase['mentions'],
+    activities: activities as WorkspaceDatabase['activities'],
+    files: files as WorkspaceDatabase['files'],
     counters: {
       node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
       role: Math.max(0, ...roles.map((role) => role.id)) + 1,

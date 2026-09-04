@@ -1,9 +1,13 @@
 import type {
+  ActivityRecord,
+  AuthorityRecord,
+  MentionRecord,
   NodeType,
   OrganizationNodeRecord,
   RoleAssignmentRecord,
   RoleName,
   UserRecord,
+  WorkItemFileRecord,
   WorkItemRecord,
   WorkItemStatus,
   WorkspaceDatabase,
@@ -14,11 +18,7 @@ const SERVER_DATASET_ID = 'server-workspace'
 const SERVER_SEED_VERSION = 1
 const UNKNOWN_OWNER_USER_ID = 'server-owner-unknown'
 const UNKNOWN_OWNER_EMAIL = 'unknown-owner@local.invalid'
-const WORKSPACE_CONTEXT_ITEM_TYPES = new Set(['USER', 'NODE', 'ROLE', 'WORK_ITEM'])
-// The server includes these records in the shared context envelope, but the
-// current workspace domain has no authority-policy or notification collection.
-// Accept them without misrepresenting them as roles or work items.
-const KNOWN_NON_WORKSPACE_CONTEXT_ITEM_TYPES = new Set(['AUTHORITY', 'MENTION'])
+const WORKSPACE_CONTEXT_ITEM_TYPES = new Set(['USER', 'NODE', 'ROLE', 'WORK_ITEM', 'AUTHORITY', 'MENTION', 'ACTIVITY', 'FILE'])
 
 export type ServerContextNormalizationIssue = {
   index: number
@@ -54,6 +54,17 @@ function toNumberValue(value: unknown, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function toBooleanValue(value: unknown, fallback = false): boolean {
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase()
+    if (s === 'true' || s === 't' || s === '1') return true
+    if (s === 'false' || s === 'f' || s === '0') return false
+  }
+  if (typeof value === 'number') return value !== 0
+  return fallback
+}
+
 function normalizeEmail(value: unknown) {
   return toStringValue(value).trim().toLowerCase()
 }
@@ -64,7 +75,12 @@ function getDisplayNameFromEmail(email: string) {
 }
 
 function normalizeNodeType(value: unknown): NodeType {
-  const normalized = toStringValue(value).toUpperCase()
+  const strVal = toStringValue(value).trim()
+  if (strVal.startsWith('CUSTOM:')) {
+    return strVal
+  }
+
+  const normalized = strVal.toUpperCase()
 
   if (
     normalized === 'USER' ||
@@ -81,7 +97,7 @@ function normalizeNodeType(value: unknown): NodeType {
 }
 
 function normalizeRoleName(value: unknown): RoleName {
-  const normalized = toStringValue(value).toUpperCase()
+  const normalized = toStringValue(value).trim().toUpperCase()
 
   if (
     normalized === 'ADMIN' ||
@@ -90,6 +106,11 @@ function normalizeRoleName(value: unknown): RoleName {
     normalized === 'VIEWER'
   ) {
     return normalized
+  }
+
+  // 커스텀 역할 이름이 있으면 대문자/원형 그대로 유지
+  if (normalized) {
+    return normalized as RoleName
   }
 
   return 'MEMBER'
@@ -183,15 +204,12 @@ export function normalizeServerContext(
       return
     }
 
-    if (
-      !WORKSPACE_CONTEXT_ITEM_TYPES.has(itemType) &&
-      !KNOWN_NON_WORKSPACE_CONTEXT_ITEM_TYPES.has(itemType)
-    ) {
+    if (!WORKSPACE_CONTEXT_ITEM_TYPES.has(itemType)) {
       addIssue(index, itemType, `지원하지 않는 컨텍스트 항목 type(${itemType})입니다.`)
     }
   })
 
-  function ensureUserByEmail(emailValue: unknown, nameValue?: unknown) {
+  function ensureUserByEmail(emailValue: unknown, nameValue?: unknown, userIdValue?: unknown) {
     const email = normalizeEmail(emailValue)
 
     if (!email) {
@@ -201,11 +219,16 @@ export function normalizeServerContext(
     const knownUserId = userIdByEmail.get(email)
 
     if (knownUserId) {
-      return usersById.get(knownUserId) ?? null
+      const existing = usersById.get(knownUserId)
+      if (existing) {
+        if (nameValue && !existing.name) existing.name = toOptionalString(nameValue) ?? existing.name
+        return existing
+      }
     }
 
+    const userId = toOptionalString(userIdValue) ?? email
     const user: UserRecord = {
-      userId: email,
+      userId,
       email,
       name: toOptionalString(nameValue) ?? getDisplayNameFromEmail(email),
       createdAt: timestamp,
@@ -255,7 +278,7 @@ export function normalizeServerContext(
 
     const user: UserRecord = {
       userId,
-      email,
+      email: email || `${userId}@local.generated`,
       name: name ?? (email ? getDisplayNameFromEmail(email) : userId),
       createdAt: timestamp,
     }
@@ -274,47 +297,48 @@ export function normalizeServerContext(
     ? ensureUserByEmail(normalizedCurrentEmail)
     : null
 
-  items.forEach((item, index) => {
-    if (toStringValue(item.type).toUpperCase() !== 'USER') {
-      return
-    }
-
-    const email = normalizeEmail(item.email ?? item.user_email)
-    const userId = toOptionalString(item.id) ?? email
-
-    if (!userId) {
-      addIssue(index, 'USER', '사용자 ID 또는 이메일이 없어 항목을 제외했습니다.')
-      return
-    }
-
-    const user = ensureUserById(userId, email, item.name ?? item.title)
-    const personalNodeId = toNumberValue(item.personal_node_id, 0)
-
-    if (user && personalNodeId > 0) {
-      user.personalNodeId = personalNodeId
-    }
-  })
-
+  // 1. 유저 정보 사전 추출 (ROLE, WORK_ITEM, FILE, ACTIVITY, USER 등)
   items.forEach((item) => {
-    if (
-      toStringValue(item.type).toUpperCase() === 'WORK_ITEM' &&
-      toOptionalString(item.owner_user_id)
-    ) {
-      ensureUserById(item.owner_user_id, item.owner_user_email)
-    }
-  })
-
-  const nodes: OrganizationNodeRecord[] = []
-
-  items.forEach((item, index) => {
     const itemType = toStringValue(item.type).toUpperCase()
 
-    if (itemType !== 'NODE') {
-      return
+    if (itemType === 'USER') {
+      const email = normalizeEmail(item.email ?? item.user_email)
+      const userId = toOptionalString(item.id) ?? email
+      if (userId) {
+        const user = ensureUserById(userId, email, item.name ?? item.title)
+        const personalNodeId = toNumberValue(item.personal_node_id, 0)
+        if (user && personalNodeId > 0) {
+          user.personalNodeId = personalNodeId
+        }
+      }
+    } else if (itemType === 'ROLE') {
+      if (item.user_id) {
+        ensureUserById(item.user_id, item.email ?? item.user_email, item.user_name ?? item.name)
+      } else {
+        ensureUserByEmail(item.email ?? item.user_email, item.user_name ?? item.name)
+      }
+    } else if (itemType === 'WORK_ITEM') {
+      if (item.owner_user_id) {
+        ensureUserById(item.owner_user_id, item.owner_user_email)
+      }
+    } else if (itemType === 'FILE') {
+      if (item.uploader_user_id) {
+        ensureUserById(item.uploader_user_id, item.uploader_email, item.uploader_name)
+      }
+    } else if (itemType === 'ACTIVITY') {
+      if (item.actor_user_id) {
+        ensureUserById(item.actor_user_id, undefined, item.actor_name)
+      }
     }
+  })
+
+  // 2. 노드(NODE) 파싱
+  const nodes: OrganizationNodeRecord[] = []
+  items.forEach((item, index) => {
+    const itemType = toStringValue(item.type).toUpperCase()
+    if (itemType !== 'NODE') return
 
     const id = toNumberValue(item.id ?? item.node_id, 0)
-
     if (id <= 0) {
       addIssue(index, itemType, '유효한 노드 ID가 없어 항목을 제외했습니다.')
       return
@@ -329,7 +353,9 @@ export function normalizeServerContext(
       nodeType: normalizeNodeType(item.node_type),
       name: toOptionalString(item.name ?? item.title) ?? `Node ${id}`,
       path,
+      isDeleted: toBooleanValue(item.is_deleted, false),
       createdAt: toOptionalString(item.created_at ?? item.updated_at) ?? timestamp,
+      updatedAt: toOptionalString(item.updated_at),
     })
   })
 
@@ -342,14 +368,11 @@ export function normalizeServerContext(
     node.path = validPath ? node.path : computeNodePath(node.id, nodesById)
   })
 
+  // 3. 역할(ROLE) 파싱
   const roles: RoleAssignmentRecord[] = []
-
   items.forEach((item, index) => {
     const itemType = toStringValue(item.type).toUpperCase()
-
-    if (itemType !== 'ROLE') {
-      return
-    }
+    if (itemType !== 'ROLE') return
 
     const nodeId = toNumberValue(item.node_id ?? item.parent_id, 0)
     const email = normalizeEmail(item.email ?? item.user_email ?? item.title)
@@ -360,18 +383,15 @@ export function normalizeServerContext(
       return
     }
 
-    if (!nodesById.has(nodeId)) {
-      addIssue(index, itemType, '역할이 참조하는 노드를 찾을 수 없어 항목을 제외했습니다.')
-      return
-    }
-
     const roleName = normalizeRoleName(item.role ?? item.role_name ?? item.status)
     roles.push({
       id: toNumberValue(item.id, index + 1),
       userId: user.userId,
       nodeId,
       roleName,
+      isDeleted: toBooleanValue(item.is_deleted, false),
       createdAt: toOptionalString(item.created_at ?? item.updated_at) ?? timestamp,
+      updatedAt: toOptionalString(item.updated_at),
     })
 
     if (roleName === 'ADMIN' && nodesById.get(nodeId)?.nodeType === 'USER') {
@@ -379,6 +399,7 @@ export function normalizeServerContext(
     }
   })
 
+  // 4. 업무(WORK_ITEM) 파싱
   let unknownOwner: UserRecord | null = null
   const workItems: WorkItemRecord[] = []
   const referenceWorkItemsById = new Map(
@@ -387,14 +408,10 @@ export function normalizeServerContext(
 
   items.forEach((item, index) => {
     const itemType = toStringValue(item.type).toUpperCase()
-
-    if (itemType !== 'WORK_ITEM') {
-      return
-    }
+    if (itemType !== 'WORK_ITEM') return
 
     const workItemId = toOptionalString(item.id)
     const referenceWorkItem = workItemId ? referenceWorkItemsById.get(workItemId) : undefined
-    const usesExpandedShape = item.owner_node_id !== undefined && item.owner_node_id !== null
     const ownerNodeId = toNumberValue(
       item.owner_node_id ?? item.parent_id,
       referenceWorkItem?.ownerNodeId ?? 0,
@@ -402,11 +419,6 @@ export function normalizeServerContext(
 
     if (!workItemId || ownerNodeId <= 0) {
       addIssue(index, itemType, '업무 ID 또는 소유 노드 ID가 없어 항목을 제외했습니다.')
-      return
-    }
-
-    if (!nodesById.has(ownerNodeId)) {
-      addIssue(index, itemType, '업무가 참조하는 소유 노드를 찾을 수 없어 항목을 제외했습니다.')
       return
     }
 
@@ -428,11 +440,12 @@ export function normalizeServerContext(
 
     const owner = ownerById ?? ownerByEmail ?? referenceOwner ?? unknownOwner
     const parentWorkItemId = toOptionalString(
-      item.parent_work_item_id ?? (usesExpandedShape ? item.parent_id : item.extra_info),
+      item.parent_work_item_id ?? item.parent_id,
     )
     const rawPriority = toNumberValue(item.priority, referenceWorkItem?.priority ?? 3)
     const rawWeight = toNumberValue(item.weight, referenceWorkItem?.weight ?? 1)
     const rawProgress = toNumberValue(item.progress, referenceWorkItem?.progress ?? 0)
+    const commentCount = toNumberValue(item.comment_count, referenceWorkItem?.commentCount ?? 0)
     const startDate =
       item.start_date !== undefined
         ? toOptionalString(item.start_date)
@@ -451,13 +464,17 @@ export function normalizeServerContext(
         item.description !== undefined
           ? toOptionalString(item.description) ?? ''
           : referenceWorkItem?.description ?? '',
+      category: toOptionalString(item.category) ?? referenceWorkItem?.category,
       status:
         item.status !== undefined
           ? normalizeWorkItemStatus(item.status)
           : referenceWorkItem?.status ?? 'todo',
       priority: rawPriority >= 1 && rawPriority <= 5 ? rawPriority : 3,
+      hidden: toBooleanValue(item.hidden, false),
       weight: rawWeight >= 0 ? rawWeight : 1,
       progress: Math.min(100, Math.max(0, rawProgress)),
+      commentCount,
+      isDeleted: toBooleanValue(item.is_deleted, false),
       ...(startDate ? { startDate } : {}),
       ...(dueDate ? { dueDate } : {}),
       ...(parentWorkItemId ? { parentWorkItemId } : {}),
@@ -466,7 +483,103 @@ export function normalizeServerContext(
         referenceWorkItem?.createdAt ??
         toOptionalString(item.updated_at) ??
         timestamp,
+      updatedAt: toOptionalString(item.updated_at),
     })
+  })
+
+  // 5. 권한(AUTHORITY) 파싱
+  const authorities: AuthorityRecord[] = []
+  items.forEach((item) => {
+    if (toStringValue(item.type).toUpperCase() !== 'AUTHORITY') return
+    const id = toNumberValue(item.id, 0)
+    const nodeId = toNumberValue(item.node_id, 0)
+    if (id > 0 && nodeId > 0) {
+      authorities.push({
+        id,
+        nodeId,
+        roleName: normalizeRoleName(item.role),
+        authority: toStringValue(item.authority),
+        updatedAt: toOptionalString(item.updated_at),
+      })
+    }
+  })
+
+  // 6. 멘션(MENTION) 파싱
+  const mentions: MentionRecord[] = []
+  items.forEach((item) => {
+    if (toStringValue(item.type).toUpperCase() !== 'MENTION') return
+    const id = toNumberValue(item.id, 0)
+    const commentId = toNumberValue(item.comment_id, 0)
+    const workItemId = toStringValue(item.work_item_id)
+    if (id > 0) {
+      mentions.push({
+        id,
+        commentId,
+        workItemId,
+        message: toStringValue(item.message),
+        isRead: toBooleanValue(item.is_read, false),
+        createdAt: toOptionalString(item.created_at) ?? timestamp,
+        updatedAt: toOptionalString(item.updated_at),
+      })
+    }
+  })
+
+  // 7. 활동(ACTIVITY) 파싱
+  const activities: ActivityRecord[] = []
+  items.forEach((item) => {
+    if (toStringValue(item.type).toUpperCase() !== 'ACTIVITY') return
+    const id = toNumberValue(item.id, 0)
+    const nodeId = toNumberValue(item.node_id, 0)
+    const actorUserId = toStringValue(item.actor_user_id)
+    const actorName = toStringValue(item.actor_name)
+    if (actorUserId) {
+      ensureUserById(actorUserId, undefined, actorName)
+    }
+    if (id > 0) {
+      activities.push({
+        id,
+        nodeId,
+        actorUserId,
+        actorName,
+        entityType: toStringValue(item.entity_type),
+        entityId: toStringValue(item.entity_id),
+        targetName: toStringValue(item.target_name),
+        actionType: toStringValue(item.action_type),
+        fieldName: item.field_name ? toStringValue(item.field_name) : null,
+        oldValue: item.old_value ? toStringValue(item.old_value) : null,
+        newValue: item.new_value ? toStringValue(item.new_value) : null,
+        createdAt: toOptionalString(item.created_at) ?? timestamp,
+      })
+    }
+  })
+
+  // 8. 파일(FILE) 파싱
+  const files: WorkItemFileRecord[] = []
+  items.forEach((item) => {
+    if (toStringValue(item.type).toUpperCase() !== 'FILE') return
+    const id = toNumberValue(item.id, 0)
+    const workItemId = toStringValue(item.work_item_id)
+    const uploaderUserId = toStringValue(item.uploader_user_id)
+    const uploaderName = toStringValue(item.uploader_name)
+    const uploaderEmail = toStringValue(item.uploader_email)
+    if (uploaderUserId) {
+      ensureUserById(uploaderUserId, uploaderEmail, uploaderName)
+    }
+    if (id > 0 && workItemId) {
+      files.push({
+        id,
+        workItemId,
+        uploaderUserId,
+        uploaderName,
+        uploaderEmail,
+        originalFileName: toStringValue(item.original_file_name),
+        fileSize: toNumberValue(item.file_size, 0),
+        mimeType: item.mime_type ? toStringValue(item.mime_type) : null,
+        isDeleted: toBooleanValue(item.is_deleted, false),
+        createdAt: toOptionalString(item.created_at) ?? timestamp,
+        updatedAt: toOptionalString(item.updated_at),
+      })
+    }
   })
 
   const validNodeIds = new Set(nodesById.keys())
@@ -498,6 +611,10 @@ export function normalizeServerContext(
       nodes,
       roles: normalizedRoles,
       workItems: normalizedWorkItems,
+      authorities,
+      mentions,
+      activities,
+      files,
       counters: {
         node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
         role: Math.max(0, ...normalizedRoles.map((role) => role.id)) + 1,

@@ -3,13 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { claimWorkItem, updateWorkItem } from '../../workspace/data/workItemService'
-import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import type { WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
+import { getWorkItemDateRangeError } from '../model/workItemFormValidation'
+import { createWorkItemUpdatePayload } from '../model/workItemUpdatePayload'
 import styles from './WorkItemEditPage.module.css'
 
 function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
@@ -63,7 +64,6 @@ export function WorkItemEditPage() {
 
   const { item } = detail
   const composer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
-  const isServerMode = isServerDataSource()
 
   function setField<Key extends keyof WorkItemCreateFormState>(
     field: Key,

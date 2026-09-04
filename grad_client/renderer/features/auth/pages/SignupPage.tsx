@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
@@ -9,10 +9,11 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
 import { isMockDataSource } from '../../workspace/data/workspaceMode'
 import signupHeroUrl from '../assets/signup-collaboration-hero.png'
-import { enterDemoWorkspace, getCurrentUser, getSuggestedUserId, signUp } from '../api'
+import { enterDemoWorkspace, getCurrentUser, signUp } from '../api'
 import styles from './SignupPage.module.css'
 
 const initialForm = {
+  userId: '',
   email: '',
   name: '',
   password: '',
@@ -22,16 +23,18 @@ type Feedback = {
   message: string
 }
 
+type ErrorField = 'userId' | 'email' | 'name' | 'password' | 'all' | null
+
 export function SignupPage() {
   const navigate = useNavigate()
   const currentUser = getCurrentUser()
   const isMockMode = isMockDataSource()
-  const suggestedUserId = useMemo(() => getSuggestedUserId(), [])
   const hasCustomTitleBar = hasCustomWindowControls()
   const [form, setForm] = useState(initialForm)
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [errorField, setErrorField] = useState<ErrorField>(null)
   const mountedRef = useRef(true)
 
   useBodyScrollSurface(hasCustomTitleBar ? 'auth' : undefined)
@@ -56,9 +59,82 @@ export function SignupPage() {
     }
 
     setFeedback(null)
+    setErrorField(null)
 
-    if (!form.email.trim() || !form.name.trim() || !form.password.trim()) {
-      setFeedback({ message: '필수 정보를 모두 입력해 주세요.' })
+    const userIdTrimmed = form.userId.trim()
+    if (!userIdTrimmed) {
+      setFeedback({ message: '아이디를 입력해 주세요.' })
+      setErrorField('userId')
+      return
+    }
+
+    const userIdRegex = /^[a-zA-Z0-9][a-zA-Z0-9_-]{3,29}$/
+    if (!userIdRegex.test(userIdTrimmed)) {
+      setFeedback({
+        message: '아이디는 4~30자의 영문, 숫자, 하이픈(-), 언더바(_)만 사용할 수 있으며 영문이나 숫자로 시작해야 합니다.',
+      })
+      setErrorField('userId')
+      return
+    }
+
+    const emailTrimmed = form.email.trim()
+    if (!emailTrimmed) {
+      setFeedback({ message: '이메일 주소를 입력해 주세요.' })
+      setErrorField('email')
+      return
+    }
+
+    if (emailTrimmed.length > 100) {
+      setFeedback({ message: '이메일 주소는 최대 100자까지 입력할 수 있습니다.' })
+      setErrorField('email')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailTrimmed)) {
+      setFeedback({ message: '올바른 이메일 형식을 입력해 주세요. (예: user@example.com)' })
+      setErrorField('email')
+      return
+    }
+
+    const nameTrimmed = form.name.trim()
+    if (!nameTrimmed) {
+      setFeedback({ message: '닉네임을 입력해 주세요.' })
+      setErrorField('name')
+      return
+    }
+
+    if (nameTrimmed.length > 50) {
+      setFeedback({ message: '닉네임은 최대 50자까지 입력할 수 있습니다.' })
+      setErrorField('name')
+      return
+    }
+
+    if (!form.password) {
+      setFeedback({ message: '비밀번호를 입력해 주세요.' })
+      setErrorField('password')
+      return
+    }
+
+    if (form.password.length < 8) {
+      setFeedback({ message: '비밀번호는 최소 8자 이상이어야 합니다.' })
+      setErrorField('password')
+      return
+    }
+
+    if (form.password.length > 64) {
+      setFeedback({ message: '비밀번호는 최대 64자까지 입력할 수 있습니다.' })
+      setErrorField('password')
+      return
+    }
+
+    const hasLetter = /[a-zA-Z]/.test(form.password)
+    const hasNumber = /\d/.test(form.password)
+    const hasSpecial = /[@$!%*#?&~^_\-+=[\]{}|:;.,<>/?]/.test(form.password)
+
+    if (!hasLetter || !hasNumber || !hasSpecial) {
+      setFeedback({ message: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' })
+      setErrorField('password')
       return
     }
 
@@ -66,9 +142,9 @@ export function SignupPage() {
 
     try {
       const response = await signUp({
-        userId: suggestedUserId,
-        email: form.email,
-        name: form.name,
+        userId: form.userId.trim(),
+        email: form.email.trim(),
+        name: form.name.trim(),
         password: form.password,
       })
 
@@ -85,7 +161,20 @@ export function SignupPage() {
           return
         }
 
-        setFeedback({ message: response.message || '가입 정보를 다시 확인해 주세요.' })
+        const msg = response.message || '가입 정보를 다시 확인해 주세요.'
+        setFeedback({ message: msg })
+
+        if (msg.includes('아이디') || msg.toLowerCase().includes('user_id') || msg.toLowerCase().includes('userid')) {
+          setErrorField('userId')
+        } else if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
+          setErrorField('email')
+        } else if (msg.includes('닉네임') || msg.includes('이름') || msg.toLowerCase().includes('name')) {
+          setErrorField('name')
+        } else if (msg.includes('비밀번호') || msg.toLowerCase().includes('password')) {
+          setErrorField('password')
+        } else {
+          setErrorField('all')
+        }
         return
       }
 
@@ -139,11 +228,15 @@ export function SignupPage() {
           <span className={`${styles.decorDot} ${styles.dotThree}`} />
         </div>
 
-        {!hasCustomTitleBar ? (
-          <header className={styles.utilityBar}>
-            <ThemeToggle compact />
-          </header>
-        ) : null}
+        <header className={styles.utilityBar}>
+          <div className={styles.utilityActions}>
+            {!hasCustomTitleBar ? <ThemeToggle compact /> : null}
+            <div className={styles.languageChip}>
+              <Icon name="globe" size={20} />
+              <span lang="ko">한국어</span>
+            </div>
+          </div>
+        </header>
 
         <div className={styles.content}>
           <aside className={styles.visualPanel} aria-label="Axis 소개">
@@ -213,12 +306,50 @@ export function SignupPage() {
               </p>
             </header>
 
-            <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting}>
+            <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting} noValidate>
+              <div className={styles.field}>
+                <label htmlFor="signup-userid" className={styles.label}>
+                  아이디
+                </label>
+                <div
+                  className={[
+                    styles.inputShell,
+                    errorField === 'userId' || errorField === 'all' ? styles.inputShellError : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  <Icon name="user" size={21} className={styles.fieldIcon} aria-hidden="true" />
+                  <input
+                    id="signup-userid"
+                    autoComplete="username"
+                    required
+                    disabled={submitting}
+                    maxLength={30}
+                    value={form.userId}
+                    onChange={(event) => {
+                      setFeedback(null)
+                      setErrorField(null)
+                      setForm((current) => ({ ...current, userId: event.target.value }))
+                    }}
+                    className={styles.input}
+                    placeholder="사용자 아이디를 입력하세요"
+                  />
+                </div>
+              </div>
+
               <div className={styles.field}>
                 <label htmlFor="signup-email" className={styles.label}>
                   이메일
                 </label>
-                <div className={styles.inputShell}>
+                <div
+                  className={[
+                    styles.inputShell,
+                    errorField === 'email' || errorField === 'all' ? styles.inputShellError : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
                   <Icon name="mail" size={21} className={styles.fieldIcon} aria-hidden="true" />
                   <input
                     id="signup-email"
@@ -226,9 +357,11 @@ export function SignupPage() {
                     autoComplete="email"
                     required
                     disabled={submitting}
+                    maxLength={100}
                     value={form.email}
                     onChange={(event) => {
                       setFeedback(null)
+                      setErrorField(null)
                       setForm((current) => ({ ...current, email: event.target.value }))
                     }}
                     className={styles.input}
@@ -241,16 +374,25 @@ export function SignupPage() {
                 <label htmlFor="signup-name" className={styles.label}>
                   닉네임
                 </label>
-                <div className={styles.inputShell}>
+                <div
+                  className={[
+                    styles.inputShell,
+                    errorField === 'name' || errorField === 'all' ? styles.inputShellError : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
                   <Icon name="user" size={21} className={styles.fieldIcon} aria-hidden="true" />
                   <input
                     id="signup-name"
                     autoComplete="name"
                     required
                     disabled={submitting}
+                    maxLength={50}
                     value={form.name}
                     onChange={(event) => {
                       setFeedback(null)
+                      setErrorField(null)
                       setForm((current) => ({ ...current, name: event.target.value }))
                     }}
                     className={styles.input}
@@ -263,7 +405,14 @@ export function SignupPage() {
                 <label htmlFor="signup-password" className={styles.label}>
                   비밀번호
                 </label>
-                <div className={styles.inputShell}>
+                <div
+                  className={[
+                    styles.inputShell,
+                    errorField === 'password' || errorField === 'all' ? styles.inputShellError : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
                   <Icon name="lock" size={21} className={styles.fieldIcon} aria-hidden="true" />
                   <input
                     id="signup-password"
@@ -271,9 +420,11 @@ export function SignupPage() {
                     autoComplete="new-password"
                     required
                     disabled={submitting}
+                    maxLength={64}
                     value={form.password}
                     onChange={(event) => {
                       setFeedback(null)
+                      setErrorField(null)
                       setForm((current) => ({ ...current, password: event.target.value }))
                     }}
                     className={`${styles.input} ${styles.passwordInput}`}
@@ -293,9 +444,9 @@ export function SignupPage() {
                 </div>
 
                 <ul id="signup-password-guidance" className={styles.passwordGuidance}>
-                  <li>보안을 위해 8자 이상을 권장합니다.</li>
-                  <li>영문, 숫자, 특수문자 조합을 권장합니다.</li>
-                  <li>다른 서비스와 다른 비밀번호를 사용하세요.</li>
+                  <li>8자 이상이어야 합니다.</li>
+                  <li>영문, 숫자, 특수문자를 모두 포함해야 합니다.</li>
+                  <li>다른 서비스와 다른 안전한 비밀번호를 사용하세요.</li>
                 </ul>
               </div>
 
@@ -349,6 +500,14 @@ export function SignupPage() {
             </div>
           </section>
         </div>
+
+        <footer className={styles.footer}>
+          <span>© 2026 Axis. All rights reserved.</span>
+          <span className={styles.footerDivider} aria-hidden="true" />
+          <span>이용약관</span>
+          <span className={styles.footerDivider} aria-hidden="true" />
+          <span>개인정보처리방침</span>
+        </footer>
       </section>
     </main>
   )

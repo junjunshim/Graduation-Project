@@ -1,14 +1,15 @@
 import { getAccessibleNodeIdsForUser } from '../data/orgService'
+import { getWorkspaceMemberSummary } from '../model/memberInheritance'
 import { getNodeTypeLabel } from '../model/labels'
 import { sortWorkspaceNodes } from '../model/sorters'
-import type { NodeType, OrganizationNodeRecord, WorkspaceSnapshot } from '../model/types'
+import type { IconName } from '../../../design-system/primitives/Icon'
+import type { OrganizationNodeRecord, WorkspaceSnapshot } from '../model/types'
 import type {
   WorkspaceDirectoryItem,
   WorkspaceDirectoryTone,
 } from '../model/workspaceDirectory'
 
-type OrganizationNodeType = Exclude<NodeType, 'USER'>
-type OrganizationNode = OrganizationNodeRecord & { nodeType: OrganizationNodeType }
+type OrganizationNode = OrganizationNodeRecord
 
 type DirectoryVisualMetadata = Pick<WorkspaceDirectoryItem, 'iconName' | 'tone'>
 
@@ -29,7 +30,8 @@ const ROOT_TONES: WorkspaceDirectoryTone[] = [
   'pink',
 ]
 
-const NODE_VISUAL_METADATA: Record<OrganizationNodeType, DirectoryVisualMetadata> = {
+const NODE_VISUAL_METADATA: Record<string, DirectoryVisualMetadata> = {
+  USER: { tone: 'violet', iconName: 'folder' },
   COMPANY: { tone: 'indigo', iconName: 'building' },
   DIVISION: { tone: 'blue', iconName: 'orgChart' },
   DEPARTMENT: { tone: 'teal', iconName: 'folder' },
@@ -37,22 +39,41 @@ const NODE_VISUAL_METADATA: Record<OrganizationNodeType, DirectoryVisualMetadata
   PROJECT: { tone: 'violet', iconName: 'cube' },
 }
 
+export function getNodeVisualMetadata(nodeType: string): DirectoryVisualMetadata {
+  if (typeof nodeType === 'string' && nodeType.startsWith('CUSTOM:')) {
+    const parts = nodeType.split(':')
+    const customIcon = (parts[2] as IconName) || 'sparkles'
+    return { tone: 'orange', iconName: customIcon }
+  }
+
+  return NODE_VISUAL_METADATA[nodeType] ?? { tone: 'orange', iconName: 'sparkles' }
+}
+
 function getCreatedDate(createdAt: string) {
   return createdAt.split('T', 1)[0] ?? createdAt
 }
 
 function getDescription(node: OrganizationNodeRecord, isRoot: boolean) {
+  if (node.nodeType === 'USER') {
+    return '개인 워크스페이스'
+  }
   return isRoot ? '전체 조직 최상위 워크스페이스' : `${getNodeTypeLabel(node.nodeType)} 워크스페이스`
-}
-
-function isOrganizationNode(node: OrganizationNodeRecord): node is OrganizationNode {
-  return node.nodeType !== 'USER'
 }
 
 export function getWorkspaceDirectory(
   userId: string | undefined,
   snapshot: WorkspaceSnapshot,
+  options?: { selectedRootId?: string | null },
 ): WorkspaceDirectoryView {
+  return queryWorkspaceDirectory(snapshot, userId ? { userId } : null, options)
+}
+
+export function queryWorkspaceDirectory(
+  snapshot: WorkspaceSnapshot,
+  currentUser: { userId: string } | null,
+  options?: { selectedRootId?: string | null },
+): WorkspaceDirectoryView {
+  const userId = currentUser?.userId?.trim()
   if (!userId) {
     return {
       hierarchyRoot: null,
@@ -65,10 +86,9 @@ export function getWorkspaceDirectory(
   const accessibleNodeIds = new Set(getAccessibleNodeIdsForUser(userId, snapshot))
   const visibleNodes = sortWorkspaceNodes(
     snapshot.nodes.filter((node) => accessibleNodeIds.has(node.id)),
-  ).filter(isOrganizationNode)
+  )
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id))
   const childNodesByParentId = new Map<number, OrganizationNode[]>()
-  const directMemberIdsByNodeId = new Map<number, Set<string>>()
 
   visibleNodes.forEach((node) => {
     if (node.parentNodeId === undefined || !visibleNodeIds.has(node.parentNodeId)) {
@@ -80,25 +100,24 @@ export function getWorkspaceDirectory(
     childNodesByParentId.set(node.parentNodeId, siblings)
   })
 
-  snapshot.roles.forEach((role) => {
-    if (!visibleNodeIds.has(role.nodeId)) {
-      return
-    }
-
-    const memberIds = directMemberIdsByNodeId.get(role.nodeId) ?? new Set<string>()
-    memberIds.add(role.userId)
-    directMemberIdsByNodeId.set(role.nodeId, memberIds)
-  })
-
-  childNodesByParentId.forEach((children, parentNodeId) => {
-    childNodesByParentId.set(parentNodeId, sortWorkspaceNodes(children).filter(isOrganizationNode))
+  // 모든 노드에 대해 단일 공통 함수(getWorkspaceMemberSummary)를 통해 팀원 지표를 사전 계산
+  const memberSummaryByNodeId = new Map<number, ReturnType<typeof getWorkspaceMemberSummary>>()
+  visibleNodes.forEach((node) => {
+    const summary = getWorkspaceMemberSummary({
+      rootNode: node,
+      nodes: snapshot.nodes,
+      roles: snapshot.roles,
+      users: snapshot.users,
+      authorities: snapshot.authorities,
+    })
+    memberSummaryByNodeId.set(node.id, summary)
   })
 
   const rootNodes = sortWorkspaceNodes(
     visibleNodes.filter(
       (node) => node.parentNodeId === undefined || !visibleNodeIds.has(node.parentNodeId),
     ),
-  ).filter(isOrganizationNode)
+  )
   const itemsByNodeId = new Map<number, WorkspaceDirectoryItem>()
 
   function buildItem(
@@ -106,39 +125,48 @@ export function getWorkspaceDirectory(
     rootId: string,
     rootTone: WorkspaceDirectoryTone,
     ancestors: ReadonlySet<number>,
-  ): { item: WorkspaceDirectoryItem; memberIds: Set<string> } {
+  ): WorkspaceDirectoryItem {
     const nextAncestors = new Set(ancestors)
     nextAncestors.add(node.id)
 
     const childResults = (childNodesByParentId.get(node.id) ?? [])
       .filter((child) => !nextAncestors.has(child.id))
       .map((child) => buildItem(child, rootId, rootTone, nextAncestors))
-    const memberIds = new Set(directMemberIdsByNodeId.get(node.id) ?? [])
 
-    childResults.forEach(({ memberIds: childMemberIds }) => {
-      childMemberIds.forEach((memberId) => memberIds.add(memberId))
-    })
+    const memberSummary = memberSummaryByNodeId.get(node.id) ?? {
+      totalCount: 0,
+      directCount: 0,
+      inheritedCount: 0,
+      overriddenCount: 0,
+      displayValue: '0',
+      description: '직속 0',
+    }
 
     const isRoot = node.id.toString() === rootId
+    const baseVisualMetadata = getNodeVisualMetadata(node.nodeType)
     const visualMetadata = isRoot
-      ? { tone: rootTone, iconName: 'building' as const }
-      : NODE_VISUAL_METADATA[node.nodeType]
+      ? { tone: rootTone, iconName: baseVisualMetadata.iconName }
+      : baseVisualMetadata
     const item: WorkspaceDirectoryItem = {
       id: node.id.toString(),
       rootId,
       name: node.name,
       description: getDescription(node, isRoot),
-      memberCount: memberIds.size,
+      memberCount: memberSummary.totalCount,
+      directMemberCount: memberSummary.directCount,
+      inheritedMemberCount: memberSummary.inheritedCount,
+      totalMemberCount: memberSummary.totalCount,
+      memberSummary,
       childCount: childResults.length,
       createdAt: getCreatedDate(node.createdAt),
       isRoot,
       isFavorite: false,
       ...visualMetadata,
-      children: childResults.map(({ item: childItem }) => childItem),
+      children: childResults,
     }
 
     itemsByNodeId.set(node.id, item)
-    return { item, memberIds }
+    return item
   }
 
   const rootOptions = rootNodes.map((rootNode, rootIndex) =>
@@ -147,13 +175,16 @@ export function getWorkspaceDirectory(
       rootNode.id.toString(),
       ROOT_TONES[rootIndex % ROOT_TONES.length] ?? 'indigo',
       new Set(),
-    ).item,
+    ),
   )
   const listItems = visibleNodes.flatMap((node) => {
     const item = itemsByNodeId.get(node.id)
     return item ? [item] : []
   })
-  const hierarchyRoot = rootOptions[0] ?? null
+  
+  const selectedRootId = options?.selectedRootId
+  const hierarchyRoot = 
+    (selectedRootId ? rootOptions.find((o) => o.id === selectedRootId) : rootOptions[0]) ?? null
 
   return {
     hierarchyRoot,

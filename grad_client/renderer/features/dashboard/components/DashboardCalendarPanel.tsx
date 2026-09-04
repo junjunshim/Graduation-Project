@@ -4,6 +4,7 @@ import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
 import type { WorkItemRecord } from '../../workspace/model/types'
 import { WEEKDAY_LABELS, type DashboardCalendar } from '../model/dashboardView'
+import { DashboardEmptyState } from './DashboardEmptyState'
 import styles from '../pages/DashboardPage.module.css'
 
 type DashboardCalendarPanelProps = {
@@ -61,24 +62,31 @@ export function DashboardCalendarPanel({ calendar, onMonthChange }: DashboardCal
       <div className={styles.calendarGrid}>
         {calendar.cells.map((cell, index) => {
           const weekdayIndex = index % 7
+          const isHoliday = Boolean(cell.holidayName)
+          const tooltipItems = cell.items.map((item) => item.title)
+          const tooltipText = [cell.holidayName, ...tooltipItems].filter(Boolean).join(' · ')
 
           return (
             <span
               key={cell.key}
               className={[
                 styles.calendarDay,
-                weekdayIndex === 0 ? styles.calendarDaySunday : '',
-                weekdayIndex === 6 ? styles.calendarDaySaturday : '',
+                weekdayIndex === 0 || isHoliday ? styles.calendarDaySunday : '',
+                weekdayIndex === 6 && !isHoliday ? styles.calendarDaySaturday : '',
                 !cell.isCurrentMonth ? styles.calendarDayMuted : '',
-                cell.items.length > 0 ? styles.calendarDayActive : '',
+                cell.items.length > 0 ? styles.calendarDayHasItems : '',
                 cell.isToday ? styles.calendarToday : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
-              title={cell.items.map((item) => item.title).join(', ')}
+              title={tooltipText || undefined}
             >
-              <span>{cell.day}</span>
-              {cell.items.length > 0 ? <strong>{cell.items.length}</strong> : null}
+              {cell.items.length > 0 ? (
+                <span className={styles.calendarDayTopCount} aria-label={`${cell.items.length}개 업무`}>
+                  {cell.items.length}
+                </span>
+              ) : null}
+              <span className={styles.calendarDayNumber}>{cell.day}</span>
             </span>
           )
         })}
@@ -96,7 +104,11 @@ export function DashboardCalendarPanel({ calendar, onMonthChange }: DashboardCal
             ))}
           </div>
         ) : (
-          <p className={styles.calendarPreviewEmpty}>이번 달에 예정된 할 일이 없습니다.</p>
+          <DashboardEmptyState
+            icon="calendar"
+            compact
+            title="이번 달 마감 예정인 업무 없음"
+          />
         )}
       </div>
     </section>

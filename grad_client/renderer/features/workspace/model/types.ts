@@ -1,6 +1,7 @@
-export type RoleName = 'ADMIN' | 'MANAGER' | 'MEMBER' | 'VIEWER'
-
-export type NodeType = 'USER' | 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM' | 'PROJECT'
+export type StandardRoleName = 'ADMIN' | 'MANAGER' | 'MEMBER' | 'VIEWER'
+export type RoleName = StandardRoleName | (string & {})
+export type StandardNodeType = 'USER' | 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM' | 'PROJECT'
+export type NodeType = StandardNodeType | (string & {})
 
 export type WorkItemStatus = 'todo' | 'in-progress' | 'done'
 
@@ -56,6 +57,53 @@ export type WorkItemRecord = {
   updatedAt?: string
 }
 
+export type AuthorityRecord = {
+  id: number
+  nodeId: number
+  roleName: RoleName
+  authority: string
+  updatedAt?: string
+}
+
+export type MentionRecord = {
+  id: number
+  commentId: number
+  workItemId: string
+  message: string
+  isRead: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
+export type ActivityRecord = {
+  id: number
+  nodeId: number
+  actorUserId: string
+  actorName: string
+  entityType: string
+  entityId: string
+  targetName: string
+  actionType: string
+  fieldName?: string | null
+  oldValue?: string | null
+  newValue?: string | null
+  createdAt: string
+}
+
+export type WorkItemFileRecord = {
+  id: number
+  workItemId: string
+  uploaderUserId: string
+  uploaderName: string
+  uploaderEmail: string
+  originalFileName: string
+  fileSize: number
+  mimeType?: string | null
+  isDeleted?: boolean
+  createdAt: string
+  updatedAt?: string
+}
+
 export type WorkspaceDatabase = {
   datasetId: string
   seedVersion: number
@@ -63,13 +111,21 @@ export type WorkspaceDatabase = {
   nodes: OrganizationNodeRecord[]
   roles: RoleAssignmentRecord[]
   workItems: WorkItemRecord[]
+  authorities?: AuthorityRecord[]
+  mentions?: MentionRecord[]
+  activities?: ActivityRecord[]
+  files?: WorkItemFileRecord[]
+  serverTime?: string
   counters: {
     node: number
     role: number
   }
 }
 
-export type WorkspaceSnapshot = Pick<WorkspaceDatabase, 'users' | 'nodes' | 'roles' | 'workItems'>
+export type WorkspaceSnapshot = Pick<
+  WorkspaceDatabase,
+  'users' | 'nodes' | 'roles' | 'workItems' | 'authorities' | 'mentions' | 'activities' | 'files'
+>
 
 export type SignUpRequest = {
   userId: string
@@ -213,6 +269,9 @@ export type WorkspaceOverview = {
   dueSoonWorkItems: WorkItemRecord[]
   rootNode?: OrganizationNodeRecord
   rootRoleMembers: RoleMember[]
+  allRoleMembers?: RoleMember[]
+  activities?: ActivityRecord[]
+  files?: WorkItemFileRecord[]
   onboardingSteps: OnboardingStep[]
 }
 

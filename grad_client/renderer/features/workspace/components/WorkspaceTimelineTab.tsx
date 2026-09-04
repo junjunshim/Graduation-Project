@@ -11,7 +11,8 @@ import {
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
-import { getWorkItemStatusLabel } from '../model/labels'
+import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
+import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
 import type { OrganizationNodeRecord, RoleMember, WorkItemRecord } from '../model/types'
 import styles from './WorkspaceTimelineTab.module.css'
 
@@ -30,10 +31,11 @@ type TimelineEntry = {
 }
 
 type TimelineGroup = {
-  nodeId: number
+  key: string
   name: string
   entries: TimelineEntry[]
   tone: TimelineTone
+  style?: CSSProperties
 }
 
 type TimelineSegment = {
@@ -57,10 +59,10 @@ type TimelineMonthGroup = {
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
 const DEFAULT_PIXELS_PER_DAY = 18
-const MIN_PIXELS_PER_DAY = 8
+const MIN_PIXELS_PER_DAY = 3
 const MAX_PIXELS_PER_DAY = 64
 const DEFAULT_VERTICAL_SCALE = 1
-const MIN_VERTICAL_SCALE = 0.45
+const MIN_VERTICAL_SCALE = 0.35
 const MAX_VERTICAL_SCALE = 1.4
 const ZOOM_BUTTON_FACTOR = 1.16
 const GROUP_ROW_HEIGHT_REM = 2.85
@@ -186,7 +188,7 @@ function getTimelineRange(entries: TimelineEntry[], today: number) {
   }
 }
 
-export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTimelineTabProps) {
+export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTabProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const labelColumnRef = useRef<HTMLDivElement>(null)
   const monthPickerRef = useRef<HTMLDivElement>(null)
@@ -208,8 +210,8 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
   const [minimumVerticalScale, setMinimumVerticalScale] = useState(MIN_VERTICAL_SCALE)
   const [isDragging, setIsDragging] = useState(false)
   const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false)
-  const [hiddenGroupIds, setHiddenGroupIds] = useState<Set<number>>(() => new Set())
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<number>>(() => new Set())
+  const [hiddenGroupKeys, setHiddenGroupKeys] = useState<Set<string>>(() => new Set())
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<Set<string>>(() => new Set())
   const [selectedMonthStart, setSelectedMonthStart] = useState(() =>
     getMonthStart(getWorkspaceTodayTimestamp()),
   )
@@ -217,35 +219,56 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
 
   const entries = useMemo(() => getTimelineEntries(workItems), [workItems])
   const groups = useMemo<TimelineGroup[]>(() => {
-    const nodeOrder = new Map(nodes.map((node, index) => [node.id, index]))
-    const nodeNames = new Map(nodes.map((node) => [node.id, node.name]))
-    const groupedEntries = new Map<number, TimelineEntry[]>()
+    const groupedEntries = new Map<string, { name: string; tone: TimelineTone; entries: TimelineEntry[] }>()
 
     entries.forEach((entry) => {
-      const existing = groupedEntries.get(entry.item.ownerNodeId) ?? []
-      existing.push(entry)
-      groupedEntries.set(entry.item.ownerNodeId, existing)
+      const tag = getWorkItemTag(entry.item)
+      const groupKey = tag ? tag.id : 'unclassified'
+      const groupName = tag ? tag.label : '미분류'
+
+      // 태그의 tone에 따라 적절한 타임라인 톤 매핑
+      let groupTone: TimelineTone = 'purple'
+      if (tag) {
+        const toneStr = String(tag.tone)
+        if (toneStr === 'blue' || toneStr === 'sky') groupTone = 'blue'
+        else if (toneStr === 'green') groupTone = 'green'
+        else if (toneStr === 'orange' || toneStr === 'amber' || toneStr === 'yellow') groupTone = 'yellow'
+        else groupTone = 'purple'
+      }
+
+      const existing = groupedEntries.get(groupKey) ?? {
+        name: groupName,
+        tone: groupTone,
+        entries: [],
+      }
+      existing.entries.push(entry)
+      groupedEntries.set(groupKey, existing)
     })
 
+    // 미리 정의된 태그 순서 (planning, research, design, document, review, release) 우선 정렬
+    const tagOrder = Object.keys(WORK_ITEM_TAGS)
+
     return Array.from(groupedEntries.entries())
-      .sort(
-        ([leftNodeId], [rightNodeId]) =>
-          (nodeOrder.get(leftNodeId) ?? Number.MAX_SAFE_INTEGER) -
-            (nodeOrder.get(rightNodeId) ?? Number.MAX_SAFE_INTEGER) ||
-          leftNodeId - rightNodeId,
-      )
-      .map(([nodeId, groupEntries], index) => ({
-        nodeId,
-        name: nodeNames.get(nodeId) ?? `워크스페이스 ${nodeId}`,
-        entries: groupEntries,
-        tone: TIMELINE_TONES[index % TIMELINE_TONES.length],
+      .sort(([keyA], [keyB]) => {
+        const indexA = tagOrder.indexOf(keyA)
+        const indexB = tagOrder.indexOf(keyB)
+        const orderA = indexA >= 0 ? indexA : 999
+        const orderB = indexB >= 0 ? indexB : 999
+        return orderA - orderB || keyA.localeCompare(keyB, 'ko')
+      })
+      .map(([key, groupData], index) => ({
+        key,
+        name: groupData.name,
+        entries: groupData.entries,
+        tone: groupData.tone || TIMELINE_TONES[index % TIMELINE_TONES.length],
+        style: getCategoryBadgeStyle(groupData.name),
       }))
-  }, [entries, nodes])
+  }, [entries])
 
   const range = useMemo(() => getTimelineRange(entries, today), [entries, today])
   const totalDays = Math.max(1, Math.ceil((range.end - range.start) / MS_PER_DAY))
   const timelineTrackWidth = totalDays * pixelsPerDay
-  const tickStepDays = pixelsPerDay >= 42 ? 1 : pixelsPerDay >= 17 ? 7 : 14
+  const tickStepDays = pixelsPerDay >= 42 ? 1 : pixelsPerDay >= 17 ? 7 : pixelsPerDay >= 7 ? 14 : 30
 
   const monthGroups = useMemo<TimelineMonthGroup[]>(() => {
     const monthGroupList: TimelineMonthGroup[] = []
@@ -327,10 +350,10 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       return MIN_VERTICAL_SCALE
     }
 
-    const visibleGroups = groups.filter((group) => !hiddenGroupIds.has(group.nodeId))
+    const visibleGroups = groups.filter((group) => !hiddenGroupKeys.has(group.key))
     const visibleTaskCount = visibleGroups.reduce(
       (taskCount, group) =>
-        taskCount + (collapsedGroupIds.has(group.nodeId) ? 0 : group.entries.length),
+        taskCount + (collapsedGroupKeys.has(group.key) ? 0 : group.entries.length),
       0,
     )
     const rootFontSize = Number.parseFloat(getComputedStyle(viewport).fontSize) || 16
@@ -352,7 +375,7 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       MIN_VERTICAL_SCALE,
       DEFAULT_VERTICAL_SCALE,
     )
-  }, [collapsedGroupIds, getDateHeaderHeight, groups, hiddenGroupIds])
+  }, [collapsedGroupKeys, getDateHeaderHeight, groups, hiddenGroupKeys])
 
   const applyView = useCallback(
     (
@@ -562,7 +585,7 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
     (
       zoomFactor: number,
       horizontalAnchorOffset: number,
-      verticalAnchorOffset: number,
+      _verticalAnchorOffset: number,
       behavior: ScrollBehavior,
     ) => {
       const viewport = viewportRef.current
@@ -572,40 +595,25 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       }
 
       const currentPixelsPerDay = pixelsPerDayRef.current
-      const currentVerticalScale = verticalScaleRef.current
       const nextPixelsPerDay = clamp(
         currentPixelsPerDay * zoomFactor,
         MIN_PIXELS_PER_DAY,
         MAX_PIXELS_PER_DAY,
       )
-      const nextVerticalScale = clamp(
-        currentVerticalScale * zoomFactor,
-        minimumVerticalScale,
-        MAX_VERTICAL_SCALE,
-      )
       const currentScrollLeft = virtualScrollLeftRef.current ?? viewport.scrollLeft
       const anchorDay = (currentScrollLeft + horizontalAnchorOffset) / currentPixelsPerDay
       const nextScrollLeft = anchorDay * nextPixelsPerDay - horizontalAnchorOffset
-      const dateHeaderHeight = getDateHeaderHeight()
       const currentScrollTop = virtualScrollTopRef.current ?? viewport.scrollTop
-      const anchorBodyPosition = Math.max(
-        0,
-        currentScrollTop + verticalAnchorOffset - dateHeaderHeight,
-      )
-      const nextScrollTop =
-        dateHeaderHeight +
-        anchorBodyPosition * (nextVerticalScale / currentVerticalScale) -
-        verticalAnchorOffset
 
       applyView(
         nextPixelsPerDay,
         nextScrollLeft,
-        nextVerticalScale,
-        nextScrollTop,
+        DEFAULT_VERTICAL_SCALE,
+        currentScrollTop,
         behavior,
       )
     },
-    [applyView, getDateHeaderHeight, minimumVerticalScale],
+    [applyView],
   )
 
   useEffect(() => {
@@ -620,8 +628,8 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
         return
       }
 
-      const hasVerticalOverflow = viewport.scrollHeight > viewport.clientHeight + 1
-      const isZoomGesture = event.ctrlKey || event.metaKey || !hasVerticalOverflow
+      // 확대/축소는 반드시 Ctrl(또는 ⌘) 키를 누른 상태에서만 작동하도록 제한하여 일반 스크롤과 명확히 분리
+      const isZoomGesture = event.ctrlKey || event.metaKey
 
       if (!isZoomGesture) {
         return
@@ -661,17 +669,19 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
     setIsMonthMenuOpen(false)
     centerDate(
       currentToday + MS_PER_DAY / 2,
-      DEFAULT_PIXELS_PER_DAY,
+      pixelsPerDayRef.current,
       'smooth',
-      DEFAULT_VERTICAL_SCALE,
-      0,
     )
   }
 
   const handleMonthSelect = (month: TimelineMonthOption) => {
     setSelectedMonthStart(month.start)
     setIsMonthMenuOpen(false)
-    centerDate(month.start + (month.end - month.start) / 2, DEFAULT_PIXELS_PER_DAY, 'smooth')
+    centerDate(
+      month.start + (month.end - month.start) / 2,
+      pixelsPerDayRef.current,
+      'smooth',
+    )
     monthButtonRef.current?.focus()
   }
 
@@ -688,50 +698,97 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
     const verticalAnchorOffset =
       dateHeaderHeight + Math.max(0, viewport.clientHeight - dateHeaderHeight) / 2
 
-    zoomView(zoomFactor, horizontalAnchorOffset, verticalAnchorOffset, 'smooth')
+    zoomView(zoomFactor, horizontalAnchorOffset, verticalAnchorOffset, 'auto')
   }
 
-  const handleFitAllClick = () => {
+  const zoomAnimationRef = useRef<number | null>(null)
+
+  const handleResetZoomClick = () => {
     const viewport = viewportRef.current
 
     if (!viewport) {
       return
     }
 
-    applyView(
-      pixelsPerDayRef.current,
-      virtualScrollLeftRef.current ?? viewport.scrollLeft,
-      minimumVerticalScale,
-      0,
-      'smooth',
-    )
+    if (zoomAnimationRef.current !== null) {
+      cancelAnimationFrame(zoomAnimationRef.current)
+      zoomAnimationRef.current = null
+    }
+
+    const startPixelsPerDay = pixelsPerDayRef.current
+    const targetPixelsPerDay = DEFAULT_PIXELS_PER_DAY
+
+    if (Math.abs(startPixelsPerDay - targetPixelsPerDay) < 0.1) {
+      return
+    }
+
+    const labelWidth = getLabelColumnWidth()
+    const horizontalAnchorOffset = Math.max(1, viewport.clientWidth - labelWidth) / 2
+    const currentScrollLeft = virtualScrollLeftRef.current ?? viewport.scrollLeft
+    const anchorDay = (currentScrollLeft + horizontalAnchorOffset) / startPixelsPerDay
+    const startTime = performance.now()
+    const duration = 280 // ms
+
+    const step = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(1, elapsed / duration)
+      // Ease out cubic
+      const ease = 1 - Math.pow(1 - progress, 3)
+
+      const currentTargetPpd = startPixelsPerDay + (targetPixelsPerDay - startPixelsPerDay) * ease
+      const nextScrollLeft = anchorDay * currentTargetPpd - horizontalAnchorOffset
+
+      applyView(
+        currentTargetPpd,
+        nextScrollLeft,
+        DEFAULT_VERTICAL_SCALE,
+        virtualScrollTopRef.current ?? viewport.scrollTop,
+        'auto',
+      )
+
+      if (progress < 1) {
+        zoomAnimationRef.current = requestAnimationFrame(step)
+      } else {
+        zoomAnimationRef.current = null
+      }
+    }
+
+    zoomAnimationRef.current = requestAnimationFrame(step)
   }
 
-  const handleGroupVisibilityChange = (nodeId: number, isVisible: boolean) => {
-    setHiddenGroupIds((currentHiddenGroupIds) => {
-      const nextHiddenGroupIds = new Set(currentHiddenGroupIds)
+  useEffect(() => {
+    return () => {
+      if (zoomAnimationRef.current !== null) {
+        cancelAnimationFrame(zoomAnimationRef.current)
+      }
+    }
+  }, [])
+
+  const handleGroupVisibilityChange = (groupKey: string, isVisible: boolean) => {
+    setHiddenGroupKeys((currentHiddenGroupKeys) => {
+      const nextHiddenGroupKeys = new Set(currentHiddenGroupKeys)
 
       if (isVisible) {
-        nextHiddenGroupIds.delete(nodeId)
+        nextHiddenGroupKeys.delete(groupKey)
       } else {
-        nextHiddenGroupIds.add(nodeId)
+        nextHiddenGroupKeys.add(groupKey)
       }
 
-      return nextHiddenGroupIds
+      return nextHiddenGroupKeys
     })
   }
 
-  const handleGroupCollapseChange = (nodeId: number) => {
-    setCollapsedGroupIds((currentCollapsedGroupIds) => {
-      const nextCollapsedGroupIds = new Set(currentCollapsedGroupIds)
+  const handleGroupCollapseChange = (groupKey: string) => {
+    setCollapsedGroupKeys((currentCollapsedGroupKeys) => {
+      const nextCollapsedGroupKeys = new Set(currentCollapsedGroupKeys)
 
-      if (nextCollapsedGroupIds.has(nodeId)) {
-        nextCollapsedGroupIds.delete(nodeId)
+      if (nextCollapsedGroupKeys.has(groupKey)) {
+        nextCollapsedGroupKeys.delete(groupKey)
       } else {
-        nextCollapsedGroupIds.add(nodeId)
+        nextCollapsedGroupKeys.add(groupKey)
       }
 
-      return nextCollapsedGroupIds
+      return nextCollapsedGroupKeys
     })
   }
 
@@ -756,26 +813,31 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
   }
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const viewport = viewportRef.current
     const drag = dragRef.current
 
-    if (!viewport || !drag || drag.pointerId !== event.pointerId) {
+    if (!drag || drag.pointerId !== event.pointerId) {
       return
     }
 
-    viewport.scrollLeft = drag.scrollLeft - (event.clientX - drag.startX)
+    const viewport = viewportRef.current
+
+    if (!viewport) {
+      return
+    }
+
+    const nextScrollLeft = drag.scrollLeft - (event.clientX - drag.startX)
+    viewport.scrollLeft = nextScrollLeft
   }
 
-  const finishPointerDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const viewport = viewportRef.current
+  const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current
 
-    if (!viewport || !drag || drag.pointerId !== event.pointerId) {
+    if (!drag || drag.pointerId !== event.pointerId) {
       return
     }
 
-    if (viewport.hasPointerCapture(event.pointerId)) {
-      viewport.releasePointerCapture(event.pointerId)
+    if (viewportRef.current?.hasPointerCapture(event.pointerId)) {
+      viewportRef.current.releasePointerCapture(event.pointerId)
     }
 
     dragRef.current = null
@@ -807,6 +869,9 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       verticalScale >= MAX_VERTICAL_SCALE - 0.001)
   const todayLeft = ((today + MS_PER_DAY / 2 - range.start) / MS_PER_DAY) * pixelsPerDay
 
+  const zoomRatio = pixelsPerDay / DEFAULT_PIXELS_PER_DAY
+  const zoomMultiplierLabel = zoomRatio >= 10 ? `${Math.round(zoomRatio)}x` : zoomRatio >= 1 ? `${zoomRatio.toFixed(1).replace(/\.0$/, '')}x` : `${zoomRatio.toFixed(1)}x`
+
   return (
     <section className={styles.panel} aria-labelledby="workspace-timeline-title">
       <h2 id="workspace-timeline-title" className={styles.visuallyHidden}>
@@ -835,8 +900,8 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
           title="스크롤로 목록 이동 · Ctrl(⌘)+휠로 가로·세로 확대/축소"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={finishPointerDrag}
-          onPointerCancel={finishPointerDrag}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
         >
           <div className={styles.canvas} style={canvasStyle}>
             <div className={styles.dateHeader}>
@@ -874,19 +939,18 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
               </span>
 
               {groups.map((group, groupIndex) => {
-                if (hiddenGroupIds.has(group.nodeId)) {
+                if (hiddenGroupKeys.has(group.key)) {
                   return null
                 }
 
-                const isCollapsed = collapsedGroupIds.has(group.nodeId)
-                const groupEntriesId = `timeline-group-entries-${group.nodeId}`
+                const isCollapsed = collapsedGroupKeys.has(group.key)
+                const groupEntriesId = `timeline-group-entries-${group.key}`
 
                 return (
                   <section
-                    key={group.nodeId}
+                    key={group.key}
                     className={[styles.group, toneClassNames[group.tone]].join(' ')}
-                    style={{ flexGrow: isCollapsed ? 0 : group.entries.length + 1 }}
-                    aria-labelledby={`timeline-group-${group.nodeId}`}
+                    aria-labelledby={`timeline-group-${group.key}`}
                   >
                     <div className={styles.groupHeader}>
                       <button
@@ -894,7 +958,7 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
                         className={[styles.groupLabel, styles.stickyLabel].join(' ')}
                         aria-controls={groupEntriesId}
                         aria-expanded={!isCollapsed}
-                        onClick={() => handleGroupCollapseChange(group.nodeId)}
+                        onClick={() => handleGroupCollapseChange(group.key)}
                       >
                         <span
                           className={[
@@ -907,7 +971,7 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
                         >
                           <Icon name="chevronDown" size={timelineIconSize} />
                         </span>
-                        <strong id={`timeline-group-${group.nodeId}`}>
+                        <strong id={`timeline-group-${group.key}`}>
                           {String(groupIndex + 1).padStart(2, '0')}. {group.name}
                         </strong>
                         <span className={styles.groupCount} aria-label={`${group.entries.length}개 업무`}>
@@ -917,48 +981,69 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
                       <div className={styles.gridTrack} aria-hidden="true" />
                     </div>
 
-                    <div id={groupEntriesId} className={styles.groupEntries} hidden={isCollapsed}>
-                      {!isCollapsed
-                        ? group.entries.map((entry) => {
-                            const left = ((entry.start - range.start) / MS_PER_DAY) * pixelsPerDay
-                            const width = Math.max(
-                              18,
-                              ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
-                            )
-                            const memberName = getMemberName(entry.item.ownerUserId, members)
+                    <div
+                      id={groupEntriesId}
+                      className={[
+                        styles.groupEntries,
+                        isCollapsed ? styles.groupEntriesCollapsed : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      <div className={styles.groupEntriesInner}>
+                        {group.entries.map((entry) => {
+                          const left = ((entry.start - range.start) / MS_PER_DAY) * pixelsPerDay
+                          const width = Math.max(
+                            18,
+                            ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
+                          )
+                          const memberName = getMemberName(entry.item.ownerUserId, members)
 
-                            return (
-                              <div key={entry.item.workItemId} className={styles.taskRow}>
+                          return (
+                            <div key={entry.item.workItemId} className={styles.taskRow}>
+                              <Link
+                                to={`/work-items/${entry.item.workItemId}`}
+                                className={[styles.taskLabel, styles.stickyLabel].join(' ')}
+                                aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}`}
+                              >
+                                <span className={styles.taskIcon} aria-hidden="true">
+                                  <Icon name="checkCircle" size={timelineIconSize} />
+                                </span>
+                                <span className={styles.taskCopy}>
+                                  <strong>{entry.item.title}</strong>
+                                </span>
+                              </Link>
+                              <div className={styles.gridTrack}>
                                 <Link
                                   to={`/work-items/${entry.item.workItemId}`}
-                                  className={[styles.taskLabel, styles.stickyLabel].join(' ')}
-                                  aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}`}
+                                  className={styles.timelineBar}
+                                  style={{
+                                    left,
+                                    width,
+                                    ...(group.style ? {
+                                      backgroundColor: group.style.backgroundColor,
+                                      borderColor: group.style.borderColor,
+                                      color: group.style.color,
+                                    } : {}),
+                                  }}
+                                  aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}`}
                                 >
-                                  <span className={styles.taskIcon} aria-hidden="true">
-                                    <Icon name="checkCircle" size={timelineIconSize} />
-                                  </span>
-                                  <span className={styles.taskCopy}>
-                                    <strong>{entry.item.title}</strong>
-                                  </span>
+                                  <span>{`${entry.item.title} · ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>
                                 </Link>
-                                <div className={styles.gridTrack}>
-                                  <Link
-                                    to={`/work-items/${entry.item.workItemId}`}
-                                    className={styles.timelineBar}
-                                    style={{ left, width }}
-                                    aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}`}
-                                  >
-                                    <span>{`${entry.item.title} · ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>
-                                  </Link>
-                                </div>
                               </div>
-                            )
-                          })
-                        : null}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   </section>
                 )
               })}
+
+              <div className={styles.emptyFillerRow} aria-hidden="true">
+                <div className={[styles.emptyFillerLabel, styles.stickyLabel].join(' ')} />
+                <div className={styles.gridTrack} />
+              </div>
             </div>
           </div>
         </div>
@@ -967,11 +1052,11 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
       <footer className={styles.footer}>
         <div className={styles.legend} aria-label="타임라인 카테고리 표시">
           {groups.map((group) => {
-            const isVisible = !hiddenGroupIds.has(group.nodeId)
+            const isVisible = !hiddenGroupKeys.has(group.key)
 
             return (
               <label
-                key={group.nodeId}
+                key={group.key}
                 className={[styles.legendItem, toneClassNames[group.tone]].join(' ')}
               >
                 <input
@@ -979,7 +1064,7 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
                   className={styles.legendCheckboxInput}
                   checked={isVisible}
                   onChange={(event) =>
-                    handleGroupVisibilityChange(group.nodeId, event.currentTarget.checked)
+                    handleGroupVisibilityChange(group.key, event.currentTarget.checked)
                   }
                 />
                 <span
@@ -1004,7 +1089,7 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
               type="button"
               className={styles.zoomButton}
               aria-label="타임라인 축소"
-              title="가로와 세로 축소"
+              title="축소"
               disabled={isZoomOutDisabled}
               onClick={() => handleZoomButtonClick(1 / ZOOM_BUTTON_FACTOR)}
             >
@@ -1013,18 +1098,18 @@ export function WorkspaceTimelineTab({ workItems, nodes, members }: WorkspaceTim
             <button
               type="button"
               className={styles.zoomFitButton}
-              aria-label="모든 업무를 화면 높이에 맞추기"
-              title="표시 중인 모든 업무 맞춤"
+              aria-label="기본 배율(1x)로 초기화"
+              title="클릭 시 기본 배율(1x)로 초기화"
               disabled={entries.length === 0}
-              onClick={handleFitAllClick}
+              onClick={handleResetZoomClick}
             >
-              전체
+              {zoomMultiplierLabel}
             </button>
             <button
               type="button"
               className={styles.zoomButton}
               aria-label="타임라인 확대"
-              title="가로와 세로 확대"
+              title="확대"
               disabled={isZoomInDisabled}
               onClick={() => handleZoomButtonClick(ZOOM_BUTTON_FACTOR)}
             >

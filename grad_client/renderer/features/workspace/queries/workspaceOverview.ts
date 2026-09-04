@@ -12,9 +12,11 @@ import type {
 import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService'
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
+import { isWorkItemDueSoon } from '../model/workItemDue'
 
 type WorkspaceOverviewOptions = {
   rootNodeId?: string | null
+  singleNodeOnly?: boolean
 }
 
 function parseRootNodeId(rootNodeId?: string | null) {
@@ -55,18 +57,6 @@ function getDescendantNodeIds(rootNodeId: number, nodes: OrganizationNodeRecord[
   return descendantNodeIds
 }
 
-function isDueSoon(item: WorkItemRecord) {
-  if (!item.dueDate || item.status === 'done') {
-    return false
-  }
-
-  const dueDate = new Date(item.dueDate)
-  const threshold = new Date()
-  threshold.setDate(threshold.getDate() + 7)
-
-  return !Number.isNaN(dueDate.getTime()) && dueDate <= threshold
-}
-
 function buildOnboardingSteps({
   hasPersonalSpace,
   hasTopNode,
@@ -99,8 +89,8 @@ function buildOnboardingSteps({
     },
     {
       id: 'work-item',
-      title: '첫 업무 등록',
-      description: '운영할 업무를 등록하고 진행을 시작해 주세요.',
+      title: '첫 업무 생성',
+      description: '워크스페이스에 첫 업무 카드를 등록해 보세요.',
       href: '/work-items/new',
     },
   ]
@@ -192,29 +182,38 @@ export function getWorkspaceOverview(
   const allAccessibleNodeIds = resolvedUserId ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot) : []
   const allAccessibleNodeIdSet = new Set(allAccessibleNodeIds)
   const allVisibleNodes = sortWorkspaceNodes(
-    snapshot.nodes.filter((node) => allAccessibleNodeIdSet.has(node.id)),
+    snapshot.nodes.filter((node) => allAccessibleNodeIdSet.has(node.id) && !node.isDeleted),
   )
+
   const visibleOrganizationNodeIds = new Set(
-    allVisibleNodes.filter((node) => node.nodeType !== 'USER').map((node) => node.id),
+    allVisibleNodes.map((node) => node.id),
   )
   const accessibleRootNodes = allVisibleNodes.filter(
     (node) =>
-      node.nodeType !== 'USER' &&
-      (node.parentNodeId === undefined || !visibleOrganizationNodeIds.has(node.parentNodeId)),
+      node.parentNodeId === undefined || !visibleOrganizationNodeIds.has(node.parentNodeId),
   )
   const requestedRootNodeId = parseRootNodeId(options?.rootNodeId)
-  const scopedRootNode = options
-    ? accessibleRootNodes.find((node) => node.id === requestedRootNodeId) ?? accessibleRootNodes[0]
-    : undefined
+  const scopedRootNode = requestedRootNodeId
+    ? allVisibleNodes.find((node) => node.id === requestedRootNodeId)
+    : options
+      ? accessibleRootNodes[0]
+      : undefined
+
+  // options가 주어졌을 때는 해당 루트 워크스페이스 하위 트리로 범위 한정 (단, singleNodeOnly일 때는 단일 노드만), options가 없을 때는 전체
   const scopedNodeIdSet = scopedRootNode
-    ? getDescendantNodeIds(scopedRootNode.id, allVisibleNodes)
+    ? (options?.singleNodeOnly ? new Set([scopedRootNode.id]) : getDescendantNodeIds(scopedRootNode.id, allVisibleNodes))
     : allAccessibleNodeIdSet
+
   const accessibleNodeIds = allAccessibleNodeIds.filter((nodeId) => scopedNodeIdSet.has(nodeId))
   const accessibleNodeIdSet = new Set(accessibleNodeIds)
-  const visibleNodes = sortWorkspaceNodes(snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id)))
-  const visibleWorkItems = sortWorkspaceWorkItems(
-    snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId)),
+
+  const visibleNodes = sortWorkspaceNodes(
+    snapshot.nodes.filter((node) => accessibleNodeIdSet.has(node.id) && !node.isDeleted),
   )
+  const visibleWorkItems = sortWorkspaceWorkItems(
+    snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId) && !item.isDeleted),
+  )
+
   const summarySnapshot = scopedRootNode
     ? {
         users: snapshot.users,
@@ -223,15 +222,29 @@ export function getWorkspaceOverview(
         workItems: visibleWorkItems,
       }
     : snapshot
+
   const summary = getWorkspaceSummary(resolvedUserId, summarySnapshot)
   const roots = buildWorkspaceTree(visibleNodes, visibleWorkItems)
+
+  const resolvedUser = snapshot.users.find(
+    (user) => user.userId === resolvedUserId || user.email === resolvedUserId,
+  )
+  const myUserId = resolvedUser?.userId ?? resolvedUserId
+  const myEmail = resolvedUser?.email?.toLowerCase()
+
+  const isMyWorkItem = (item: WorkItemRecord) => {
+    if (item.ownerUserId === myUserId) return true
+    if (myEmail && item.ownerUserId.toLowerCase() === myEmail) return true
+    return false
+  }
+
   const myWorkItems = sortWorkspaceWorkItems(
-    visibleWorkItems.filter((item) => item.ownerUserId === resolvedUserId),
+    visibleWorkItems.filter(isMyWorkItem),
   )
   const teamPoolWorkItems = sortWorkspaceWorkItems(
-    visibleWorkItems.filter((item) => item.ownerUserId !== resolvedUserId && item.status !== 'done'),
+    visibleWorkItems.filter((item) => !isMyWorkItem(item) && item.status !== 'done'),
   )
-  const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isDueSoon))
+  const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isWorkItemDueSoon))
   const urgentWorkItemIds = new Set<string>()
   const urgentWorkItems = sortWorkspaceWorkItems(
     [...dueSoonWorkItems, ...visibleWorkItems.filter((item) => item.priority <= 2 && item.status !== 'done')].filter(
@@ -245,21 +258,78 @@ export function getWorkspaceOverview(
       },
     ),
   )
-  const rootNode =
-    visibleNodes.find((node) => node.nodeType !== 'USER' && node.path.length === 1) ??
-    visibleNodes.find((node) => node.nodeType !== 'USER')
+
+  const rootNode = scopedRootNode ?? visibleNodes[0]
+  const scopedNodeId = scopedRootNode?.id
 
   const usersById = new Map(snapshot.users.map((user) => [user.userId, user]))
-  const nodesById = new Map(snapshot.nodes.map((node) => [node.id, node]))
-  const rootRoleMembers = rootNode
-    ? snapshot.roles
-        .filter((role) => role.nodeId === rootNode.id)
-        .map((role) => toRoleMember(role.id, role.userId, role.roleName, usersById))
-        .sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+
+  // 하위 자손 노드 ID 목록
+  const descendantNodeIds = rootNode ? getDescendantNodeIds(rootNode.id, snapshot.nodes) : new Set<number>()
+  descendantNodeIds.delete(rootNode?.id ?? -1) // 자기 자신 제외
+
+  const descendantAssignedUsers = new Set<string>()
+  snapshot.roles.forEach((r) => {
+    if (!r.isDeleted && descendantNodeIds.has(r.nodeId)) {
+      descendantAssignedUsers.add(r.userId)
+    }
+  })
+
+  const rawRootRoles = rootNode && rootNode.nodeType !== 'USER'
+    ? snapshot.roles.filter((role) => role.nodeId === rootNode.id && !role.isDeleted)
     : []
 
+  // 직속 역할 멤버: 하위 노드에 더 구체적으로 배정되지 않은 멤버 (만약 모두 하위에 배정되어 0명이면 ADMIN은 유지)
+  let directRootRoles = rawRootRoles.filter((r) => !descendantAssignedUsers.has(r.userId))
+  if (directRootRoles.length === 0 && rawRootRoles.length > 0) {
+    const adminRoles = rawRootRoles.filter((r) => r.roleName === 'ADMIN')
+    directRootRoles = adminRoles.length > 0 ? adminRoles : [rawRootRoles[0]]
+  }
+
+  const rootRoleMembers = rootNode
+    ? (rootNode.nodeType === 'USER'
+        ? (resolvedUser
+            ? [
+                toRoleMember(
+                  0,
+                  resolvedUser.userId,
+                  'ADMIN',
+                  usersById,
+                ),
+              ]
+            : [])
+        : directRootRoles
+            .map((role) => toRoleMember(role.id, role.userId, role.roleName, usersById))
+            .sort((left, right) => left.name.localeCompare(right.name, 'ko')))
+    : []
+
+  // 현재 선택된 트리의 전체 노드 ID 집합 (rootNode 및 그 모든 자손 노드들만 포함)
+  const scopedTreeIds = rootNode
+    ? new Set<number>([rootNode.id, ...Array.from(descendantNodeIds)])
+    : accessibleNodeIdSet
+
+  // 하위 포함 고유 팀원 목록 (현재 트리에 속한 역할만 집계)
+  const allRoleMemberMap = new Map<string, RoleMember>()
+  snapshot.roles
+    .filter((role) => !role.isDeleted && scopedTreeIds.has(role.nodeId))
+    .forEach((role) => {
+      if (!allRoleMemberMap.has(role.userId)) {
+        allRoleMemberMap.set(role.userId, toRoleMember(role.id, role.userId, role.roleName, usersById))
+      }
+    })
+  const allRoleMembers = Array.from(allRoleMemberMap.values()).sort((left, right) =>
+    left.name.localeCompare(right.name, 'ko'),
+  )
+
+  const nodeActivities = (snapshot.activities ?? []).filter(
+    (act) => scopedNodeId === undefined || act.nodeId === scopedNodeId,
+  )
+  const nodeFiles = (snapshot.files ?? []).filter((file) =>
+    visibleWorkItems.some((item) => item.workItemId === file.workItemId),
+  )
+
   const orgRoles = snapshot.roles.filter((role) => {
-    const node = nodesById.get(role.nodeId)
+    const node = snapshot.nodes.find((n) => n.id === role.nodeId)
     return node?.nodeType !== 'USER'
   })
 
@@ -278,6 +348,9 @@ export function getWorkspaceOverview(
     dueSoonWorkItems,
     rootNode,
     rootRoleMembers,
+    allRoleMembers,
+    activities: nodeActivities,
+    files: nodeFiles,
     onboardingSteps: buildOnboardingSteps({
       hasPersonalSpace: Boolean(currentUser?.personalNodeId),
       hasTopNode: summary.orgNodeCount > 0,

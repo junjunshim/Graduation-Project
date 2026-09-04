@@ -2,21 +2,17 @@ import { Link } from 'react-router-dom'
 import { DocumentIcon } from '../../../design-system/primitives/DocumentIcon'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
-import type { UserRecord, WorkItemRecord } from '../../workspace/model/types'
+import type { WorkItemFileRecord } from '../../workspace/model/types'
 import { DashboardEmptyState } from './DashboardEmptyState'
 import styles from '../pages/DashboardPage.module.css'
 
-function getOwnerName(ownerUserId: string, users: UserRecord[]) {
-  return users.find((user) => user.userId === ownerUserId)?.name ?? ownerUserId
-}
-
 export function DashboardDocumentsPanel({
-  recentDocuments,
-  users,
+  files,
 }: {
-  recentDocuments: WorkItemRecord[]
-  users: UserRecord[]
+  files: WorkItemFileRecord[]
 }) {
+  const activeFiles = files.filter((file) => !file.isDeleted).slice(0, 5)
+
   return (
     <section className={[styles.panel, styles.documentsPanel].join(' ')}>
       <div className={styles.sectionHeader}>
@@ -30,25 +26,36 @@ export function DashboardDocumentsPanel({
       </div>
 
       <div className={styles.documentList}>
-        {recentDocuments.length > 0 ? (
-          recentDocuments.map((item) => (
-            <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.documentRow}>
+        {activeFiles.length > 0 ? (
+          activeFiles.map((file) => (
+            <Link
+              key={file.id}
+              to={`/work-items/${file.workItemId}`}
+              className={styles.documentRow}
+              title={`${file.originalFileName} (${file.workItemId})`}
+            >
               <DocumentIcon />
-              <strong className={styles.documentTitle}>{item.title}</strong>
-              <span className={styles.documentOwner}>{getOwnerName(item.ownerUserId, users)} ·</span>
-              <time className={styles.documentDate} dateTime={item.createdAt}>
-                {formatWorkspaceShortDate(item.createdAt)}
+              <div className={styles.documentCopy}>
+                <strong className={styles.documentTitle}>{file.originalFileName}</strong>
+              </div>
+              <span className={styles.documentOwner}>
+                {file.workItemId} · {file.uploaderName || file.uploaderUserId}
+              </span>
+              <time className={styles.documentDate} dateTime={file.createdAt}>
+                {formatWorkspaceShortDate(file.createdAt)}
               </time>
             </Link>
           ))
         ) : (
-          <DashboardEmptyState>최근 문서로 표시할 업무가 없습니다.</DashboardEmptyState>
+          <DashboardEmptyState
+            icon="folder"
+            title="업로드된 문서가 없습니다"
+          >
+            업무에 공유할 문서를 등록해 보세요.
+          </DashboardEmptyState>
         )}
       </div>
-
-      <Link to="/documents" className={styles.documentAddLink} aria-label="문서 탭으로 이동">
-        <Icon name="plus" size={17} />
-      </Link>
     </section>
   )
 }
+

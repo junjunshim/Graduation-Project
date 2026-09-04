@@ -1,0 +1,311 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  padding: 1.5rem;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 620px;
+  max-height: 85vh;
+  background: var(--surface-panel);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1.25rem 1.4rem;
+  border-bottom: 1px solid var(--line-default);
+  background: var(--surface-panel-subtle);
+  gap: 16px;
+}
+
+.titleGroup {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.headerIcon {
+  color: var(--accent-purple, #6366f1);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 850;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  margin: 4px 0 0 0;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.closeBtn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.body {
+  padding: 1.4rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 본인 역할 잠금 위험 경고 카드 */
+.lockoutWarningCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 14%, var(--surface-panel));
+  border: 1.5px solid var(--accent-red, #ef4444);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.12);
+}
+
+.lockoutWarningIcon {
+  color: var(--accent-red, #ef4444);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.lockoutWarningContent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lockoutWarningTitle {
+  font-size: 0.84rem;
+  font-weight: 850;
+  color: var(--accent-red, #ef4444);
+}
+
+.lockoutWarningDesc {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.lockoutWarningDesc strong {
+  color: var(--text-primary);
+}
+
+.lockoutAckLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 10%, var(--surface-panel));
+  border: 1px dashed color-mix(in srgb, var(--accent-red, #ef4444) 40%, transparent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.73rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.lockoutAckCheckbox {
+  accent-color: var(--accent-red, #ef4444);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+/* 상단 Hex/카운트 비교 요약 */
+.diffSummaryCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel-muted);
+}
+
+.diffSummaryColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.summaryLabel {
+  font-size: 0.68rem;
+  font-weight: 750;
+  color: var(--text-muted);
+}
+
+.summaryHex {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+.summaryHexNew {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.88rem;
+  font-weight: 850;
+  color: var(--accent-purple, #8b5cf6);
+}
+
+.summaryCount,
+.summaryCountNew {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.summaryCountNew {
+  color: var(--accent-green, #10b981);
+  font-weight: 750;
+}
+
+.summaryArrow {
+  color: var(--text-muted);
+}
+
+/* 변경 내역 섹션 */
+.changeSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.changeHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.changeCountBadge {
+  font-size: 0.7rem;
+  font-weight: 750;
+  color: var(--text-secondary);
+}
+
+.changeList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.changeItemAdd,
+.changeItemRemove {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+
+.changeItemAdd {
+  background: color-mix(in srgb, var(--accent-green, #10b981) 10%, var(--surface-panel));
+  border-color: color-mix(in srgb, var(--accent-green, #10b981) 30%, transparent);
+}
+
+.changeItemRemove {
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 10%, var(--surface-panel));
+  border-color: color-mix(in srgb, var(--accent-red, #ef4444) 30%, transparent);
+}
+
+.badgeAdd,
+.badgeRemove {
+  display: inline-block;
+  padding: 0.12rem 0.4rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.62rem;
+  font-weight: 850;
+  flex-shrink: 0;
+}
+
+.badgeAdd {
+  background: color-mix(in srgb, var(--accent-green, #10b981) 22%, var(--surface-panel));
+  color: var(--accent-green, #10b981);
+}
+
+.badgeRemove {
+  background: color-mix(in srgb, var(--accent-red, #ef4444) 22%, var(--surface-panel));
+  color: var(--accent-red, #ef4444);
+}
+
+.changeInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.changeInfo strong {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.changeInfo span {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.emptyChange {
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 1rem 1.4rem;
+  border-top: 1px solid var(--line-default);
+  background: var(--surface-panel-subtle);
+}

@@ -8,11 +8,13 @@ import type {
   WorkspaceSnapshot,
   WorkspaceSummary,
 } from '../model/types'
+import { isWorkItemDueSoon } from '../model/workItemDue'
 import { delay, getUserByEmail, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
 import {
   assignRoleOnServer,
   createSubNodeOnServer,
   createTopNodeOnServer,
+  fetchNodeDetailOnServer,
   updateNodeOnServer,
   updateRoleOnServer,
 } from './serverWorkspace'
@@ -54,8 +56,26 @@ function getDescendantNodeIds(rootIds: number[], nodes: OrganizationNodeRecord[]
 
 export function getAccessibleNodeIdsForUser(userId: string, snapshot?: WorkspaceSnapshot) {
   const workspace = snapshot ?? readWorkspaceDb()
-  const directNodeIds = workspace.roles.filter((role) => role.userId === userId).map((role) => role.nodeId)
-  const personalNodeId = workspace.users.find((user) => user.userId === userId)?.personalNodeId
+
+  // snapshot이 명시적으로 전달된 경우(특정 스코프로 축소된 스냅샷 포함), 해당 snapshot에 포함된 노드 ID들을 반환합니다.
+  if (snapshot) {
+    return snapshot.nodes.map((node) => node.id)
+  }
+
+  // 서버 모드에서는 GET /context/init이 이미 권한 계산을 거친 접근 가능한 노드들만 전달하므로,
+  // 로컬에 존재하는 노드들을 그대로 접근 가능한 노드로 취급합니다.
+  if (isServerDataSource()) {
+    return workspace.nodes.map((node) => node.id)
+  }
+
+  const user = workspace.users.find((candidate) => candidate.userId === userId || candidate.email === userId)
+  const resolvedUserId = user?.userId ?? userId
+  const resolvedEmail = user?.email?.toLowerCase()
+
+  const directNodeIds = workspace.roles
+    .filter((role) => role.userId === resolvedUserId || (resolvedEmail && role.userId === resolvedEmail))
+    .map((role) => role.nodeId)
+  const personalNodeId = user?.personalNodeId
   const rootIds = Array.from(new Set([...directNodeIds, ...(personalNodeId ? [personalNodeId] : [])]))
   return getDescendantNodeIds(rootIds, workspace.nodes)
 }
@@ -88,7 +108,18 @@ export function getOrgSnapshot(): WorkspaceSnapshot {
     workItems: db.workItems
       .filter((item) => !item.isDeleted && activeNodeIds.has(item.ownerNodeId))
       .map((item) => ({ ...item })),
+    authorities: (db.authorities ?? []).map((auth) => ({ ...auth })),
+    mentions: (db.mentions ?? []).map((m) => ({ ...m })),
+    activities: (db.activities ?? []).map((act) => ({ ...act })),
+    files: (db.files ?? []).map((f) => ({ ...f })),
   }
+}
+
+export async function fetchNodeDetail(nodeId: number | string): Promise<WorkspaceSnapshot> {
+  if (isServerDataSource()) {
+    await fetchNodeDetailOnServer(nodeId)
+  }
+  return getOrgSnapshot()
 }
 
 export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapshot): WorkspaceSummary {
@@ -112,8 +143,10 @@ export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapsho
   const workspace = snapshot ?? readWorkspaceDb()
   const visibleNodeIds = getAccessibleNodeIdsForUser(userId, workspace)
   const visibleNodeIdSet = new Set(visibleNodeIds)
-  const visibleWorkItems = workspace.workItems.filter((item) => visibleNodeIdSet.has(item.ownerNodeId))
-  const visibleNodes = workspace.nodes.filter((node) => visibleNodeIdSet.has(node.id))
+  const visibleWorkItems = workspace.workItems.filter(
+    (item) => visibleNodeIdSet.has(item.ownerNodeId) && !item.isDeleted,
+  )
+  const visibleNodes = workspace.nodes.filter((node) => visibleNodeIdSet.has(node.id) && !node.isDeleted)
   const now = new Date()
   const dueSoonThreshold = new Date(now)
   dueSoonThreshold.setDate(now.getDate() + 7)
@@ -135,14 +168,7 @@ export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapsho
         : 0,
     myWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId === userId).length,
     teamPoolWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId !== userId).length,
-    dueSoonWorkItemCount: visibleWorkItems.filter((item) => {
-      if (!item.dueDate || item.status === 'done') {
-        return false
-      }
-
-      const dueDate = new Date(item.dueDate)
-      return !Number.isNaN(dueDate.getTime()) && dueDate <= dueSoonThreshold
-    }).length,
+    dueSoonWorkItemCount: visibleWorkItems.filter(isWorkItemDueSoon).length,
   }
 }
 

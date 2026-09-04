@@ -24,10 +24,14 @@ export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignO
         <div className={styles.sidebarTop}>
           <nav className={styles.navigation} aria-label="주요 메뉴">
             {navigationItems.map((item) => {
+              const prefixes = item.activePathPrefixes ?? (item.activePathPrefix ? [item.activePathPrefix] : [])
+              const hasPrefixMatching = prefixes.length > 0
               const isSectionActive = Boolean(
-                item.activePathPrefix &&
-                  (location.pathname === item.activePathPrefix ||
-                    location.pathname.startsWith(`${item.activePathPrefix}/`)),
+                hasPrefixMatching &&
+                  prefixes.some(
+                    (prefix) =>
+                      location.pathname === prefix || location.pathname.startsWith(`${prefix}/`),
+                  ),
               )
               const linkContent = (
                 <>
@@ -38,7 +42,7 @@ export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignO
                 </>
               )
 
-              if (item.activePathPrefix) {
+              if (hasPrefixMatching) {
                 return (
                   <Link
                     key={item.to}

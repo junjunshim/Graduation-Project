@@ -10,6 +10,14 @@
 
 using namespace drogon;
 
+namespace {
+void addCorsHeaders(const HttpResponsePtr &res) {
+    res->addHeader("Access-Control-Allow-Origin", "*");
+    res->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+    res->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+}
+}
+
 void JwtFilter::doFilter(const HttpRequestPtr &req,
                          FilterCallback &&fcb,
                          FilterChainCallback &&fccb)
@@ -24,10 +32,12 @@ void JwtFilter::doFilter(const HttpRequestPtr &req,
     {
         Json::Value ret;
         ret["status"] = "error";
+        ret["code"] = "401";
         ret["message"] = "로그인이 필요한 서비스입니다.";
         
         auto res = HttpResponse::newHttpJsonResponse(ret);
-        res->setStatusCode(k401Unauthorized); // 500 대신 인증 에러인 401 사용
+        res->setStatusCode(k401Unauthorized);
+        addCorsHeaders(res);
         fcb(res);
         return;
     }
@@ -62,6 +72,10 @@ void JwtFilter::doFilter(const HttpRequestPtr &req,
 
         auto res = drogon::HttpResponse::newHttpJsonResponse(ret);
         res->setStatusCode(k401Unauthorized);
+<<<<<<< Updated upstream
+=======
+        addCorsHeaders(res);
+>>>>>>> Stashed changes
         fcb(res);
     }
 }

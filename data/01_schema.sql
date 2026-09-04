@@ -8,7 +8,7 @@ CREATE TYPE history_status AS ENUM ('inserted', 'updated', 'deleted');
 -- 1. organization_nodes - 모든 공간과 주체의 트리 구조 
 CREATE TABLE IF NOT EXISTS organization_nodes (
     node_id SERIAL PRIMARY KEY,
-    node_type VARCHAR(20) NOT NULL,
+    node_type VARCHAR(100) NOT NULL,
     parent_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE SET NULL,
     name VARCHAR(100) NOT NULL,
     path INTEGER[] NOT NULL,
@@ -130,7 +130,7 @@ CREATE INDEX idx_user_history_user_id ON user_histories(user_id);
 CREATE TABLE organization_node_histories (
     history_id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL,
-    node_type VARCHAR(20) NOT NULL,
+    node_type VARCHAR(100) NOT NULL,
     parent_node_id INTEGER,
     name VARCHAR(100) NOT NULL,
     path INTEGER[] NOT NULL,

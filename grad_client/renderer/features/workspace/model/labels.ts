@@ -100,3 +100,34 @@ export function getRoleBadgeStyle(roleName: string): React.CSSProperties {
     border: `1px solid ${palette.border}`,
   }
 }
+
+/**
+ * 카테고리 이름을 해싱 후 % 10 하여 10개 컬러 중 일관된 스타일을 반환합니다.
+ */
+export function getCategoryBadgeStyle(categoryName: string): React.CSSProperties {
+  const normalized = (categoryName || '').trim()
+
+  if (!normalized) {
+    const defaultPalette = ROLE_PALETTE[9]
+    return {
+      backgroundColor: defaultPalette.bg,
+      color: defaultPalette.color,
+      border: `1px solid ${defaultPalette.border}`,
+    }
+  }
+
+  let hash = 0
+  for (let i = 0; i < normalized.length; i += 1) {
+    hash = (hash << 5) - hash + normalized.charCodeAt(i)
+    hash |= 0
+  }
+
+  const index = Math.abs(hash) % ROLE_PALETTE.length
+  const palette = ROLE_PALETTE[index]
+
+  return {
+    backgroundColor: palette.bg,
+    color: palette.color,
+    border: `1px solid ${palette.border}`,
+  }
+}

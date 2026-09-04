@@ -28,28 +28,33 @@ export const TEMPORARY_WORK_ITEM_TAGS: Partial<Record<string, WorkItemTagId>> = 
   '0704': 'research',
 }
 
+import { getCategoryBadgeStyle } from './labels'
+
 export function getWorkItemTag(item: WorkItemRecord) {
   if (item.category && item.category.trim()) {
-    const rawCategory = item.category.trim().toLowerCase()
+    const label = item.category.trim()
+    const rawCategory = label.toLowerCase()
+    const style = getCategoryBadgeStyle(label)
+
     // 직접 매칭되는 태그 키 확인
     if (rawCategory in WORK_ITEM_TAGS) {
       const key = rawCategory as WorkItemTagId
-      return { id: key, ...WORK_ITEM_TAGS[key] }
+      return { id: key, ...WORK_ITEM_TAGS[key], style }
     }
 
     // 한글 레이블 매칭 확인
     const foundEntry = Object.entries(WORK_ITEM_TAGS).find(
-      ([, tag]) => tag.label === item.category?.trim(),
+      ([, tag]) => tag.label === label,
     )
     if (foundEntry) {
-      return { id: foundEntry[0] as WorkItemTagId, ...foundEntry[1] }
+      return { id: foundEntry[0] as WorkItemTagId, ...foundEntry[1], style }
     }
 
-    // 커스텀 카테고리 문자열인 경우 기본 태그 톤 반환
     return {
       id: rawCategory as WorkItemTagId,
-      label: item.category.trim(),
+      label,
       tone: 'blue' as const,
+      style,
     }
   }
 
@@ -59,8 +64,12 @@ export function getWorkItemTag(item: WorkItemRecord) {
     return null
   }
 
+  const tag = WORK_ITEM_TAGS[tagId]
+  const style = getCategoryBadgeStyle(tag.label)
+
   return {
     id: tagId,
-    ...WORK_ITEM_TAGS[tagId],
+    ...tag,
+    style,
   }
 }

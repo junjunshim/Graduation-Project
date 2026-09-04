@@ -22,6 +22,7 @@ export type DashboardMetric = {
   description: string
   icon: IconName
   tone: DashboardMetricTone
+  href?: string
 }
 
 type ParsedDate = {
@@ -291,6 +292,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       description: '접근 가능한 워크스페이스',
       icon: 'trendingUp',
       tone: 'blue',
+      href: '/workspace/select',
     },
     {
       label: '진행 중인 업무',
@@ -298,6 +300,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       description: '전체 진행 중 / 내 진행 중',
       icon: 'clock',
       tone: 'neutral',
+      href: '/work-items?status=in-progress',
     },
     {
       label: '마감 임박',
@@ -305,6 +308,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       description: '전체 마감 임박 / 내 마감 임박',
       icon: 'alertTriangle',
       tone: 'amber',
+      href: '/work-items?schedule=dueSoon',
     },
     {
       label: '완료한 업무',
@@ -312,6 +316,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       description: '전체 완료 / 내 완료',
       icon: 'checkCircle',
       tone: 'green',
+      href: '/work-items?status=done',
     },
   ]
 }

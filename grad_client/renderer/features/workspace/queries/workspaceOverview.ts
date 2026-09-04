@@ -12,6 +12,7 @@ import type {
 import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService'
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
+import { isWorkItemDueSoon } from '../model/workItemDue'
 
 type WorkspaceOverviewOptions = {
   rootNodeId?: string | null
@@ -54,18 +55,6 @@ function getDescendantNodeIds(rootNodeId: number, nodes: OrganizationNodeRecord[
   }
 
   return descendantNodeIds
-}
-
-function isDueSoon(item: WorkItemRecord) {
-  if (!item.dueDate || item.status === 'done') {
-    return false
-  }
-
-  const dueDate = new Date(item.dueDate)
-  const threshold = new Date()
-  threshold.setDate(threshold.getDate() + 7)
-
-  return !Number.isNaN(dueDate.getTime()) && dueDate <= threshold
 }
 
 function buildOnboardingSteps({
@@ -255,7 +244,7 @@ export function getWorkspaceOverview(
   const teamPoolWorkItems = sortWorkspaceWorkItems(
     visibleWorkItems.filter((item) => !isMyWorkItem(item) && item.status !== 'done'),
   )
-  const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isDueSoon))
+  const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isWorkItemDueSoon))
   const urgentWorkItemIds = new Set<string>()
   const urgentWorkItems = sortWorkspaceWorkItems(
     [...dueSoonWorkItems, ...visibleWorkItems.filter((item) => item.priority <= 2 && item.status !== 'done')].filter(

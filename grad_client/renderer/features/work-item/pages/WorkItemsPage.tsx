@@ -22,6 +22,8 @@ const workItemsTabs: WorkItemsTab[] = [
 export function WorkItemsPage() {
   const [searchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
+  const requestedStatus = searchParams.get('status')
+  const requestedSchedule = searchParams.get('schedule')
   const activeView: WorkItemsView = requestedView === 'create' ? 'create' : 'list'
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
@@ -59,6 +61,7 @@ export function WorkItemsPage() {
           <WorkItemCreatePage embedded />
         ) : overview ? (
           <WorkspaceTasksTab
+            key={[requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
             workItems={overview.visibleWorkItems}
             members={visibleMembers}
             workspaces={overview.visibleNodes}
@@ -66,6 +69,8 @@ export function WorkItemsPage() {
             createHref="/work-items?view=create"
             filterLayout="toolbar"
             showHeading={false}
+            initialStatus={requestedStatus}
+            initialSchedule={requestedSchedule}
           />
         ) : null}
       </div>

@@ -11,7 +11,7 @@ import {
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
-import { getWorkItemStatusLabel } from '../model/labels'
+import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
 import type { OrganizationNodeRecord, RoleMember, WorkItemRecord } from '../model/types'
 import styles from './WorkspaceTimelineTab.module.css'
@@ -35,6 +35,7 @@ type TimelineGroup = {
   name: string
   entries: TimelineEntry[]
   tone: TimelineTone
+  style?: CSSProperties
 }
 
 type TimelineSegment = {
@@ -260,6 +261,7 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
         name: groupData.name,
         entries: groupData.entries,
         tone: groupData.tone || TIMELINE_TONES[index % TIMELINE_TONES.length],
+        style: getCategoryBadgeStyle(groupData.name),
       }))
   }, [entries])
 
@@ -1015,7 +1017,15 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
                                 <Link
                                   to={`/work-items/${entry.item.workItemId}`}
                                   className={styles.timelineBar}
-                                  style={{ left, width }}
+                                  style={{
+                                    left,
+                                    width,
+                                    ...(group.style ? {
+                                      backgroundColor: group.style.backgroundColor,
+                                      borderColor: group.style.borderColor,
+                                      color: group.style.color,
+                                    } : {}),
+                                  }}
                                   aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}`}
                                 >
                                   <span>{`${entry.item.title} · ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>

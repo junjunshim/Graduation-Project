@@ -1,13 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { formatWorkspaceShortDate } from '../model/formatters'
-import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
+import { getWorkItemStatusLabel, getWorkItemStatusTone, getCategoryBadgeStyle } from '../model/labels'
 import type { OrganizationNodeRecord, UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
+import { getWorkItemDueScheduleInfo } from '../model/workItemDue'
+import type { DueScheduleType } from '../model/workItemDue'
+import { getNodeVisualMetadata } from '../queries/workspaceDirectory'
 import styles from './WorkspaceTasksTab.module.css'
 
 type WorkspaceTasksTabProps = {
@@ -18,6 +21,8 @@ type WorkspaceTasksTabProps = {
   createHref?: string
   filterLayout?: 'sidebar' | 'toolbar'
   showHeading?: boolean
+  initialStatus?: string | null
+  initialSchedule?: string | null
 }
 
 export type TaskViewMode = 'list' | 'tree'
@@ -25,6 +30,7 @@ export type TaskViewMode = 'list' | 'tree'
 type PriorityFilter = 'all' | 'high' | 'medium' | 'low'
 type TagFilter = 'all' | WorkItemTagId
 type StatusFilter = 'all' | WorkItemStatus
+type DueScheduleFilter = 'all' | DueScheduleType
 
 type TaskTreeNode = {
   item: WorkItemRecord
@@ -108,6 +114,7 @@ function TaskTreeNodeCard({
   const tag = getWorkItemTag(item)
   const ownerName = getMemberName(item.ownerUserId, members)
   const dueDate = item.dueDate ? formatWorkspaceShortDate(item.dueDate) : null
+  const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
 
   return (
     <div className={styles.treeNodeContainer} style={{ '--tree-depth': depth } as React.CSSProperties}>
@@ -139,7 +146,7 @@ function TaskTreeNodeCard({
 
           <div className={styles.treeCardMetaGroup}>
             {tag ? (
-              <span className={styles.tagBadge} data-tone={tag.tone}>
+              <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
                 {tag.label}
               </span>
             ) : null}
@@ -157,6 +164,11 @@ function TaskTreeNodeCard({
               <span className={styles.treeDueDate}>
                 <Icon name="calendar" size={13} />
                 {dueDate}
+                {item.status !== 'done' && dueScheduleInfo.scheduleType !== 'none' ? (
+                  <span className={styles.dueBadge} data-tone={dueScheduleInfo.tone}>
+                    {dueScheduleInfo.label}
+                  </span>
+                ) : null}
               </span>
             ) : null}
 
@@ -287,6 +299,8 @@ export function WorkspaceTasksTab({
   createHref = '/work-items?view=create',
   filterLayout = 'sidebar',
   showHeading = true,
+  initialStatus,
+  initialSchedule,
 }: WorkspaceTasksTabProps) {
   const [viewMode, setViewMode] = useState<TaskViewMode>('list')
   const [searchQuery, setSearchQuery] = useState('')
@@ -294,13 +308,56 @@ export function WorkspaceTasksTab({
   const [ownerFilter, setOwnerFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
   const [tagFilter, setTagFilter] = useState<TagFilter>('all')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [statusFilters, setStatusFilters] = useState(INITIAL_STATUS_FILTERS)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    if (initialStatus && WORK_ITEM_STATUSES.includes(initialStatus as WorkItemStatus)) {
+      return initialStatus as WorkItemStatus
+    }
+    return 'all'
+  })
+  const [scheduleFilter, setScheduleFilter] = useState<DueScheduleFilter>(() => {
+    if (
+      initialSchedule === 'dueSoon' ||
+      initialSchedule === 'plenty' ||
+      initialSchedule === 'overdue' ||
+      initialSchedule === 'none'
+    ) {
+      return initialSchedule
+    }
+    return 'all'
+  })
+  const [statusFilters, setStatusFilters] = useState(() => {
+    if (initialStatus && WORK_ITEM_STATUSES.includes(initialStatus as WorkItemStatus)) {
+      return {
+        done: initialStatus === 'done',
+        'in-progress': initialStatus === 'in-progress',
+        todo: initialStatus === 'todo',
+      }
+    }
+    return INITIAL_STATUS_FILTERS
+  })
   const [rangeStart, setRangeStart] = useState('')
   const [rangeEnd, setRangeEnd] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
   const [isFilterOpen, setIsFilterOpen] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
+  const [openDropdown, setOpenDropdown] = useState<'workspace' | 'tag' | 'status' | 'schedule' | null>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (toolbarRef.current && !toolbarRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null)
+      }
+    }
+
+    if (openDropdown !== null) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openDropdown])
 
   const ownerOptions = useMemo(() => {
     const visibleOwnerIds = new Set(workItems.map((item) => item.ownerUserId))
@@ -332,6 +389,31 @@ export function WorkspaceTasksTab({
     [workspaces],
   )
 
+  const selectedWorkspaceObj = useMemo(
+    () => workspaceOptions.find((w) => String(w.id) === workspaceFilter),
+    [workspaceOptions, workspaceFilter],
+  )
+
+  const selectedTagObj = useMemo(
+    () => tagOptions.find((t) => t.id === tagFilter),
+    [tagOptions, tagFilter],
+  )
+
+  const selectedScheduleBadge = useMemo(() => {
+    switch (scheduleFilter) {
+      case 'dueSoon':
+        return { label: '마감 임박', tone: 'soon' as const }
+      case 'plenty':
+        return { label: '여유 있음', tone: 'neutral' as const }
+      case 'overdue':
+        return { label: '기한 지남', tone: 'overdue' as const }
+      case 'none':
+        return { label: '마감 미정', tone: 'neutral' as const }
+      default:
+        return null
+    }
+  }, [scheduleFilter])
+
   const filteredWorkItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
 
@@ -339,12 +421,9 @@ export function WorkspaceTasksTab({
       const selectedWorkspace = workspaceOptions.find(
         (workspace) => String(workspace.id) === workspaceFilter,
       )
-      const ownerWorkspace = workspaces.find((workspace) => workspace.id === item.ownerNodeId)
       const matchesWorkspace =
         workspaceFilter === 'all' ||
-        (selectedWorkspace !== undefined &&
-          ownerWorkspace !== undefined &&
-          (ownerWorkspace.id === selectedWorkspace.id || ownerWorkspace.path.includes(selectedWorkspace.id)))
+        (selectedWorkspace !== undefined && item.ownerNodeId === selectedWorkspace.id)
       const ownerName = getMemberName(item.ownerUserId, members)
       const matchesQuery =
         normalizedQuery.length === 0 ||
@@ -353,8 +432,15 @@ export function WorkspaceTasksTab({
       const matchesOwner = ownerFilter === 'all' || item.ownerUserId === ownerFilter
       const matchesStatus =
         filterLayout === 'toolbar'
-          ? statusFilter === 'all' || item.status === statusFilter
+          ? statusFilter === 'all'
+            ? true
+            : item.status === statusFilter
           : statusFilters[item.status]
+      const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
+      const matchesSchedule =
+        scheduleFilter === 'all'
+          ? true
+          : dueScheduleInfo.scheduleType === scheduleFilter
       const matchesPriority =
         priorityFilter === 'all' || getPriorityMeta(item.priority).filter === priorityFilter
       const matchesTag = tagFilter === 'all' || getWorkItemTag(item)?.id === tagFilter
@@ -373,6 +459,7 @@ export function WorkspaceTasksTab({
         matchesQuery &&
         matchesOwner &&
         matchesStatus &&
+        matchesSchedule &&
         matchesPriority &&
         matchesTag &&
         matchesDateRange
@@ -385,6 +472,7 @@ export function WorkspaceTasksTab({
     priorityFilter,
     rangeEnd,
     rangeStart,
+    scheduleFilter,
     searchQuery,
     statusFilter,
     statusFilters,
@@ -441,6 +529,7 @@ export function WorkspaceTasksTab({
     setPriorityFilter('all')
     setTagFilter('all')
     setStatusFilter('all')
+    setScheduleFilter('all')
     setStatusFilters(INITIAL_STATUS_FILTERS)
     setRangeStart('')
     setRangeEnd('')
@@ -502,57 +591,290 @@ export function WorkspaceTasksTab({
       ) : null}
 
       {filterLayout === 'toolbar' ? (
-        <div className={styles.listToolbar} aria-label="업무 목록 필터">
-          <label className={styles.toolbarField}>
-            <span className={styles.visuallyHidden}>워크스페이스</span>
-            <select
-              value={workspaceFilter}
-              onChange={(event) => {
-                setWorkspaceFilter(event.target.value)
-                setCurrentPage(1)
-              }}
+        <div ref={toolbarRef} className={styles.listToolbar} aria-label="업무 목록 필터">
+          {/* 워크스페이스 드롭다운 */}
+          <div className={styles.toolbarFilterItem}>
+            <button
+              type="button"
+              className={[styles.toolbarDropdownTrigger, openDropdown === 'workspace' ? styles.dropdownOpen : ''].join(' ')}
+              onClick={() => setOpenDropdown((prev) => (prev === 'workspace' ? null : 'workspace'))}
+              aria-expanded={openDropdown === 'workspace'}
+              aria-haspopup="listbox"
             >
-              <option value="all">워크스페이스</option>
-              {workspaceOptions.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
-              ))}
-            </select>
-            <Icon name="chevronDown" size={14} />
-          </label>
+              <div className={styles.toolbarFieldDisplay}>
+                {selectedWorkspaceObj ? (
+                  <>
+                    <Icon name={getNodeVisualMetadata(selectedWorkspaceObj.nodeType).iconName} size={14} className={styles.toolbarWorkspaceIcon} />
+                    <span className={styles.toolbarFieldText}>{selectedWorkspaceObj.name}</span>
+                  </>
+                ) : (
+                  <>
+                    <Icon name="folder" size={14} className={styles.toolbarWorkspaceIcon} />
+                    <span className={styles.toolbarFieldPlaceholder}>전체 워크스페이스</span>
+                  </>
+                )}
+              </div>
+              <Icon name="chevronDown" size={14} className={openDropdown === 'workspace' ? styles.rotateIcon : undefined} />
+            </button>
 
-          <label className={styles.toolbarField}>
-            <span className={styles.visuallyHidden}>카테고리</span>
-            <select
-              value={tagFilter}
-              onChange={(event) => {
-                setTagFilter(event.target.value as TagFilter)
-                setCurrentPage(1)
-              }}
-            >
-              <option value="all">전체 카테고리</option>
-              {tagOptions.map((tag) => (
-                <option key={tag.id} value={tag.id}>{tag.label}</option>
-              ))}
-            </select>
-            <Icon name="chevronDown" size={14} />
-          </label>
+            {openDropdown === 'workspace' && (
+              <div className={styles.filterDropdownMenu} role="listbox">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={workspaceFilter === 'all'}
+                  className={[styles.dropdownItem, workspaceFilter === 'all' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setWorkspaceFilter('all')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <Icon name="folder" size={14} className={styles.toolbarWorkspaceIcon} />
+                  <span className={styles.dropdownItemText}>전체 워크스페이스</span>
+                </button>
+                {workspaceOptions.map((workspace) => (
+                  <button
+                    key={workspace.id}
+                    type="button"
+                    role="option"
+                    aria-selected={String(workspace.id) === workspaceFilter}
+                    className={[styles.dropdownItem, String(workspace.id) === workspaceFilter ? styles.dropdownItemSelected : ''].join(' ')}
+                    onClick={() => {
+                      setWorkspaceFilter(String(workspace.id))
+                      setCurrentPage(1)
+                      setOpenDropdown(null)
+                    }}
+                  >
+                    <Icon name={getNodeVisualMetadata(workspace.nodeType).iconName} size={14} className={styles.toolbarWorkspaceIcon} />
+                    <span className={styles.dropdownItemText}>{workspace.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <label className={styles.toolbarField}>
-            <span className={styles.visuallyHidden}>상태</span>
-            <select
-              value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value as StatusFilter)
-                setCurrentPage(1)
-              }}
+          {/* 카테고리 드롭다운 */}
+          <div className={styles.toolbarFilterItem}>
+            <button
+              type="button"
+              className={[styles.toolbarDropdownTrigger, openDropdown === 'tag' ? styles.dropdownOpen : ''].join(' ')}
+              onClick={() => setOpenDropdown((prev) => (prev === 'tag' ? null : 'tag'))}
+              aria-expanded={openDropdown === 'tag'}
+              aria-haspopup="listbox"
             >
-              <option value="all">전체 상태</option>
-              {WORK_ITEM_STATUSES.map((status) => (
-                <option key={status} value={status}>{getWorkItemStatusLabel(status)}</option>
-              ))}
-            </select>
-            <Icon name="chevronDown" size={14} />
-          </label>
+              <div className={styles.toolbarFieldDisplay}>
+                {selectedTagObj ? (
+                  <span
+                    className={styles.toolbarBadge}
+                    style={getCategoryBadgeStyle(selectedTagObj.label)}
+                  >
+                    {selectedTagObj.label}
+                  </span>
+                ) : (
+                  <span className={styles.toolbarFieldPlaceholder}>전체 카테고리</span>
+                )}
+              </div>
+              <Icon name="chevronDown" size={14} className={openDropdown === 'tag' ? styles.rotateIcon : undefined} />
+            </button>
+
+            {openDropdown === 'tag' && (
+              <div className={styles.filterDropdownMenu} role="listbox">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={tagFilter === 'all'}
+                  className={[styles.dropdownItem, tagFilter === 'all' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setTagFilter('all')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <span className={styles.dropdownItemText}>전체 카테고리</span>
+                </button>
+                {tagOptions.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    role="option"
+                    aria-selected={tag.id === tagFilter}
+                    className={[styles.dropdownItem, tag.id === tagFilter ? styles.dropdownItemSelected : ''].join(' ')}
+                    onClick={() => {
+                      setTagFilter(tag.id as TagFilter)
+                      setCurrentPage(1)
+                      setOpenDropdown(null)
+                    }}
+                  >
+                    <span className={styles.toolbarBadge} style={getCategoryBadgeStyle(tag.label)}>
+                      {tag.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 상태 드롭다운 */}
+          <div className={styles.toolbarFilterItem}>
+            <button
+              type="button"
+              className={[styles.toolbarDropdownTrigger, openDropdown === 'status' ? styles.dropdownOpen : ''].join(' ')}
+              onClick={() => setOpenDropdown((prev) => (prev === 'status' ? null : 'status'))}
+              aria-expanded={openDropdown === 'status'}
+              aria-haspopup="listbox"
+            >
+              <div className={styles.toolbarFieldDisplay}>
+                {statusFilter !== 'all' ? (
+                  <span
+                    className={styles.statusBadge}
+                    data-tone={getWorkItemStatusTone(statusFilter)}
+                  >
+                    {getWorkItemStatusLabel(statusFilter)}
+                  </span>
+                ) : (
+                  <span className={styles.toolbarFieldPlaceholder}>전체 상태</span>
+                )}
+              </div>
+              <Icon name="chevronDown" size={14} className={openDropdown === 'status' ? styles.rotateIcon : undefined} />
+            </button>
+
+            {openDropdown === 'status' && (
+              <div className={styles.filterDropdownMenu} role="listbox">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={statusFilter === 'all'}
+                  className={[styles.dropdownItem, statusFilter === 'all' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setStatusFilter('all')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <span className={styles.dropdownItemText}>전체 상태</span>
+                </button>
+                {WORK_ITEM_STATUSES.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    role="option"
+                    aria-selected={status === statusFilter}
+                    className={[styles.dropdownItem, status === statusFilter ? styles.dropdownItemSelected : ''].join(' ')}
+                    onClick={() => {
+                      setStatusFilter(status)
+                      setCurrentPage(1)
+                      setOpenDropdown(null)
+                    }}
+                  >
+                    <span className={styles.statusBadge} data-tone={getWorkItemStatusTone(status)}>
+                      {getWorkItemStatusLabel(status)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 일정 드롭다운 */}
+          <div className={styles.toolbarFilterItem}>
+            <button
+              type="button"
+              className={[styles.toolbarDropdownTrigger, openDropdown === 'schedule' ? styles.dropdownOpen : ''].join(' ')}
+              onClick={() => setOpenDropdown((prev) => (prev === 'schedule' ? null : 'schedule'))}
+              aria-expanded={openDropdown === 'schedule'}
+              aria-haspopup="listbox"
+            >
+              <div className={styles.toolbarFieldDisplay}>
+                {selectedScheduleBadge ? (
+                  <span className={styles.dueBadge} data-tone={selectedScheduleBadge.tone}>
+                    {selectedScheduleBadge.label}
+                  </span>
+                ) : (
+                  <span className={styles.toolbarFieldPlaceholder}>전체 일정</span>
+                )}
+              </div>
+              <Icon name="chevronDown" size={14} className={openDropdown === 'schedule' ? styles.rotateIcon : undefined} />
+            </button>
+
+            {openDropdown === 'schedule' && (
+              <div className={styles.filterDropdownMenu} role="listbox">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={scheduleFilter === 'all'}
+                  className={[styles.dropdownItem, scheduleFilter === 'all' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setScheduleFilter('all')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <span className={styles.dropdownItemText}>전체 일정</span>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={scheduleFilter === 'dueSoon'}
+                  className={[styles.dropdownItem, scheduleFilter === 'dueSoon' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setScheduleFilter('dueSoon')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <span className={styles.dueBadge} data-tone="soon">
+                    마감 임박 (7일 이내)
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={scheduleFilter === 'plenty'}
+                  className={[styles.dropdownItem, scheduleFilter === 'plenty' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setScheduleFilter('plenty')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <span className={styles.dueBadge} data-tone="neutral">
+                    여유 있음
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={scheduleFilter === 'overdue'}
+                  className={[styles.dropdownItem, scheduleFilter === 'overdue' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setScheduleFilter('overdue')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <span className={styles.dueBadge} data-tone="overdue">
+                    기한 지남
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={scheduleFilter === 'none'}
+                  className={[styles.dropdownItem, scheduleFilter === 'none' ? styles.dropdownItemSelected : ''].join(' ')}
+                  onClick={() => {
+                    setScheduleFilter('none')
+                    setCurrentPage(1)
+                    setOpenDropdown(null)
+                  }}
+                >
+                  <span className={styles.dueBadge} data-tone="neutral">
+                    마감일 미정
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className={[styles.toolbarField, styles.dateRangeField].join(' ')}>
             <Icon name="calendar" size={15} />
@@ -633,7 +955,10 @@ export function WorkspaceTasksTab({
                 <span role="columnheader" className={styles.actionCell} aria-label="작업" />
               </div>
 
-              <div className={styles.tableBody} role="rowgroup">
+              <div
+                className={[styles.tableBody, pagedWorkItems.length === 0 ? styles.tableBodyEmpty : ''].filter(Boolean).join(' ')}
+                role="rowgroup"
+              >
                 {pagedWorkItems.length > 0 ? (
                   pagedWorkItems.map((item) => {
                     const isSelected = selectedIds.has(item.workItemId)
@@ -641,6 +966,7 @@ export function WorkspaceTasksTab({
                     const statusTone = getWorkItemStatusTone(item.status)
                     const priorityMeta = getPriorityMeta(item.priority)
                     const tag = getWorkItemTag(item)
+                    const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
 
                     return (
                       <div
@@ -683,7 +1009,14 @@ export function WorkspaceTasksTab({
 
                         <span role="cell" className={styles.dueDateCell}>
                           {item.dueDate ? (
-                            <span className={styles.dueDate}>{formatWorkspaceShortDate(item.dueDate)}</span>
+                            <>
+                              <span className={styles.dueDate}>{formatWorkspaceShortDate(item.dueDate)}</span>
+                              {item.status !== 'done' && dueScheduleInfo.scheduleType !== 'none' ? (
+                                <span className={styles.dueBadge} data-tone={dueScheduleInfo.tone}>
+                                  {dueScheduleInfo.label}
+                                </span>
+                              ) : null}
+                            </>
                           ) : (
                             <span className={styles.emptyDueDate}>-</span>
                           )}
@@ -691,7 +1024,7 @@ export function WorkspaceTasksTab({
 
                         <span role="cell" className={styles.tagCell}>
                           {tag ? (
-                            <span className={styles.tagBadge} data-tone={tag.tone}>
+                            <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
                               {tag.label}
                             </span>
                           ) : (
@@ -847,6 +1180,26 @@ export function WorkspaceTasksTab({
                   </label>
                 ))}
               </fieldset>
+
+              <label className={styles.filterGroup}>
+                <span>일정/마감</span>
+                <span className={styles.selectField}>
+                  <select
+                    value={scheduleFilter}
+                    onChange={(event) => {
+                      setScheduleFilter(event.target.value as DueScheduleFilter)
+                      setCurrentPage(1)
+                    }}
+                  >
+                    <option value="all">전체</option>
+                    <option value="dueSoon">마감 임박 (7일 이내)</option>
+                    <option value="plenty">여유 있음</option>
+                    <option value="overdue">기한 지남</option>
+                    <option value="none">마감일 미정</option>
+                  </select>
+                  <Icon name="chevronDown" size={13} />
+                </span>
+              </label>
 
               <label className={styles.filterGroup}>
                 <span>우선순위</span>

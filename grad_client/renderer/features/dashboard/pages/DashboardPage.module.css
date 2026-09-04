@@ -197,7 +197,19 @@
   box-shadow: var(--shadow-panel);
   background: var(--surface-panel);
   color: var(--text-primary);
+  text-decoration: none;
+  cursor: pointer;
   overflow: hidden;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.kpiCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 20px -4px rgba(16, 23, 45, 0.12);
+  border-color: var(--line-strong, #c5cedd);
 }
 
 .kpiValueRow {

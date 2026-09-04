@@ -1,6 +1,7 @@
 @import '../tokens/theme.css';
 
 :root {
+  font-size: 17px;
   font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
@@ -10,6 +11,13 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* QHD (2560x1440) 및 대형 고해상도 화면에서 전체 텍스트와 UI 요소를 화면에 맞게 시원하게 확대 */
+@media (min-width: 2000px), (min-height: 1100px) {
+  :root {
+    font-size: 18.5px;
+  }
 }
 
 html,

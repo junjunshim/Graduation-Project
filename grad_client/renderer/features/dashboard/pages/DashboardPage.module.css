@@ -1838,21 +1838,25 @@
    content rows to use the available desktop height. */
 @media (min-width: 1081px) {
   .page {
-    grid-template-rows: auto auto;
-    align-content: start;
-    gap: 1rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    gap: 1.25rem;
     width: 100%;
     max-width: none;
-    min-height: auto;
+    min-height: 0;
     margin-inline: 0;
     padding: 1.55rem var(--space-page-x) 2rem;
   }
 
   .dashboardGrid {
-    grid-template-rows:
-      clamp(29rem, 50vh, 32.5rem)
-      clamp(10.5rem, 24vh, 17rem);
-    height: auto;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1.5fr) minmax(0, 1fr);
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    gap: 1.7rem;
   }
 
   .boardPanel,
@@ -1860,15 +1864,62 @@
   .documentsPanel,
   .activityPanel {
     height: 100%;
+    min-height: 0;
+  }
+
+  .boardPanel {
+    display: flex;
+    flex-direction: column;
+    padding-top: 0.2rem;
+  }
+
+  .boardColumns {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+    min-width: 0;
+    align-items: stretch;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .boardColumn {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .taskStack {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .taskCard {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   .calendarPanel {
-    grid-template-rows: auto auto 1fr 7.1rem;
+    grid-template-rows: auto auto 1fr auto;
   }
 
   .calendarGrid {
-    grid-template-rows: repeat(6, minmax(2.2rem, 1fr));
+    grid-template-rows: repeat(6, minmax(0, 1fr));
     height: 100%;
+    min-height: 0;
+  }
+
+  .calendarPreview {
+    height: auto;
+    min-height: 4.5rem;
+    max-height: none;
   }
 
   .documentsPanel,
@@ -1878,7 +1929,17 @@
 
   .documentList,
   .activityList {
-    align-content: stretch;
-    grid-auto-rows: minmax(2.15rem, 1fr);
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    gap: 0.4rem;
+  }
+
+  .documentRow,
+  .activityItem {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 }

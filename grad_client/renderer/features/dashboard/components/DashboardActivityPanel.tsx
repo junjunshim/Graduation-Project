@@ -51,7 +51,12 @@ export function DashboardActivityPanel({
             )
           })
         ) : (
-          <DashboardEmptyState>표시할 활동이 없습니다.</DashboardEmptyState>
+          <DashboardEmptyState
+            icon="clock"
+            title="최근 활동 내역이 없습니다"
+          >
+            조직 내 새로운 업데이트와 변경 사항이 이곳에 기록됩니다.
+          </DashboardEmptyState>
         )}
       </div>
     </section>

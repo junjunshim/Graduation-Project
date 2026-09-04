@@ -47,7 +47,12 @@ export function DashboardDocumentsPanel({
             </Link>
           ))
         ) : (
-          <DashboardEmptyState>최근 업로드된 문서가 없습니다.</DashboardEmptyState>
+          <DashboardEmptyState
+            icon="folder"
+            title="업로드된 문서가 없습니다"
+          >
+            업무에 공유할 문서를 등록해 보세요.
+          </DashboardEmptyState>
         )}
       </div>
     </section>

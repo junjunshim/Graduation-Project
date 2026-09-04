@@ -158,15 +158,26 @@ function HierarchyView({
           >
             {branches.map((branch) => (
               <li className={styles.branchColumn} key={branch.id}>
-                <article className={styles.branchCard}>
-                  <div className={styles.branchFavorite}>
+                <article
+                  className={styles.branchCard}
+                  onClick={() => onOpenWorkspace(branch.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenWorkspace(branch.id)
+                    }
+                  }}
+                >
+                  <div className={styles.branchFavorite} onClick={(e) => e.stopPropagation()}>
                     <FavoriteButton
                       isFavorite={favoriteIds.has(branch.id)}
                       label={branch.name}
                       onToggle={() => onToggleFavorite(branch.id)}
                     />
                   </div>
-                  <div className={styles.branchMore}>
+                  <div className={styles.branchMore} onClick={(e) => e.stopPropagation()}>
                     <MoreButton label={branch.name} />
                   </div>
                   <WorkspaceGlyph item={branch} variant="branch" />
@@ -182,8 +193,20 @@ function HierarchyView({
                 {branch.children.length > 0 ? (
                   <ol className={styles.leafList}>
                     {branch.children.map((child) => (
-                      <li className={styles.leafCard} key={child.id}>
-                        <div className={styles.leafFavorite}>
+                      <li
+                        className={styles.leafCard}
+                        key={child.id}
+                        onClick={() => onOpenWorkspace(child.id)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onOpenWorkspace(child.id)
+                          }
+                        }}
+                      >
+                        <div className={styles.leafFavorite} onClick={(e) => e.stopPropagation()}>
                           <FavoriteButton
                             isFavorite={favoriteIds.has(child.id)}
                             label={child.name}
@@ -196,7 +219,9 @@ function HierarchyView({
                           <span>{child.description}</span>
                           <small>{formatMemberCount(child)}</small>
                         </div>
-                        <MoreButton label={child.name} />
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <MoreButton label={child.name} />
+                        </div>
                       </li>
                     ))}
                   </ol>
@@ -617,17 +642,19 @@ export function WorkspaceEntryPage() {
     setIsChooserOpen(true)
   }
 
-  function openWorkspace(rootId: string) {
-    if (!workspaceDirectory.rootOptions.some((root) => root.id === rootId)) {
+  function openWorkspace(workspaceId: string) {
+    const targetItem = workspaceDirectory.listItems.find((item) => item.id === workspaceId)
+    if (!targetItem) {
       return
     }
 
+    const targetRootId = targetItem.rootId || targetItem.id
     selectWorkspaceRoot(
-      rootId,
-      getDefaultWorkspaceRootId(currentUser?.userId) === rootId,
+      targetRootId,
+      getDefaultWorkspaceRootId(currentUser?.userId) === targetRootId,
       currentUser?.userId,
     )
-    navigate('/workspace')
+    navigate(`/workspace?nodeId=${encodeURIComponent(workspaceId)}`)
   }
 
   return (

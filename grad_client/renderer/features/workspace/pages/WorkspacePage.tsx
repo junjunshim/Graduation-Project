@@ -726,11 +726,17 @@ export function WorkspacePage() {
         <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
           {workspaceTabs.map((tab) => {
             const isActive = tab.view === activeView
+            const targetTo =
+              workspaceRootParam && tab.to.startsWith('/workspace')
+                ? tab.to.includes('?')
+                  ? `${tab.to}&nodeId=${encodeURIComponent(workspaceRootParam)}`
+                  : `${tab.to}?nodeId=${encodeURIComponent(workspaceRootParam)}`
+                : tab.to
 
             return (
               <Link
                 key={tab.label}
-                to={tab.to}
+                to={targetTo}
                 className={[styles.tabLink, isActive ? styles.tabLinkActive : ''].filter(Boolean).join(' ')}
                 aria-current={isActive ? 'page' : undefined}
               >

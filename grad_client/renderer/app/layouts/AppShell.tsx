@@ -61,10 +61,13 @@ export function AppShell() {
     return null
   }
 
+  const workspaceRootParam = searchParams.get('rootId') || searchParams.get('nodeId')
   const overview = getWorkspaceOverview(currentUser.userId, snapshot, {
     rootNodeId:
+      workspaceRootParam ??
       getActiveWorkspaceRootId(currentUser.userId) ??
       getDefaultWorkspaceRootId(currentUser.userId),
+    singleNodeOnly: true,
   })
   const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0

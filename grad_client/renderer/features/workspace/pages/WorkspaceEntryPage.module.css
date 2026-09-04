@@ -359,6 +359,18 @@
   border-radius: 0.56rem;
   background: var(--entry-panel);
   text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--axis-motion-fast) ease,
+    border-color var(--axis-motion-fast) ease,
+    box-shadow var(--axis-motion-fast) ease;
+}
+
+.branchCard:hover {
+  border-color: var(--entry-line-strong);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 .branchCard::after {
@@ -517,6 +529,18 @@
   border: 1px solid var(--entry-line);
   border-radius: 0.52rem;
   background: var(--entry-panel);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--axis-motion-fast) ease,
+    border-color var(--axis-motion-fast) ease,
+    box-shadow var(--axis-motion-fast) ease;
+}
+
+.leafCard:hover {
+  border-color: var(--entry-line-strong);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.07);
+  transform: translateY(-1px);
 }
 
 .leafCard::before {

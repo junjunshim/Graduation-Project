@@ -12,6 +12,11 @@ DECLARE
     v_hashed_password TEXT;
 BEGIN
     -- 0. 사용자 중복 체크
+    IF EXISTS (SELECT 1 FROM users WHERE user_id = p_user_id) THEN
+        RAISE EXCEPTION '[P0510] User ID already exists: %', p_user_id
+        USING ERRCODE = 'P0510';
+    END IF;
+
     IF EXISTS (SELECT 1 FROM users WHERE email = p_email) THEN
         RAISE EXCEPTION '[P0501] Email already exists: %', p_email
         USING ERRCODE = 'P0501';
@@ -59,7 +64,7 @@ BEGIN
     RETURN TRUE;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0501' THEN
+        WHEN SQLSTATE 'P0501' OR SQLSTATE 'P0510' THEN
         RAISE;
         WHEN OTHERS THEN
         RAISE EXCEPTION '[P0502] Error occurred while registering user: %', SQLERRM

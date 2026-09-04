@@ -38,6 +38,7 @@ enum class DbErrorCode {
     LoginFailed,                // P0505 로그인 실패
     DeleteUserError,            // P0506 사용자 삭제 실패
     GetUserProfileFailed,       // P0507 사용자 프로필 조회 실패
+    UserIdAlreadyExists,        // P0510 이미 존재하는 유저 ID
     ParentWorkItemNotFound,     // P0601 부모 work item 없음
     CreateWorkItemFailed,       // P0602 work item 생성 실패
     UpdateWorkItemNotFound,     // P0603 업데이트할 work item 없음

@@ -106,6 +106,7 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0507") != std::string::npos) return DbErrorCode::GetUserProfileFailed;
     else if (errMsg.find("P0508") != std::string::npos) return DbErrorCode::UpdateUserFailed;
     else if (errMsg.find("P0509") != std::string::npos) return DbErrorCode::ReadMentionFailed;
+    else if (errMsg.find("P0510") != std::string::npos) return DbErrorCode::UserIdAlreadyExists;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
@@ -270,6 +271,11 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::EmailAlreadyExists:{
             ret["message"] = "이미 존재하는 이메일입니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::UserIdAlreadyExists:{
+            ret["message"] = "이미 존재하는 아이디입니다.";
             ret["http_code"] = drogon::k400BadRequest;
             break;
         }

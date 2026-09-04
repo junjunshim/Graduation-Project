@@ -7,7 +7,6 @@ import { DashboardBoard } from '../components/DashboardBoard'
 import { DashboardCalendarPanel } from '../components/DashboardCalendarPanel'
 import { DashboardDocumentsPanel } from '../components/DashboardDocumentsPanel'
 import { DashboardKpiGrid } from '../components/DashboardKpiGrid'
-import { DashboardOnboarding } from '../components/DashboardOnboarding'
 import {
   buildDashboardCalendar,
   getDashboardMetrics,
@@ -32,10 +31,6 @@ export function DashboardPage() {
   const recentActivities = snapshot.activities ?? []
   const calendar = buildDashboardCalendar(overview.visibleWorkItems, calendarMonthOffset)
   const metrics = getDashboardMetrics(overview)
-
-  if (overview.summary.orgNodeCount === 0) {
-    return <DashboardOnboarding overview={overview} />
-  }
 
   return (
     <section className={styles.page}>

@@ -75,7 +75,12 @@ function getDisplayNameFromEmail(email: string) {
 }
 
 function normalizeNodeType(value: unknown): NodeType {
-  const normalized = toStringValue(value).toUpperCase()
+  const strVal = toStringValue(value).trim()
+  if (strVal.startsWith('CUSTOM:')) {
+    return strVal
+  }
+
+  const normalized = strVal.toUpperCase()
 
   if (
     normalized === 'USER' ||

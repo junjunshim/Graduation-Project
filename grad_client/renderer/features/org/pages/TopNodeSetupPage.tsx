@@ -118,10 +118,12 @@ export function TopNodeSetupPage() {
       }
 
       if (response.newNodeId) {
-        selectWorkspaceRoot(String(response.newNodeId), false, user.userId)
+        const newRootIdStr = String(response.newNodeId)
+        selectWorkspaceRoot(newRootIdStr, false, user.userId)
+        navigate(`/workspace/select?rootId=${encodeURIComponent(newRootIdStr)}`)
+      } else {
+        navigate('/workspace/select')
       }
-
-      navigate('/workspace/select')
     } catch (error) {
       setFeedback({
         tone: 'error',

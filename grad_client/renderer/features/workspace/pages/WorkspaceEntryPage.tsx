@@ -7,6 +7,7 @@ import { Panel } from '../../../design-system/primitives/Panel'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceEntryViewToggle } from '../components/WorkspaceEntryViewToggle'
 import { getOrgSnapshot } from '../data/orgService'
+import { subscribeToWorkspaceCache } from '../data/workspaceCacheEvents'
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
@@ -549,29 +550,45 @@ function WorkspaceChooserDialog({
 export function WorkspaceEntryPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const snapshot = getOrgSnapshot()
+  const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const currentUser = getCurrentUser(snapshot)
   const workspaceDirectory = getWorkspaceDirectory(currentUser?.userId, snapshot)
+  const paramRootId = searchParams.get('rootId')
   const [activeRootId, setActiveRootId] = useState(
-    () => getActiveWorkspaceRootId(currentUser?.userId),
+    () => paramRootId || getActiveWorkspaceRootId(currentUser?.userId),
   )
   const defaultRootId = getDefaultWorkspaceRootId(currentUser?.userId)
-  const activeRoot = workspaceDirectory.rootOptions.find((root) => root.id === activeRootId)
+  const activeRoot = workspaceDirectory.rootOptions.find((root) => root.id === (paramRootId || activeRootId))
   const defaultRoot = workspaceDirectory.rootOptions.find((root) => root.id === defaultRootId)
   const hierarchyRoot =
     activeRoot ?? defaultRoot ?? workspaceDirectory.hierarchyRoot
   const shouldOpenChooserInitially = Boolean(
-    hierarchyRoot && !activeRoot && !defaultRoot,
+    !paramRootId && hierarchyRoot && !activeRoot && !defaultRoot,
   )
   const view = searchParams.get('view') === 'list' ? 'list' : 'hierarchy'
   const [isChooserOpen, setIsChooserOpen] = useState(shouldOpenChooserInitially)
   const [selectedRootId, setSelectedRootId] = useState(
-    () => hierarchyRoot?.id ?? workspaceDirectory.defaultRootId ?? '',
+    () => paramRootId || hierarchyRoot?.id || workspaceDirectory.defaultRootId || '',
   )
   const [currentPage, setCurrentPage] = useState(1)
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(
     () => getFavoriteWorkspaceIds(currentUser?.userId),
   )
+
+  useEffect(() => {
+    const unsubscribe = subscribeToWorkspaceCache(() => {
+      setSnapshot(getOrgSnapshot())
+    })
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (paramRootId) {
+      setActiveRootId(paramRootId)
+      setSelectedRootId(paramRootId)
+      setIsChooserOpen(false)
+    }
+  }, [paramRootId])
 
   const sortedRootOptions = [...workspaceDirectory.rootOptions].sort((a, b) => {
     const aFav = favoriteIds.has(a.id) ? 1 : 0

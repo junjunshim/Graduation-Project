@@ -418,8 +418,12 @@ export async function createTopNodeOnServer(payload: CreateTopNodeRequest) {
       return { status: 'error' as const, message: response.message ?? '공유 공간을 만들지 못했습니다.' }
     }
 
+    const items = parseServerContextItems((response as ServerContextResponse).data)
+    const createdNodeItem = items.find((item) => (item.type ?? '').toUpperCase() === 'NODE')
+    const newNodeId = createdNodeItem?.id !== undefined ? Number(createdNodeItem.id) : 0
+
     await refreshWorkspaceAfterCommittedMutation()
-    return { status: 'success' as const, newNodeId: 0 }
+    return { status: 'success' as const, newNodeId }
   }, '공유 공간을 만들지 못했습니다.')
 }
 
@@ -440,8 +444,12 @@ export async function createSubNodeOnServer(payload: CreateSubNodeRequest) {
       return { status: 'error' as const, message: response.message ?? '하위 조직을 추가하지 못했습니다.' }
     }
 
+    const items = parseServerContextItems((response as ServerContextResponse).data)
+    const createdNodeItem = items.find((item) => (item.type ?? '').toUpperCase() === 'NODE')
+    const newNodeId = createdNodeItem?.id !== undefined ? Number(createdNodeItem.id) : 0
+
     await refreshWorkspaceAfterCommittedMutation()
-    return { status: 'success' as const, newNodeId: 0 }
+    return { status: 'success' as const, newNodeId }
   }, '하위 조직을 추가하지 못했습니다.')
 }
 

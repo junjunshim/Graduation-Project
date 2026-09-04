@@ -314,7 +314,14 @@ export async function apiRequest<ResponseBody>(
   }
 
   // 401 Unauthorized 발생 시: access_token 만료 가능성 -> 1회 자동 refresh 및 재요청
-  if (response.status === 401 && !isRetry && options.includeToken !== false && path !== '/users/refresh' && path !== '/users/login') {
+  const cleanPath = path.replace(/^\/+/, '')
+  if (
+    response.status === 401 &&
+    !isRetry &&
+    options.includeToken !== false &&
+    !cleanPath.startsWith('users/refresh') &&
+    !cleanPath.startsWith('users/login')
+  ) {
     console.info('[ApiClient] 토큰 만료 감지 -> 토큰 재발급 및 재요청 시도')
     const newAccessToken = await refreshServerTokens()
     if (newAccessToken) {

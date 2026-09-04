@@ -116,6 +116,13 @@ const router = createHashRouter([
             },
           },
           {
+            path: '/setup/sub-node',
+            lazy: async () => {
+              const { SubNodeSetupPage } = await import('../features/org/pages/SubNodeSetupPage')
+              return { Component: SubNodeSetupPage }
+            },
+          },
+          {
             path: '/org/manage',
             element: <OrgManagePage />,
           },

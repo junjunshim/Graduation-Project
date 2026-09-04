@@ -18,7 +18,7 @@ export const navigationItems: NavigationItem[] = [
     to: '/workspace/select',
     label: '워크스페이스',
     icon: 'folder',
-    activePathPrefixes: ['/workspace', '/setup/top-node'],
+    activePathPrefixes: ['/workspace', '/setup/top-node', '/setup/sub-node'],
   },
   {
     to: '/work-items',

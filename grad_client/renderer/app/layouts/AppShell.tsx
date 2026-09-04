@@ -87,7 +87,21 @@ export function AppShell() {
     ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
     : null
   const workItemCategory = workItemDetail ? getWorkItemTag(workItemDetail.item) : null
-  const shellHeading: ShellTopActionsHeading = location.pathname === '/setup/top-node'
+  const parentNodeParam = searchParams.get('parentNodeId')
+  const parentNodeForHeading = parentNodeParam
+    ? snapshot.nodes.find((n) => n.id === parseInt(parentNodeParam, 10))
+    : null
+
+  const shellHeading: ShellTopActionsHeading = location.pathname === '/setup/sub-node'
+    ? {
+        type: 'breadcrumb',
+        label: '워크스페이스',
+        title: '하위 워크스페이스 생성',
+        subtitle: parentNodeForHeading
+          ? `${parentNodeForHeading.name}의 하위 워크스페이스를 등록합니다.`
+          : '부모 워크스페이스의 하위 워크스페이스를 등록합니다.',
+      }
+    : location.pathname === '/setup/top-node'
     ? {
         type: 'breadcrumb',
         label: '워크스페이스',
@@ -106,7 +120,7 @@ export function AppShell() {
     : isWorkspaceRoute
       ? {
           type: 'breadcrumb',
-          label: '워크 스페이스',
+          label: '워크스페이스',
           title: workspaceLabel,
           subtitle: '공동작업을 위한 워크스페이스',
         }
@@ -167,14 +181,14 @@ export function AppShell() {
       <div
         className={[
           styles.workspace,
-          hasCustomTitleBar || isWorkspaceSelectRoute || location.pathname === '/setup/top-node'
+          hasCustomTitleBar || isWorkspaceSelectRoute || location.pathname === '/setup/top-node' || location.pathname === '/setup/sub-node'
             ? styles.workspaceWithoutPageBar
             : '',
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {!hasCustomTitleBar && !isWorkspaceSelectRoute && location.pathname !== '/setup/top-node' ? (
+        {!hasCustomTitleBar && !isWorkspaceSelectRoute && location.pathname !== '/setup/top-node' && location.pathname !== '/setup/sub-node' ? (
           <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} />
         ) : null}
 

@@ -21,19 +21,19 @@ import {
   refreshServerTokens,
   setServerSession,
   type ApiRequestOptions,
-} from './apiClient'
+} from './apiClient.js'
 import {
   getServerLoginTokens,
   isServerStatusResponse,
   parseServerContextItems,
   type ServerContextResponse,
   type ServerLoginResponse,
-} from './apiTypes'
-import { normalizeServerContext } from './contextAdapter'
-import { getWorkspaceApiBaseUrl } from './workspaceMode'
-import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore'
-import { setCurrentSessionUserId } from '../session'
-import { notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents'
+} from './apiTypes.js'
+import { normalizeServerContext } from './contextAdapter.js'
+import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
+import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
+import { setCurrentSessionUserId } from '../session.js'
+import { notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents.js'
 
 type ServerOperationError = {
   status: 'error'
@@ -213,6 +213,14 @@ export async function loadServerWorkspace(email = getCurrentServerEmail()) {
   }
 
   writeServerWorkspaceDb(db)
+
+  // 워크스페이스 로드/새로고침 시 웹소켓이 아직 연결되지 않았거나 닫혀있으면 연결 수립
+  if (hasServerSession()) {
+    connectNotificationWebSocket().catch((err) => {
+      console.warn('[WorkspaceAdapter] 초기 웹소켓 연결 백그라운드 시도:', err)
+    })
+  }
+
   return db
 }
 
@@ -715,31 +723,60 @@ function scheduleWebSocketReconnect() {
   }, delay)
 }
 
-export function connectNotificationWebSocket(token?: string | null): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const accessToken = token ?? getServerAccessToken()
-    if (!accessToken) {
-      const err = new Error('WebSocket 연결을 위한 인증 토큰이 없습니다.')
-      reject(err)
-      return
-    }
+let pingIntervalTimer: ReturnType<typeof setInterval> | null = null
 
-    isIntentionalDisconnect = false
+function stopHeartbeat() {
+  if (pingIntervalTimer) {
+    clearInterval(pingIntervalTimer)
+    pingIntervalTimer = null
+  }
+}
 
-    if (notificationSocket && notificationSocket.readyState === WebSocket.OPEN) {
-      resolve(notificationSocket)
-      return
-    }
-
-    if (notificationSocket) {
+function startHeartbeat(socket: WebSocket) {
+  stopHeartbeat()
+  // 15초마다 가벼운 핑 전송 (연결 활성 유지)
+  pingIntervalTimer = setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) {
       try {
-        notificationSocket.close()
+        socket.send(JSON.stringify({ type: 'PING' }))
       } catch {
         // ignore
       }
-      notificationSocket = null
+    } else {
+      stopHeartbeat()
     }
+  }, 15000)
+}
 
+let connectPromise: Promise<WebSocket> | null = null
+
+export function connectNotificationWebSocket(token?: string | null): Promise<WebSocket> {
+  if (notificationSocket && (notificationSocket.readyState === WebSocket.OPEN || notificationSocket.readyState === WebSocket.CONNECTING)) {
+    if (connectPromise) {
+      return connectPromise
+    }
+    return Promise.resolve(notificationSocket)
+  }
+
+  const accessToken = token ?? getServerAccessToken()
+  if (!accessToken) {
+    return Promise.reject(new Error('WebSocket 연결을 위한 인증 토큰이 없습니다.'))
+  }
+
+  isIntentionalDisconnect = false
+
+  if (notificationSocket) {
+    try {
+      notificationSocket.close()
+    } catch {
+      // ignore
+    }
+    notificationSocket = null
+  }
+
+  stopHeartbeat()
+
+  const promise = new Promise<WebSocket>((resolve, reject) => {
     let isHandshakeComplete = false
 
     try {
@@ -773,6 +810,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
           reconnectTimer = null
         }
         console.info('[WebSocket] 실시간 알림 서버 연결 성공')
+        startHeartbeat(socket)
         resolve(socket)
       }
 
@@ -797,6 +835,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
 
       socket.onclose = (event) => {
         clearTimeout(timeoutId)
+        stopHeartbeat()
         console.info(`[WebSocket] 실시간 알림 서버 연결 종료 (코드: ${event.code})`)
         if (notificationSocket === socket) {
           notificationSocket = null
@@ -806,12 +845,13 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
           reject(new Error(`WebSocket 연결이 조기 종료되었습니다. (코드: ${event.code})`))
         }
 
-        // 의도적인 로그아웃/종료가 아니면 자동 재연결 예약
+        // 의도적인 로그아웃이 아니면 자동 재연결 예약
         if (!isIntentionalDisconnect && hasServerSession()) {
           scheduleWebSocketReconnect()
         }
       }
     } catch (err) {
+      stopHeartbeat()
       if (notificationSocket) {
         notificationSocket = null
       }
@@ -820,11 +860,17 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         scheduleWebSocketReconnect()
       }
     }
+  }).finally(() => {
+    connectPromise = null
   })
+
+  connectPromise = promise
+  return promise
 }
 
 export function disconnectNotificationWebSocket() {
   isIntentionalDisconnect = true
+  stopHeartbeat()
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null

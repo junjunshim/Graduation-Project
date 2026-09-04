@@ -1,4 +1,5 @@
 import type { IconName } from '../../../design-system/primitives/Icon'
+import type { WorkspaceMemberSummary } from '../model/memberInheritance'
 
 export type WorkspaceDirectoryTone =
   | 'indigo'
@@ -16,7 +17,9 @@ export type WorkspaceDirectoryItem = {
   description: string
   memberCount: number
   directMemberCount: number
+  inheritedMemberCount: number
   totalMemberCount: number
+  memberSummary: WorkspaceMemberSummary
   childCount: number
   createdAt: string
   isRoot: boolean

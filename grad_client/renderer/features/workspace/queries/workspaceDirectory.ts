@@ -1,4 +1,5 @@
 import { getAccessibleNodeIdsForUser } from '../data/orgService'
+import { getWorkspaceMemberSummary } from '../model/memberInheritance'
 import { getNodeTypeLabel } from '../model/labels'
 import { sortWorkspaceNodes } from '../model/sorters'
 import type { IconName } from '../../../design-system/primitives/Icon'
@@ -62,7 +63,17 @@ function getDescription(node: OrganizationNodeRecord, isRoot: boolean) {
 export function getWorkspaceDirectory(
   userId: string | undefined,
   snapshot: WorkspaceSnapshot,
+  options?: { selectedRootId?: string | null },
 ): WorkspaceDirectoryView {
+  return queryWorkspaceDirectory(snapshot, userId ? { userId } : null, options)
+}
+
+export function queryWorkspaceDirectory(
+  snapshot: WorkspaceSnapshot,
+  currentUser: { userId: string } | null,
+  options?: { selectedRootId?: string | null },
+): WorkspaceDirectoryView {
+  const userId = currentUser?.userId?.trim()
   if (!userId) {
     return {
       hierarchyRoot: null,
@@ -78,7 +89,6 @@ export function getWorkspaceDirectory(
   )
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id))
   const childNodesByParentId = new Map<number, OrganizationNode[]>()
-  const directMemberIdsByNodeId = new Map<number, Set<string>>()
 
   visibleNodes.forEach((node) => {
     if (node.parentNodeId === undefined || !visibleNodeIds.has(node.parentNodeId)) {
@@ -90,58 +100,17 @@ export function getWorkspaceDirectory(
     childNodesByParentId.set(node.parentNodeId, siblings)
   })
 
-  // 노드별 직접 소속 역할 배정 맵
-  const rolesByNodeId = new Map<number, Set<string>>()
-  snapshot.roles.forEach((role) => {
-    if (!visibleNodeIds.has(role.nodeId) || role.isDeleted) {
-      return
-    }
-
-    const memberIds = rolesByNodeId.get(role.nodeId) ?? new Set<string>()
-    memberIds.add(role.userId)
-    rolesByNodeId.set(role.nodeId, memberIds)
-  })
-
-  // 각 노드별 직속 멤버: 해당 노드에 역할이 있으면서, 동시에 해당 노드의 하위 자식 노드들에 더 구체적인 역할로 배정(override)되지 않은 멤버
+  // 모든 노드에 대해 단일 공통 함수(getWorkspaceMemberSummary)를 통해 팀원 지표를 사전 계산
+  const memberSummaryByNodeId = new Map<number, ReturnType<typeof getWorkspaceMemberSummary>>()
   visibleNodes.forEach((node) => {
-    const assignedUserIds = rolesByNodeId.get(node.id) ?? new Set<string>()
-    // 하위 자손 노드 ID 목록
-    const descendantIds = new Set<number>()
-    const queue = [...(childNodesByParentId.get(node.id) ?? [])]
-    while (queue.length > 0) {
-      const child = queue.shift()
-      if (child && !descendantIds.has(child.id)) {
-        descendantIds.add(child.id)
-        queue.push(...(childNodesByParentId.get(child.id) ?? []))
-      }
-    }
-
-    const descendantAssignedUsers = new Set<string>()
-    descendantIds.forEach((descId) => {
-      rolesByNodeId.get(descId)?.forEach((uid) => descendantAssignedUsers.add(uid))
+    const summary = getWorkspaceMemberSummary({
+      rootNode: node,
+      nodes: snapshot.nodes,
+      roles: snapshot.roles,
+      users: snapshot.users,
+      authorities: snapshot.authorities,
     })
-
-    const directUserIds = new Set<string>()
-    assignedUserIds.forEach((uid) => {
-      // 하위 노드에 구체적으로 배정되지 않은 경우에만 현재 노드의 직속 인원으로 판별
-      if (!descendantAssignedUsers.has(uid)) {
-        directUserIds.add(uid)
-      }
-    })
-
-    // 만약 모든 멤버가 하위에 배정되어 0명이 되는 경우(예: 최상위 관리자도 하위에 배정된 경우 등), 최소한 해당 노드의 ADMIN/소유자는 직속으로 유지
-    if (directUserIds.size === 0 && assignedUserIds.size > 0) {
-      const adminRoles = snapshot.roles.filter((r) => r.nodeId === node.id && r.roleName === 'ADMIN' && !r.isDeleted)
-      if (adminRoles.length > 0) {
-        adminRoles.forEach((r) => directUserIds.add(r.userId))
-      } else {
-        // ADMIN이 없으면 첫 번째 배정자를 직속으로
-        const firstUser = Array.from(assignedUserIds)[0]
-        if (firstUser) directUserIds.add(firstUser)
-      }
-    }
-
-    directMemberIdsByNodeId.set(node.id, directUserIds)
+    memberSummaryByNodeId.set(node.id, summary)
   })
 
   const rootNodes = sortWorkspaceNodes(
@@ -156,19 +125,22 @@ export function getWorkspaceDirectory(
     rootId: string,
     rootTone: WorkspaceDirectoryTone,
     ancestors: ReadonlySet<number>,
-  ): { item: WorkspaceDirectoryItem; memberIds: Set<string> } {
+  ): WorkspaceDirectoryItem {
     const nextAncestors = new Set(ancestors)
     nextAncestors.add(node.id)
 
     const childResults = (childNodesByParentId.get(node.id) ?? [])
       .filter((child) => !nextAncestors.has(child.id))
       .map((child) => buildItem(child, rootId, rootTone, nextAncestors))
-    const directMemberIds = directMemberIdsByNodeId.get(node.id) ?? new Set<string>()
-    const memberIds = new Set(directMemberIds)
 
-    childResults.forEach(({ memberIds: childMemberIds }) => {
-      childMemberIds.forEach((memberId) => memberIds.add(memberId))
-    })
+    const memberSummary = memberSummaryByNodeId.get(node.id) ?? {
+      totalCount: 0,
+      directCount: 0,
+      inheritedCount: 0,
+      overriddenCount: 0,
+      displayValue: '0',
+      description: '직속 0',
+    }
 
     const isRoot = node.id.toString() === rootId
     const baseVisualMetadata = getNodeVisualMetadata(node.nodeType)
@@ -180,19 +152,21 @@ export function getWorkspaceDirectory(
       rootId,
       name: node.name,
       description: getDescription(node, isRoot),
-      memberCount: memberIds.size,
-      directMemberCount: directMemberIds.size,
-      totalMemberCount: memberIds.size,
+      memberCount: memberSummary.totalCount,
+      directMemberCount: memberSummary.directCount,
+      inheritedMemberCount: memberSummary.inheritedCount,
+      totalMemberCount: memberSummary.totalCount,
+      memberSummary,
       childCount: childResults.length,
       createdAt: getCreatedDate(node.createdAt),
       isRoot,
       isFavorite: false,
       ...visualMetadata,
-      children: childResults.map(({ item: childItem }) => childItem),
+      children: childResults,
     }
 
     itemsByNodeId.set(node.id, item)
-    return { item, memberIds }
+    return item
   }
 
   const rootOptions = rootNodes.map((rootNode, rootIndex) =>
@@ -201,13 +175,16 @@ export function getWorkspaceDirectory(
       rootNode.id.toString(),
       ROOT_TONES[rootIndex % ROOT_TONES.length] ?? 'indigo',
       new Set(),
-    ).item,
+    ),
   )
   const listItems = visibleNodes.flatMap((node) => {
     const item = itemsByNodeId.get(node.id)
     return item ? [item] : []
   })
-  const hierarchyRoot = rootOptions[0] ?? null
+  
+  const selectedRootId = options?.selectedRootId
+  const hierarchyRoot = 
+    (selectedRootId ? rootOptions.find((o) => o.id === selectedRootId) : rootOptions[0]) ?? null
 
   return {
     hierarchyRoot,

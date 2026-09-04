@@ -17,6 +17,7 @@ import {
 import { formatActivityMessage } from '../../dashboard/model/activityFormatter'
 import { formatWorkspaceMonthDay } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
+import { canCreateSubNode } from '../model/effectiveAuthority'
 import type { ActivityRecord, RoleMember, UserRecord, WorkItemRecord, WorkItemStatus, WorkspaceOverview } from '../model/types'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import styles from './WorkspacePage.module.css'
@@ -393,7 +394,7 @@ function getWorkItemCounts(workItems: WorkItemRecord[]) {
   }
 }
 
-import { analyzeWorkspaceMembers } from '../model/memberInheritance'
+import { getWorkspaceMemberSummary } from '../model/memberInheritance'
 import type { WorkspaceSnapshot } from '../model/types'
 
 function getWorkspaceMetrics(
@@ -403,7 +404,7 @@ function getWorkspaceMetrics(
   const counts = getWorkItemCounts(overview.visibleWorkItems)
   const averageProgress = clampProgress(overview.summary.averageProgress)
 
-  const memberAnalysis = analyzeWorkspaceMembers({
+  const memberSummary = getWorkspaceMemberSummary({
     rootNode: overview.rootNode,
     nodes: snapshot.nodes,
     roles: snapshot.roles,
@@ -411,21 +412,6 @@ function getWorkspaceMetrics(
     authorities: snapshot.authorities,
     allRoleMembers: overview.allRoleMembers,
   })
-
-  const totalCount = memberAnalysis.all.length
-  const directCount = memberAnalysis.direct.length
-  const inheritedCount = memberAnalysis.inherited.length
-  const overriddenCount = memberAnalysis.overridden.length
-
-  const isRoot = !overview.rootNode?.parentNodeId
-
-  const memberValue = isRoot
-    ? String(totalCount)
-    : `${directCount} / ${totalCount}`
-
-  const memberDescription = isRoot
-    ? `직속 ${directCount} · 오버라이드 ${overriddenCount}`
-    : `직속 ${directCount} · 상속 ${inheritedCount}${overriddenCount > 0 ? ` · 오버라이드 ${overriddenCount}` : ''}`
 
   return [
     {
@@ -453,8 +439,8 @@ function getWorkspaceMetrics(
     },
     {
       label: '팀원',
-      value: memberValue,
-      description: memberDescription,
+      value: memberSummary.displayValue,
+      description: memberSummary.description,
       icon: 'users',
       tone: 'purple',
     },
@@ -764,6 +750,17 @@ export function WorkspacePage() {
             ))}
             {extraMemberCount > 0 ? <strong data-member-name={`외 ${extraMemberCount}명 (전체 ${totalMemberCount}명)`}>+{extraMemberCount}</strong> : null}
           </div>
+
+          {overview.rootNode && canCreateSubNode(currentUser.userId, overview.rootNode.id, snapshot) ? (
+            <Link
+              to={`/setup/sub-node?parentNodeId=${overview.rootNode.id}`}
+              className={styles.primaryAction}
+              title="현재 워크스페이스 하위에 새 워크스페이스를 생성합니다."
+            >
+              <Icon name="plus" size={15} />
+              하위 워크스페이스 생성
+            </Link>
+          ) : null}
 
           <button type="button" className={styles.secondaryAction}>
             <Icon name="users" size={15} />

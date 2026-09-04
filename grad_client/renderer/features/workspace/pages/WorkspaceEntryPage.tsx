@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
@@ -17,6 +17,7 @@ import {
 } from '../data/workspaceDirectorySelection'
 import type { WorkspaceDirectoryItem, WorkspaceDirectoryTone } from '../model/workspaceDirectory'
 import { getWorkspaceDirectory } from '../queries/workspaceDirectory'
+import { canCreateSubNode } from '../model/effectiveAuthority'
 import styles from './WorkspaceEntryPage.module.css'
 
 const WORKSPACE_LIST_PAGE_SIZE = 10
@@ -51,7 +52,7 @@ function WorkspaceGlyph({
       ].join(' ')}
       aria-hidden="true"
     >
-      <Icon name={item.iconName} size={variant === 'leaf' ? 21 : variant === 'dialog' ? 28 : 30} />
+      <Icon name={item.iconName} size={variant === 'leaf' ? 26 : variant === 'dialog' ? 28 : 30} />
     </span>
   )
 }
@@ -85,182 +86,516 @@ function FavoriteButton({
   )
 }
 
-function MoreButton({ label }: { label: string }) {
+function MoreButton({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick?: (event: React.MouseEvent) => void
+}) {
   return (
-    <span className={styles.moreButton} title={`${label} 더보기`} aria-hidden="true">
+    <button
+      type="button"
+      className={styles.moreButton}
+      title={`${label} 더보기`}
+      aria-label={`${label} 추가 작업`}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick?.(e)
+      }}
+    >
       <Icon name="moreHorizontal" size={19} />
-    </span>
+    </button>
   )
 }
 
 function formatMemberCount(item: WorkspaceDirectoryItem) {
-  if (item.childCount > 0) {
-    return `직속 ${item.directMemberCount}명 (전체 ${item.totalMemberCount}명)`
+  const direct = item.memberSummary?.directCount ?? item.directMemberCount
+  const total = item.memberSummary?.totalCount ?? item.totalMemberCount
+
+  if (total > 0 && total !== direct) {
+    return `직속 ${direct}명 · 전체 ${total}명`
   }
-  return `멤버 ${item.directMemberCount || item.memberCount}명`
+  return `직속 ${direct}명`
+}
+
+function DendroBranchConnectors({
+  childrenCount,
+  containerRef,
+  triggerKey,
+}: {
+  childrenCount: number
+  containerRef: React.RefObject<HTMLDivElement>
+  triggerKey?: string
+}) {
+  const [paths, setPaths] = useState<string[]>([])
+  const svgHeight = 44
+
+  useLayoutEffect(() => {
+    function updateCurves() {
+      const container = containerRef.current
+      if (!container) return
+
+      const containerRect = container.getBoundingClientRect()
+      if (containerRect.width === 0) return
+
+      // 부모 카드 요소 찾기 (바로 상위의 dendroSubTree 또는 dendroTopDownRoot)
+      const parentSubTree = container.parentElement?.closest(`.${styles.dendroSubTree}, .${styles.dendroTopDownRoot}`)
+      const parentCard = (parentSubTree?.querySelector(`:scope > .${styles.dendroNodeCardWrapper} > .${styles.dendroCard}`) ||
+        parentSubTree?.querySelector(`:scope > .${styles.rootCardWrapper} > .${styles.rootCard}`)) as HTMLElement | null
+
+      const childCols = Array.from(container.querySelectorAll(`:scope > .${styles.dendroChildCol}`)) as HTMLElement[]
+      if (childCols.length === 0) return
+
+      // 자식 카드들의 위치 추출
+      const childCardCenters: number[] = []
+      childCols.forEach((col) => {
+        const childCard = (col.querySelector(`:scope > .${styles.dendroSubTree} > .${styles.dendroNodeCardWrapper} > .${styles.dendroCard}`) ||
+          col.querySelector(`.${styles.dendroCard}`)) as HTMLElement | null
+        
+        let childX = col.offsetLeft + col.offsetWidth / 2
+        if (childCard) {
+          const childRect = childCard.getBoundingClientRect()
+          const childCenterScreen = childRect.left + childRect.width / 2
+          const relativeRatio = (childCenterScreen - containerRect.left) / containerRect.width
+          childX = relativeRatio * container.offsetWidth
+        }
+        childCardCenters.push(childX)
+      })
+
+      // 부모 카드의 연결선 출발점 (X좌표):
+      // 자식들이 1개 이상 있을 때 첫 번째 자식 중심과 마지막 자식 중심의 정중앙 또는 부모 카드의 화면 중심
+      let parentX = container.offsetWidth / 2
+      if (parentCard) {
+        const parentRect = parentCard.getBoundingClientRect()
+        const parentCenterScreen = parentRect.left + parentRect.width / 2
+        const relativeRatio = (parentCenterScreen - containerRect.left) / containerRect.width
+        parentX = relativeRatio * container.offsetWidth
+      } else if (childCardCenters.length > 0) {
+        parentX = (childCardCenters[0] + childCardCenters[childCardCenters.length - 1]) / 2
+      }
+      const parentY = 0
+
+      const newPaths: string[] = []
+      childCardCenters.forEach((childX) => {
+        const childY = svgHeight
+        // 부드러운 3차 베지에 곡선 (Cubic Bézier Spline Curve)
+        const cp1Y = svgHeight * 0.5
+        const cp2Y = svgHeight * 0.5
+        const path = `M ${parentX} ${parentY} C ${parentX} ${cp1Y}, ${childX} ${cp2Y}, ${childX} ${childY}`
+        newPaths.push(path)
+      })
+
+      setPaths(newPaths)
+    }
+
+    updateCurves()
+    const startTime = performance.now()
+    let animFrameId: number
+    const animateCurves = (now: number) => {
+      updateCurves()
+      if (now - startTime < 450) {
+        animFrameId = requestAnimationFrame(animateCurves)
+      }
+    }
+    animFrameId = requestAnimationFrame(animateCurves)
+
+    const containerEl = containerRef.current
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined' && containerEl) {
+      resizeObserver = new ResizeObserver(() => {
+        updateCurves()
+      })
+      resizeObserver.observe(containerEl)
+      const subTree = containerEl.closest(`.${styles.dendroSubTree}`) || containerEl.closest(`.${styles.dendroTopDownRoot}`)
+      if (subTree) resizeObserver.observe(subTree)
+    }
+
+    window.addEventListener('resize', updateCurves)
+    return () => {
+      cancelAnimationFrame(animFrameId)
+      if (resizeObserver) resizeObserver.disconnect()
+      window.removeEventListener('resize', updateCurves)
+    }
+  }, [childrenCount, containerRef, triggerKey])
+
+  if (childrenCount === 0) return null
+
+  return (
+    <svg className={styles.dendroSvgConnector} aria-hidden="true">
+      {paths.map((d, index) => (
+        <path
+          key={index}
+          className={styles.dendroSvgPath}
+          d={d}
+          fill="none"
+          stroke="var(--axis-brand-border, #c8c7ff)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  )
+}
+
+function TreeNodeCard({
+  item,
+  depth,
+  favoriteIds,
+  collapsedIds,
+  collapsingIds,
+  onOpenWorkspace,
+  onToggleFavorite,
+  onToggleCollapse,
+  onContextMenu,
+}: {
+  item: WorkspaceDirectoryItem
+  depth: number
+  favoriteIds: ReadonlySet<string>
+  collapsedIds: ReadonlySet<string>
+  collapsingIds?: ReadonlySet<string>
+  onOpenWorkspace: (id: string) => void
+  onToggleFavorite: (id: string) => void
+  onToggleCollapse: (id: string) => void
+  onContextMenu: (event: React.MouseEvent, item: WorkspaceDirectoryItem) => void
+}) {
+  const hasChildren = item.children && item.children.length > 0
+  const isFavorite = favoriteIds.has(item.id)
+  const isCollapsed = collapsedIds.has(item.id)
+  const isCollapsing = collapsingIds ? collapsingIds.has(item.id) : false
+  const childrenRowRef = useRef<HTMLDivElement>(null)
+
+  return (
+    <div className={styles.dendroSubTree}>
+      {/* 노드 카드 본체 (수직형 세로 카드) */}
+      <div className={styles.dendroNodeCardWrapper}>
+        <div
+          className={[
+            styles.dendroCard,
+            depth === 1 ? styles.dendroCardLevel1 : depth === 2 ? styles.dendroCardLevel2 : styles.dendroCardLevelDeep,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onClick={() => onOpenWorkspace(item.id)}
+          onContextMenu={(e) => onContextMenu(e, item)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onOpenWorkspace(item.id)
+            }
+          }}
+        >
+          <div className={styles.dendroFavorite} onClick={(e) => e.stopPropagation()}>
+            <FavoriteButton
+              isFavorite={isFavorite}
+              label={item.name}
+              onToggle={() => onToggleFavorite(item.id)}
+            />
+          </div>
+
+          <div className={styles.dendroGlyphWrapper}>
+            <WorkspaceGlyph item={item} variant={depth === 1 ? 'branch' : 'leaf'} />
+          </div>
+
+          <div className={styles.dendroCopy}>
+            <strong className={styles.dendroName} title={item.name}>{item.name}</strong>
+            <span className={styles.dendroDesc} title={item.description}>{item.description}</span>
+          </div>
+
+          <div className={styles.dendroFooter}>
+            <small className={styles.dendroMember}>{formatMemberCount(item)}</small>
+            {hasChildren && (
+              <button
+                type="button"
+                className={[styles.dendroChildBadge, isCollapsed || isCollapsing ? styles.dendroChildBadgeCollapsed : ''].filter(Boolean).join(' ')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleCollapse(item.id)
+                }}
+                title={isCollapsed || isCollapsing ? '하위 노드 펼치기' : '하위 노드 숨기기'}
+              >
+                {isCollapsed || isCollapsing ? `하위 +${item.childCount}개` : `하위 ${item.childCount}개`}
+              </button>
+            )}
+          </div>
+
+          <div className={styles.dendroMore} onClick={(e) => e.stopPropagation()}>
+            <MoreButton label={item.name} onClick={(e) => onContextMenu(e, item)} />
+          </div>
+        </div>
+      </div>
+
+      {/* 하위 자식 노드들 (Top-Down 수형 분기: 접히는 중 애니메이션 및 접기 완료 후 언마운트) */}
+      {hasChildren && !isCollapsed && (
+        <div className={[styles.dendroChildrenSection, isCollapsing ? styles.dendroChildrenSectionCollapsing : ''].filter(Boolean).join(' ')}>
+          <div className={styles.dendroChildrenWrapper}>
+            <div ref={childrenRowRef} className={styles.dendroChildrenRow}>
+              <DendroBranchConnectors
+                childrenCount={item.children.length}
+                containerRef={childrenRowRef}
+                triggerKey={`${item.id}-${isCollapsed}-${isCollapsing}`}
+              />
+              {item.children.map((child) => (
+                <div key={child.id} className={styles.dendroChildCol}>
+                  <TreeNodeCard
+                    item={child}
+                    depth={depth + 1}
+                    favoriteIds={favoriteIds}
+                    collapsedIds={collapsedIds}
+                    collapsingIds={collapsingIds}
+                    onOpenWorkspace={onOpenWorkspace}
+                    onToggleFavorite={onToggleFavorite}
+                    onToggleCollapse={onToggleCollapse}
+                    onContextMenu={onContextMenu}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function HierarchyView({
   root,
   branches,
   favoriteIds,
+  collapsedIds,
+  collapsingIds,
   onOpenWorkspace,
   onToggleFavorite,
+  onToggleCollapse,
+  onContextMenu,
 }: {
   root: WorkspaceDirectoryItem
   branches: WorkspaceDirectoryItem[]
   favoriteIds: ReadonlySet<string>
+  collapsedIds: ReadonlySet<string>
+  collapsingIds?: ReadonlySet<string>
   onOpenWorkspace: (rootId: string) => void
   onToggleFavorite: (id: string) => void
+  onToggleCollapse: (id: string) => void
+  onContextMenu: (event: React.MouseEvent, item: WorkspaceDirectoryItem) => void
 }) {
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const rootBranchesRowRef = useRef<HTMLDivElement>(null)
+
+  // 루트 워크스페이스 변경 시 줌/팬 초기화
+  useEffect(() => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+  }, [root.id])
+
+  // 줌 인/아웃 핸들러
+  const handleZoomIn = () => setZoom((prev) => Math.min(2, Math.round((prev + 0.15) * 100) / 100))
+  const handleZoomOut = () => setZoom((prev) => Math.max(0.4, Math.round((prev - 0.15) * 100) / 100))
+  const handleResetZoom = () => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+  }
+
+  // 캔버스 마우스 휠 줌 (Ctrl/Meta + 휠)
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        const delta = e.deltaY > 0 ? -0.1 : 0.1
+        setZoom((prev) => Math.min(2, Math.max(0.4, Math.round((prev + delta) * 100) / 100)))
+      }
+    }
+
+    viewport.addEventListener('wheel', handleWheel, { passive: false })
+    return () => viewport.removeEventListener('wheel', handleWheel)
+  }, [])
+
+  const canvasRef = useRef<HTMLElement>(null)
+
+  // 캔버스 드래그 팬 (Pan)
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return // 좌클릭만
+    // 카드나 버튼 클릭 시에는 팬 시작 안함
+    if ((e.target as HTMLElement).closest('button, a, input, article, role')) return
+
+    setIsPanning(true)
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return
+    const dx = e.clientX - panStartRef.current.x
+    const dy = e.clientY - panStartRef.current.y
+    const targetX = panStartRef.current.panX + dx
+    const targetY = panStartRef.current.panY + dy
+
+    // 노드가 존재하는 트리 콘텐츠의 실제 크기 기반으로 팬 한계값(Bounds) 계산
+    const viewport = viewportRef.current
+    const canvas = canvasRef.current
+    if (viewport && canvas) {
+      const topDownRoot = canvas.querySelector(`.${styles.dendroTopDownRoot}`) as HTMLElement | null
+      const contentWidth = (topDownRoot?.offsetWidth || canvas.offsetWidth) * zoom
+      const contentHeight = (topDownRoot?.offsetHeight || 600) * zoom
+      const vpWidth = viewport.clientWidth
+      const vpHeight = viewport.clientHeight
+
+      // 트리가 뷰포트를 벗어나지 않도록 여유 버퍼(160px)만 허용하고 제한
+      const maxPanX = Math.max(160, (contentWidth - vpWidth) / 2 + 160)
+      const minPanX = -maxPanX
+
+      // 위아래 이동 한계: 루트 노드가 뷰포트 아래로 너무 내려가거나 최하단 노드가 위로 사라지지 않도록 제한
+      const minPanY = -Math.max(80, contentHeight - vpHeight + 160)
+      const maxPanY = 160
+
+      setPan({
+        x: Math.min(maxPanX, Math.max(minPanX, targetX)),
+        y: Math.min(maxPanY, Math.max(minPanY, targetY)),
+      })
+    } else {
+      setPan({ x: targetX, y: targetY })
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsPanning(false)
+  }
+
   return (
-    <div className={styles.treeViewport}>
-      <section className={styles.treeCanvas} aria-label={`${root.name} 워크스페이스 계층도`}>
-        <div className={styles.rootCardWrapper}>
-          <button type="button" className={styles.rootCard} onClick={() => onOpenWorkspace(root.id)}>
-            <WorkspaceGlyph item={root} variant="root" />
-            <span className={styles.rootCardCopy}>
-              <span className={styles.rootNameLine}>
-                <strong>{root.name}</strong>
-                <RootBadge />
+    <div
+      ref={viewportRef}
+      className={[styles.treeViewport, isPanning ? styles.treeViewportPanning : ''].filter(Boolean).join(' ')}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
+      {/* 줌 / 팬 플로팅 툴바 */}
+      <div className={styles.zoomToolbar} onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className={styles.zoomButton}
+          onClick={handleZoomIn}
+          title="확대 (Ctrl + 마우스 휠 위)"
+          aria-label="확대"
+        >
+          <Icon name="plus" size={16} />
+        </button>
+        <button
+          type="button"
+          className={styles.zoomButton}
+          onClick={handleZoomOut}
+          title="축소 (Ctrl + 마우스 휠 아래)"
+          aria-label="축소"
+        >
+          <Icon name="minus" size={16} />
+        </button>
+        <span className={styles.zoomDivider} />
+        <button
+          type="button"
+          className={styles.zoomLabelButton}
+          onClick={handleResetZoom}
+          title="원래 크기로 초기화 (100%)"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button
+          type="button"
+          className={styles.zoomButton}
+          onClick={handleResetZoom}
+          title="화면 맞춤 / 리셋"
+          aria-label="리셋"
+        >
+          <Icon name="rotateCcw" size={15} />
+        </button>
+      </div>
+
+      <section
+        ref={canvasRef}
+        className={styles.treeCanvas}
+        aria-label={`${root.name} 워크스페이스 계층도`}
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px)`,
+          zoom: zoom,
+          transformOrigin: 'top center',
+        }}
+      >
+        <div className={styles.dendroTopDownRoot}>
+          {/* 루트 노드 카드 */}
+          <div className={styles.rootCardWrapper}>
+            <button
+              type="button"
+              className={styles.rootCard}
+              onClick={() => onOpenWorkspace(root.id)}
+              onContextMenu={(e) => onContextMenu(e, root)}
+            >
+              <WorkspaceGlyph item={root} variant="root" />
+              <span className={styles.rootCardCopy}>
+                <span className={styles.rootNameLine}>
+                  <strong>{root.name}</strong>
+                  <RootBadge />
+                </span>
+                <span>{root.description}</span>
+                <span>
+                  {formatMemberCount(root)}
+                  <i aria-hidden="true" />
+                  하위 {root.childCount}개
+                </span>
               </span>
-              <span>{root.description}</span>
-              <span>
-                {formatMemberCount(root)}
-                <i aria-hidden="true" />
-                하위 {root.childCount}개
-              </span>
-            </span>
-            <Icon name="chevronRight" size={20} />
-          </button>
-          <div className={styles.rootFavorite}>
-            <FavoriteButton
-              isFavorite={favoriteIds.has(root.id)}
-              label={root.name}
-              onToggle={() => onToggleFavorite(root.id)}
-            />
+              <Icon name="chevronRight" size={20} />
+            </button>
+            <div className={styles.rootFavorite}>
+              <FavoriteButton
+                isFavorite={favoriteIds.has(root.id)}
+                label={root.name}
+                onToggle={() => onToggleFavorite(root.id)}
+              />
+            </div>
           </div>
+
+          {/* 1단계 브랜치 및 하위 수형 덴드로그램 트리 (접었을 때 부드러운 전환 후 레이아웃 재계산) */}
+          {branches.length > 0 && !collapsedIds.has(root.id) && (
+            <div className={[styles.dendroChildrenSection, collapsingIds?.has(root.id) ? styles.dendroChildrenSectionCollapsing : ''].filter(Boolean).join(' ')}>
+              <div className={styles.dendroChildrenWrapper}>
+                <div ref={rootBranchesRowRef} className={styles.dendroChildrenRow}>
+                  <DendroBranchConnectors
+                    childrenCount={branches.length}
+                    containerRef={rootBranchesRowRef}
+                    triggerKey={`${root.id}-${collapsedIds.has(root.id)}-${collapsingIds?.has(root.id)}`}
+                  />
+                  {branches.map((branch) => (
+                    <div key={branch.id} className={styles.dendroChildCol}>
+                      <TreeNodeCard
+                        item={branch}
+                        depth={1}
+                        favoriteIds={favoriteIds}
+                        collapsedIds={collapsedIds}
+                        collapsingIds={collapsingIds}
+                        onOpenWorkspace={onOpenWorkspace}
+                        onToggleFavorite={onToggleFavorite}
+                        onToggleCollapse={onToggleCollapse}
+                        onContextMenu={onContextMenu}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-
-        {branches.length > 0 ? (
-          <ol
-            className={[
-              styles.branchGrid,
-              branches.length < 6 ? styles.branchGridFiltered : '',
-              branches.length === 1 ? styles.branchGridSingle : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            style={
-              branches.length < 6
-                ? { gridTemplateColumns: `repeat(${branches.length}, 11.4rem)` }
-                : undefined
-            }
-          >
-            {branches.map((branch) => (
-              <li className={styles.branchColumn} key={branch.id}>
-                <article
-                  className={styles.branchCard}
-                  onClick={() => onOpenWorkspace(branch.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      onOpenWorkspace(branch.id)
-                    }
-                  }}
-                >
-                  <div className={styles.branchFavorite} onClick={(e) => e.stopPropagation()}>
-                    <FavoriteButton
-                      isFavorite={favoriteIds.has(branch.id)}
-                      label={branch.name}
-                      onToggle={() => onToggleFavorite(branch.id)}
-                    />
-                  </div>
-                  <div className={styles.branchMore} onClick={(e) => e.stopPropagation()}>
-                    <MoreButton label={branch.name} />
-                  </div>
-                  <WorkspaceGlyph item={branch} variant="branch" />
-                  <h2>{branch.name}</h2>
-                  <p>{branch.description}</p>
-                  <span>
-                    {formatMemberCount(branch)}
-                    <i aria-hidden="true" />
-                    하위 {branch.childCount}개
-                  </span>
-                </article>
-
-                {branch.children.length > 0 ? (
-                  <ol className={styles.leafList}>
-                    {branch.children.map((child) => (
-                      <li
-                        className={styles.leafCard}
-                        key={child.id}
-                        onClick={() => onOpenWorkspace(child.id)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            onOpenWorkspace(child.id)
-                          }
-                        }}
-                      >
-                        <div className={styles.leafFavorite} onClick={(e) => e.stopPropagation()}>
-                          <FavoriteButton
-                            isFavorite={favoriteIds.has(child.id)}
-                            label={child.name}
-                            onToggle={() => onToggleFavorite(child.id)}
-                          />
-                        </div>
-                        <WorkspaceGlyph item={child} variant="leaf" />
-                        <div className={styles.leafCopy}>
-                          <strong>{child.name}</strong>
-                          <span>{child.description}</span>
-                          <small>{formatMemberCount(child)}</small>
-                        </div>
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <MoreButton label={child.name} />
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div className={styles.emptyState}>검색 결과와 일치하는 워크스페이스가 없습니다.</div>
-        )}
-
-        <aside className={styles.legend} aria-label="계층도 안내">
-          <strong>안내</strong>
-          <span>
-            <Icon name="star" size={17} className={styles.legendStar} />
-            즐겨찾기한 워크스페이스
-          </span>
-          <span>
-            <i className={styles.legendRootIcon}>
-              <Icon name="building" size={13} />
-            </i>
-            루트 워크스페이스
-          </span>
-          <span>
-            <i className={styles.legendLeafIcon}>
-              <Icon name="folder" size={13} />
-            </i>
-            일반 워크스페이스
-          </span>
-          <span>
-            <i className={styles.legendConnector} />
-            하위 워크스페이스
-          </span>
-          <span>
-            <Icon name="moreHorizontal" size={17} />
-            더보기 메뉴
-          </span>
-        </aside>
       </section>
     </div>
   )
@@ -275,6 +610,7 @@ function ListView({
   onOpenWorkspace,
   onPageChange,
   onToggleFavorite,
+  onContextMenu,
 }: {
   rows: WorkspaceDirectoryItem[]
   favoriteIds: ReadonlySet<string>
@@ -284,13 +620,18 @@ function ListView({
   onOpenWorkspace: (rootId: string) => void
   onPageChange: (page: number) => void
   onToggleFavorite: (id: string) => void
+  onContextMenu: (event: React.MouseEvent, item: WorkspaceDirectoryItem) => void
 }) {
   return (
     <section className={styles.listSection} aria-label="워크스페이스 목록">
       <ol className={styles.workspaceRows}>
         {rows.length > 0 ? (
           rows.map((item) => (
-            <li className={styles.workspaceRow} key={item.id}>
+            <li
+              className={styles.workspaceRow}
+              key={item.id}
+              onContextMenu={(e) => onContextMenu(e, item)}
+            >
               <FavoriteButton
                 isFavorite={favoriteIds.has(item.id)}
                 label={item.name}
@@ -330,7 +671,12 @@ function ListView({
                 </span>
               </span>
 
-              <MoreButton label={item.name} />
+              <div className={styles.rowMoreWrapper} onClick={(e) => e.stopPropagation()}>
+                <MoreButton
+                  label={item.name}
+                  onClick={(e) => onContextMenu(e, item)}
+                />
+              </div>
             </li>
           ))
         ) : (
@@ -636,6 +982,75 @@ export function WorkspaceEntryPage() {
     setFavoriteIds(new Set(updated))
   }
 
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
+  const [collapsingIds, setCollapsingIds] = useState<Set<string>>(new Set())
+
+  function toggleCollapse(id: string) {
+    if (collapsedIds.has(id)) {
+      // 펼치기: 즉시 collapsedIds에서 제거하여 나타나게 함
+      setCollapsedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    } else {
+      // 접기: 먼저 collapsingIds에 추가하여 페이드아웃 애니메이션을 실행하고 160ms 후 collapsedIds에 추가
+      setCollapsingIds((prev) => new Set(prev).add(id))
+      setTimeout(() => {
+        setCollapsedIds((prev) => new Set(prev).add(id))
+        setCollapsingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+      }, 160)
+    }
+  }
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    item: WorkspaceDirectoryItem
+    canCreateSub: boolean
+  } | null>(null)
+
+  // 외부 클릭 시 컨텍스트 메뉴 닫기
+  useEffect(() => {
+    const handleClose = () => setContextMenu(null)
+    if (contextMenu) {
+      window.addEventListener('click', handleClose)
+      window.addEventListener('contextmenu', handleClose)
+    }
+    return () => {
+      window.removeEventListener('click', handleClose)
+      window.removeEventListener('contextmenu', handleClose)
+    }
+  }, [contextMenu])
+
+  const handleContextMenu = (e: React.MouseEvent, item: WorkspaceDirectoryItem) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const parsedNodeId = parseInt(item.id, 10)
+    const canCreateSub =
+      Number.isFinite(parsedNodeId) && currentUser
+        ? canCreateSubNode(currentUser.userId, parsedNodeId, snapshot)
+        : false
+
+    // 권한이 있는 경우 컨텍스트 메뉴 표시 (화면 벗어남 방지)
+    const menuWidth = 220
+    const menuHeight = 150
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+
+    setContextMenu({
+      x,
+      y,
+      item,
+      canCreateSub,
+    })
+  }
+
   function handleConfirmWorkspace() {
     if (!workspaceDirectory.rootOptions.some((root) => root.id === selectedRootId)) {
       return
@@ -684,11 +1099,16 @@ export function WorkspaceEntryPage() {
 
       {view === 'hierarchy' && hierarchyRoot ? (
         <HierarchyView
+          key={hierarchyRoot.id}
           root={hierarchyRoot}
           branches={hierarchyBranches}
           favoriteIds={favoriteIds}
+          collapsedIds={collapsedIds}
+          collapsingIds={collapsingIds}
           onOpenWorkspace={openWorkspace}
           onToggleFavorite={toggleFavorite}
+          onToggleCollapse={toggleCollapse}
+          onContextMenu={handleContextMenu}
         />
       ) : view === 'list' ? (
         <ListView
@@ -700,12 +1120,81 @@ export function WorkspaceEntryPage() {
           onOpenWorkspace={openWorkspace}
           onPageChange={setCurrentPage}
           onToggleFavorite={toggleFavorite}
+          onContextMenu={handleContextMenu}
         />
       ) : (
         <section className={styles.emptyState} aria-live="polite">
           표시할 조직 워크스페이스가 없습니다.
         </section>
       )}
+
+      {/* 우클릭 / 더보기 컨텍스트 메뉴 */}
+      {contextMenu ? (
+        <div
+          className={styles.contextMenu}
+          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className={styles.contextMenuItem}
+            onClick={() => {
+              const item = contextMenu.item
+              setContextMenu(null)
+              openWorkspace(item.id)
+            }}
+          >
+            <Icon name="folder" size={15} />
+            <span>워크스페이스 열기</span>
+          </button>
+
+          {/* 하위 노드가 있는 경우: 숨기기 / 펼치기 메뉴 */}
+          {contextMenu.item.children && contextMenu.item.children.length > 0 ? (
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              onClick={() => {
+                const item = contextMenu.item
+                setContextMenu(null)
+                toggleCollapse(item.id)
+              }}
+            >
+              <Icon name={collapsedIds.has(contextMenu.item.id) ? 'chevronDown' : 'chevronUp'} size={15} />
+              <span>{collapsedIds.has(contextMenu.item.id) ? '하위 노드 펼치기' : '하위 노드 숨기기'}</span>
+            </button>
+          ) : null}
+
+          {contextMenu.canCreateSub ? (
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              onClick={() => {
+                const item = contextMenu.item
+                setContextMenu(null)
+                navigate(`/setup/sub-node?parentNodeId=${encodeURIComponent(item.id)}`)
+              }}
+            >
+              <Icon name="plus" size={15} />
+              <span>하위 워크스페이스 생성</span>
+            </button>
+          ) : null}
+
+          <div className={styles.contextMenuDivider} />
+
+          <button
+            type="button"
+            className={styles.contextMenuItem}
+            onClick={() => {
+              const item = contextMenu.item
+              setContextMenu(null)
+              toggleFavorite(item.id)
+            }}
+          >
+            <Icon name="star" size={15} />
+            <span>{favoriteIds.has(contextMenu.item.id) ? '즐겨찾기 해제' : '즐겨찾기 추가'}</span>
+          </button>
+        </div>
+      ) : null}
 
       <WorkspaceChooserDialog
         isOpen={isChooserOpen}

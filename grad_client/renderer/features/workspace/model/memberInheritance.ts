@@ -206,3 +206,60 @@ export function analyzeWorkspaceMembers({
 
   return { all, direct, inherited, overridden }
 }
+
+export type WorkspaceMemberSummary = {
+  totalCount: number
+  directCount: number
+  inheritedCount: number
+  overriddenCount: number
+  displayValue: string
+  description: string
+}
+
+/**
+ * 프로젝트 전역에서 워크스페이스 팀원 지표(KPI 및 표시 텍스트)를 일관되게 제공하는 단일 표준 함수
+ */
+export function getWorkspaceMemberSummary({
+  rootNode,
+  nodes = [],
+  roles = [],
+  users = [],
+  authorities = [],
+  allRoleMembers = [],
+}: {
+  rootNode?: OrganizationNodeRecord | null
+  nodes?: OrganizationNodeRecord[]
+  roles?: RoleAssignmentRecord[]
+  users?: UserRecord[]
+  authorities?: AuthorityRecord[]
+  allRoleMembers?: RoleMember[]
+}): WorkspaceMemberSummary {
+  const analysis = analyzeWorkspaceMembers({
+    rootNode,
+    nodes,
+    roles,
+    users,
+    authorities,
+    allRoleMembers,
+  })
+
+  const totalCount = analysis.all.length
+  const directCount = analysis.direct.length
+  const inheritedCount = analysis.inherited.length
+  const overriddenCount = analysis.overridden.length
+  const isRoot = !rootNode?.parentNodeId
+
+  const displayValue = isRoot ? String(totalCount) : `${directCount} / ${totalCount}`
+  const description = isRoot
+    ? `직속 ${directCount} · 오버라이드 ${overriddenCount}`
+    : `직속 ${directCount} · 상속 ${inheritedCount}${overriddenCount > 0 ? ` · 오버라이드 ${overriddenCount}` : ''}`
+
+  return {
+    totalCount,
+    directCount,
+    inheritedCount,
+    overriddenCount,
+    displayValue,
+    description,
+  }
+}

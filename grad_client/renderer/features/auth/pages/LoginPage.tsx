@@ -37,6 +37,7 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(Boolean(rememberedEmail))
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [errorField, setErrorField] = useState<'email' | 'password' | 'all' | null>(null)
   const [syncPhase, setSyncPhase] = useState<'auth' | 'ws' | 'sync' | 'parse'>('auth')
   const [feedback, setFeedback] = useState<Feedback | null>(() => {
     const state = location.state
@@ -58,24 +59,50 @@ export function LoginPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (submitting) {
+    const emailTrimmed = form.email.trim()
+    if (!emailTrimmed) {
+      setFeedback({ tone: 'error', message: '이메일 주소를 입력해 주세요.' })
+      setErrorField('email')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailTrimmed)) {
+      setFeedback({ tone: 'error', message: '올바른 이메일 형식을 입력해 주세요. (예: user@example.com)' })
+      setErrorField('email')
+      return
+    }
+
+    if (!form.password) {
+      setFeedback({ tone: 'error', message: '비밀번호를 입력해 주세요.' })
+      setErrorField('password')
       return
     }
 
     setSubmitting(true)
     setSyncPhase('auth')
     setFeedback(null)
+    setErrorField(null)
 
     try {
       // 1. 사용자 계정 인증
       setSyncPhase('auth')
       const response = await signIn({
-        email: form.email,
+        email: emailTrimmed,
         password: form.password,
       })
 
       if (response.status === 'error') {
-        setFeedback({ tone: 'error', message: response.message })
+        const msg = response.message || '로그인에 실패했습니다.'
+        setFeedback({ tone: 'error', message: msg })
+
+        if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
+          setErrorField('email')
+        } else if (msg.includes('비밀번호') || msg.toLowerCase().includes('password')) {
+          setErrorField('password')
+        } else {
+          setErrorField('all')
+        }
         return
       }
 
@@ -96,10 +123,18 @@ export function LoginPage() {
 
       navigate('/dashboard', { replace: true })
     } catch (error) {
+      const msg = error instanceof Error ? error.message : '로그인 및 데이터 동기화에 실패했습니다.'
       setFeedback({
         tone: 'error',
-        message: error instanceof Error ? error.message : '로그인 및 데이터 동기화에 실패했습니다.',
+        message: msg,
       })
+      if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
+        setErrorField('email')
+      } else if (msg.includes('비밀번호') || msg.toLowerCase().includes('password')) {
+        setErrorField('password')
+      } else {
+        setErrorField('all')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -221,12 +256,19 @@ export function LoginPage() {
               <p>Axis 계정으로 로그인해주세요.</p>
             </div>
 
-            <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting}>
+            <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting} noValidate>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="login-email">
                   이메일
                 </label>
-                <span className={styles.inputShell}>
+                <span
+                  className={[
+                    styles.inputShell,
+                    errorField === 'email' || errorField === 'all' ? styles.inputShellError : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
                   <Icon name="mail" size={21} className={styles.fieldIcon} />
                   <input
                     id="login-email"
@@ -234,8 +276,13 @@ export function LoginPage() {
                     autoComplete="email"
                     required
                     disabled={submitting}
+                    maxLength={100}
                     value={form.email}
-                    onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                    onChange={(event) => {
+                      setFeedback(null)
+                      setErrorField(null)
+                      setForm((current) => ({ ...current, email: event.target.value }))
+                    }}
                     className={styles.input}
                     placeholder="이메일 주소를 입력하세요"
                   />
@@ -246,7 +293,14 @@ export function LoginPage() {
                 <label className={styles.label} htmlFor="login-password">
                   비밀번호
                 </label>
-                <span className={styles.inputShell}>
+                <span
+                  className={[
+                    styles.inputShell,
+                    errorField === 'password' || errorField === 'all' ? styles.inputShellError : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
                   <Icon name="lock" size={21} className={styles.fieldIcon} />
                   <input
                     id="login-password"
@@ -254,8 +308,13 @@ export function LoginPage() {
                     autoComplete="current-password"
                     required
                     disabled={submitting}
+                    maxLength={64}
                     value={form.password}
-                    onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                    onChange={(event) => {
+                      setFeedback(null)
+                      setErrorField(null)
+                      setForm((current) => ({ ...current, password: event.target.value }))
+                    }}
                     className={[styles.input, styles.passwordInput].join(' ')}
                     placeholder="비밀번호를 입력하세요"
                   />

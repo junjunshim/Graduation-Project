@@ -426,6 +426,16 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--signup-primary) 12%, transparent);
 }
 
+.inputShellError {
+  border-color: var(--accent-red) !important;
+  background: color-mix(in srgb, var(--accent-red-soft) 40%, var(--signup-surface)) !important;
+}
+
+.inputShellError:focus-within {
+  border-color: var(--accent-red) !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15) !important;
+}
+
 .inputShell:has(.input:disabled) {
   opacity: 0.72;
 }

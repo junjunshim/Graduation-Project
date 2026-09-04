@@ -8,6 +8,7 @@ import type {
   WorkspaceSnapshot,
   WorkspaceSummary,
 } from '../model/types'
+import { isWorkItemDueSoon } from '../model/workItemDue'
 import { delay, getUserByEmail, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
 import {
   assignRoleOnServer,
@@ -55,6 +56,11 @@ function getDescendantNodeIds(rootIds: number[], nodes: OrganizationNodeRecord[]
 
 export function getAccessibleNodeIdsForUser(userId: string, snapshot?: WorkspaceSnapshot) {
   const workspace = snapshot ?? readWorkspaceDb()
+
+  // snapshot이 명시적으로 전달된 경우(특정 스코프로 축소된 스냅샷 포함), 해당 snapshot에 포함된 노드 ID들을 반환합니다.
+  if (snapshot) {
+    return snapshot.nodes.map((node) => node.id)
+  }
 
   // 서버 모드에서는 GET /context/init이 이미 권한 계산을 거친 접근 가능한 노드들만 전달하므로,
   // 로컬에 존재하는 노드들을 그대로 접근 가능한 노드로 취급합니다.
@@ -162,14 +168,7 @@ export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapsho
         : 0,
     myWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId === userId).length,
     teamPoolWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId !== userId).length,
-    dueSoonWorkItemCount: visibleWorkItems.filter((item) => {
-      if (!item.dueDate || item.status === 'done') {
-        return false
-      }
-
-      const dueDate = new Date(item.dueDate)
-      return !Number.isNaN(dueDate.getTime()) && dueDate <= dueSoonThreshold
-    }).length,
+    dueSoonWorkItemCount: visibleWorkItems.filter(isWorkItemDueSoon).length,
   }
 }
 

@@ -31,10 +31,27 @@ const STATUS_VALUE_LABELS: Record<string, string> = {
   done: '완료',
 }
 
-export function formatActivityMessage(activity: ActivityRecord): string {
-  const actor = activity.actorName || activity.actorUserId || '사용자'
+export function formatActivityMessage(
+  activity: ActivityRecord,
+  options?: {
+    actorName?: string
+    targetName?: string
+    resolveUserName?: (userId: string) => string | undefined
+    resolveWorkItemTitle?: (workItemId: string) => string | undefined
+  },
+): string {
+  const actor =
+    options?.actorName ||
+    (activity.actorUserId && options?.resolveUserName?.(activity.actorUserId)) ||
+    activity.actorName ||
+    activity.actorUserId ||
+    '사용자'
   const entityLabel = ENTITY_TYPE_LABELS[activity.entityType.toUpperCase()] ?? activity.entityType
-  const target = activity.targetName ? `‘${activity.targetName}’` : '항목'
+  const resolvedTarget =
+    options?.targetName ||
+    (activity.entityType.toUpperCase() === 'ROLE' && activity.targetName && options?.resolveUserName?.(activity.targetName)) ||
+    activity.targetName
+  const target = resolvedTarget ? `‘${resolvedTarget}’` : '항목'
 
   const isRoleEntity = activity.entityType.toUpperCase() === 'ROLE'
   const isCommentEntity = activity.entityType.toUpperCase() === 'COMMENT'
@@ -62,14 +79,24 @@ export function formatActivityMessage(activity: ActivityRecord): string {
   }
 
   if (isCommentEntity) {
+    const rawTarget = activity.targetName || ''
+    // e.g., 'Comment on WI-123' -> 'WI-123'
+    const matchedWorkItemId = rawTarget.replace(/^Comment on\s*/i, '').trim()
+    const resolvedTitle =
+      (matchedWorkItemId && options?.resolveWorkItemTitle?.(matchedWorkItemId)) ||
+      (options?.targetName) ||
+      (matchedWorkItemId ? matchedWorkItemId : '')
+
+    const targetWorkItemStr = resolvedTitle ? `‘${resolvedTitle}’ 업무에 ` : ''
+
     switch (activity.actionType.toLowerCase()) {
       case 'inserted':
       case 'created':
-        return `${actor}님이 댓글을 등록했습니다.`
+        return `${actor}님이 ${targetWorkItemStr}댓글을 등록했습니다.`
       case 'deleted':
-        return `${actor}님이 댓글을 삭제했습니다.`
+        return `${actor}님이 ${targetWorkItemStr}댓글을 삭제했습니다.`
       case 'updated':
-        return `${actor}님이 댓글을 수정했습니다.`
+        return `${actor}님이 ${targetWorkItemStr}댓글을 수정했습니다.`
       default:
         break
     }

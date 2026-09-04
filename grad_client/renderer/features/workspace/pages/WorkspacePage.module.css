@@ -545,7 +545,8 @@
 .boardPanel {
   grid-template-rows: auto minmax(0, 1fr) auto;
   align-content: stretch;
-  min-height: clamp(21rem, 35vh, 23.5rem);
+  height: clamp(23.5rem, 39vh, 25.5rem);
+  min-height: clamp(23.5rem, 39vh, 25.5rem);
 }
 
 .timelinePanel {
@@ -1621,6 +1622,65 @@
 
 .retryButton:hover {
   opacity: 0.9;
+}
+
+.emptyCopy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 8rem;
+  margin: 0;
+  padding: 1.5rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.tableEmptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 16rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.tableEmptyState p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.timelineEmptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 11rem;
+  gap: 0.4rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+}
+
+.timelineEmptyIcon {
+  color: var(--text-muted);
+  opacity: 0.55;
+  margin-bottom: 0.2rem;
+}
+
+.timelineEmptyTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.timelineEmptySubtitle {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 500;
 }
 
 @keyframes spin {

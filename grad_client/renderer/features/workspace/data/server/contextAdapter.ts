@@ -530,12 +530,17 @@ export function normalizeServerContext(
     if (toStringValue(item.type).toUpperCase() !== 'ACTIVITY') return
     const id = toNumberValue(item.id, 0)
     const nodeId = toNumberValue(item.node_id, 0)
+    const actorUserId = toStringValue(item.actor_user_id)
+    const actorName = toStringValue(item.actor_name)
+    if (actorUserId) {
+      ensureUserById(actorUserId, undefined, actorName)
+    }
     if (id > 0) {
       activities.push({
         id,
         nodeId,
-        actorUserId: toStringValue(item.actor_user_id),
-        actorName: toStringValue(item.actor_name),
+        actorUserId,
+        actorName,
         entityType: toStringValue(item.entity_type),
         entityId: toStringValue(item.entity_id),
         targetName: toStringValue(item.target_name),
@@ -554,13 +559,19 @@ export function normalizeServerContext(
     if (toStringValue(item.type).toUpperCase() !== 'FILE') return
     const id = toNumberValue(item.id, 0)
     const workItemId = toStringValue(item.work_item_id)
+    const uploaderUserId = toStringValue(item.uploader_user_id)
+    const uploaderName = toStringValue(item.uploader_name)
+    const uploaderEmail = toStringValue(item.uploader_email)
+    if (uploaderUserId) {
+      ensureUserById(uploaderUserId, uploaderEmail, uploaderName)
+    }
     if (id > 0 && workItemId) {
       files.push({
         id,
         workItemId,
-        uploaderUserId: toStringValue(item.uploader_user_id),
-        uploaderName: toStringValue(item.uploader_name),
-        uploaderEmail: toStringValue(item.uploader_email),
+        uploaderUserId,
+        uploaderName,
+        uploaderEmail,
         originalFileName: toStringValue(item.original_file_name),
         fileSize: toNumberValue(item.file_size, 0),
         mimeType: item.mime_type ? toStringValue(item.mime_type) : null,

@@ -43,7 +43,11 @@ export function DashboardPage() {
           onMonthChange={handleCalendarMonthChange}
         />
         <DashboardDocumentsPanel files={recentFiles} />
-        <DashboardActivityPanel activities={recentActivities} />
+        <DashboardActivityPanel
+          activities={recentActivities}
+          workItems={overview.visibleWorkItems}
+          users={users}
+        />
       </div>
 
     </section>

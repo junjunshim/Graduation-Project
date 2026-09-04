@@ -676,6 +676,7 @@ function scheduleWebSocketReconnect() {
 
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
+    reconnectTimer = null
   }
 
   // 지수 백오프: 1s, 2s, 4s, 8s, 16s... (최대 30s) + 20% 지터
@@ -687,9 +688,17 @@ function scheduleWebSocketReconnect() {
 
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null
+    if (isIntentionalDisconnect || !hasServerSession()) {
+      return
+    }
+
+    // 1. 토큰 만료 가능성을 대비하여 필요시 리프레시
     let token = getServerAccessToken()
-    if (!token && hasServerSession()) {
-      token = await refreshServerTokens()
+    if (reconnectAttempts > 0 || !token) {
+      const refreshed = await refreshServerTokens()
+      if (refreshed) {
+        token = refreshed
+      }
     }
 
     if (!token || isIntentionalDisconnect) {
@@ -700,9 +709,7 @@ function scheduleWebSocketReconnect() {
       reconnectAttempts += 1
       await connectNotificationWebSocket(token)
     } catch (err) {
-      console.warn('[WebSocket] 자동 재연결 실패 -> 토큰 재발급 후 재시도 검토:', err)
-      // 토큰 만료 가능성이 있으므로 리프레시 시도
-      await refreshServerTokens()
+      console.warn('[WebSocket] 자동 재연결 실패 -> 다음 재연결 예약:', err)
       scheduleWebSocketReconnect()
     }
   }, delay)
@@ -712,7 +719,8 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
   return new Promise((resolve, reject) => {
     const accessToken = token ?? getServerAccessToken()
     if (!accessToken) {
-      reject(new Error('WebSocket 연결을 위한 인증 토큰이 없습니다.'))
+      const err = new Error('WebSocket 연결을 위한 인증 토큰이 없습니다.')
+      reject(err)
       return
     }
 
@@ -724,9 +732,15 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
     }
 
     if (notificationSocket) {
-      notificationSocket.close()
+      try {
+        notificationSocket.close()
+      } catch {
+        // ignore
+      }
       notificationSocket = null
     }
+
+    let isHandshakeComplete = false
 
     try {
       const wsUrl = getNotificationWebSocketUrl(accessToken)
@@ -734,13 +748,24 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
       notificationSocket = socket
 
       const timeoutId = setTimeout(() => {
-        if (socket.readyState !== WebSocket.OPEN) {
-          socket.close()
+        if (!isHandshakeComplete && socket.readyState !== WebSocket.OPEN) {
+          try {
+            socket.close()
+          } catch {
+            // ignore
+          }
+          if (notificationSocket === socket) {
+            notificationSocket = null
+          }
           reject(new Error('실시간 알림 서버(WebSocket) 연결 시간이 초과되었습니다.'))
+          if (!isIntentionalDisconnect && hasServerSession()) {
+            scheduleWebSocketReconnect()
+          }
         }
       }, 5000)
 
       socket.onopen = () => {
+        isHandshakeComplete = true
         clearTimeout(timeoutId)
         reconnectAttempts = 0
         if (reconnectTimer) {
@@ -761,14 +786,24 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
       }
 
       socket.onerror = (error) => {
-        clearTimeout(timeoutId)
-        console.warn('[WebSocket] 실시간 알림 서버 연결 오류:', error)
+        if (!isHandshakeComplete) {
+          clearTimeout(timeoutId)
+          console.warn('[WebSocket] 실시간 알림 서버 연결 핸드셰이크 오류:', error)
+          reject(new Error('실시간 알림 서버 연결 중 오류가 발생했습니다.'))
+        } else {
+          console.warn('[WebSocket] 실시간 알림 서버 통신 오류:', error)
+        }
       }
 
       socket.onclose = (event) => {
+        clearTimeout(timeoutId)
         console.info(`[WebSocket] 실시간 알림 서버 연결 종료 (코드: ${event.code})`)
         if (notificationSocket === socket) {
           notificationSocket = null
+        }
+
+        if (!isHandshakeComplete) {
+          reject(new Error(`WebSocket 연결이 조기 종료되었습니다. (코드: ${event.code})`))
         }
 
         // 의도적인 로그아웃/종료가 아니면 자동 재연결 예약
@@ -777,7 +812,13 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         }
       }
     } catch (err) {
+      if (notificationSocket) {
+        notificationSocket = null
+      }
       reject(err)
+      if (!isIntentionalDisconnect && hasServerSession()) {
+        scheduleWebSocketReconnect()
+      }
     }
   })
 }

@@ -15,7 +15,7 @@ import styles from './WorkspaceTasksTab.module.css'
 
 type WorkspaceTasksTabProps = {
   workItems: WorkItemRecord[]
-  members: Array<Pick<UserRecord, 'userId' | 'name'>>
+  members: Array<Pick<UserRecord, 'userId' | 'name'> & Partial<Pick<UserRecord, 'email'>>>
   workspaces?: Array<Pick<OrganizationNodeRecord, 'id' | 'name' | 'nodeType' | 'path'>>
   tableLabel?: string
   createHref?: string
@@ -47,8 +47,14 @@ const INITIAL_STATUS_FILTERS: Record<WorkItemStatus, boolean> = {
   todo: true,
 }
 
-function getMemberName(userId: string, members: Array<Pick<UserRecord, 'userId' | 'name'>>) {
-  return members.find((member) => member.userId === userId)?.name ?? '미지정'
+function getMemberName(
+  userId: string,
+  members: Array<Pick<UserRecord, 'userId' | 'name'> & Partial<Pick<UserRecord, 'email'>>>,
+) {
+  const found = members.find((member) => member.userId === userId || (member.email && member.email === userId))
+  if (found) return found.name
+  if (userId && !userId.startsWith('U-') && !userId.includes('@')) return userId
+  return '미지정'
 }
 
 function getPriorityMeta(priority: number) {
@@ -135,7 +141,7 @@ function TaskTreeNodeCard({
             )}
 
             <div className={styles.treeCardTitleGroup}>
-              <Link to={`/work-items?view=detail&id=${item.workItemId}`} className={styles.treeCardTitle}>
+              <Link to={`/work-items/${item.workItemId}`} className={styles.treeCardTitle}>
                 {item.title}
               </Link>
               {item.description ? (
@@ -984,7 +990,7 @@ export function WorkspaceTasksTab({
                         </span>
 
                         <span role="cell" className={styles.titleCell}>
-                          <Link to={`/work-items?view=detail&id=${item.workItemId}`} className={styles.taskTitle}>
+                          <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
                             {item.title}
                           </Link>
                         </span>

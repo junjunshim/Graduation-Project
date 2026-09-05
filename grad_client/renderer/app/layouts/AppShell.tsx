@@ -10,8 +10,6 @@ import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
 } from '../../features/workspace/data/workspaceDirectorySelection'
-import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../../features/workspace/model/labels'
-import { getWorkItemTag } from '../../features/workspace/model/workItemTags'
 import { getSelectedWorkItemDetail } from '../../features/workspace/queries/selectedWorkItemDetail'
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
 import { ShellSidebar } from './ShellSidebar'
@@ -86,7 +84,6 @@ export function AppShell() {
   const workItemDetail = workItemDetailMatch
     ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
     : null
-  const workItemCategory = workItemDetail ? getWorkItemTag(workItemDetail.item) : null
   const parentNodeParam = searchParams.get('parentNodeId')
   const parentNodeForHeading = parentNodeParam
     ? snapshot.nodes.find((n) => n.id === parseInt(parentNodeParam, 10))
@@ -128,17 +125,10 @@ export function AppShell() {
       ? { type: 'greeting' }
       : workItemDetail
         ? {
-            type: 'workItem',
+            type: 'breadcrumb',
+            label: '업무',
             title: workItemDetail.item.title,
             subtitle: workItemDetail.ownerNode.name,
-            backTo: '/work-items',
-            category: workItemCategory
-              ? { label: workItemCategory.label, tone: workItemCategory.tone }
-              : undefined,
-            status: {
-              label: getWorkItemStatusLabel(workItemDetail.item.status),
-              tone: getWorkItemStatusTone(workItemDetail.item.status),
-            },
           }
       : hasSectionHeading
         ? {

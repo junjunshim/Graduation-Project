@@ -776,12 +776,13 @@ export function WorkspacePage() {
         <WorkspaceTimelineTab
           workItems={overview.visibleWorkItems}
           nodes={overview.visibleNodes}
-          members={overview.rootRoleMembers}
+          members={overview.allRoleMembers && overview.allRoleMembers.length > 0 ? overview.allRoleMembers : overview.rootRoleMembers}
         />
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
           workItems={overview.visibleWorkItems}
-          members={overview.rootRoleMembers}
+          members={snapshot.users}
+          workspaces={overview.visibleNodes}
         />
       ) : activeView === 'files' ? (
         <WorkspaceFilesTab

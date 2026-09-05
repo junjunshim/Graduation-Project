@@ -319,7 +319,9 @@ export function normalizeServerContext(
       }
     } else if (itemType === 'WORK_ITEM') {
       if (item.owner_user_id) {
-        ensureUserById(item.owner_user_id, item.owner_user_email)
+        ensureUserById(item.owner_user_id, item.owner_user_email, item.owner_user_name)
+      } else if (item.owner_user_email) {
+        ensureUserByEmail(item.owner_user_email, item.owner_user_name)
       }
     } else if (itemType === 'FILE') {
       if (item.uploader_user_id) {

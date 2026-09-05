@@ -75,6 +75,15 @@ export type MentionRecord = {
   updatedAt?: string
 }
 
+export type WorkItemCommentRecord = {
+  commentId: number
+  authorUserId: string
+  authorName: string
+  authorEmail: string
+  content: string
+  createdAt: string
+}
+
 export type ActivityRecord = {
   id: number
   nodeId: number

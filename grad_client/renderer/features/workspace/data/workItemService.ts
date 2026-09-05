@@ -5,7 +5,13 @@ import type {
   WorkspaceDatabase,
 } from '../model/types'
 import { delay, generateWorkItemId, nowIso, readWorkspaceDb, writeWorkspaceDb } from './localStore'
-import { createWorkItemOnServer, updateWorkItemOnServer } from './serverWorkspace'
+import {
+  addWorkItemCommentOnServer,
+  createWorkItemOnServer,
+  fetchWorkItemDetailOnServer,
+  updateWorkItemOnServer,
+  type WorkItemDetailResult,
+} from './serverWorkspace'
 import { createServerEntityId } from './server/serverId'
 import { isServerDataSource } from './workspaceMode'
 
@@ -247,3 +253,34 @@ export async function claimWorkItem(payload: ClaimWorkItemRequest) {
     workItemId: item.workItemId,
   }
 }
+
+export async function fetchWorkItemDetail(workItemId: string): Promise<WorkItemDetailResult> {
+  if (isServerDataSource()) {
+    return fetchWorkItemDetailOnServer(workItemId)
+  }
+
+  await delay()
+  const db = readWorkspaceDb()
+  const item = db.workItems.find((w) => w.workItemId === workItemId)
+  if (!item) {
+    throw new Error('요청한 업무를 찾을 수 없습니다.')
+  }
+
+  const files = (db.files ?? []).filter((f) => f.workItemId === workItemId && !f.isDeleted)
+
+  return {
+    item,
+    comments: [],
+    files,
+  }
+}
+
+export async function addWorkItemComment(workItemId: string, content: string) {
+  if (isServerDataSource()) {
+    return addWorkItemCommentOnServer(workItemId, content)
+  }
+
+  await delay()
+  return { status: 'success' as const }
+}
+

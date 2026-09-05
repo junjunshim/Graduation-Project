@@ -71,6 +71,7 @@ export type ServerContextItem = {
   owner_node_id?: string | number
   owner_user_id?: string
   owner_user_email?: string
+  owner_user_name?: string
   parent_work_item_id?: string | null
   description?: string | null
   category?: string | null

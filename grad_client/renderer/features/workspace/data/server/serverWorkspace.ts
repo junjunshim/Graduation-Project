@@ -10,6 +10,8 @@ import type {
   UpdateRoleRequest,
   UpdateWorkItemRequest,
   UserRecord,
+  WorkItemCommentRecord,
+  WorkItemFileRecord,
   WorkspaceDatabase,
 } from '../../model/types'
 import {
@@ -655,6 +657,135 @@ export async function renameRoleDefinitionOnServer(payload: RenameRoleDefinition
     await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const }
   }, '역할 이름을 변경하지 못했습니다.')
+}
+
+export type WorkItemDetailResult = {
+  item: WorkspaceDatabase['workItems'][number]
+  comments: WorkItemCommentRecord[]
+  files: WorkItemFileRecord[]
+}
+
+export async function fetchWorkItemDetailOnServer(workItemId: string): Promise<WorkItemDetailResult> {
+  const normalizedId = workItemId.trim()
+  if (!normalizedId) {
+    throw new Error('유효한 업무 ID가 아닙니다.')
+  }
+
+  const response = await apiRequest<unknown>(`/workItems?work_item_id=${encodeURIComponent(normalizedId)}`)
+
+  if (!isServerStatusResponse(response)) {
+    throw new Error('업무 상세 조회 응답 형식이 올바르지 않습니다.')
+  }
+
+  if (response.status === 'error') {
+    throw new Error(response.message ?? '업무 상세 정보를 불러오지 못했습니다.')
+  }
+
+  const rawItems = parseServerContextItems((response as ServerContextResponse).data)
+  const detailItem = rawItems.find(
+    (item) => String(item.type).toUpperCase() === 'WORK_ITEM_DETAIL' || String(item.type).toUpperCase() === 'WORK_ITEM',
+  )
+
+  if (!detailItem) {
+    throw new Error('업무 상세 데이터를 찾을 수 없습니다.')
+  }
+
+  const current = readWorkspaceDb()
+
+  // comments 추출
+  const comments: WorkItemCommentRecord[] = []
+  if (Array.isArray((detailItem as Record<string, unknown>).comments)) {
+    const rawComments = (detailItem as Record<string, unknown>).comments as Array<Record<string, unknown>>
+    rawComments.forEach((c) => {
+      comments.push({
+        commentId: Number(c.comment_id ?? 0),
+        authorUserId: String(c.author_user_id ?? ''),
+        authorName: String(c.author_name ?? c.author_email ?? '작성자'),
+        authorEmail: String(c.author_email ?? ''),
+        content: String(c.content ?? ''),
+        createdAt: String(c.created_at ?? new Date().toISOString()),
+      })
+    })
+  }
+
+  // files 추출
+  const files: WorkItemFileRecord[] = []
+  if (Array.isArray((detailItem as Record<string, unknown>).files)) {
+    const rawFiles = (detailItem as Record<string, unknown>).files as Array<Record<string, unknown>>
+    rawFiles.forEach((f) => {
+      files.push({
+        id: Number(f.file_id ?? 0),
+        workItemId: normalizedId,
+        uploaderUserId: String(f.uploader_user_id ?? ''),
+        uploaderName: String(f.uploader_name ?? f.uploader_email ?? '업로더'),
+        uploaderEmail: String(f.uploader_email ?? ''),
+        originalFileName: String(f.original_file_name ?? `file_${f.file_id}`),
+        fileSize: Number(f.file_size ?? 0),
+        mimeType: f.mime_type ? String(f.mime_type) : null,
+        isDeleted: Boolean(f.is_deleted),
+        createdAt: String(f.created_at ?? new Date().toISOString()),
+      })
+    })
+  }
+
+  // WORK_ITEM으로 contextAdapter에 전달하여 workItems, users 정규화
+  const contextItems: typeof rawItems = [
+    {
+      ...detailItem,
+      type: 'WORK_ITEM',
+      id: detailItem.work_item_id ?? detailItem.id ?? normalizedId,
+    },
+    ...files.map((f) => ({
+      type: 'FILE',
+      id: f.id,
+      work_item_id: f.workItemId,
+      uploader_user_id: f.uploaderUserId,
+      uploader_name: f.uploaderName,
+      uploader_email: f.uploaderEmail,
+      original_file_name: f.originalFileName,
+      file_size: f.fileSize,
+      mime_type: f.mimeType,
+      created_at: f.createdAt,
+    })),
+  ]
+
+  const { workspace: normalized } = normalizeServerContext(
+    contextItems,
+    getCurrentServerEmail(),
+    { referenceWorkspace: current },
+  )
+
+  const merged = mergeServerUpdates(current, normalized)
+  writeServerWorkspaceDb(merged)
+
+  const foundItem = merged.workItems.find((w) => w.workItemId === normalizedId)
+  if (!foundItem) {
+    throw new Error('정규화된 업무 데이터를 찾을 수 없습니다.')
+  }
+
+  return {
+    item: foundItem,
+    comments,
+    files,
+  }
+}
+
+export async function addWorkItemCommentOnServer(workItemId: string, content: string) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/workItems/comments', {
+      method: 'POST',
+      body: {
+        work_item_id: workItemId,
+        content,
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '댓글을 등록하지 못했습니다.' }
+    }
+
+    return { status: 'success' as const }
+  }, '댓글을 등록하지 못했습니다.')
 }
 
 // ----------------------------------------------------

@@ -240,3 +240,75 @@ BEGIN
         USING ERRCODE = 'P0702';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- 활동 로그 생성 시, 해당 노드에 대해 활동 열람 권한이 있는 멤버 목록을 추출하여 pg_notify로 전송하는 트리거 함수
+CREATE OR REPLACE FUNCTION notify_activity_event()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_recipients JSONB;
+    v_payload JSONB;
+BEGIN
+    -- 1. 해당 노드에 대해 HISTORY_ALL_VIEW 권한을 가진 사용자 목록 및 업무 조회 가능 여부(can_view_work_items) 추출
+    -- 본인(actor)은 알림 수신 대상에서 제외
+    WITH candidate_users AS (
+        SELECT DISTINCT u.user_id, u.email
+        FROM role_assignments ra
+        JOIN users u ON ra.user_id = u.user_id
+        WHERE u.is_deleted = FALSE
+          AND u.user_id != NEW.actor_user_id
+          -- 해당 노드이거나 상위 조상 노드에 배정된 사용자
+          AND (
+              ra.node_id = NEW.node_id
+              OR EXISTS (
+                  SELECT 1 FROM organization_nodes n
+                  WHERE n.node_id = NEW.node_id
+                    AND ra.node_id = ANY(n.path)
+              )
+          )
+    ),
+    authorized_recipients AS (
+        SELECT 
+            cu.email,
+            cu.user_id,
+            check_authority_with_override(cu.user_id, NEW.node_id, 'WI_PUBLIC_VIEW') AS can_view_work_items
+        FROM candidate_users cu
+        WHERE check_authority_with_override(cu.user_id, NEW.node_id, 'HISTORY_ALL_VIEW') = TRUE
+    )
+    SELECT COALESCE(
+        jsonb_agg(
+            jsonb_build_object(
+                'email', ar.email,
+                'user_id', ar.user_id,
+                'can_view_work_items', ar.can_view_work_items
+            )
+        ),
+        '[]'::jsonb
+    ) INTO v_recipients
+    FROM authorized_recipients ar;
+
+    -- 2. 대상 수신자가 1명 이상 있을 때만 pg_notify 실행
+    IF jsonb_array_length(v_recipients) > 0 THEN
+        v_payload := jsonb_build_object(
+            'activity_id', NEW.log_id,
+            'node_id', NEW.node_id,
+            'actor_user_id', NEW.actor_user_id,
+            'actor_name', NEW.actor_name,
+            'entity_type', NEW.entity_type,
+            'entity_id', NEW.entity_id,
+            'target_name', NEW.target_name,
+            'action_type', NEW.action_type,
+            'field_name', NEW.field_name,
+            'old_value', NEW.old_value,
+            'new_value', NEW.new_value,
+            'created_at', to_char(NEW.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+            'recipients', v_recipients
+        );
+
+        PERFORM pg_notify('activity_notification_channel', v_payload::TEXT);
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+

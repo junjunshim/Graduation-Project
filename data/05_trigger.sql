@@ -146,3 +146,10 @@ DROP TRIGGER IF EXISTS trg_user_soft_delete ON users;
 CREATE TRIGGER trg_user_soft_delete
 AFTER UPDATE OF is_deleted ON users
 FOR EACH ROW EXECUTE FUNCTION handle_user_soft_delete();
+
+
+-- 7. activity_logs 변경 시 실시간 웹소켓 알림을 위한 pg_notify 트리거 등록
+DROP TRIGGER IF EXISTS trg_notify_activity ON activity_logs;
+CREATE TRIGGER trg_notify_activity
+AFTER INSERT ON activity_logs
+FOR EACH ROW EXECUTE FUNCTION notify_activity_event();

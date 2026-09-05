@@ -29,7 +29,9 @@ add_executable(${PROJECT_NAME} main.cc)
 #
 # and comment out the following lines
 find_package(Drogon CONFIG REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon)
+find_package(PostgreSQL REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon ${PostgreSQL_LIBRARIES})
+target_include_directories(${PROJECT_NAME} PRIVATE ${PostgreSQL_INCLUDE_DIRS})
 
 # ##############################################################################
 

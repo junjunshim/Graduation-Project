@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <filesystem>
+#include "NotificationWebSocketController.h"
 
 int main() {
     // 0. 파일 업로드 기본 디렉터리 자동 생성
@@ -23,6 +24,7 @@ int main() {
     };
 
     // 3. Json 설정 덮어쓰기
+    std::string dbConnInfo;
     try{
         std::ifstream ifs(configPath);
         Json::Value config;
@@ -36,6 +38,16 @@ int main() {
             db["dbname"] = getEnv("DB_NAME", db["dbname"].asString());
             db["user"] = getEnv("DB_USER", db["user"].asString());
             db["passwd"] = getEnv("DB_PASSWORD", db["passwd"].asString());
+        }
+
+        // libpq용 연결 문자열(conninfo) 생성
+        if(config.isMember("db_clients") && config["db_clients"].isArray() && !config["db_clients"].empty()){
+            const auto& db = config["db_clients"][0];
+            dbConnInfo = "host=" + db["host"].asString() +
+                         " port=" + std::to_string(db["port"].asInt()) +
+                         " dbname=" + db["dbname"].asString() +
+                         " user=" + db["user"].asString() +
+                         " password=" + db["passwd"].asString();
         }
 
         // jwt 설정 덮어쓰기
@@ -135,7 +147,11 @@ int main() {
         );
     });
 
+    // 5. PostgreSQL 활동 알림(LISTEN/NOTIFY) 백그라운드 리스너 기동
+    api::NotificationWebSocketController::startNotificationListener(dbConnInfo);
+
     //Run HTTP framework,the method will block in the internal event loop
     drogon::app().run();
     return 0;
 }
+

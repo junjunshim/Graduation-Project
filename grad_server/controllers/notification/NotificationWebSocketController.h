@@ -27,6 +27,9 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
     // 특정 유저의 모든 연결 세션으로 실시간 메시지를 발송하는 정적 함수
     static bool sendNotificationToUser(const std::string &user_email, const std::string &message);
 
+    // PostgreSQL LISTEN/NOTIFY 수신 백그라운드 리스너 시작 함수
+    static void startNotificationListener(const std::string &conninfo);
+
   private:
     // 샤드 1개를 구성하는 구조체 (독립된 Mutex와 Multi-Connection Map)
     struct ConnectionShard {

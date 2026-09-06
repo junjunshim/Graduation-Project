@@ -289,23 +289,40 @@ BEGIN
 
     -- 2. 대상 수신자가 1명 이상 있을 때만 pg_notify 실행
     IF jsonb_array_length(v_recipients) > 0 THEN
-        v_payload := jsonb_build_object(
-            'activity_id', NEW.log_id,
-            'node_id', NEW.node_id,
-            'actor_user_id', NEW.actor_user_id,
-            'actor_name', NEW.actor_name,
-            'entity_type', NEW.entity_type,
-            'entity_id', NEW.entity_id,
-            'target_name', NEW.target_name,
-            'action_type', NEW.action_type,
-            'field_name', NEW.field_name,
-            'old_value', NEW.old_value,
-            'new_value', NEW.new_value,
-            'created_at', to_char(NEW.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-            'recipients', v_recipients
-        );
+        DECLARE
+            v_work_item_id VARCHAR(50) := NULL;
+        BEGIN
+            IF NEW.entity_type = 'WORK_ITEM' THEN
+                v_work_item_id := NEW.entity_id;
+            ELSIF NEW.entity_type = 'COMMENT' THEN
+                SELECT work_item_id INTO v_work_item_id
+                FROM work_item_comments
+                WHERE comment_id = NEW.entity_id::INTEGER;
+            ELSIF NEW.entity_type = 'FILE' THEN
+                SELECT work_item_id INTO v_work_item_id
+                FROM work_item_files
+                WHERE file_id = NEW.entity_id::INTEGER;
+            END IF;
 
-        PERFORM pg_notify('activity_notification_channel', v_payload::TEXT);
+            v_payload := jsonb_build_object(
+                'activity_id', NEW.log_id,
+                'node_id', NEW.node_id,
+                'actor_user_id', NEW.actor_user_id,
+                'actor_name', NEW.actor_name,
+                'entity_type', NEW.entity_type,
+                'entity_id', NEW.entity_id,
+                'work_item_id', v_work_item_id,
+                'target_name', NEW.target_name,
+                'action_type', NEW.action_type,
+                'field_name', NEW.field_name,
+                'old_value', NEW.old_value,
+                'new_value', NEW.new_value,
+                'created_at', to_char(NEW.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+                'recipients', v_recipients
+            );
+
+            PERFORM pg_notify('activity_notification_channel', v_payload::TEXT);
+        END;
     END IF;
 
     RETURN NEW;

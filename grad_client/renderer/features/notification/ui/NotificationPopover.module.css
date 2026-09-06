@@ -1,0 +1,164 @@
+.wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.bellButton {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border-radius: 9999px;
+  background: var(--axis-status-error, #ef4444);
+  color: #ffffff;
+  pointer-events: none;
+  border: 2px solid var(--axis-surface-canvas, #1e1e2d);
+  box-sizing: border-box;
+  line-height: 1;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 20rem;
+  max-height: 28rem;
+  background: var(--axis-surface-panel);
+  border: 1px solid var(--axis-line-strong);
+  border-radius: var(--axis-radius-action);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeIn 0.15s ease;
+}
+
+.popoverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--axis-line-default);
+}
+
+.popoverTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--axis-text-primary);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.textActionBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.75rem;
+  color: var(--axis-brand-primary);
+  cursor: pointer;
+}
+
+.textActionBtn:hover {
+  text-decoration: underline;
+}
+
+.notificationList {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0.25rem 0;
+}
+
+.emptyState {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--axis-text-muted);
+  font-size: 0.82rem;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--axis-line-default);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item:hover {
+  background: var(--axis-surface-muted);
+}
+
+.itemUnread {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.itemTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.itemTitle {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--axis-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTime {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--axis-text-muted);
+}
+
+.itemMessage {
+  font-size: 0.78rem;
+  color: var(--axis-text-secondary);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.unreadDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--axis-brand-primary);
+  margin-right: 0.4rem;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -14,6 +14,7 @@ import { getSelectedWorkItemDetail } from '../../features/workspace/queries/sele
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
 import { ShellSidebar } from './ShellSidebar'
 import { ShellTopActions, type ShellTopActionsHeading } from './ShellTopActions'
+import { NotificationToastContainer } from '../../features/notification/ui/NotificationToast'
 import { WorkspacePageHeader } from './WorkspacePageHeader'
 import { getShellPageMeta } from './shellPageMeta'
 import styles from './AppShell.module.css'
@@ -210,6 +211,7 @@ export function AppShell() {
           </main>
         </div>
       </div>
+      <NotificationToastContainer userId={currentUser.userId} />
     </div>
   )
 }

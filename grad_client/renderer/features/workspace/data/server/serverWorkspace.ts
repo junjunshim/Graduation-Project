@@ -35,7 +35,8 @@ import { normalizeServerContext } from './contextAdapter.js'
 import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
 import { setCurrentSessionUserId } from '../session.js'
-import { notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents.js'
+import { notifyLiveNotificationReceived, notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents.js'
+import { pruneFavoriteWorkspaceIds } from '../workspaceDirectorySelection.js'
 
 type ServerOperationError = {
   status: 'error'
@@ -99,37 +100,61 @@ function getCurrentServerEmail() {
 }
 
 function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDatabase): WorkspaceDatabase {
+  // 노드별 업무 재구성: updates에 노드가 들어온 경우, 해당 노드의 업무는 updates의 업무로 완전히 교체(Replace)
+  // updates에 포함된 노드 ID 목록
+  const updatedNodeIds = new Set(updates.nodes.map((n) => n.id))
+
+  // 1. 노드: updates에 있는 노드로 교체/추가
   const nodesById = new Map(current.nodes.map((node) => [node.id, node]))
-  const rolesById = new Map(current.roles.map((role) => [role.id, role]))
-  const workItemsById = new Map(current.workItems.map((item) => [item.workItemId, item]))
+  updates.nodes.forEach((node) => nodesById.set(node.id, node))
+
+  // 2. 역할: updates의 노드에 속한 역할은 updates의 역할로 교체
+  const roles = [
+    ...current.roles.filter((r) => !updatedNodeIds.has(r.nodeId)),
+    ...updates.roles,
+  ]
+
+  // 3. 업무: updates의 노드에 속한 업무는 updates의 업무로 완전히 교체 (기존 잔여 업무 Pruning)
+  const workItems = [
+    ...current.workItems.filter((item) => !updatedNodeIds.has(item.ownerNodeId)),
+    ...updates.workItems,
+  ]
+
+  // 4. 유저: updates의 유저로 업데이트
   const usersById = new Map(current.users.map((user) => [user.userId, user]))
-  const authoritiesById = new Map((current.authorities ?? []).map((auth) => [auth.id, auth]))
+  updates.users.forEach((user) => usersById.set(user.userId, user))
+
+  // 5. 권한: updates의 노드 권한으로 교체
+  const authorities = [
+    ...(current.authorities ?? []).filter((a) => !updatedNodeIds.has(a.nodeId)),
+    ...(updates.authorities ?? []),
+  ]
+
+  // 6. 파일: updates의 노드 업무 파일로 교체
+  const updatedWorkItemIds = new Set(updates.workItems.map((w) => w.workItemId))
+  const files = [
+    ...(current.files ?? []).filter((f) => !updatedWorkItemIds.has(f.workItemId)),
+    ...(updates.files ?? []),
+  ]
+
+  // 7. 활동 및 멘션 병합
   const mentionsById = new Map((current.mentions ?? []).map((m) => [m.id, m]))
   const activitiesById = new Map((current.activities ?? []).map((act) => [act.id, act]))
-  const filesById = new Map((current.files ?? []).map((f) => [f.id, f]))
-
-  updates.users.forEach((user) => usersById.set(user.userId, user))
-  updates.nodes.forEach((node) => nodesById.set(node.id, node))
-  updates.roles.forEach((role) => rolesById.set(role.id, role))
-  updates.workItems.forEach((item) => workItemsById.set(item.workItemId, item))
-  ;(updates.authorities ?? []).forEach((auth) => authoritiesById.set(auth.id, auth))
   ;(updates.mentions ?? []).forEach((m) => mentionsById.set(m.id, m))
   ;(updates.activities ?? []).forEach((act) => activitiesById.set(act.id, act))
-  ;(updates.files ?? []).forEach((f) => filesById.set(f.id, f))
 
   const nodes = Array.from(nodesById.values())
-  const roles = Array.from(rolesById.values())
 
   return {
     ...current,
     users: Array.from(usersById.values()),
     nodes,
     roles,
-    workItems: Array.from(workItemsById.values()),
-    authorities: Array.from(authoritiesById.values()),
+    workItems,
+    authorities,
     mentions: Array.from(mentionsById.values()),
     activities: Array.from(activitiesById.values()),
-    files: Array.from(filesById.values()),
+    files,
     counters: {
       node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
       role: Math.max(0, ...roles.map((role) => role.id)) + 1,
@@ -215,6 +240,14 @@ export async function loadServerWorkspace(email = getCurrentServerEmail()) {
   }
 
   writeServerWorkspaceDb(db)
+
+  // 최신 노드 목록 기준으로 즐겨찾기 목록 동기화 (권한 박탈/삭제된 노드 자동 정리)
+  try {
+    const validNodeIdStrings = new Set(db.nodes.map((n) => String(n.id)))
+    pruneFavoriteWorkspaceIds(validNodeIdStrings, db.users.find((u) => u.email === email)?.userId)
+  } catch {
+    // ignore
+  }
 
   // 워크스페이스 로드/새로고침 시 웹소켓이 아직 연결되지 않았거나 닫혀있으면 연결 수립
   if (hasServerSession()) {
@@ -949,6 +982,34 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         try {
           const payload = JSON.parse(event.data)
           console.debug('[WebSocket] 수신 알림:', payload)
+
+          if (payload && payload.type === 'NOTIFICATION') {
+            const data = payload.data || payload
+
+            // 1. 전역 라이브 알림 이벤트 발송 (Toast 및 Bell 헤더 팝오버용)
+            notifyLiveNotificationReceived({
+              notification_id: data.notification_id || data.mention_id,
+              node_id: data.node_id,
+              entity_type: data.entity_type || (payload.sub_type === 'MENTION' ? 'COMMENT' : undefined),
+              entity_id: data.entity_id || data.work_item_id,
+              action: data.action,
+              actor_user_id: data.actor_user_id || data.mentioned_user_id,
+              actor_name: data.actor_name || data.mentioned_user_name,
+              title: data.title || (payload.sub_type === 'MENTION' ? '멘션 알림' : '새로운 알림'),
+              content: data.content || data.message || '새로운 활동이 발생했습니다.',
+              link_url: data.link_url || (data.work_item_id ? `/work-items/${data.work_item_id}` : undefined),
+              is_read: Boolean(data.is_read),
+              created_at: data.created_at || new Date().toISOString(),
+              can_view_detail: data.can_view_detail !== false,
+            })
+
+            // 2. 워크스페이스 변경 활동인 경우, 백그라운드에서 최신 워크스페이스 상태 자동 재구성 (Replace)
+            if (payload.sub_type === 'ACTIVITY') {
+              loadServerWorkspace().catch((err) => {
+                console.warn('[WebSocket] 활동 알림 수신 후 워크스페이스 동기화 실패:', err)
+              })
+            }
+          }
         } catch {
           console.debug('[WebSocket] 수신 메시지:', event.data)
         }

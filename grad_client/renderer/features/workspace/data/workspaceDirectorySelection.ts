@@ -81,3 +81,23 @@ export function toggleFavoriteWorkspaceId(id: string, userId?: string): Set<stri
 
   return currentFavorites
 }
+
+export function pruneFavoriteWorkspaceIds(validIds: Set<string>, userId?: string): Set<string> {
+  const currentFavorites = getFavoriteWorkspaceIds(userId)
+  const storageKey = getUserStorageKey(FAVORITE_WORKSPACES_KEY, userId)
+
+  let changed = false
+  for (const id of currentFavorites) {
+    if (!validIds.has(id)) {
+      currentFavorites.delete(id)
+      changed = true
+    }
+  }
+
+  if (changed && typeof window !== 'undefined' && storageKey) {
+    window.localStorage.setItem(storageKey, JSON.stringify(Array.from(currentFavorites)))
+  }
+
+  return currentFavorites
+}
+

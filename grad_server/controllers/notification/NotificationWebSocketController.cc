@@ -183,10 +183,18 @@ static void processActivityNotification(const std::string &rawPayload)
     else if (entityType == "COMMENT") title = "댓글 알림";
     else title = "활동 알림";
 
+    std::string workItemId = root.isMember("work_item_id") && !root["work_item_id"].isNull() ? root["work_item_id"].asString() : "";
+
     std::string linkUrl;
-    if (entityType == "WORK_ITEM") linkUrl = "/work-items/" + entityId;
-    else if (entityType == "NODE") linkUrl = "/workspaces/" + std::to_string(nodeId);
-    else linkUrl = "/workspaces/" + std::to_string(nodeId) + "?tab=timeline";
+    if ((entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !workItemId.empty()) {
+        linkUrl = "/work-items/" + workItemId;
+    } else if (entityType == "ROLE" || entityType == "AUTHORITY") {
+        linkUrl = "/workspace?nodeId=" + std::to_string(nodeId) + "&view=roles";
+    } else if (entityType == "NODE") {
+        linkUrl = "/workspace?nodeId=" + std::to_string(nodeId);
+    } else {
+        linkUrl = "/workspace?nodeId=" + std::to_string(nodeId) + "&view=timeline";
+    }
 
     // 1. 업무 상세 조회 권한이 있는 사용자용 페이로드 직렬화
     Json::Value fullPayload;
@@ -196,6 +204,9 @@ static void processActivityNotification(const std::string &rawPayload)
     fullPayload["data"]["node_id"] = nodeId;
     fullPayload["data"]["entity_type"] = entityType;
     fullPayload["data"]["entity_id"] = entityId;
+    if (!workItemId.empty()) {
+        fullPayload["data"]["work_item_id"] = workItemId;
+    }
     fullPayload["data"]["action"] = actionType;
     fullPayload["data"]["actor_user_id"] = actorUserId;
     fullPayload["data"]["actor_name"] = actorName;
@@ -208,9 +219,10 @@ static void processActivityNotification(const std::string &rawPayload)
 
     // 2. 업무 상세 조회 권한이 없는(마스킹된) 사용자용 페이로드 직렬화
     Json::Value maskedPayload = fullPayload;
-    if (entityType == "WORK_ITEM") {
-        maskedPayload["data"]["content"] = actorName + "님이 업무[" + entityId + "]를 " + actionKorean;
-        maskedPayload["data"]["link_url"] = "/workspaces/" + std::to_string(nodeId) + "?tab=timeline";
+    if (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") {
+        std::string targetCode = !workItemId.empty() ? workItemId : entityId;
+        maskedPayload["data"]["content"] = actorName + "님이 업무[" + targetCode + "] 관련 활동을 " + actionKorean;
+        maskedPayload["data"]["link_url"] = "/workspace?nodeId=" + std::to_string(nodeId) + "&view=timeline";
     }
     maskedPayload["data"]["can_view_detail"] = false;
 

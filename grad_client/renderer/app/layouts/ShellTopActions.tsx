@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '../../design-system/primitives/Button'
 import { Icon } from '../../design-system/primitives/Icon'
 import { SearchField } from '../../design-system/primitives/SearchField'
+import { NotificationPopover } from '../../features/notification/ui/NotificationPopover'
 import styles from './ShellTopActions.module.css'
 
 export type ShellTopActionsHeading =
@@ -129,9 +130,10 @@ export function ShellTopActions({
           />
 
           <div className={styles.shellActionButtons}>
-            <Button variant="icon" className={styles.shellIconButton} aria-label="Notifications">
-              <Icon name="bell" size={20} />
-            </Button>
+            <NotificationPopover
+              userId={currentUser.userId}
+              buttonClassName={styles.shellIconButton}
+            />
 
             <Button
               variant="icon"

@@ -12,9 +12,15 @@ import { addWorkItemComment, fetchWorkItemDetail } from '../../workspace/data/wo
 import { subscribeToWorkspaceCache } from '../../workspace/data/workspaceCacheEvents'
 import { formatWorkspaceDate, formatWorkspaceTimestamp } from '../../workspace/model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
-import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord } from '../../workspace/model/types'
+import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord, WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
+import { CommentMentionInput, RenderCommentContent } from '../ui/CommentMentionInput'
+import {
+  formatContentWithMentions,
+  getMentionCandidatesForWorkItem,
+  type MentionCandidate,
+} from '../ui/mentionUtils'
 import styles from './WorkItemDetailPage.module.css'
 
 type DetailPropertyProps = {
@@ -76,6 +82,7 @@ export function WorkItemDetailPage() {
 
   // 댓글 입력 상태
   const [commentInput, setCommentInput] = useState('')
+  const [selectedMentions, setSelectedMentions] = useState<MentionCandidate[]>([])
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
   const [commentError, setCommentError] = useState<string | null>(null)
 
@@ -145,12 +152,16 @@ export function WorkItemDetailPage() {
     setIsSubmittingComment(true)
     setCommentError(null)
 
+    // @사용자명 을 <mention email="...">@사용자명</mention> 으로 변환
+    const formattedContent = formatContentWithMentions(commentInput.trim(), selectedMentions)
+
     try {
-      const res = await addWorkItemComment(workItemId, commentInput.trim())
+      const res = await addWorkItemComment(workItemId, formattedContent)
       if (res.status === 'error') {
         setCommentError(res.message)
       } else {
         setCommentInput('')
+        setSelectedMentions([])
         // 댓글 재로드
         await loadDetailFromServer(workItemId)
       }
@@ -201,6 +212,12 @@ export function WorkItemDetailPage() {
   const detail = workItemId
     ? getSelectedWorkItemDetail(workItemId, currentUser.userId, snapshot)
     : null
+
+  // 업무 접근 권한이 있는 멤버만 멘션 후보로 필터링 (본인 제외, 숨김/공개 권한 비트 검사)
+  const mentionCandidates = useMemo(() => {
+    if (!detail?.item || !currentUser) return []
+    return getMentionCandidatesForWorkItem(detail.item, currentUser.userId, snapshot)
+  }, [detail?.item, currentUser, snapshot])
 
   // 첨부파일 합산 (서버 응답 + 스냅샷 파일)
   const allFiles = useMemo(() => {
@@ -413,7 +430,7 @@ export function WorkItemDetailPage() {
             <DetailProperty icon="list" label={`하위 업무 (${directChildren.length})`}>
               {directChildren.length > 0 ? (
                 <div className={styles.childList}>
-                  {directChildren.map((child) => (
+                  {directChildren.map((child: WorkItemRecord) => (
                     <Link
                       key={child.workItemId}
                       to={`/work-items/${child.workItemId}`}
@@ -573,11 +590,21 @@ export function WorkItemDetailPage() {
         {/* 댓글 작성 폼 */}
         <form className={styles.commentForm} onSubmit={handleCommentSubmit}>
           <div className={styles.commentInputWrapper}>
-            <textarea
-              className={styles.commentInput}
-              placeholder="댓글이나 업무 진행 상황을 작성하세요..."
+            <CommentMentionInput
+              placeholder="댓글이나 업무 진행 상황을 작성하세요... (@를 입력하여 팀원 멘션)"
               value={commentInput}
-              onChange={(e) => setCommentInput(e.target.value)}
+              onChange={setCommentInput}
+              candidates={mentionCandidates}
+              selectedMentions={selectedMentions}
+              onSelectCandidate={(candidate) => {
+                setSelectedMentions((prev) => {
+                  if (prev.some((m) => m.userId === candidate.userId)) return prev
+                  return [...prev, candidate]
+                })
+              }}
+              onRemoveMention={(candidate) => {
+                setSelectedMentions((prev) => prev.filter((m) => m.userId !== candidate.userId))
+              }}
               rows={3}
               disabled={isSubmittingComment}
             />
@@ -622,7 +649,9 @@ export function WorkItemDetailPage() {
                       {formatWorkspaceTimestamp(comment.createdAt)}
                     </span>
                   </div>
-                  <div className={styles.commentBody}>{comment.content}</div>
+                  <div className={styles.commentBody}>
+                    <RenderCommentContent content={comment.content} />
+                  </div>
                 </div>
               </div>
             ))

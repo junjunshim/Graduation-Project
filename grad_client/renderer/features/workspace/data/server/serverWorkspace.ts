@@ -114,11 +114,17 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
     ...updates.roles,
   ]
 
-  // 3. 업무: updates의 노드에 속한 업무는 updates의 업무로 완전히 교체 (기존 잔여 업무 Pruning)
-  const workItems = [
-    ...current.workItems.filter((item) => !updatedNodeIds.has(item.ownerNodeId)),
-    ...updates.workItems,
-  ]
+  // 3. 업무: workItemId 기준 중복 방지 Upsert 및 노드 단위 Pruning
+  const workItemsById = new Map(current.workItems.map((item) => [item.workItemId, item]))
+  if (updatedNodeIds.size > 0) {
+    current.workItems.forEach((item) => {
+      if (updatedNodeIds.has(item.ownerNodeId)) {
+        workItemsById.delete(item.workItemId)
+      }
+    })
+  }
+  updates.workItems.forEach((item) => workItemsById.set(item.workItemId, item))
+  const workItems = Array.from(workItemsById.values())
 
   // 4. 유저: updates의 유저로 업데이트
   const usersById = new Map(current.users.map((user) => [user.userId, user]))
@@ -130,12 +136,18 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
     ...(updates.authorities ?? []),
   ]
 
-  // 6. 파일: updates의 노드 업무 파일로 교체
+  // 6. 파일: updates의 노드 업무 파일로 교체 (파일 ID 및 workItemId 기준 중복 방지)
   const updatedWorkItemIds = new Set(updates.workItems.map((w) => w.workItemId))
-  const files = [
-    ...(current.files ?? []).filter((f) => !updatedWorkItemIds.has(f.workItemId)),
-    ...(updates.files ?? []),
-  ]
+  const filesById = new Map((current.files ?? []).map((f) => [f.id, f]))
+  if (updatedWorkItemIds.size > 0) {
+    ;(current.files ?? []).forEach((f) => {
+      if (updatedWorkItemIds.has(f.workItemId)) {
+        filesById.delete(f.id)
+      }
+    })
+  }
+  ;(updates.files ?? []).forEach((f) => filesById.set(f.id, f))
+  const files = Array.from(filesById.values())
 
   // 7. 활동 및 멘션 병합
   const mentionsById = new Map((current.mentions ?? []).map((m) => [m.id, m]))

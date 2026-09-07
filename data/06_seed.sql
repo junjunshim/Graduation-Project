@@ -178,11 +178,11 @@ BEGIN
                 PERFORM add_work_item_comment(v_dept_leader_email, v_company_project_id_1, '기획부에서 일정 및 마일스톤 확인했습니다.');
                 
                 -- 멘션 댓글 2개
-                PERFORM add_work_item_comment(v_comp_admin_email, v_company_project_id_1, '@' || v_dept_leader_name || ' 1분기 상세 목표 전달 바랍니다.');
+                PERFORM add_work_item_comment(v_comp_admin_email, v_company_project_id_1, '<mention email="' || v_dept_leader_email || '">@' || v_dept_leader_name || '</mention> 1분기 상세 목표 전달 바랍니다.');
                 SELECT MAX(comment_id) INTO v_comm_id_1 FROM work_item_comments WHERE work_item_id = v_company_project_id_1;
                 PERFORM add_comment_mention(v_comm_id_1, v_dept_leader_email);
                 
-                PERFORM add_work_item_comment(v_dept_leader_email, v_company_project_id_1, '@' || v_comp_admin_name || ' 리소스 검토 완료 후 보고드리겠습니다.');
+                PERFORM add_work_item_comment(v_dept_leader_email, v_company_project_id_1, '<mention email="' || v_comp_admin_email || '">@' || v_comp_admin_name || '</mention> 리소스 검토 완료 후 보고드리겠습니다.');
                 SELECT MAX(comment_id) INTO v_comm_id_2 FROM work_item_comments WHERE work_item_id = v_company_project_id_1;
                 PERFORM add_comment_mention(v_comm_id_2, v_comp_admin_email);
             END IF;
@@ -217,11 +217,11 @@ BEGIN
                 PERFORM add_work_item_comment(v_comp_admin_email, v_company_project_id_2, '인프라 점검 작업을 시작합니다.');
                 PERFORM add_work_item_comment(v_dept_leader_email, v_company_project_id_2, '보안 가이드라인 사전 검토 완료했습니다.');
                 
-                PERFORM add_work_item_comment(v_comp_admin_email, v_company_project_id_2, '@' || v_dept_leader_name || ' 마이그레이션 예산 검토 부탁드립니다.');
+                PERFORM add_work_item_comment(v_comp_admin_email, v_company_project_id_2, '<mention email="' || v_dept_leader_email || '">@' || v_dept_leader_name || '</mention> 마이그레이션 예산 검토 부탁드립니다.');
                 SELECT MAX(comment_id) INTO v_comm_id_1 FROM work_item_comments WHERE work_item_id = v_company_project_id_2;
                 PERFORM add_comment_mention(v_comm_id_1, v_dept_leader_email);
 
-                PERFORM add_work_item_comment(v_dept_leader_email, v_company_project_id_2, '@' || v_comp_admin_name || ' 승인 요청 문서 올렸습니다.');
+                PERFORM add_work_item_comment(v_dept_leader_email, v_company_project_id_2, '<mention email="' || v_comp_admin_email || '">@' || v_comp_admin_name || '</mention> 승인 요청 문서 올렸습니다.');
                 SELECT MAX(comment_id) INTO v_comm_id_2 FROM work_item_comments WHERE work_item_id = v_company_project_id_2;
                 PERFORM add_comment_mention(v_comm_id_2, v_comp_admin_email);
             END IF;
@@ -274,11 +274,11 @@ BEGIN
                 PERFORM add_work_item_comment(v_dept_leader_email, v_curr_wi_id, '진행 간 이슈 발생 시 언제든 공유 바랍니다.');
                 
                 -- 2) 멘션 댓글 2개 (팀장 -> 팀원, 팀원 -> 팀장)
-                PERFORM add_work_item_comment(v_dept_leader_email, v_curr_wi_id, '@' || v_member_name || ' 요구사항 명세서 참고하여 진행해 주세요.');
+                PERFORM add_work_item_comment(v_dept_leader_email, v_curr_wi_id, '<mention email="' || v_member_email || '">@' || v_member_name || '</mention> 요구사항 명세서 참고하여 진행해 주세요.');
                 SELECT MAX(comment_id) INTO v_comm_id_1 FROM work_item_comments WHERE work_item_id = v_curr_wi_id;
                 PERFORM add_comment_mention(v_comm_id_1, v_member_email);
 
-                PERFORM add_work_item_comment(v_member_email, v_curr_wi_id, '@' || v_dept_leader_name || ' 초안 작성 완료되어 검토 요청드립니다.');
+                PERFORM add_work_item_comment(v_member_email, v_curr_wi_id, '<mention email="' || v_dept_leader_email || '">@' || v_dept_leader_name || '</mention> 초안 작성 완료되어 검토 요청드립니다.');
                 SELECT MAX(comment_id) INTO v_comm_id_2 FROM work_item_comments WHERE work_item_id = v_curr_wi_id;
                 PERFORM add_comment_mention(v_comm_id_2, v_dept_leader_email);
             END LOOP;
@@ -287,22 +287,22 @@ BEGIN
             PERFORM add_work_item_comment(v_dept_leader_email, v_dept_wi_id_1, '스프린트 진행 현황 점검합니다.');
             PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem1@' || v_comp_domains[c_idx], v_dept_wi_id_1, '모듈 단위 테스트 진행 중입니다.');
             
-            PERFORM add_work_item_comment(v_dept_leader_email, v_dept_wi_id_1, '@' || v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 팀원1' || ' 코드 리뷰 진행 부탁드립니다.');
+            PERFORM add_work_item_comment(v_dept_leader_email, v_dept_wi_id_1, '<mention email="' || v_comp_names[c_idx] || '_' || d_idx || 'dept_mem1@' || v_comp_domains[c_idx] || '">@' || v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 팀원1</mention> 코드 리뷰 진행 부탁드립니다.');
             SELECT MAX(comment_id) INTO v_comm_id_1 FROM work_item_comments WHERE work_item_id = v_dept_wi_id_1;
             PERFORM add_comment_mention(v_comm_id_1, v_comp_names[c_idx] || '_' || d_idx || 'dept_mem1@' || v_comp_domains[c_idx]);
 
-            PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem1@' || v_comp_domains[c_idx], v_dept_wi_id_1, '@' || v_dept_leader_name || ' 코드 리뷰 완료했습니다.');
+            PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem1@' || v_comp_domains[c_idx], v_dept_wi_id_1, '<mention email="' || v_dept_leader_email || '">@' || v_dept_leader_name || '</mention> 코드 리뷰 완료했습니다.');
             SELECT MAX(comment_id) INTO v_comm_id_2 FROM work_item_comments WHERE work_item_id = v_dept_wi_id_1;
             PERFORM add_comment_mention(v_comm_id_2, v_dept_leader_email);
 
             PERFORM add_work_item_comment(v_dept_leader_email, v_dept_wi_id_2, 'QA 검증 일정 공유합니다.');
             PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem2@' || v_comp_domains[c_idx], v_dept_wi_id_2, '테스트 케이스 준비 완료되었습니다.');
 
-            PERFORM add_work_item_comment(v_dept_leader_email, v_dept_wi_id_2, '@' || v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 팀원2' || ' 회귀 테스트 케이스 업데이트 바랍니다.');
+            PERFORM add_work_item_comment(v_dept_leader_email, v_dept_wi_id_2, '<mention email="' || v_comp_names[c_idx] || '_' || d_idx || 'dept_mem2@' || v_comp_domains[c_idx] || '">@' || v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 팀원2</mention> 회귀 테스트 케이스 업데이트 바랍니다.');
             SELECT MAX(comment_id) INTO v_comm_id_1 FROM work_item_comments WHERE work_item_id = v_dept_wi_id_2;
             PERFORM add_comment_mention(v_comm_id_1, v_comp_names[c_idx] || '_' || d_idx || 'dept_mem2@' || v_comp_domains[c_idx]);
 
-            PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem2@' || v_comp_domains[c_idx], v_dept_wi_id_2, '@' || v_dept_leader_name || ' 업데이트 완료했습니다.');
+            PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem2@' || v_comp_domains[c_idx], v_dept_wi_id_2, '<mention email="' || v_dept_leader_email || '">@' || v_dept_leader_name || '</mention> 업데이트 완료했습니다.');
             SELECT MAX(comment_id) INTO v_comm_id_2 FROM work_item_comments WHERE work_item_id = v_dept_wi_id_2;
             PERFORM add_comment_mention(v_comm_id_2, v_dept_leader_email);
 
@@ -346,11 +346,11 @@ BEGIN
                 PERFORM add_work_item_comment(v_dept_leader_email, v_curr_wi_id, '팀 미팅 아젠다를 확인해 주세요.');
                 PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem' || t_idx || '@' || v_comp_domains[c_idx], v_curr_wi_id, '회의 참석 준비 완료했습니다.');
 
-                PERFORM add_work_item_comment(v_dept_leader_email, v_curr_wi_id, '@' || v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 팀원' || t_idx || ' 회의록 정리 담당해 주세요.');
+                PERFORM add_work_item_comment(v_dept_leader_email, v_curr_wi_id, '<mention email="' || v_comp_names[c_idx] || '_' || d_idx || 'dept_mem' || t_idx || '@' || v_comp_domains[c_idx] || '">@' || v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 팀원' || t_idx || '</mention> 회의록 정리 담당해 주세요.');
                 SELECT MAX(comment_id) INTO v_comm_id_1 FROM work_item_comments WHERE work_item_id = v_curr_wi_id;
                 PERFORM add_comment_mention(v_comm_id_1, v_comp_names[c_idx] || '_' || d_idx || 'dept_mem' || t_idx || '@' || v_comp_domains[c_idx]);
 
-                PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem' || t_idx || '@' || v_comp_domains[c_idx], v_curr_wi_id, '@' || v_dept_leader_name || ' 회의록 첨부파일 확인 부탁드립니다.');
+                PERFORM add_work_item_comment(v_comp_names[c_idx] || '_' || d_idx || 'dept_mem' || t_idx || '@' || v_comp_domains[c_idx], v_curr_wi_id, '<mention email="' || v_dept_leader_email || '">@' || v_dept_leader_name || '</mention> 회의록 첨부파일 확인 부탁드립니다.');
                 SELECT MAX(comment_id) INTO v_comm_id_2 FROM work_item_comments WHERE work_item_id = v_curr_wi_id;
                 PERFORM add_comment_mention(v_comm_id_2, v_dept_leader_email);
             END LOOP;

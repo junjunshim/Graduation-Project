@@ -83,10 +83,16 @@ BEGIN
             p_owner_node_id => v_company_node_id, 
             p_owner_user_email => v_comp_admin_email, 
             p_title => v_companies[c_idx] || ' 핵심 프로젝트 Alpha', 
+            p_parent_work_item_id => NULL,
             p_description => v_companies[c_idx] || ' 차세대 플래그십 라인업 통합 R&D 개발 프로젝트',
             p_category => 'PROJECT',
-            p_start_date => '2026-01-01',
-            p_due_date => '2026-12-31'
+            p_hidden => FALSE,
+            p_status => 'in-progress',
+            p_priority => 5,
+            p_weight => 5,
+            p_progress => 65,
+            p_start_date => '2026-08-01',
+            p_due_date => '2026-11-30'
         );
         -- 회사 프로젝트 1 첨부파일 (실제 API처럼 UUID 기반 고유 파일명 적용)
         PERFORM add_work_item_file(
@@ -107,10 +113,16 @@ BEGIN
             p_owner_node_id => v_company_node_id, 
             p_owner_user_email => v_comp_admin_email, 
             p_title => v_companies[c_idx] || ' 전사 인프라 최적화', 
+            p_parent_work_item_id => NULL,
             p_description => v_companies[c_idx] || ' 클라우드 마이그레이션 및 서비스 비용 아키텍처 개선 과제',
             p_category => 'INFRA',
-            p_start_date => '2026-02-01',
-            p_due_date => '2026-11-30'
+            p_hidden => FALSE,
+            p_status => 'in-progress',
+            p_priority => 4,
+            p_weight => 4,
+            p_progress => 40,
+            p_start_date => '2026-08-15',
+            p_due_date => '2026-12-31'
         );
         -- 회사 프로젝트 2 첨부파일
         PERFORM add_work_item_file(
@@ -154,11 +166,16 @@ BEGIN
                 p_owner_node_id => v_dept_node_id,
                 p_owner_user_email => v_dept_leader_email,
                 p_title => v_depts[d_idx] || ' 세부 구현 스프린트',
+                p_parent_work_item_id => v_company_project_id_1,
                 p_description => v_companies[c_idx] || ' ' || v_depts[d_idx] || '의 세부 마일스톤 기획 및 리소스 설계',
                 p_category => 'FEATURE',
-                p_start_date => '2026-03-01',
-                p_due_date => '2026-06-30',
-                p_parent_work_item_id => v_company_project_id_1
+                p_hidden => FALSE,
+                p_status => CASE WHEN (d_idx % 3) = 0 THEN 'done' WHEN (d_idx % 3) = 1 THEN 'in-progress' ELSE 'todo' END,
+                p_priority => 4,
+                p_weight => 3,
+                p_progress => CASE WHEN (d_idx % 3) = 0 THEN 100 WHEN (d_idx % 3) = 1 THEN 70 ELSE 0 END,
+                p_start_date => '2026-08-20',
+                p_due_date => '2026-09-30'
             );
             -- 부서 업무 1 첨부파일
             PERFORM add_work_item_file(
@@ -195,11 +212,16 @@ BEGIN
                 p_owner_node_id => v_dept_node_id,
                 p_owner_user_email => v_dept_leader_email,
                 p_title => v_depts[d_idx] || ' 품질 및 QA 검증',
+                p_parent_work_item_id => v_company_project_id_2,
                 p_description => v_companies[c_idx] || ' ' || v_depts[d_idx] || ' 보안 무결성 분석 및 릴리즈 전 최종 배포 검증',
                 p_category => 'QA',
-                p_start_date => '2026-04-01',
-                p_due_date => '2026-07-31',
-                p_parent_work_item_id => v_company_project_id_2
+                p_hidden => FALSE,
+                p_status => CASE WHEN (d_idx % 3) = 0 THEN 'in-progress' WHEN (d_idx % 3) = 1 THEN 'todo' ELSE 'in-progress' END,
+                p_priority => 3,
+                p_weight => 2,
+                p_progress => CASE WHEN (d_idx % 3) = 0 THEN 45 WHEN (d_idx % 3) = 1 THEN 0 ELSE 30 END,
+                p_start_date => '2026-08-25',
+                p_due_date => '2026-10-15'
             );
             -- 부서 업무 2 첨부파일
             PERFORM add_work_item_file(
@@ -250,11 +272,32 @@ BEGIN
                     p_owner_node_id => v_dept_node_id,
                     p_owner_user_email => v_member_email,
                     p_title => v_member_name || ' 담당 실무 과제',
+                    p_parent_work_item_id => v_dept_wi_id_1,
                     p_description => v_member_name || '이 수행하는 단위 세부 기능 개발 및 코드 무결성 확보',
                     p_category => 'TASK',
-                    p_start_date => '2026-03-10',
-                    p_due_date => '2026-04-30',
-                    p_parent_work_item_id => v_dept_wi_id_1
+                    p_hidden => FALSE,
+                    p_status => CASE 
+                        WHEN (m_idx % 3) = 1 THEN 'done' 
+                        WHEN (m_idx % 3) = 2 THEN 'in-progress' 
+                        ELSE 'todo' 
+                    END,
+                    p_priority => CASE WHEN m_idx <= 2 THEN 4 ELSE 2 END,
+                    p_weight => 1,
+                    p_progress => CASE 
+                        WHEN (m_idx % 3) = 1 THEN 100 
+                        WHEN (m_idx % 3) = 2 THEN 50 
+                        ELSE 0 
+                    END,
+                    p_start_date => CASE 
+                        WHEN (m_idx % 3) = 1 THEN '2026-08-25' 
+                        WHEN (m_idx % 3) = 2 THEN '2026-09-01' 
+                        ELSE '2026-09-05' 
+                    END,
+                    p_due_date => CASE 
+                        WHEN (m_idx % 3) = 1 THEN '2026-09-05' 
+                        WHEN (m_idx % 3) = 2 THEN '2026-09-20' 
+                        ELSE '2026-09-25' 
+                    END
                 );
 
                 -- 팀원 실무 과제 첨부파일 1개 등록
@@ -324,11 +367,16 @@ BEGIN
                     p_owner_node_id => v_team_node_id,
                     p_owner_user_email => v_dept_leader_email,
                     p_title => v_depts[d_idx] || ' ' || t_idx || '팀 현안 검토',
+                    p_parent_work_item_id => v_dept_wi_id_2,
                     p_description => v_depts[d_idx] || ' ' || t_idx || '팀원들이 함께 완수할 단기 TODO 스크럼 과제',
                     p_category => 'MEETING',
-                    p_start_date => '2026-04-01',
-                    p_due_date => '2026-05-15',
-                    p_parent_work_item_id => v_dept_wi_id_2
+                    p_hidden => FALSE,
+                    p_status => CASE WHEN t_idx = 1 THEN 'in-progress' ELSE 'todo' END,
+                    p_priority => 3,
+                    p_weight => 1,
+                    p_progress => CASE WHEN t_idx = 1 THEN 50 ELSE 0 END,
+                    p_start_date => '2026-09-01',
+                    p_due_date => '2026-09-18'
                 );
 
                 -- 팀 단위 업무 첨부파일 1개 등록

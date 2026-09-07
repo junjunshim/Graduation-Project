@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { DocumentIcon } from '../../../design-system/primitives/DocumentIcon'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
@@ -79,6 +79,7 @@ export function WorkItemDetailPage() {
   // 상세 API에서 불러온 comments 및 files 목록 (실시간 보존)
   const [comments, setComments] = useState<WorkItemCommentRecord[]>([])
   const [serverFiles, setServerFiles] = useState<WorkItemFileRecord[]>([])
+  const [serverActivities, setServerActivities] = useState<ActivityRecord[]>([])
 
   // 댓글 입력 상태
   const [commentInput, setCommentInput] = useState('')
@@ -122,6 +123,7 @@ export function WorkItemDetailPage() {
         const result = await fetchWorkItemDetail(targetId)
         setComments(result.comments)
         setServerFiles(result.files)
+        setServerActivities(result.activities ?? [])
         setSnapshot(getOrgSnapshot())
       } catch (err) {
         console.warn('[WorkItemDetailPage] 업무 상세 조회 실패:', err)
@@ -138,11 +140,14 @@ export function WorkItemDetailPage() {
       window.scrollTo({ top: 0, behavior: 'instant' })
       setComments([])
       setServerFiles([])
+      setServerActivities([])
       setCommentInput('')
       setCommentError(null)
       loadDetailFromServer(workItemId)
     }
   }, [workItemId, loadDetailFromServer])
+
+  const commentListRef = useRef<HTMLDivElement>(null)
 
   // 댓글 작성 제출
   const handleCommentSubmit = async (e: FormEvent) => {
@@ -164,6 +169,16 @@ export function WorkItemDetailPage() {
         setSelectedMentions([])
         // 댓글 재로드
         await loadDetailFromServer(workItemId)
+
+        // 작성된 최신 댓글(맨 아래)로 부드럽게 스크롤
+        setTimeout(() => {
+          if (commentListRef.current) {
+            commentListRef.current.scrollTo({
+              top: commentListRef.current.scrollHeight,
+              behavior: 'smooth',
+            })
+          }
+        }, 80)
       }
     } catch (err) {
       setCommentError(err instanceof Error ? err.message : '댓글 작성에 실패했습니다.')
@@ -250,33 +265,45 @@ export function WorkItemDetailPage() {
     const currentCommentIds = new Set<string>()
     comments.forEach((c) => currentCommentIds.add(String(c.commentId)))
 
-    return (snapshot.activities ?? [])
-      .filter((act: ActivityRecord) => {
-        const entityType = act.entityType.toUpperCase()
+    // 스냅샷 활동과 서버에서 받아온 업무 상세 활동 합산 (ID 기준 중복 제거)
+    const combinedMap = new Map<number | string, ActivityRecord>()
+    serverActivities.forEach((act) => combinedMap.set(act.id, act))
 
-        // 1. WORK_ITEM 엔티티인 경우
-        if (entityType === 'WORK_ITEM') {
-          if (act.entityId === currentId) return true
-          if (act.targetName === targetTitle) return true
-        }
+    const snapshotFiltered = (snapshot.activities ?? []).filter((act: ActivityRecord) => {
+      const entityType = act.entityType.toUpperCase()
 
-        // 2. COMMENT 엔티티인 경우
-        if (entityType === 'COMMENT') {
-          // targetName 예: 'Comment on WI-206'
-          const matchedWorkItemId = act.targetName ? act.targetName.replace(/^Comment on\s*/i, '').trim() : ''
-          if (matchedWorkItemId === currentId) return true
-          if (currentCommentIds.has(String(act.entityId))) return true
-        }
+      // 1. WORK_ITEM 엔티티인 경우
+      if (entityType === 'WORK_ITEM') {
+        if (act.entityId === currentId) return true
+        if (act.targetName === targetTitle) return true
+      }
 
-        // 3. FILE 엔티티인 경우
-        if (entityType === 'FILE') {
-          if (currentFileIds.has(String(act.entityId))) return true
-        }
+      // 2. COMMENT 엔티티인 경우
+      if (entityType === 'COMMENT') {
+        // targetName 예: 'Comment on WI-206'
+        const matchedWorkItemId = act.targetName ? act.targetName.replace(/^Comment on\s*/i, '').trim() : ''
+        if (matchedWorkItemId === currentId) return true
+        if (currentCommentIds.has(String(act.entityId))) return true
+      }
 
-        return false
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  }, [snapshot.activities, detail, comments, allFiles])
+      // 3. FILE 엔티티인 경우
+      if (entityType === 'FILE') {
+        if (currentFileIds.has(String(act.entityId))) return true
+      }
+
+      return false
+    })
+
+    snapshotFiltered.forEach((act) => {
+      if (!combinedMap.has(act.id)) {
+        combinedMap.set(act.id, act)
+      }
+    })
+
+    return Array.from(combinedMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+  }, [serverActivities, snapshot.activities, detail, comments, allFiles])
 
   if (!detail && !serverLoading) {
     return (
@@ -587,43 +614,8 @@ export function WorkItemDetailPage() {
           </div>
         </div>
 
-        {/* 댓글 작성 폼 */}
-        <form className={styles.commentForm} onSubmit={handleCommentSubmit}>
-          <div className={styles.commentInputWrapper}>
-            <CommentMentionInput
-              placeholder="댓글이나 업무 진행 상황을 작성하세요... (@를 입력하여 팀원 멘션)"
-              value={commentInput}
-              onChange={setCommentInput}
-              candidates={mentionCandidates}
-              selectedMentions={selectedMentions}
-              onSelectCandidate={(candidate) => {
-                setSelectedMentions((prev) => {
-                  if (prev.some((m) => m.userId === candidate.userId)) return prev
-                  return [...prev, candidate]
-                })
-              }}
-              onRemoveMention={(candidate) => {
-                setSelectedMentions((prev) => prev.filter((m) => m.userId !== candidate.userId))
-              }}
-              rows={3}
-              disabled={isSubmittingComment}
-            />
-            <div className={styles.commentFormFooter}>
-              {commentError && <span className={styles.commentError}>{commentError}</span>}
-              <button
-                type="submit"
-                className={styles.commentSubmitButton}
-                disabled={!commentInput.trim() || isSubmittingComment}
-              >
-                <Icon name="plus" size={13} />
-                {isSubmittingComment ? '등록 중...' : '댓글 등록'}
-              </button>
-            </div>
-          </div>
-        </form>
-
         {/* 댓글 목록 */}
-        <div className={styles.commentList}>
+        <div ref={commentListRef} className={styles.commentList}>
           {comments.length === 0 ? (
             <div className={styles.emptyPanelState}>
               <Icon name="messageCircle" size={20} />
@@ -657,6 +649,41 @@ export function WorkItemDetailPage() {
             ))
           )}
         </div>
+
+        {/* 댓글 작성 폼 (하단 배치) */}
+        <form className={styles.commentForm} onSubmit={handleCommentSubmit}>
+          <div className={styles.commentInputWrapper}>
+            <CommentMentionInput
+              placeholder="댓글이나 업무 진행 상황을 작성하세요... (@를 입력하여 팀원 멘션)"
+              value={commentInput}
+              onChange={setCommentInput}
+              candidates={mentionCandidates}
+              selectedMentions={selectedMentions}
+              onSelectCandidate={(candidate) => {
+                setSelectedMentions((prev) => {
+                  if (prev.some((m) => m.userId === candidate.userId)) return prev
+                  return [...prev, candidate]
+                })
+              }}
+              onRemoveMention={(candidate) => {
+                setSelectedMentions((prev) => prev.filter((m) => m.userId !== candidate.userId))
+              }}
+              rows={3}
+              disabled={isSubmittingComment}
+            />
+            <div className={styles.commentFormFooter}>
+              {commentError && <span className={styles.commentError}>{commentError}</span>}
+              <button
+                type="submit"
+                className={styles.commentSubmitButton}
+                disabled={!commentInput.trim() || isSubmittingComment}
+              >
+                <Icon name="plus" size={13} />
+                {isSubmittingComment ? '등록 중...' : '댓글 등록'}
+              </button>
+            </div>
+          </div>
+        </form>
       </section>
 
       {/* 파일 내용 뷰어 모달 */}

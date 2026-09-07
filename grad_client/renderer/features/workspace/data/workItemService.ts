@@ -272,6 +272,7 @@ export async function fetchWorkItemDetail(workItemId: string): Promise<WorkItemD
     item,
     comments: [],
     files,
+    activities: [],
   }
 }
 

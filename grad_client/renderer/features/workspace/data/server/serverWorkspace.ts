@@ -1,4 +1,5 @@
 import type {
+  ActivityRecord,
   AssignRoleRequest,
   CreateSubNodeRequest,
   CreateTopNodeRequest,
@@ -708,6 +709,7 @@ export type WorkItemDetailResult = {
   item: WorkspaceDatabase['workItems'][number]
   comments: WorkItemCommentRecord[]
   files: WorkItemFileRecord[]
+  activities: ActivityRecord[]
 }
 
 export async function fetchWorkItemDetailOnServer(workItemId: string): Promise<WorkItemDetailResult> {
@@ -773,7 +775,32 @@ export async function fetchWorkItemDetailOnServer(workItemId: string): Promise<W
     })
   }
 
-  // WORK_ITEM으로 contextAdapter에 전달하여 workItems, users 정규화
+  // activities 추출
+  const activities: ActivityRecord[] = []
+  if (Array.isArray((detailItem as Record<string, unknown>).activities)) {
+    const rawActivities = (detailItem as Record<string, unknown>).activities as Array<Record<string, unknown>>
+    rawActivities.forEach((act) => {
+      const id = Number(act.id ?? 0)
+      if (id > 0) {
+        activities.push({
+          id,
+          nodeId: Number(act.node_id ?? 0),
+          actorUserId: String(act.actor_user_id ?? ''),
+          actorName: String(act.actor_name ?? ''),
+          entityType: String(act.entity_type ?? ''),
+          entityId: String(act.entity_id ?? ''),
+          targetName: String(act.target_name ?? ''),
+          actionType: String(act.action_type ?? ''),
+          fieldName: act.field_name ? String(act.field_name) : null,
+          oldValue: act.old_value ? String(act.old_value) : null,
+          newValue: act.new_value ? String(act.new_value) : null,
+          createdAt: String(act.created_at ?? new Date().toISOString()),
+        })
+      }
+    })
+  }
+
+  // WORK_ITEM, FILE, ACTIVITY 등을 contextAdapter에 전달하여 정규화
   const contextItems: typeof rawItems = [
     {
       ...detailItem,
@@ -791,6 +818,21 @@ export async function fetchWorkItemDetailOnServer(workItemId: string): Promise<W
       file_size: f.fileSize,
       mime_type: f.mimeType,
       created_at: f.createdAt,
+    })),
+    ...activities.map((a) => ({
+      type: 'ACTIVITY',
+      id: a.id,
+      node_id: a.nodeId,
+      actor_user_id: a.actorUserId,
+      actor_name: a.actorName,
+      entity_type: a.entityType,
+      entity_id: a.entityId,
+      target_name: a.targetName,
+      action_type: a.actionType,
+      field_name: a.fieldName,
+      old_value: a.oldValue,
+      new_value: a.newValue,
+      created_at: a.createdAt,
     })),
   ]
 
@@ -812,6 +854,7 @@ export async function fetchWorkItemDetailOnServer(workItemId: string): Promise<W
     item: foundItem,
     comments,
     files,
+    activities,
   }
 }
 

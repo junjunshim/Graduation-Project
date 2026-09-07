@@ -419,8 +419,36 @@
 }
 
 /* 댓글(Comments) 관련 스타일 */
+.commentList {
+  display: grid;
+  gap: 0.9rem;
+  max-height: 28rem;
+  overflow-y: auto;
+  padding-right: 0.45rem;
+  scroll-behavior: smooth;
+}
+
+.commentList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.commentList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.commentList::-webkit-scrollbar-thumb {
+  background: var(--axis-line-default);
+  border-radius: 9999px;
+}
+
+.commentList::-webkit-scrollbar-thumb:hover {
+  background: var(--axis-text-muted);
+}
+
 .commentForm {
-  margin-bottom: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--axis-line-default);
 }
 
 .commentInputWrapper {
@@ -487,11 +515,6 @@
   cursor: not-allowed;
 }
 
-.commentList {
-  display: grid;
-  gap: 0.9rem;
-}
-
 .commentItem {
   display: flex;
   align-items: flex-start;
@@ -547,6 +570,30 @@
 }
 
 /* 활동 내역(Activity Timeline) 스타일 */
+.activityList {
+  max-height: 22rem;
+  overflow-y: auto;
+  padding-right: 0.45rem;
+  scroll-behavior: smooth;
+}
+
+.activityList::-webkit-scrollbar {
+  width: 6px;
+}
+
+.activityList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.activityList::-webkit-scrollbar-thumb {
+  background: var(--axis-line-default);
+  border-radius: 9999px;
+}
+
+.activityList::-webkit-scrollbar-thumb:hover {
+  background: var(--axis-text-muted);
+}
+
 .activityTimeline {
   list-style: none;
   margin: 0;

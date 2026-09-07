@@ -634,7 +634,31 @@ BEGIN
                     WHERE f.work_item_id = w.work_item_id
                 ), '[]'::jsonb
             )
-        ELSE '[]'::jsonb END
+        ELSE '[]'::jsonb END,
+        'activities', COALESCE(
+            (
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'id', al.log_id,
+                        'node_id', al.node_id,
+                        'actor_user_id', al.actor_user_id,
+                        'actor_name', al.actor_name,
+                        'entity_type', al.entity_type,
+                        'entity_id', al.entity_id,
+                        'target_name', al.target_name,
+                        'action_type', al.action_type,
+                        'field_name', al.field_name,
+                        'old_value', al.old_value,
+                        'new_value', al.new_value,
+                        'created_at', al.created_at
+                    ) ORDER BY al.created_at DESC
+                )
+                FROM activity_logs al
+                WHERE (al.entity_type = 'WORK_ITEM' AND (al.entity_id = w.work_item_id OR al.target_name = w.title))
+                   OR (al.entity_type = 'COMMENT' AND (al.target_name LIKE 'Comment on ' || w.work_item_id || '%' OR al.entity_id IN (SELECT comment_id::VARCHAR FROM work_item_comments WHERE work_item_id = w.work_item_id)))
+                   OR (al.entity_type = 'FILE' AND al.entity_id IN (SELECT file_id::VARCHAR FROM work_item_files WHERE work_item_id = w.work_item_id))
+            ), '[]'::jsonb
+        )
     )::jsonb AS out_data
     FROM work_items w
     JOIN users u_owner ON w.owner_user_id = u_owner.user_id

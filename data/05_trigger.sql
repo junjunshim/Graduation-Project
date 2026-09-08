@@ -9,6 +9,40 @@ $$ LANGUAGE plpgsql;
 
 
 
+-- 1.5. work_items의 노드별 display_id 자동 채번 함수 정의
+CREATE OR REPLACE FUNCTION assign_work_item_display_id()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_next_display_id INTEGER;
+BEGIN
+    -- display_id가 지정되지 않았거나 0 이하인 경우에만 해당 노드 내 최대값 + 1로 자동 채번
+    IF NEW.display_id IS NULL OR NEW.display_id <= 0 THEN
+        IF NEW.owner_node_id IS NOT NULL THEN
+            SELECT COALESCE(MAX(display_id), 0) + 1
+            INTO v_next_display_id
+            FROM work_items
+            WHERE owner_node_id = NEW.owner_node_id;
+        ELSE
+            SELECT COALESCE(MAX(display_id), 0) + 1
+            INTO v_next_display_id
+            FROM work_items
+            WHERE owner_node_id IS NULL;
+        END IF;
+
+        NEW.display_id := v_next_display_id;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_assign_work_item_display_id ON work_items;
+CREATE TRIGGER trg_assign_work_item_display_id
+BEFORE INSERT ON work_items
+FOR EACH ROW EXECUTE FUNCTION assign_work_item_display_id();
+
+
+
 -- 2. update_modified_column 함수를 각 테이블의 BEFORE UPDATE 트리거로 설정
 DROP TRIGGER IF EXISTS trg_update_nodes_time ON organization_nodes;
 DROP TRIGGER IF EXISTS trg_update_users_time ON users;

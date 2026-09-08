@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS role_defaults (
 -- 5. 업무와 프로젝트 데이터
 CREATE TABLE IF NOT EXISTS work_items (
     work_item_id VARCHAR(50) PRIMARY KEY,
+    display_id INTEGER NOT NULL,
     owner_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE SET NULL,
     parent_work_item_id VARCHAR(50) REFERENCES work_items(work_item_id) ON DELETE SET NULL,
     owner_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -93,9 +94,11 @@ CREATE TABLE IF NOT EXISTS work_items (
     due_date DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT check_dates CHECK (due_date >= start_date)
+    CONSTRAINT check_dates CHECK (due_date >= start_date),
+    CONSTRAINT uq_work_items_node_display UNIQUE (owner_node_id, display_id)
 );
 CREATE INDEX idx_work_items_node_id ON work_items(owner_node_id);
+CREATE INDEX idx_work_items_node_display ON work_items(owner_node_id, display_id);
 CREATE INDEX idx_work_items_user_id ON work_items(owner_user_id);
 CREATE INDEX idx_work_items_parent_id ON work_items(parent_work_item_id);
 CREATE INDEX idx_work_items_is_deleted ON work_items(is_deleted);
@@ -177,6 +180,7 @@ CREATE INDEX idx_authority_history_node_id ON role_authority_histories(node_id);
 CREATE TABLE work_item_histories (
     history_id SERIAL PRIMARY KEY,
     work_item_id VARCHAR(50) NOT NULL,
+    display_id INTEGER NOT NULL,
     owner_node_id INTEGER NOT NULL,
     parent_work_item_id VARCHAR(50),
     owner_user_id VARCHAR(50) NOT NULL,

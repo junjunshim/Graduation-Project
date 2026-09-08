@@ -136,6 +136,7 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'WORK_ITEM',
         'id', w.work_item_id,
+        'display_id', w.display_id,
         'parent_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
         'owner_user_id', w.owner_user_id,
@@ -275,6 +276,7 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'WORK_ITEM',
         'id', w.work_item_id,
+        'display_id', w.display_id,
         'parent_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
         'owner_user_id', w.owner_user_id,
@@ -578,6 +580,7 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'WORK_ITEM_DETAIL',
         'work_item_id', w.work_item_id,
+        'display_id', w.display_id,
         'parent_work_item_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
         'owner_user_id', w.owner_user_id,
@@ -1076,6 +1079,7 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'WORK_ITEM',
         'id', w.work_item_id,
+        'display_id', w.display_id,
         'parent_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
         'owner_user_id', w.owner_user_id,

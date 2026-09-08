@@ -59,7 +59,7 @@ void WorkItemController::createWorkItem(const HttpRequestPtr &req, std::function
     auto dbClient = drogon::app().getDbClient();
     
     // DB 함수 호출 SQL
-    std::string sql = "SELECT * from create_work_item($1, $2, $3, $4, $5, $6, $7,$8, $9, $10, $11, $12, $13, $14)";
+    std::string sql = "SELECT * from create_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)";
     
     // DB 함수 비동기 실행
     dbClient->execSqlAsync(

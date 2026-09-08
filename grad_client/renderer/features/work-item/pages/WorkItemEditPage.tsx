@@ -21,6 +21,7 @@ function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
     title: item?.title ?? '',
     parentWorkItemId: item?.parentWorkItemId ?? '',
     description: item?.description ?? '',
+    hidden: Boolean(item?.hidden),
     status: item?.status ?? 'todo',
     priority: String(item?.priority ?? 3),
     weight: String(item?.weight ?? 1),

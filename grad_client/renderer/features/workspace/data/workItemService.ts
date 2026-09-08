@@ -108,6 +108,8 @@ export async function createWorkItem(payload: CreateWorkItemRequest) {
     ownerUserId: ownerUser.userId,
     title,
     description: payload.description?.trim() ?? '',
+    category: payload.category?.trim() || undefined,
+    hidden: payload.hidden ?? false,
     status: payload.status ?? 'todo',
     priority,
     weight,

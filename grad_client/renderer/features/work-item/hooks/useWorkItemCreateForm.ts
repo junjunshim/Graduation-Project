@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import type { WorkItemStatus } from '../../workspace/model/types'
-import type { WorkItemTagId } from '../../workspace/model/workItemTags'
 
 export type WorkItemCreateFormState = {
-  categoryId: WorkItemTagId | ''
+  categoryId: string
   ownerNodeId: string
   ownerUserId: string
   title: string
   parentWorkItemId: string
   description: string
+  hidden: boolean
   status: WorkItemStatus
   priority: string
   weight: string
@@ -26,6 +26,7 @@ const initialForm: WorkItemCreateFormState = {
   title: '',
   parentWorkItemId: '',
   description: '',
+  hidden: false,
   status: 'todo',
   priority: '3',
   weight: '1',
@@ -43,9 +44,9 @@ export function useWorkItemCreateForm(userId?: string) {
       userId,
       selectedNodeId,
       undefined,
-      { enforceServerCreateContract },
+      { enforceServerCreateContract, isHidden: form.hidden },
     ),
-    [enforceServerCreateContract, selectedNodeId, userId],
+    [enforceServerCreateContract, form.hidden, selectedNodeId, userId],
   )
 
   useEffect(() => {

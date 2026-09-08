@@ -1,30 +1,21 @@
-import { Link, useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceTasksTab } from '../../workspace/components/WorkspaceTasksTab'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
-import { WorkItemCreatePage } from './WorkItemCreatePage'
 import styles from './WorkItemsPage.module.css'
-
-type WorkItemsView = 'list' | 'create'
-
-type WorkItemsTab = {
-  label: string
-  to: string
-  view: WorkItemsView
-}
-
-const workItemsTabs: WorkItemsTab[] = [
-  { label: '목록', to: '/work-items', view: 'list' },
-  { label: '생성', to: '/work-items?view=create', view: 'create' },
-]
 
 export function WorkItemsPage() {
   const [searchParams] = useSearchParams()
   const requestedView = searchParams.get('view')
   const requestedStatus = searchParams.get('status')
   const requestedSchedule = searchParams.get('schedule')
-  const activeView: WorkItemsView = requestedView === 'create' ? 'create' : 'list'
+
+  // 기존 ?view=create 접근 시 /work-items/new 로 자동 리다이렉트
+  if (requestedView === 'create') {
+    return <Navigate to="/work-items/new" replace />
+  }
+
   const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const overview = currentUser ? getWorkspaceOverview(currentUser.userId, snapshot) : null
@@ -32,41 +23,16 @@ export function WorkItemsPage() {
   const visibleMembers = snapshot.users.filter((user) => visibleOwnerIds.has(user.userId))
 
   return (
-    <section className={[styles.page, activeView === 'create' ? styles.pageCreate : ''].filter(Boolean).join(' ')}>
-      {activeView !== 'create' ? (
-        <div className={styles.navigationBar}>
-          <nav className={styles.tabs} aria-label="업무 보기">
-            {workItemsTabs.map((tab) => {
-              const isActive = tab.view === activeView
-
-              return (
-                <Link
-                  key={tab.view}
-                  to={tab.to}
-                  className={[styles.tabLink, isActive ? styles.tabLinkActive : '']
-                    .filter(Boolean)
-                    .join(' ')}
-                  aria-current={isActive ? 'page' : undefined}
-                >
-                  {tab.label}
-                </Link>
-              )
-            })}
-          </nav>
-        </div>
-      ) : null}
-
+    <section className={styles.page}>
       <div className={styles.tabContent}>
-        {activeView === 'create' ? (
-          <WorkItemCreatePage embedded />
-        ) : overview ? (
+        {overview ? (
           <WorkspaceTasksTab
             key={[requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
             workItems={overview.visibleWorkItems}
             members={visibleMembers}
             workspaces={overview.visibleNodes}
             tableLabel="접근 가능한 전체 업무 목록"
-            createHref="/work-items?view=create"
+            createHref="/work-items/new"
             filterLayout="toolbar"
             showHeading={false}
             initialStatus={requestedStatus}

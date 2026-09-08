@@ -32,10 +32,10 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean, searc
   if (pathname === '/work-items/new') {
     return {
       section: 'Work Item',
-      title: '새 업무 등록',
-      description: '조직, 담당자, 일정, 진행 속성을 하나의 페이지에서 작성합니다.',
-      actionLabel: '조직 관리',
-      actionTo: '/org/manage',
+      title: '업무 생성',
+      description: '업무를 생성해보세요.',
+      actionLabel: '업무 목록',
+      actionTo: '/work-items',
     }
   }
 

@@ -199,6 +199,8 @@ export type CreateWorkItemRequest = {
   title: string
   parentWorkItemId?: string
   description?: string
+  category?: string
+  hidden?: boolean
   status?: WorkItemStatus
   priority?: number
   weight?: number
@@ -211,6 +213,8 @@ export type UpdateWorkItemRequest = {
   workItemId: string
   title?: string
   description?: string
+  category?: string
+  hidden?: boolean
   status?: WorkItemStatus
   priority?: number
   weight?: number
@@ -315,4 +319,5 @@ export type WorkItemComposerContext = {
   pathLabel: string
   assignableUsers: UserRecord[]
   availableParentItems: WorkItemRecord[]
+  existingCategories: string[]
 }

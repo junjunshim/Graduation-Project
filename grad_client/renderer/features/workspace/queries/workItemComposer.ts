@@ -4,6 +4,7 @@ import { getNextGeneratedWorkItemId } from '../data/workItemService'
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 import {
+  getNodeExistingCategories,
   getServerAssignableUsers,
   getServerAvailableParentItems,
   getServerCreatableNodeIds,
@@ -11,6 +12,7 @@ import {
 
 type WorkItemComposerOptions = {
   enforceServerCreateContract?: boolean
+  isHidden?: boolean
 }
 
 export function getWorkItemComposerContext(
@@ -39,7 +41,7 @@ export function getWorkItemComposerContext(
 
   const assignableUsers = selectedNode
     ? options.enforceServerCreateContract
-      ? getServerAssignableUsers(selectedNode.id, snapshot)
+      ? getServerAssignableUsers(selectedNode.id, snapshot, options.isHidden)
       : (() => {
         const userIds = Array.from(
           new Set(
@@ -64,9 +66,25 @@ export function getWorkItemComposerContext(
   const availableParentItems = selectedNode
     ? sortWorkspaceWorkItems(
         options.enforceServerCreateContract && resolvedUserId
-          ? getServerAvailableParentItems(resolvedUserId, selectedNode.path, snapshot)
-          : snapshot.workItems.filter((item) => selectedNode.path.includes(item.ownerNodeId)),
+          ? getServerAvailableParentItems(resolvedUserId, selectedNode.id, snapshot)
+          : snapshot.workItems.filter((item) => {
+              const allowedNodeIds = new Set<number>([selectedNode.id])
+              if (selectedNode.parentNodeId) allowedNodeIds.add(selectedNode.parentNodeId)
+              return allowedNodeIds.has(item.ownerNodeId)
+            }),
       )
+    : []
+
+  const existingCategories = selectedNode
+    ? options.enforceServerCreateContract
+      ? getNodeExistingCategories(selectedNode.id, snapshot)
+      : Array.from(
+          new Set(
+            snapshot.workItems
+              .filter((item) => item.ownerNodeId === selectedNode.id && item.category?.trim())
+              .map((item) => item.category!.trim()),
+          ),
+        ).sort((a, b) => a.localeCompare(b, 'ko'))
     : []
 
   return {
@@ -76,5 +94,6 @@ export function getWorkItemComposerContext(
     pathLabel: selectedNode ? getNodePathLabel(selectedNode.id, snapshot.nodes) : '경로 없음',
     assignableUsers,
     availableParentItems,
+    existingCategories,
   }
 }

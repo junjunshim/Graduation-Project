@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { createWorkItem } from '../../workspace/data/workItemService'
 import { isServerDataSource } from '../../workspace/data/workspaceMode'
@@ -10,11 +10,7 @@ import { useWorkItemCreateForm } from '../hooks/useWorkItemCreateForm'
 import { getWorkItemDateRangeError } from '../model/workItemFormValidation'
 import styles from '../styles/WorkItemCreatePage.module.css'
 
-type WorkItemCreatePageProps = {
-  embedded?: boolean
-}
-
-export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps) {
+export function WorkItemCreatePage() {
   const navigate = useNavigate()
   const currentUser = getCurrentUser()
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
@@ -73,6 +69,8 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
         title: form.title,
         parentWorkItemId: form.parentWorkItemId || undefined,
         description: form.description,
+        category: form.categoryId || undefined,
+        hidden: form.hidden,
         status: form.status,
         priority: Number(form.priority),
         weight: Number(form.weight),
@@ -86,7 +84,8 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
         return
       }
 
-      navigate(embedded ? '/work-items' : '/dashboard')
+      // 업무 생성 성공 시 해당 업무 상세 페이지 또는 목록으로 이동
+      navigate(`/work-items/${encodeURIComponent(activeComposer.suggestedWorkItemId)}`)
     } catch (error) {
       setFeedback({
         tone: 'error',
@@ -98,24 +97,24 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
   }
 
   return (
-    <section className={[styles.page, embedded ? styles.pageEmbedded : ''].filter(Boolean).join(' ')}>
-      {!embedded ? (
-        <header className={styles.pageIntro}>
-          <p className={styles.eyebrow}>New Page</p>
-          <h2 className={styles.title}>새 업무를 문서처럼 작성하세요.</h2>
-          <p className={styles.description}>
-            담당 조직, 담당자, 일정, 진행 속성을 한 페이지에서 작성하고 바로 업무를 생성할 수 있습니다.
-          </p>
-        </header>
-      ) : null}
+    <div className={styles.page}>
+      {/* 상단 브레드크럼 및 네비게이션 */}
+      <div className={styles.breadcrumbRow}>
+        <Link to="/work-items" className={styles.backLink}>
+          <span>←</span> 업무 목록으로
+        </Link>
+        <span className={styles.breadcrumbDivider}>/</span>
+        <span className={styles.currentBreadcrumb}>새 업무 작성</span>
+      </div>
 
-      <div className={[styles.layout, embedded ? styles.layoutEmbedded : ''].filter(Boolean).join(' ')}>
-        <section className={[styles.editorPanel, embedded ? styles.editorPanelEmbedded : ''].filter(Boolean).join(' ')}>
+      {/* 메인 레이아웃 (좌: 폼 카드 그룹, 우: 실시간 요약 사이드바) */}
+      <div className={styles.layout}>
+        <main className={styles.mainContent}>
           <WorkItemCreateForm
             composer={activeComposer}
             form={form}
-            categoryRequired={!isServerMode}
-            categorySupported={!isServerMode}
+            categoryRequired={false}
+            categorySupported={true}
             submitting={submitting}
             feedback={feedback ?? (serverAvailabilityMessage
               ? { tone: 'error', message: serverAvailabilityMessage }
@@ -125,14 +124,12 @@ export function WorkItemCreatePage({ embedded = false }: WorkItemCreatePageProps
             onCancel={() => navigate('/work-items')}
             onFieldChange={setField}
           />
-        </section>
+        </main>
 
-        {!embedded ? (
-          <aside className={styles.sidebar}>
-            <WorkItemCreateSidebar composer={activeComposer} />
-          </aside>
-        ) : null}
+        <aside className={styles.sidebar}>
+          <WorkItemCreateSidebar composer={activeComposer} form={form} />
+        </aside>
       </div>
-    </section>
+    </div>
   )
 }

@@ -10,6 +10,8 @@ export function createWorkItemUpdatePayload(
 
   if (current.title !== initial.title) payload.title = current.title
   if (current.description !== initial.description) payload.description = current.description
+  if (current.categoryId !== initial.categoryId) payload.category = current.categoryId || undefined
+  if (current.hidden !== initial.hidden) payload.hidden = current.hidden
   if (current.status !== initial.status) payload.status = current.status
   if (current.priority !== initial.priority) payload.priority = Number(current.priority)
   if (current.weight !== initial.weight) payload.weight = Number(current.weight)

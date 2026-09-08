@@ -22,6 +22,7 @@ import styles from './AppShell.module.css'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'grad-client-sidebar-collapsed'
 const SECTION_HEADING_ROUTES = new Set([
   '/work-items',
+  '/work-items/new',
   '/calendar',
   '/documents',
   '/files',

@@ -780,6 +780,7 @@ export function WorkspacePage() {
         />
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
+          createHref={overview.rootNode ? `/work-items/new?nodeId=${overview.rootNode.id}` : '/work-items/new'}
           workItems={overview.visibleWorkItems}
           members={snapshot.users}
           workspaces={overview.visibleNodes}
@@ -872,7 +873,7 @@ export function WorkspacePage() {
                   ))}
                 </div>
               </div>
-              <Link to="/work-items/new" className={styles.roundAction}>
+              <Link to={overview.rootNode ? `/work-items/new?nodeId=${overview.rootNode.id}` : '/work-items/new'} className={styles.roundAction}>
                 <Icon name="plus" size={14} />
                 <span>새 업무</span>
               </Link>

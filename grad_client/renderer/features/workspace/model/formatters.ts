@@ -198,3 +198,14 @@ export function formatWorkspaceTimestamp(value: string) {
   const tokens = resolveTimestampTokens(normalizedValue)
   return tokens ? formatTimestampTokens(tokens) : normalizedValue
 }
+
+/**
+ * 업무 화면 표시용 코드 반환 (displayId가 존재하면 WI-{displayId}, 없으면 기존 workItemId)
+ */
+export function getWorkItemDisplayCode(item?: { displayId?: number; workItemId: string } | null): string {
+  if (!item) return ''
+  if (typeof item.displayId === 'number' && item.displayId > 0) {
+    return `WI-${item.displayId}`
+  }
+  return item.workItemId
+}

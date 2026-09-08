@@ -102,8 +102,13 @@ export async function createWorkItem(payload: CreateWorkItemRequest) {
     }
   }
 
+  const nodeWorkItems = db.workItems.filter((item) => item.ownerNodeId === payload.ownerNodeId)
+  const maxDisplayId = nodeWorkItems.reduce((max, item) => Math.max(max, item.displayId ?? 0), 0)
+  const displayId = maxDisplayId + 1
+
   db.workItems.push({
     workItemId,
+    displayId,
     ownerNodeId: payload.ownerNodeId,
     ownerUserId: ownerUser.userId,
     title,

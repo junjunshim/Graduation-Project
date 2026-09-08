@@ -51,6 +51,7 @@ export function getServerLoginTokens(response: ServerLoginResponse): ServerLogin
 export type ServerContextItem = {
   type?: string
   id?: string | number
+  display_id?: string | number
   node_id?: string | number
   node_type?: string
   parent_id?: string | number | null

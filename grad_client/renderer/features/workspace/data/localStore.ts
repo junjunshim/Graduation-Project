@@ -262,6 +262,7 @@ function normalizeDb(
   rawDb.workItems.forEach((entry, index) => {
     const item = entry as Record<string, unknown>
     const workItemId = String(item.workItemId ?? item.work_item_id ?? '')
+    const displayId = Number(item.displayId ?? item.display_id)
     const ownerNodeId = Number(item.ownerNodeId ?? item.owner_node_id)
     const ownerUserId = String(item.ownerUserId ?? item.owner_user_id ?? '')
 
@@ -309,6 +310,7 @@ function normalizeDb(
 
     workItems.push({
       workItemId,
+      ...(Number.isInteger(displayId) && displayId > 0 ? { displayId } : {}),
       ownerNodeId,
       ownerUserId,
       title: String(item.title ?? workItemId),

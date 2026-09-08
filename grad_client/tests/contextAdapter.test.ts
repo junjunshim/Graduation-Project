@@ -2,6 +2,22 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseServerContextItems } from '../renderer/features/workspace/data/server/apiTypes.js'
 import { normalizeServerContext } from '../renderer/features/workspace/data/server/contextAdapter.js'
+import { getWorkItemDisplayCode } from '../renderer/features/workspace/model/formatters.js'
+
+test('server display IDs reach the UI without replacing the internal work item ID', () => {
+    for (const displayValue of [7, '7']) {
+      const items = parseServerContextItems([
+        { type: 'NODE', id: 20, node_type: 'TEAM', title: 'Team' },
+        { type: 'WORK_ITEM', id: 'WI-104', owner_node_id: 20, display_id: displayValue },
+      ])
+      const result = normalizeServerContext(items, 'viewer@example.com')
+      const item = result.workspace.workItems[0]
+
+      assert.equal(item?.workItemId, 'WI-104')
+      assert.equal(item?.displayId, 7)
+      assert.equal(getWorkItemDisplayCode(item), 'WI-7')
+    }
+})
 
 test('checked-in compact context response is normalized without inventing the current user as owner', () => {
   const result = normalizeServerContext(

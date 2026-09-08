@@ -228,6 +228,9 @@
 }
 
 .treeCardTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--axis-text-primary, #10172d);
   font-size: 0.9rem;
   font-weight: 750;
@@ -240,6 +243,20 @@
 .treeCardTitle:hover {
   color: var(--axis-brand-primary, #625cf2);
   text-decoration: underline;
+}
+
+.taskCodeBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--axis-surface-muted, #f1f5f9);
+  color: var(--axis-text-secondary, #475569);
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid var(--axis-line-default, #e2e8f0);
+  line-height: 1.3;
+  flex-shrink: 0;
 }
 
 .treeCardDescription {
@@ -738,7 +755,9 @@
 }
 
 .taskTitle {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
   color: var(--text-primary);
   font-size: 0.86rem;
@@ -751,6 +770,12 @@
 .taskTitle:hover {
   color: var(--accent-blue);
   text-decoration: underline;
+}
+
+.taskTitleText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .taskDescription {

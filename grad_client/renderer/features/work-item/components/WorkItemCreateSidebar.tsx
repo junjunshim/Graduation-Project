@@ -58,8 +58,8 @@ export function WorkItemCreateSidebar({ composer, form }: WorkItemCreateSidebarP
         <h4 className={styles.sideCardTitle}>업무 등록 정보</h4>
         <div className={styles.metaList}>
           <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>업무 고유 식별자</span>
-            <span className={styles.metaValueBadge}>{composer.suggestedWorkItemId}</span>
+            <span className={styles.metaLabel}>업무 식별 코드</span>
+            <strong className={styles.metaValue}>업무 생성시, 자동으로 등록됩니다.</strong>
           </div>
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>선택된 조직</span>

@@ -649,7 +649,15 @@ function cloneRoles(roles: RoleAssignmentRecord[]) {
 }
 
 function cloneWorkItems(workItems: WorkItemRecord[]) {
-  return workItems.map((item) => ({ ...item }))
+  const nodeCounters = new Map<number, number>()
+  return workItems.map((item) => {
+    const nextCounter = (nodeCounters.get(item.ownerNodeId) ?? 0) + 1
+    nodeCounters.set(item.ownerNodeId, nextCounter)
+    return {
+      ...item,
+      displayId: item.displayId ?? nextCounter,
+    }
+  })
 }
 
 export function createTeam404WorkspaceSeed(): WorkspaceDatabase {

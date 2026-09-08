@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react'
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { createWorkItem } from '../../workspace/data/workItemService'
 import { isServerDataSource } from '../../workspace/data/workspaceMode'
@@ -12,11 +12,14 @@ import styles from '../styles/WorkItemCreatePage.module.css'
 
 export function WorkItemCreatePage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const requestedNodeId = Number(searchParams.get('nodeId'))
+  const initialNodeId = Number.isInteger(requestedNodeId) && requestedNodeId > 0 ? requestedNodeId : undefined
   const currentUser = getCurrentUser()
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const isServerMode = isServerDataSource()
-  const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId)
+  const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId, initialNodeId)
 
   if (!currentUser || !composer) {
     return null

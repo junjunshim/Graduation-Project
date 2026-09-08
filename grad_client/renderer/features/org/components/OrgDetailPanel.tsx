@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatWorkspaceDate } from '../../workspace/model/formatters'
+import { formatWorkspaceDate, getWorkItemDisplayCode } from '../../workspace/model/formatters'
 import { getNodeTypeLabel, getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
 import type { SelectedNodeDetail, WorkItemRecord } from '../../workspace/model/types'
 import styles from '../styles/OrgManagePage.module.css'
@@ -122,7 +122,7 @@ export function OrgDetailPanel({ selectedDetail }: OrgDetailPanelProps) {
                 <div className={styles.rowCopy}>
                   <strong>{item.title}</strong>
                   <p className={styles.rowMeta}>
-                    {item.workItemId} · 진행률 {item.progress}% · 우선순위 {item.priority} · 마감{' '}
+                    {getWorkItemDisplayCode(item)} · 진행률 {item.progress}% · 우선순위 {item.priority} · 마감{' '}
                     {formatWorkspaceDate(item.dueDate)}
                   </p>
                 </div>

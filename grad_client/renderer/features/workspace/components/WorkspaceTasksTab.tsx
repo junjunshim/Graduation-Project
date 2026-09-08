@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
-import { formatWorkspaceShortDate } from '../model/formatters'
+import { formatWorkspaceShortDate, getWorkItemDisplayCode } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone, getCategoryBadgeStyle } from '../model/labels'
 import type { OrganizationNodeRecord, UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
@@ -142,7 +142,8 @@ function TaskTreeNodeCard({
 
             <div className={styles.treeCardTitleGroup}>
               <Link to={`/work-items/${item.workItemId}`} className={styles.treeCardTitle}>
-                {item.title}
+                <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+                <span className={styles.taskTitleText}>{item.title}</span>
               </Link>
               {item.description ? (
                 <p className={styles.treeCardDescription}>{item.description}</p>
@@ -991,7 +992,8 @@ export function WorkspaceTasksTab({
 
                         <span role="cell" className={styles.titleCell}>
                           <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
-                            {item.title}
+                            <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+                            <span className={styles.taskTitleText}>{item.title}</span>
                           </Link>
                         </span>
 

@@ -457,8 +457,14 @@ export function normalizeServerContext(
         ? toOptionalString(item.due_date)
         : referenceWorkItem?.dueDate
 
+    const displayId =
+      item.display_id !== undefined
+        ? toNumberValue(item.display_id, 0)
+        : referenceWorkItem?.displayId
+
     workItems.push({
       workItemId,
+      ...(displayId && displayId > 0 ? { displayId } : {}),
       ownerNodeId,
       ownerUserId: owner?.userId ?? currentUser?.userId ?? UNKNOWN_OWNER_USER_ID,
       title: toOptionalString(item.title) ?? referenceWorkItem?.title ?? workItemId,

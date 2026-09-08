@@ -10,7 +10,11 @@ import { fetchWorkItemFileContent } from '../../workspace/data/fileService'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { addWorkItemComment, fetchWorkItemDetail } from '../../workspace/data/workItemService'
 import { subscribeToWorkspaceCache } from '../../workspace/data/workspaceCacheEvents'
-import { formatWorkspaceDate, formatWorkspaceTimestamp } from '../../workspace/model/formatters'
+import {
+  formatWorkspaceDate,
+  formatWorkspaceTimestamp,
+  getWorkItemDisplayCode,
+} from '../../workspace/model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
 import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord, WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
@@ -374,7 +378,7 @@ export function WorkItemDetailPage() {
         {/* 행 1: 업무 코드, 업무 명, 카테고리, 우선순위 */}
         <div className={styles.propertyRow}>
           <DetailProperty icon="cube" label="업무 코드">
-            <span className={styles.workItemCodeText}>{item.workItemId}</span>
+            <span className={styles.workItemCodeText}>{getWorkItemDisplayCode(item)}</span>
           </DetailProperty>
 
           <DetailProperty icon="fileText" label="업무 명">
@@ -444,7 +448,7 @@ export function WorkItemDetailPage() {
                   title={`상위 업무로 이동: ${parentTitle}`}
                 >
                   <Icon name="arrowRight" size={12} className={styles.parentIcon} />
-                  <span className={styles.parentCode}>[{parentId}]</span>
+                  <span className={styles.parentCode}>[{getWorkItemDisplayCode(parentWorkItem ?? { workItemId: parentId })}]</span>
                   <span className={styles.parentTitle}>{parentTitle}</span>
                 </Link>
               ) : (
@@ -465,7 +469,7 @@ export function WorkItemDetailPage() {
                       title={`하위 업무로 이동: ${child.title}`}
                     >
                       <Icon name="arrowRight" size={12} className={styles.childIcon} />
-                      <span className={styles.childCode}>[{child.workItemId}]</span>
+                      <span className={styles.childCode}>[{getWorkItemDisplayCode(child)}]</span>
                       <span className={styles.childTitle}>{child.title}</span>
                     </Link>
                   ))}

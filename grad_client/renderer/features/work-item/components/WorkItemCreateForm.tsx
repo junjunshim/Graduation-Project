@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getNodeVisualMetadata } from '../../workspace/queries/workspaceDirectory'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../../workspace/model/labels'
+import { getWorkItemDisplayCode } from '../../workspace/model/formatters'
 import { WORK_ITEM_STATUS_OPTIONS } from '../../workspace/model/options'
 import type { WorkItemComposerContext } from '../../workspace/model/types'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
@@ -223,7 +224,7 @@ export function WorkItemCreateForm({
                 <option value="">(최상위 업무 - 상위 업무 없음)</option>
                 {composer.availableParentItems.map((parent) => (
                   <option key={parent.workItemId} value={parent.workItemId}>
-                    {parent.hidden ? '🔒 [숨김] ' : ''}[{parent.workItemId}] {parent.title}
+                    {parent.hidden ? '🔒 [숨김] ' : ''}[{getWorkItemDisplayCode(parent)}] {parent.title}
                   </option>
                 ))}
               </select>

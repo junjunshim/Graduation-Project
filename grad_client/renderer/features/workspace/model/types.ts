@@ -38,6 +38,7 @@ export type RoleAssignmentRecord = {
 
 export type WorkItemRecord = {
   workItemId: string
+  displayId?: number
   ownerNodeId: number
   ownerUserId: string
   title: string
@@ -314,6 +315,7 @@ export type SelectedWorkItemDetail = {
 
 export type WorkItemComposerContext = {
   suggestedWorkItemId: string
+  suggestedDisplayCode: string
   availableNodes: OrganizationNodeRecord[]
   selectedNode: OrganizationNodeRecord | null
   pathLabel: string

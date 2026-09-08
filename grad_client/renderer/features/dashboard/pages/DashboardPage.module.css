@@ -1512,7 +1512,7 @@
   grid-column: span 8;
   grid-template-rows: auto minmax(0, 1fr);
   align-content: start;
-  padding-top: 1rem;
+  padding-top: 1rem !important;
 }
 
 .calendarPanel {

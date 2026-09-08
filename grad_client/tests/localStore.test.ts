@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { normalizeServerWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
 import { normalizeServerContext } from '../renderer/features/workspace/data/server/contextAdapter.js'
+import { getWorkItemDisplayCode } from '../renderer/features/workspace/model/formatters.js'
 
 test('compact server work items survive context adapter and cache normalization round trips', () => {
   const adapted = normalizeServerContext(
@@ -16,6 +17,7 @@ test('compact server work items survive context adapter and cache normalization 
       {
         type: 'WORK_ITEM',
         id: 'WI-ROUND-TRIP',
+        display_id: 7,
         parent_id: 10,
         title: 'Round Trip Work',
         status: 'doing',
@@ -30,6 +32,9 @@ test('compact server work items survive context adapter and cache normalization 
   const owner = cached.users.find((candidate) => candidate.userId === item?.ownerUserId)
 
   assert.ok(item)
+  assert.equal(item.displayId, 7)
+  assert.equal(item.workItemId, 'WI-ROUND-TRIP')
+  assert.equal(getWorkItemDisplayCode(item), 'WI-7')
   assert.equal(item.ownerUserId, 'server-owner-unknown')
   assert.equal(owner?.name, '담당자 미확인')
   assert.equal(owner?.email, 'unknown-owner@local.invalid')

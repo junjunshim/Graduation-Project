@@ -87,8 +87,15 @@ export function getWorkItemComposerContext(
         ).sort((a, b) => a.localeCompare(b, 'ko'))
     : []
 
+  const nodeWorkItems = selectedNode
+    ? snapshot.workItems.filter((item) => item.ownerNodeId === selectedNode.id)
+    : []
+  const maxDisplayId = nodeWorkItems.reduce((max, item) => Math.max(max, item.displayId ?? 0), 0)
+  const suggestedDisplayCode = `WI-${maxDisplayId + 1}`
+
   return {
     suggestedWorkItemId: getNextGeneratedWorkItemId(snapshot),
+    suggestedDisplayCode,
     availableNodes,
     selectedNode,
     pathLabel: selectedNode ? getNodePathLabel(selectedNode.id, snapshot.nodes) : '경로 없음',

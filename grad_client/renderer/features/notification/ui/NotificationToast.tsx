@@ -7,6 +7,7 @@ import {
   type LiveNotificationPayload,
 } from '../../workspace/data/workspaceCacheEvents'
 import { navigateNotification } from './navigateNotification'
+import { subscribeToToasts } from '../data/toastEvents'
 import styles from './NotificationToast.module.css'
 
 type NotificationToastContainerProps = {
@@ -22,7 +23,7 @@ export function NotificationToastContainer({ userId }: NotificationToastContaine
   const navigate = useNavigate()
 
   useEffect(() => {
-    const unsubscribe = subscribeToLiveNotifications((payload) => {
+    const addToast = (payload: LiveNotificationPayload) => {
       const toastId = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
       const newToast: ToastMessage = { ...payload, toastId }
 
@@ -32,9 +33,14 @@ export function NotificationToastContainer({ userId }: NotificationToastContaine
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.toastId !== toastId))
       }, 4000)
-    })
+    }
+    const unsubscribe = subscribeToLiveNotifications(addToast)
+    const unsubscribeToasts = subscribeToToasts(addToast)
 
-    return unsubscribe
+    return () => {
+      unsubscribe()
+      unsubscribeToasts()
+    }
   }, [])
 
   const handleDismiss = (toastId: string, e?: React.MouseEvent) => {

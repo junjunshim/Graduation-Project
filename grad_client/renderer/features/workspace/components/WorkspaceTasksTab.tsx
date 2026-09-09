@@ -8,7 +8,7 @@ import { getWorkItemStatusLabel, getWorkItemStatusTone, getCategoryBadgeStyle } 
 import type { OrganizationNodeRecord, UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
-import { getWorkItemDueScheduleInfo } from '../model/workItemDue'
+import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItemDue'
 import type { DueScheduleType } from '../model/workItemDue'
 import { getNodeVisualMetadata } from '../queries/workspaceDirectory'
 import styles from './WorkspaceTasksTab.module.css'
@@ -447,7 +447,9 @@ export function WorkspaceTasksTab({
       const matchesSchedule =
         scheduleFilter === 'all'
           ? true
-          : dueScheduleInfo.scheduleType === scheduleFilter
+          : scheduleFilter === 'none'
+            ? parseWorkspaceDay(item.dueDate) === null
+            : dueScheduleInfo.scheduleType === scheduleFilter
       const matchesPriority =
         priorityFilter === 'all' || getPriorityMeta(item.priority).filter === priorityFilter
       const matchesTag = tagFilter === 'all' || getWorkItemTag(item)?.id === tagFilter

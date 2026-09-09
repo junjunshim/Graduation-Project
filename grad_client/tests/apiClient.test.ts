@@ -97,6 +97,57 @@ test('api client normalizes the base URL and serializes JSON bodies', async () =
   }
 })
 
+test('multipart upload preserves the file and internal work item ID without a JSON content type', async () => {
+  const originalFetch = globalThis.fetch
+  const formData = new FormData()
+  formData.append('work_item_id', 'WI-104')
+  formData.append('file', new File(['uploaded content'], 'report.txt', { type: 'text/plain' }))
+  globalThis.fetch = async (_input, init) => {
+    assert.equal(init?.method, 'POST')
+    assert.equal(new Headers(init?.headers).has('Content-Type'), false)
+    assert.equal(init?.body, formData)
+    const request = new Request('http://localhost/upload', init)
+    assert.match(request.headers.get('Content-Type') ?? '', /^multipart\/form-data; boundary=/)
+    const received = await request.formData()
+    assert.equal(received.get('work_item_id'), 'WI-104')
+    const file = received.get('file') as File
+    assert.equal(file.name, 'report.txt')
+    assert.equal(await file.text(), 'uploaded content')
+    return new Response(JSON.stringify({ status: 'success' }), { status: 201 })
+  }
+  try {
+    const result = await apiRequest<{ status: string }>('/workItems/files/upload', {
+      method: 'POST', formData, includeToken: false,
+    })
+    assert.equal(result.status, 'success')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('binary downloads preserve bytes and reject server errors', async () => {
+  const originalFetch = globalThis.fetch
+  const bytes = new Uint8Array([0, 255, 128, 13, 10, 80, 75])
+  globalThis.fetch = async () => new Response(bytes, {
+    status: 200, headers: { 'Content-Type': 'application/octet-stream' },
+  })
+  try {
+    const blob = await apiRequest<Blob>('/workItems/files/download?file_id=12', {
+      responseType: 'blob', includeToken: false,
+    })
+    assert.deepEqual(new Uint8Array(await blob.arrayBuffer()), bytes)
+    globalThis.fetch = async () => new Response(JSON.stringify({ status: 'error', message: '접근 권한 없음' }), {
+      status: 403, headers: { 'Content-Type': 'application/json' },
+    })
+    await assert.rejects(
+      apiRequest('/workItems/files/download?file_id=12', { responseType: 'blob', includeToken: false }),
+      (error: unknown) => error instanceof ApiClientError && error.status === 403,
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('GET and 204 responses do not require a JSON body', async () => {
   const originalFetch = globalThis.fetch
 

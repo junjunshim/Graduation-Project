@@ -8,6 +8,8 @@ import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { WorkItemFileRecord, WorkItemRecord } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import { FileContentViewerModal } from './FileContentViewerModal'
+import { WorkItemFileUpload } from './WorkItemFileUpload'
+import { useFileContextMenu } from './useFileContextMenu'
 import styles from './WorkspaceFilesTab.module.css'
 
 type WorkspaceFilesTabProps = {
@@ -39,38 +41,6 @@ function getFileIcon(filename: string) {
   return 'fileText'
 }
 
-// 파일이 등록되어 있지 않은 업무를 위한 기본 산출물 파일 데이터 생성
-function getMockFilesForWorkItem(item: WorkItemRecord): WorkItemFileRecord[] {
-  const tag = getWorkItemTag(item)
-  const tagLabel = tag?.label ?? '업무'
-  const dateStr = item.createdAt || new Date().toISOString()
-
-  return [
-    {
-      id: Number(item.workItemId.replace(/\D/g, '') || '1') * 100 + 1,
-      workItemId: item.workItemId,
-      originalFileName: `[${tagLabel}] ${item.title}_요구사항정의서.md`,
-      fileSize: 1024 * 450 + (item.title.length * 1024 * 25),
-      mimeType: 'text/markdown',
-      uploaderName: '담당자',
-      uploaderUserId: item.ownerUserId,
-      uploaderEmail: '',
-      createdAt: dateStr,
-    },
-    {
-      id: Number(item.workItemId.replace(/\D/g, '') || '1') * 100 + 2,
-      workItemId: item.workItemId,
-      originalFileName: `${item.title}_산출물_명세서.txt`,
-      fileSize: 1024 * 180 + (item.title.length * 1024 * 12),
-      mimeType: 'text/plain',
-      uploaderName: '담당자',
-      uploaderUserId: item.ownerUserId,
-      uploaderEmail: '',
-      createdAt: dateStr,
-    },
-  ]
-}
-
 function getSampleDocumentContent(fileName: string, itemTitle: string) {
   return `# ${fileName}
 
@@ -100,6 +70,7 @@ function getSampleDocumentContent(fileName: string, itemTitle: string) {
 }
 
 export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabProps) {
+  const { openFileContextMenu, fileContextMenu } = useFileContextMenu()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(() => workItems[0]?.workItemId ?? null)
   const [viewLayout, setViewLayout] = useState<'grid' | 'table'>('grid')
@@ -110,17 +81,13 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
   const [isLoadingFile, setIsLoadingFile] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
 
-  // 각 업무별로 실제 등록된 파일 또는 모의 파일 매핑
+  // 각 업무별로 실제 등록된 파일만 매핑
   const filesByWorkItem = useMemo(() => {
     const map = new Map<string, WorkItemFileRecord[]>()
 
     workItems.forEach((item) => {
       const realFiles = files.filter((f) => f.workItemId === item.workItemId && !f.isDeleted)
-      if (realFiles.length > 0) {
-        map.set(item.workItemId, realFiles)
-      } else {
-        map.set(item.workItemId, getMockFilesForWorkItem(item))
-      }
+      map.set(item.workItemId, realFiles)
     })
 
     return map
@@ -198,6 +165,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
 
   return (
     <div className={styles.container}>
+      {fileContextMenu}
       {/* 상단 툴바 */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
@@ -219,6 +187,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
         </div>
 
         <div className={styles.toolbarRight}>
+          {selectedWorkItem ? <WorkItemFileUpload key={selectedWorkItem.workItemId} workItemId={selectedWorkItem.workItemId} workItemTitle={selectedWorkItem.title} /> : null}
           <SearchField
             label="파일 또는 폴더 검색"
             placeholder="파일 또는 폴더 검색..."
@@ -341,6 +310,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                       key={file.id}
                       className={styles.fileCard}
                       onClick={() => handleOpenFile(file)}
+                      onContextMenu={(event) => openFileContextMenu(event, file)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
@@ -387,6 +357,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                           key={file.id}
                           className={styles.fileTableRow}
                           onClick={() => handleOpenFile(file)}
+                          onContextMenu={(event) => openFileContextMenu(event, file)}
                           style={{ cursor: 'pointer' }}
                         >
                           <td className={styles.tdName}>

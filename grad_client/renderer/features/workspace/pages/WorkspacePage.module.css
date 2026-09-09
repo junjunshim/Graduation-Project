@@ -1260,7 +1260,7 @@
 
 .activityList {
   display: grid;
-  align-content: start;
+  align-content: normal;
   gap: clamp(0.24rem, 0.5vh, 0.45rem);
   height: 100%;
   min-width: 0;

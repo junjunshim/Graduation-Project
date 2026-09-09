@@ -7,6 +7,8 @@ const SERVER_EMAIL_STORAGE_KEY = 'grad-client-server-email'
 export type ApiRequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   body?: unknown
+  formData?: FormData
+  responseType?: 'json' | 'blob'
   includeToken?: boolean
   signal?: AbortSignal
   timeoutMs?: number
@@ -234,7 +236,7 @@ export async function apiRequest<ResponseBody>(
   const headers = new Headers()
   headers.set('Accept', 'application/json')
 
-  if (options.body !== undefined) {
+  if (options.body !== undefined && !options.formData) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -282,9 +284,13 @@ export async function apiRequest<ResponseBody>(
       headers,
       signal: controller.signal,
       credentials: 'omit',
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.formData
+        ? { body: options.formData }
+        : options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     })
-    payload = await parseResponseBody(response)
+    payload = options.responseType === 'blob' && response.ok
+      ? await response.blob()
+      : await parseResponseBody(response)
   } catch (error) {
     if (error instanceof ApiClientError) {
       throw error

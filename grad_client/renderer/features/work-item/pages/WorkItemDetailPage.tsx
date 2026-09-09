@@ -6,6 +6,8 @@ import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { formatActivityMessage } from '../../dashboard/model/activityFormatter'
 import { FileContentViewerModal } from '../../workspace/components/FileContentViewerModal'
+import { WorkItemFileUpload } from '../../workspace/components/WorkItemFileUpload'
+import { useFileContextMenu } from '../../workspace/components/useFileContextMenu'
 import { fetchWorkItemFileContent } from '../../workspace/data/fileService'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { addWorkItemComment, fetchWorkItemDetail } from '../../workspace/data/workItemService'
@@ -74,6 +76,7 @@ function formatFileSize(bytes: number) {
 }
 
 export function WorkItemDetailPage() {
+  const { openFileContextMenu, fileContextMenu } = useFileContextMenu()
   const { workItemId } = useParams()
   const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
@@ -565,12 +568,25 @@ export function WorkItemDetailPage() {
 
           {/* 첨부파일 */}
           <section className={styles.attachmentPanel}>
+            {fileContextMenu}
             <div className={styles.attachmentHeader}>
               <div className={styles.attachmentTitle}>
                 <Icon name="folder" size={15} />
                 <h3>첨부파일</h3>
                 <span className={styles.countBadge}>{allFiles.length}</span>
               </div>
+              <WorkItemFileUpload
+                key={item.workItemId}
+                workItemId={item.workItemId}
+                workItemTitle={item.title}
+                onUploaded={async () => {
+                  const result = await fetchWorkItemDetail(item.workItemId)
+                  setComments(result.comments)
+                  setServerFiles(result.files)
+                  setServerActivities(result.activities ?? [])
+                  setSnapshot(getOrgSnapshot())
+                }}
+              />
             </div>
 
             {allFiles.length === 0 ? (
@@ -581,11 +597,12 @@ export function WorkItemDetailPage() {
             ) : (
               <div className={styles.fileList}>
                 {allFiles.map((file) => (
+                  <div key={file.id} className={styles.fileEntry}>
                   <button
-                    key={file.id}
                     type="button"
                     className={styles.fileCard}
                     onClick={() => handleOpenFileViewer(file)}
+                    onContextMenu={(event) => openFileContextMenu(event, file)}
                     title="클릭하여 파일 내용 보기"
                   >
                     <div className={styles.fileIconBox}>
@@ -601,6 +618,7 @@ export function WorkItemDetailPage() {
                     </div>
                     <Icon name="chevronRight" size={14} className={styles.fileArrow} />
                   </button>
+                  </div>
                 ))}
               </div>
             )}

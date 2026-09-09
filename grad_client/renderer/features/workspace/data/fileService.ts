@@ -1,4 +1,5 @@
-import { getServerAccessToken } from './server/apiClient'
+import { apiRequest, getServerAccessToken } from './server/apiClient'
+import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
 import { isServerDataSource } from './workspaceMode'
 
@@ -11,6 +12,51 @@ export type CachedFileItem = {
 }
 
 const FILE_CACHE_PREFIX = 'grad-file-cache-'
+
+export async function downloadWorkItemFile(fileId: number, fileName: string): Promise<void> {
+  if (!isServerDataSource()) {
+    throw new Error('파일 다운로드는 서버 연결 모드에서 사용할 수 있습니다.')
+  }
+  const blob = await apiRequest<Blob>(`/workItems/files/download?file_id=${fileId}`, {
+    responseType: 'blob',
+    timeoutMs: 120_000,
+  })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  anchor.hidden = true
+  document.body.appendChild(anchor)
+  try {
+    anchor.click()
+  } finally {
+    anchor.remove()
+    globalThis.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  }
+}
+
+export async function uploadWorkItemFile(workItemId: string, file: File): Promise<void> {
+  if (!isServerDataSource()) {
+    throw new Error('파일 등록은 서버 연결 모드에서 사용할 수 있습니다.')
+  }
+  if (!workItemId.trim()) {
+    throw new Error('파일을 등록할 업무를 선택해 주세요.')
+  }
+  const formData = new FormData()
+  formData.append('work_item_id', workItemId)
+  formData.append('file', file)
+  const response = await apiRequest<unknown>('/workItems/files/upload', {
+    method: 'POST',
+    formData,
+    timeoutMs: 120_000,
+  })
+  if (!isServerStatusResponse(response)) {
+    throw new Error('파일 등록 응답 형식이 올바르지 않습니다.')
+  }
+  if (response.status === 'error') {
+    throw new Error(response.message || '파일을 등록하지 못했습니다.')
+  }
+}
 
 function getCachedFile(fileId: number): CachedFileItem | null {
   try {

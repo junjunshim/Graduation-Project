@@ -8,7 +8,6 @@ import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { WorkItemFileRecord, WorkItemRecord } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import { FileContentViewerModal } from './FileContentViewerModal'
-import { WorkItemFileUpload } from './WorkItemFileUpload'
 import { useFileContextMenu } from './useFileContextMenu'
 import styles from './WorkspaceFilesTab.module.css'
 
@@ -70,7 +69,7 @@ function getSampleDocumentContent(fileName: string, itemTitle: string) {
 }
 
 export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabProps) {
-  const { openFileContextMenu, fileContextMenu } = useFileContextMenu()
+  const { openFileContextMenu, openUploadContextMenu, fileContextMenu } = useFileContextMenu()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(() => workItems[0]?.workItemId ?? null)
   const [viewLayout, setViewLayout] = useState<'grid' | 'table'>('grid')
@@ -187,7 +186,6 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
         </div>
 
         <div className={styles.toolbarRight}>
-          {selectedWorkItem ? <WorkItemFileUpload key={selectedWorkItem.workItemId} workItemId={selectedWorkItem.workItemId} workItemTitle={selectedWorkItem.title} /> : null}
           <SearchField
             label="파일 또는 폴더 검색"
             placeholder="파일 또는 폴더 검색..."
@@ -293,7 +291,9 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
           ) : null}
 
           {/* 파일 리스트 영역 */}
-          <div className={styles.filesContent}>
+          <div className={styles.filesContent} onContextMenu={(event) => {
+            if (selectedWorkItem) openUploadContextMenu(event, selectedWorkItem)
+          }}>
             {activeFiles.length === 0 ? (
               <div className={styles.emptyFilesState}>
                 <Icon name="page" size={32} />

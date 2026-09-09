@@ -657,8 +657,9 @@ BEGIN
                     ) ORDER BY al.created_at DESC
                 )
                 FROM activity_logs al
-                WHERE (al.entity_type = 'WORK_ITEM' AND (al.entity_id = w.work_item_id OR al.target_name = w.title))
-                   OR (al.entity_type = 'COMMENT' AND (al.target_name LIKE 'Comment on ' || w.work_item_id || '%' OR al.entity_id IN (SELECT comment_id::VARCHAR FROM work_item_comments WHERE work_item_id = w.work_item_id)))
+                -- 표시 제목이나 ID 접두사가 아닌 실제 객체 ID로 소속 업무를 판별합니다.
+                WHERE (al.entity_type = 'WORK_ITEM' AND al.entity_id = w.work_item_id)
+                   OR (al.entity_type = 'COMMENT' AND al.entity_id IN (SELECT comment_id::VARCHAR FROM work_item_comments WHERE work_item_id = w.work_item_id))
                    OR (al.entity_type = 'FILE' AND al.entity_id IN (SELECT file_id::VARCHAR FROM work_item_files WHERE work_item_id = w.work_item_id))
             ), '[]'::jsonb
         )

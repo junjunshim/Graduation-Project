@@ -1,14 +1,13 @@
 .menu {
-  position: fixed;
+  composes: contextMenu from '../pages/WorkspaceEntryPage.module.css';
   z-index: 10000;
-  padding: 6px;
-  min-width: 150px;
-  background: var(--axis-surface-panel);
-  border: 1px solid var(--axis-line-default);
-  border-radius: var(--axis-radius-sm, 6px);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 15%);
 }
 
-.menu > button {
-  width: 100%;
+.item {
+  composes: contextMenuItem from '../pages/WorkspaceEntryPage.module.css';
+}
+
+.item:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }

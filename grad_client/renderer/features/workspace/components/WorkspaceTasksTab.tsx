@@ -12,6 +12,7 @@ import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItem
 import type { DueScheduleType } from '../model/workItemDue'
 import { getNodeVisualMetadata } from '../queries/workspaceDirectory'
 import styles from './WorkspaceTasksTab.module.css'
+import { useWorkItemContextMenu } from './useWorkItemContextMenu'
 
 type WorkspaceTasksTabProps = {
   workItems: WorkItemRecord[]
@@ -124,7 +125,7 @@ function TaskTreeNodeCard({
 
   return (
     <div className={styles.treeNodeContainer} style={{ '--tree-depth': depth } as React.CSSProperties}>
-      <div className={styles.treeCard}>
+      <div className={styles.treeCard} data-work-item-id={item.workItemId}>
         <div className={styles.treeCardMain}>
           <div className={styles.treeCardLeft}>
             {hasChildren ? (
@@ -309,6 +310,7 @@ export function WorkspaceTasksTab({
   initialStatus,
   initialSchedule,
 }: WorkspaceTasksTabProps) {
+  const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
   const [viewMode, setViewMode] = useState<TaskViewMode>('list')
   const [searchQuery, setSearchQuery] = useState('')
   const [workspaceFilter, setWorkspaceFilter] = useState('all')
@@ -550,9 +552,11 @@ export function WorkspaceTasksTab({
   return (
     <section
       className={styles.panel}
+      onContextMenu={onWorkItemContextMenu}
       aria-labelledby={showHeading ? 'workspace-tasks-title' : undefined}
       aria-label={showHeading ? undefined : tableLabel}
     >
+      {workItemContextMenu}
       {showHeading ? (
         <header className={styles.pageHeader}>
           <div className={styles.pageHeaderTitleGroup}>
@@ -980,6 +984,7 @@ export function WorkspaceTasksTab({
                     return (
                       <div
                         key={item.workItemId}
+                        data-work-item-id={item.workItemId}
                         className={[styles.taskRow, isSelected ? styles.taskRowSelected : ''].join(' ')}
                         role="row"
                       >

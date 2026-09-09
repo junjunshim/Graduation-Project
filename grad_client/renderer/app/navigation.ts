@@ -4,6 +4,7 @@ export type NavigationItem = {
   to: string
   label: string
   icon: IconName
+  disabled?: boolean
   activePathPrefix?: string
   activePathPrefixes?: string[]
 }
@@ -21,19 +22,15 @@ export const navigationItems: NavigationItem[] = [
     activePathPrefixes: ['/workspace', '/setup/top-node', '/setup/sub-node'],
   },
   {
-    to: '/work-items',
-    label: '업무',
-    icon: 'checkSquare',
+    to: '/channels',
+    label: '채널',
+    icon: 'messageCircle',
+    disabled: true,
   },
   {
     to: '/calendar',
     label: '캘린더',
     icon: 'calendar',
-  },
-  {
-    to: '/files',
-    label: '파일',
-    icon: 'folder',
   },
   {
     to: '/settings',

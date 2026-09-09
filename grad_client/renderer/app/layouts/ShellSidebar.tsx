@@ -1,22 +1,21 @@
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
-import type { WorkspaceOverview } from '../../features/workspace/model/types'
+import { SidebarFavorites } from './SidebarFavorites'
 import { navigationItems } from '../navigation'
 import styles from './AppShell.module.css'
 
 type ShellSidebarProps = {
-  overview: WorkspaceOverview
+  userId: string
   isCollapsed: boolean
   onToggleCollapsed: () => void
   onSignOut: () => void
 }
 
-export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignOut }: ShellSidebarProps) {
+export function ShellSidebar({ userId, isCollapsed, onToggleCollapsed, onSignOut }: ShellSidebarProps) {
   const location = useLocation()
   const expandSidebarLabel = '사이드바 펼치기'
   const collapseSidebarLabel = '사이드바 접기'
   const signOutLabel = '로그아웃'
-  const recentWorkItems = overview.recentWorkItems.slice(0, 4)
 
   return (
     <aside className={styles.sidebar}>
@@ -41,6 +40,21 @@ export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignO
                   <span className={styles.navCopy}>{item.label}</span>
                 </>
               )
+
+              if (item.disabled) {
+                return (
+                  <span
+                    key={item.to}
+                    role="link"
+                    aria-disabled="true"
+                    aria-label={isCollapsed ? item.label : undefined}
+                    data-tooltip={isCollapsed ? item.label : undefined}
+                    className={[styles.navItem, isCollapsed ? styles.tooltipAnchor : ''].filter(Boolean).join(' ')}
+                  >
+                    {linkContent}
+                  </span>
+                )
+              }
 
               if (hasPrefixMatching) {
                 return (
@@ -86,32 +100,7 @@ export function ShellSidebar({ overview, isCollapsed, onToggleCollapsed, onSignO
           </nav>
         </div>
 
-        <section className={styles.workspaceList} aria-label="내 워크 스페이스">
-          <div className={styles.workspaceListHeader}>
-            <h2>내 워크 스페이스</h2>
-            <Link
-              to="/work-items/new"
-              className={[styles.workspaceListAdd, styles.tooltipAnchor].join(' ')}
-              data-tooltip="업무 등록"
-            >
-              <Icon name="plus" size={14} />
-              <span className={styles.srOnly}>업무 등록</span>
-            </Link>
-          </div>
-
-          <div className={styles.recentWorkItems}>
-            {recentWorkItems.length > 0 ? (
-              recentWorkItems.map((item) => (
-                <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.recentWorkItem}>
-                  <span>#</span>
-                  <strong>{item.title}</strong>
-                </Link>
-              ))
-            ) : (
-              <p className={styles.recentWorkItemEmpty}>최근 업무가 없습니다.</p>
-            )}
-          </div>
-        </section>
+        <SidebarFavorites key={userId} userId={userId} />
 
         <div className={styles.sidebarBottom}>
           <button

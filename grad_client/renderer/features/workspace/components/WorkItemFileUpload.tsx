@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import { Button } from '../../../design-system/primitives/Button'
+import { Icon } from '../../../design-system/primitives/Icon'
+import menuStyles from './FileContextMenu.module.css'
 import { showToast } from '../../notification/data/toastEvents'
 import { uploadWorkItemFile } from '../data/fileService'
 import { fetchWorkItemDetail } from '../data/workItemService'
@@ -52,9 +53,10 @@ export function WorkItemFileUpload({ workItemId, workItemTitle, onUploaded }: Pr
   return (
     <div className={styles.upload}>
       <input ref={inputRef} type="file" hidden onChange={handleFileChange} disabled={busy} aria-label="등록할 파일 선택" />
-      <Button disabled={busy} onClick={() => inputRef.current?.click()}>
-        {busy ? '등록 중…' : '파일 등록'}
-      </Button>
+      <button type="button" role="menuitem" className={menuStyles.item} disabled={busy} onClick={() => inputRef.current?.click()}>
+        <Icon name="plus" size={15} />
+        <span>{busy ? '등록 중…' : '파일 등록'}</span>
+      </button>
       {message ? <p className={styles.message} role={failed ? 'alert' : 'status'}>{message}</p> : null}
     </div>
   )

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { Button } from '../../../design-system/primitives/Button'
+import { Icon } from '../../../design-system/primitives/Icon'
+import styles from './FileContextMenu.module.css'
 import { showToast } from '../../notification/data/toastEvents'
 import { downloadWorkItemFile } from '../data/fileService'
 import type { WorkItemFileRecord } from '../model/types'
@@ -29,7 +30,9 @@ export function WorkItemFileDownload({ file, onComplete }: { file: WorkItemFileR
   }
 
   return (
-    <Button
+    <button
+      type="button"
+      className={styles.item}
       role="menuitem"
       disabled={busy}
       aria-label={`${file.originalFileName} 다운로드`}
@@ -38,7 +41,8 @@ export function WorkItemFileDownload({ file, onComplete }: { file: WorkItemFileR
         void handleDownload()
       }}
     >
-      {busy ? '다운로드 중…' : '다운로드'}
-    </Button>
+      <Icon name="chevronDown" size={15} />
+      <span>{busy ? '다운로드 중…' : '다운로드'}</span>
+    </button>
   )
 }

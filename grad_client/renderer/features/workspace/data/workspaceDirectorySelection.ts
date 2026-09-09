@@ -77,6 +77,7 @@ export function toggleFavoriteWorkspaceId(id: string, userId?: string): Set<stri
 
   if (typeof window !== 'undefined' && storageKey) {
     window.localStorage.setItem(storageKey, JSON.stringify(Array.from(currentFavorites)))
+    window.dispatchEvent(new Event('grad-client-favorites-updated'))
   }
 
   return currentFavorites
@@ -100,4 +101,3 @@ export function pruneFavoriteWorkspaceIds(validIds: Set<string>, userId?: string
 
   return currentFavorites
 }
-

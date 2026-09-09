@@ -833,6 +833,7 @@
   font-weight: 700;
   text-decoration: none;
   transition: opacity 160ms ease;
+  white-space: nowrap;
 }
 
 .editButton:hover {

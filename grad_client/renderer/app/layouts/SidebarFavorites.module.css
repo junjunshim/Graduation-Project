@@ -1,0 +1,19 @@
+.dialog {
+  width: min(480px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-surface, 8px);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-primary);
+}
+.dialog::backdrop { background: rgb(0 0 0 / 35%); }
+.content { padding: 24px; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.header h2 { margin: 0; font-size: 1.1rem; }
+.header button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.filters { display: flex; gap: 8px; margin: 20px 0 12px; }
+.filters input, .filters select { min-width: 0; padding: 8px; border: 1px solid var(--axis-line-default); border-radius: 6px; background: var(--axis-surface-panel); color: inherit; }
+.filters input { flex: 1; }
+.list { max-height: 360px; overflow-y: auto; }
+.option { display: flex; align-items: center; gap: 10px; padding: 10px 4px; cursor: pointer; overflow-wrap: anywhere; }
+.option:hover { background: var(--axis-brand-primary-soft); }

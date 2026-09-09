@@ -977,6 +977,16 @@ export function WorkspaceEntryPage() {
     setSearchParams(nextSearchParams, { replace: true })
   }
 
+  useEffect(() => {
+    const updateFavorites = () => setFavoriteIds(getFavoriteWorkspaceIds(currentUser?.userId))
+    window.addEventListener('grad-client-favorites-updated', updateFavorites)
+    window.addEventListener('storage', updateFavorites)
+    return () => {
+      window.removeEventListener('grad-client-favorites-updated', updateFavorites)
+      window.removeEventListener('storage', updateFavorites)
+    }
+  }, [currentUser?.userId])
+
   function toggleFavorite(id: string) {
     const updated = toggleFavoriteWorkspaceId(id, currentUser?.userId)
     setFavoriteIds(new Set(updated))

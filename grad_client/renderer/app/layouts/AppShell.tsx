@@ -164,7 +164,7 @@ export function AppShell() {
       ) : null}
 
       <ShellSidebar
-        overview={overview}
+        userId={currentUser.userId}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapsed={() => setIsSidebarCollapsed((current) => !current)}
         onSignOut={handleSignOut}

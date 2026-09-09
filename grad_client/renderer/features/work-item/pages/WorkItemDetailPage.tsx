@@ -6,8 +6,8 @@ import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { formatActivityMessage } from '../../dashboard/model/activityFormatter'
 import { FileContentViewerModal } from '../../workspace/components/FileContentViewerModal'
-import { WorkItemFileUpload } from '../../workspace/components/WorkItemFileUpload'
 import { useFileContextMenu } from '../../workspace/components/useFileContextMenu'
+import { WorkItemFavoriteButton } from '../../workspace/components/WorkItemFavoriteButton'
 import { fetchWorkItemFileContent } from '../../workspace/data/fileService'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { addWorkItemComment, fetchWorkItemDetail } from '../../workspace/data/workItemService'
@@ -76,7 +76,7 @@ function formatFileSize(bytes: number) {
 }
 
 export function WorkItemDetailPage() {
-  const { openFileContextMenu, fileContextMenu } = useFileContextMenu()
+  const { openFileContextMenu, openUploadContextMenu, fileContextMenu } = useFileContextMenu()
   const { workItemId } = useParams()
   const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
@@ -262,7 +262,6 @@ export function WorkItemDetailPage() {
   const relatedActivities = useMemo(() => {
     if (!detail) return []
     const currentId = detail.item.workItemId
-    const targetTitle = detail.item.title.trim()
 
     // 현재 업무에 등록된 파일 ID 목록
     const currentFileIds = new Set<string>()
@@ -282,14 +281,10 @@ export function WorkItemDetailPage() {
       // 1. WORK_ITEM 엔티티인 경우
       if (entityType === 'WORK_ITEM') {
         if (act.entityId === currentId) return true
-        if (act.targetName === targetTitle) return true
       }
 
       // 2. COMMENT 엔티티인 경우
       if (entityType === 'COMMENT') {
-        // targetName 예: 'Comment on WI-206'
-        const matchedWorkItemId = act.targetName ? act.targetName.replace(/^Comment on\s*/i, '').trim() : ''
-        if (matchedWorkItemId === currentId) return true
         if (currentCommentIds.has(String(act.entityId))) return true
       }
 
@@ -369,6 +364,7 @@ export function WorkItemDetailPage() {
         </button>
 
         <div className={styles.actions}>
+          <WorkItemFavoriteButton workItemId={item.workItemId} />
           <Link to={`/work-items/${item.workItemId}/edit`} className={styles.editButton}>
             <Icon name="pencil" size={14} />
             수정
@@ -567,7 +563,13 @@ export function WorkItemDetailPage() {
           </section>
 
           {/* 첨부파일 */}
-          <section className={styles.attachmentPanel}>
+          <section className={styles.attachmentPanel} onContextMenu={(event) => openUploadContextMenu(event, item, async () => {
+            const result = await fetchWorkItemDetail(item.workItemId)
+            setComments(result.comments)
+            setServerFiles(result.files)
+            setServerActivities(result.activities ?? [])
+            setSnapshot(getOrgSnapshot())
+          })}>
             {fileContextMenu}
             <div className={styles.attachmentHeader}>
               <div className={styles.attachmentTitle}>
@@ -575,18 +577,6 @@ export function WorkItemDetailPage() {
                 <h3>첨부파일</h3>
                 <span className={styles.countBadge}>{allFiles.length}</span>
               </div>
-              <WorkItemFileUpload
-                key={item.workItemId}
-                workItemId={item.workItemId}
-                workItemTitle={item.title}
-                onUploaded={async () => {
-                  const result = await fetchWorkItemDetail(item.workItemId)
-                  setComments(result.comments)
-                  setServerFiles(result.files)
-                  setServerActivities(result.activities ?? [])
-                  setSnapshot(getOrgSnapshot())
-                }}
-              />
             </div>
 
             {allFiles.length === 0 ? (

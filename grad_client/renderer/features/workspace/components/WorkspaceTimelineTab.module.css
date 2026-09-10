@@ -20,6 +20,69 @@
   white-space: nowrap;
 }
 
+.viewOptions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.viewOptions button {
+  white-space: nowrap;
+}
+
+.viewOptions button[aria-pressed='true'] {
+  color: var(--accent-blue);
+  background: var(--surface-selected);
+  border-color: var(--line-selected);
+}
+
+.taskLink {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 0.58rem;
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+}
+
+.treeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.treeToggle > span {
+  display: inline-flex;
+}
+
+.treeToggle:focus-visible,
+.taskLink:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+.unscheduled {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-inline: 0.7rem;
+  color: var(--text-muted);
+  font-size: var(--timeline-task-font-size);
+}
+
 .controls {
   display: inline-flex;
   align-items: center;
@@ -545,6 +608,24 @@
   background: transparent;
 }
 
+.treeGroup {
+  border-bottom: 0;
+  padding-block: 0.5rem;
+}
+
+.treeGroup + .treeGroup {
+  border-top: 1px solid var(--line-strong);
+}
+
+.treeGroup .taskLabel {
+  border-left: 3px solid var(--timeline-bar-color);
+}
+
+.treeGroup .taskRow:first-child .taskCopy strong {
+  color: var(--timeline-bar-color);
+  font-weight: 800;
+}
+
 .groupLabel {
   display: flex;
   align-items: center;
@@ -624,7 +705,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: 2000px;
+  max-height: none;
   opacity: 1;
   transition: max-height 260ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease;
 }
@@ -663,6 +744,7 @@
   gap: 0.58rem;
   overflow: hidden;
   padding: var(--timeline-task-padding-y) 0.9rem;
+  padding-left: calc(0.9rem + min(var(--task-depth, 0), 4) * 1rem);
   color: inherit;
   transition: background 140ms ease;
 }
@@ -704,6 +786,20 @@
 
 .taskRow .gridTrack {
   background-color: var(--surface-panel);
+}
+
+.highlightedRow .taskLabel,
+.highlightedRow .gridTrack {
+  background-color: color-mix(in srgb, var(--accent-blue) var(--highlight-strength), var(--surface-panel));
+}
+
+.selectedRow .taskLabel {
+  box-shadow: inset 3px 0 var(--accent-blue);
+}
+
+.highlightedRow .timelineBar {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 1px;
 }
 
 .timelineBar {
@@ -792,6 +888,8 @@
 
   .controls {
     justify-self: end;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .viewport {

@@ -4,7 +4,6 @@ import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { claimWorkItem, updateWorkItem } from '../../workspace/data/workItemService'
 import type { WorkItemRecord } from '../../workspace/model/types'
-import { getWorkItemTag } from '../../workspace/model/workItemTags'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
@@ -15,7 +14,7 @@ import styles from './WorkItemEditPage.module.css'
 
 function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
   return {
-    categoryId: item ? getWorkItemTag(item)?.id ?? '' : '',
+    categoryId: item?.category?.trim() ?? '',
     ownerNodeId: item ? String(item.ownerNodeId) : '',
     ownerUserId: item?.ownerUserId ?? '',
     title: item?.title ?? '',

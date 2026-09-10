@@ -35,8 +35,11 @@ const initialForm: WorkItemCreateFormState = {
   dueDate: '',
 }
 
-export function useWorkItemCreateForm(userId?: string, initialNodeId?: number) {
-  const [form, setForm] = useState<WorkItemCreateFormState>(initialForm)
+export function useWorkItemCreateForm(userId?: string, initialNodeId?: number, initialParentWorkItemId?: string) {
+  const [form, setForm] = useState<WorkItemCreateFormState>(() => ({
+    ...initialForm,
+    parentWorkItemId: initialParentWorkItemId ?? '',
+  }))
   const selectedNodeId = form.ownerNodeId ? Number(form.ownerNodeId) : initialNodeId
   const enforceServerCreateContract = isServerDataSource()
   const composer = useMemo(

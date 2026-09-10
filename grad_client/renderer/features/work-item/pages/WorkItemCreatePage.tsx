@@ -19,7 +19,7 @@ export function WorkItemCreatePage() {
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const isServerMode = isServerDataSource()
-  const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId, initialNodeId)
+  const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId, initialNodeId, searchParams.get('parentWorkItemId') ?? undefined)
 
   if (!currentUser || !composer) {
     return null

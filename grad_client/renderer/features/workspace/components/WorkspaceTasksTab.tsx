@@ -4,7 +4,13 @@ import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { formatWorkspaceShortDate, getWorkItemDisplayCode } from '../model/formatters'
-import { getWorkItemStatusLabel, getWorkItemStatusTone, getCategoryBadgeStyle } from '../model/labels'
+import {
+  getWorkItemStatusLabel,
+  getWorkItemStatusTone,
+  getCategoryBadgeStyle,
+  getWorkItemPriorityMeta,
+  type WorkItemPriorityTone,
+} from '../model/labels'
 import type { OrganizationNodeRecord, UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
@@ -28,7 +34,7 @@ type WorkspaceTasksTabProps = {
 
 export type TaskViewMode = 'list' | 'tree'
 
-type PriorityFilter = 'all' | 'high' | 'medium' | 'low'
+type PriorityFilter = 'all' | WorkItemPriorityTone
 type TagFilter = 'all' | WorkItemTagId
 type StatusFilter = 'all' | WorkItemStatus
 type DueScheduleFilter = 'all' | DueScheduleType
@@ -56,18 +62,6 @@ function getMemberName(
   if (found) return found.name
   if (userId && !userId.startsWith('U-') && !userId.includes('@')) return userId
   return '미지정'
-}
-
-function getPriorityMeta(priority: number) {
-  if (priority <= 1) {
-    return { filter: 'high' as const, label: '높음', symbol: '↑' }
-  }
-
-  if (priority <= 3) {
-    return { filter: 'medium' as const, label: '보통', symbol: '−' }
-  }
-
-  return { filter: 'low' as const, label: '낮음', symbol: '↓' }
 }
 
 function getVisiblePageNumbers(currentPage: number, pageCount: number) {
@@ -117,7 +111,7 @@ function TaskTreeNodeCard({
   const hasChildren = children.length > 0
   const isCollapsed = collapsedMap.get(item.workItemId) ?? false
   const statusTone = getWorkItemStatusTone(item.status)
-  const priorityMeta = getPriorityMeta(item.priority)
+  const priorityMeta = getWorkItemPriorityMeta(item.priority)
   const tag = getWorkItemTag(item)
   const ownerName = getMemberName(item.ownerUserId, members)
   const dueDate = item.dueDate ? formatWorkspaceShortDate(item.dueDate) : null
@@ -163,7 +157,7 @@ function TaskTreeNodeCard({
               {getWorkItemStatusLabel(item.status)}
             </span>
 
-            <span className={styles.priority} data-priority={priorityMeta.filter}>
+            <span className={styles.priority} data-priority={priorityMeta.tone}>
               <strong>{priorityMeta.symbol}</strong>
               {priorityMeta.label}
             </span>
@@ -453,7 +447,7 @@ export function WorkspaceTasksTab({
             ? parseWorkspaceDay(item.dueDate) === null
             : dueScheduleInfo.scheduleType === scheduleFilter
       const matchesPriority =
-        priorityFilter === 'all' || getPriorityMeta(item.priority).filter === priorityFilter
+        priorityFilter === 'all' || getWorkItemPriorityMeta(item.priority).tone === priorityFilter
       const matchesTag = tagFilter === 'all' || getWorkItemTag(item)?.id === tagFilter
       const itemStart = item.startDate ?? item.dueDate
       const itemEnd = item.dueDate ?? item.startDate
@@ -977,7 +971,7 @@ export function WorkspaceTasksTab({
                     const isSelected = selectedIds.has(item.workItemId)
                     const ownerName = getMemberName(item.ownerUserId, members)
                     const statusTone = getWorkItemStatusTone(item.status)
-                    const priorityMeta = getPriorityMeta(item.priority)
+                    const priorityMeta = getWorkItemPriorityMeta(item.priority)
                     const tag = getWorkItemTag(item)
                     const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
 
@@ -1016,7 +1010,7 @@ export function WorkspaceTasksTab({
                         </span>
 
                         <span role="cell" className={styles.priorityCell}>
-                          <span className={styles.priority} data-priority={priorityMeta.filter}>
+                          <span className={styles.priority} data-priority={priorityMeta.tone}>
                             <strong>{priorityMeta.symbol}</strong>
                             {priorityMeta.label}
                           </span>
@@ -1227,9 +1221,11 @@ export function WorkspaceTasksTab({
                     }}
                   >
                     <option value="all">전체</option>
-                    <option value="high">높음</option>
-                    <option value="medium">보통</option>
-                    <option value="low">낮음</option>
+                    <option value="highest">매우 높음 (↑↑)</option>
+                    <option value="high">높음 (↑)</option>
+                    <option value="medium">보통 (−)</option>
+                    <option value="low">낮음 (↓)</option>
+                    <option value="lowest">매우 낮음 (↓↓)</option>
                   </select>
                   <Icon name="chevronDown" size={13} />
                 </span>

@@ -293,6 +293,7 @@ export type WorkspaceOverview = {
   allRoleMembers?: RoleMember[]
   activities?: ActivityRecord[]
   files?: WorkItemFileRecord[]
+  allFiles?: WorkItemFileRecord[]
   onboardingSteps: OnboardingStep[]
 }
 

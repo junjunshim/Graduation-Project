@@ -1,0 +1,131 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  padding: 1.5rem;
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 420px;
+  background: var(--axis-surface-panel, #ffffff);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  animation: fadeInModal 0.18s ease-out;
+}
+
+@keyframes fadeInModal {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1.25rem 0.75rem;
+}
+
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--axis-text-primary, #0f172a);
+  margin: 0;
+}
+
+.body {
+  padding: 0.5rem 1.25rem 1.25rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--axis-text-secondary, #475569);
+}
+
+.targetName {
+  font-weight: 600;
+  color: var(--axis-text-primary, #0f172a);
+  word-break: break-all;
+}
+
+.warningNote {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--axis-text-muted, #64748b);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--axis-line-default, #e2e8f0);
+  background: var(--axis-surface-panel-subtle, #f8fafc);
+}
+
+.cancelBtn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--axis-line-default, #cbd5e1);
+  background: #ffffff;
+  color: var(--axis-text-secondary, #475569);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cancelBtn:hover {
+  background: #f1f5f9;
+}
+
+.deleteBtn {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: none;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.deleteBtn:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.deleteBtn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

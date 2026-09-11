@@ -261,6 +261,31 @@ export async function claimWorkItem(payload: ClaimWorkItemRequest) {
   }
 }
 
+export async function deleteWorkItem(workItemId: string) {
+  if (isServerDataSource()) {
+    const { deleteWorkItemOnServer } = await import('./server/serverWorkspace')
+    return deleteWorkItemOnServer(workItemId)
+  }
+
+  await delay()
+  const db = readWorkspaceDb()
+  const itemIndex = db.workItems.findIndex((w) => w.workItemId === workItemId)
+  if (itemIndex < 0) {
+    return {
+      status: 'error' as const,
+      message: '요청한 업무를 찾을 수 없습니다.',
+    }
+  }
+
+  db.workItems[itemIndex].isDeleted = true
+  writeWorkspaceDb(db)
+
+  return {
+    status: 'success' as const,
+    workItemId,
+  }
+}
+
 export async function fetchWorkItemDetail(workItemId: string): Promise<WorkItemDetailResult> {
   if (isServerDataSource()) {
     return fetchWorkItemDetailOnServer(workItemId)

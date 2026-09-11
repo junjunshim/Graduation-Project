@@ -24,6 +24,32 @@ export function getWorkItemStatusTone(status: WorkItemStatus) {
   return 'done' as const
 }
 
+export type WorkItemPriorityLevel = 1 | 2 | 3 | 4 | 5
+export type WorkItemPriorityTone = 'highest' | 'high' | 'medium' | 'low' | 'lowest'
+
+export interface WorkItemPriorityMeta {
+  level: WorkItemPriorityLevel
+  label: string
+  symbol: string
+  tone: WorkItemPriorityTone
+}
+
+export function getWorkItemPriorityMeta(priority: number): WorkItemPriorityMeta {
+  if (priority <= 1) {
+    return { level: 1, label: '매우 높음', symbol: '↑↑', tone: 'highest' }
+  }
+  if (priority === 2) {
+    return { level: 2, label: '높음', symbol: '↑', tone: 'high' }
+  }
+  if (priority === 3) {
+    return { level: 3, label: '보통', symbol: '−', tone: 'medium' }
+  }
+  if (priority === 4) {
+    return { level: 4, label: '낮음', symbol: '↓', tone: 'low' }
+  }
+  return { level: 5, label: '매우 낮음', symbol: '↓↓', tone: 'lowest' }
+}
+
 export function getNodeTypeLabel(nodeType: NodeType) {
   if (typeof nodeType === 'string' && nodeType.startsWith('CUSTOM:')) {
     const parts = nodeType.split(':')

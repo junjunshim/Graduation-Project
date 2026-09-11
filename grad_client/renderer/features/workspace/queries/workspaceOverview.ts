@@ -313,8 +313,11 @@ export function getWorkspaceOverview(
   const nodeActivities = (snapshot.activities ?? []).filter(
     (act) => scopedNodeId === undefined || act.nodeId === scopedNodeId,
   )
-  const nodeFiles = (snapshot.files ?? []).filter((file) =>
-    visibleWorkItems.some((item) => item.workItemId === file.workItemId),
+  const nodeFiles = (snapshot.files ?? []).filter(
+    (file) => !file.isDeleted && visibleWorkItems.some((item) => item.workItemId === file.workItemId),
+  )
+  const allNodeFiles = (snapshot.files ?? []).filter(
+    (file) => visibleWorkItems.some((item) => item.workItemId === file.workItemId),
   )
 
   const orgRoles = snapshot.roles.filter((role) => {
@@ -340,6 +343,7 @@ export function getWorkspaceOverview(
     allRoleMembers,
     activities: nodeActivities,
     files: nodeFiles,
+    allFiles: allNodeFiles,
     onboardingSteps: buildOnboardingSteps({
       hasPersonalSpace: Boolean(currentUser?.personalNodeId),
       hasTopNode: summary.orgNodeCount > 0,

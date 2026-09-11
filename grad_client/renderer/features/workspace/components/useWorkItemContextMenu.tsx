@@ -4,11 +4,16 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getOrgSnapshot } from '../data/orgService'
 import { WorkItemFavoriteButton } from './WorkItemFavoriteButton'
+import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 import styles from './FileContextMenu.module.css'
 
 export function useWorkItemContextMenu() {
   const navigate = useNavigate()
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
+    id: string
+    title: string
+  } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!menu) return
@@ -47,19 +52,84 @@ export function useWorkItemContextMenu() {
     if (item) params.set('nodeId', String(item.ownerNodeId))
     openPage(`/work-items/new?${params}`)
   }
-  const workItemContextMenu = menu ? createPortal(
-    <div ref={ref} className={styles.menu} style={{ left: menu.x, top: menu.y }} role="menu" aria-label="업무 메뉴" onContextMenu={(event) => event.preventDefault()}>
-      <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}`)}>
-        <Icon name="arrowRight" size={15} /><span>상세페이지 이동</span>
-      </button>
-      <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}/edit`)}>
-        <Icon name="pencil" size={15} /><span>업무 수정</span>
-      </button>
-      <button type="button" className={styles.item} role="menuitem" onClick={() => createChild(menu.id)}>
-        <Icon name="plus" size={15} /><span>하위 업무 생성하기</span>
-      </button>
-      <WorkItemFavoriteButton workItemId={menu.id} menu onToggle={() => setMenu(null)} />
-    </div>, document.body,
-  ) : null
+  const workItemContextMenu = (
+    <>
+      {menu
+        ? createPortal(
+            <div ref={ref} className={styles.menu} style={{ left: menu.x, top: menu.y }} role="menu" aria-label="업무 메뉴" onContextMenu={(event) => event.preventDefault()}>
+              <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}`)}>
+                <Icon name="arrowRight" size={15} /><span>상세페이지 이동</span>
+              </button>
+              <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}/edit`)}>
+                <Icon name="pencil" size={15} /><span>업무 수정</span>
+              </button>
+              <button type="button" className={styles.item} role="menuitem" onClick={() => createChild(menu.id)}>
+                <Icon name="plus" size={15} /><span>하위 업무 생성하기</span>
+              </button>
+              <WorkItemFavoriteButton workItemId={menu.id} menu onToggle={() => setMenu(null)} />
+              <div className={styles.separator} />
+              <button
+                type="button"
+                className={styles.deleteItem}
+                role="menuitem"
+                onClick={() => {
+                  const targetItem = getOrgSnapshot().workItems.find((w) => w.workItemId === menu.id)
+                  setDeleteConfirmTarget({
+                    id: menu.id,
+                    title: targetItem?.title || menu.id,
+                  })
+                  setMenu(null)
+                }}
+              >
+                <Icon name="trash" size={15} />
+                <span>업무 삭제</span>
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {deleteConfirmTarget && (
+        <ConfirmDeleteModal
+          isOpen={true}
+          title="업무 삭제"
+          itemName={deleteConfirmTarget.title}
+          itemTypeLabel="업무"
+          warningText="삭제된 업무는 휴지통으로 이동되며 15일간 보관 후 영구 삭제됩니다."
+          onClose={() => setDeleteConfirmTarget(null)}
+          onConfirm={async () => {
+            const target = deleteConfirmTarget
+            try {
+              const { deleteWorkItem } = await import('../data/workItemService')
+              const { showToast } = await import('../../notification/data/toastEvents')
+              const res = await deleteWorkItem(target.id)
+              if (res.status === 'error') {
+                showToast({
+                  title: '업무 삭제 실패',
+                  content: res.message || '업무를 삭제하지 못했습니다.',
+                  created_at: new Date().toISOString(),
+                })
+              } else {
+                showToast({
+                  title: '업무 삭제 완료',
+                  content: `'${target.title}' 업무가 삭제되어 휴지통으로 이동되었습니다.`,
+                  created_at: new Date().toISOString(),
+                })
+              }
+            } catch (error) {
+              const { showToast } = await import('../../notification/data/toastEvents')
+              showToast({
+                title: '업무 삭제 실패',
+                content: error instanceof Error ? error.message : '업무를 삭제하지 못했습니다.',
+                created_at: new Date().toISOString(),
+              })
+            } finally {
+              setDeleteConfirmTarget(null)
+            }
+          }}
+        />
+      )}
+    </>
+  )
   return { onWorkItemContextMenu, workItemContextMenu }
 }

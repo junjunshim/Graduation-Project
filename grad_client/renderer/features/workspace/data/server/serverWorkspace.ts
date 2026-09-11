@@ -289,27 +289,18 @@ export async function loadWorkspaceDirectoryScopeOnServer(email = getCurrentServ
   const current = readWorkspaceDb()
   const { workspace: updates } = normalizeServerContext(items, email, { referenceWorkspace: current })
 
-  // 노드 트리는 이번에 서버에서 온 유효 노드 목록으로 완전 교체 (이전에 캐시된 유령/삭제 노드 제거)
-  const validNodeIds = new Set(updates.nodes.map((n) => n.id))
-
-  // 기존 캐시의 업무/파일 중 여전히 유효한 노드에 속한 것만 보존
-  const preservedWorkItems = current.workItems.filter((w) => validNodeIds.has(w.ownerNodeId))
-  const preservedFiles = (current.files ?? []).filter((f) => {
-    const parentWorkItem = preservedWorkItems.find((w) => w.workItemId === f.workItemId)
-    return Boolean(parentWorkItem)
-  })
-
+  // 소프트 딜리트 및 휴지통 복구를 지원하기 위해, 기존 업무(workItems)와 파일(files)은 캐시에서 임의 삭제하지 않고 그대로 보존
   const updatedDb: WorkspaceDatabase = {
     ...current,
     nodes: updates.nodes,
     roles: updates.roles,
     authorities: updates.authorities ?? [],
-    workItems: preservedWorkItems,
-    files: preservedFiles,
+    workItems: current.workItems,
+    files: current.files,
     counters: {
       ...current.counters,
-      node: Math.max(0, ...updates.nodes.map((node) => node.id)) + 1,
-      role: Math.max(0, ...updates.roles.map((role) => role.id)) + 1,
+      node: Math.max(0, ...updates.nodes.map((node) => node.id), ...current.nodes.map((n) => n.id)) + 1,
+      role: Math.max(0, ...updates.roles.map((role) => role.id), ...current.roles.map((r) => r.id)) + 1,
     },
   }
 
@@ -685,6 +676,36 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
   }, '업무를 수정하지 못했습니다.')
 }
 
+export async function deleteWorkItemOnServer(workItemId: string) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/workItems', {
+      method: 'DELETE',
+      body: {
+        work_item_id: workItemId,
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '업무를 삭제하지 못했습니다.' }
+    }
+
+    // 본인이 삭제한 업무는 웹소켓 알림이 오지 않으므로 로컬 캐시(readWorkspaceDb)에 즉시 isDeleted = true 반영
+    try {
+      const currentDb = readWorkspaceDb()
+      const itemIndex = currentDb.workItems.findIndex((w) => w.workItemId === workItemId)
+      if (itemIndex >= 0) {
+        currentDb.workItems[itemIndex].isDeleted = true
+        writeServerWorkspaceDb(currentDb)
+      }
+    } catch (err) {
+      console.warn('[serverWorkspace] 업무 삭제 로컬 캐시 반영 실패:', err)
+    }
+
+    await refreshWorkspaceAfterCommittedMutation()
+    return { status: 'success' as const, workItemId }
+  }, '업무를 삭제하지 못했습니다.')
+}
+
 export type UpdateRoleAuthorityRequest = {
   roleId: number
   nodeId: number
@@ -877,6 +898,7 @@ export async function fetchWorkItemDetailOnServer(workItemId: string): Promise<W
       original_file_name: f.originalFileName,
       file_size: f.fileSize,
       mime_type: f.mimeType,
+      is_deleted: f.isDeleted,
       created_at: f.createdAt,
     })),
     ...activities.map((a) => ({

@@ -789,7 +789,7 @@ BEGIN
            OR effective_authority IS NULL
     )
 
-    -- A. 접근 가능한 NODE 메타데이터 반환
+    -- A. 접근 가능한 NODE 메타데이터 반환 (is_deleted 포함)
     SELECT jsonb_build_object(
         'type', 'NODE',
         'id', n.node_id,
@@ -803,7 +803,6 @@ BEGIN
     )
     FROM organization_nodes n
     WHERE n.node_id IN (SELECT node_id FROM filtered_nodes)
-      AND n.is_deleted = FALSE
 
     UNION ALL
 

@@ -483,29 +483,6 @@ function getMemberName(
   return userId
 }
 
-function getDocumentScheduleLabel(item: WorkItemRecord, todayTimestamp: number) {
-  const schedule = getWorkItemSchedule(item)
-
-  if (!schedule) {
-    return `등록 ${formatWorkspaceMonthDay(item.createdAt)}`
-  }
-
-  const state = getWorkItemScheduleState(schedule, todayTimestamp)
-
-  if (state === 'current' && item.dueDate) {
-    return `마감 ${formatWorkspaceMonthDay(item.dueDate)}`
-  }
-
-  if (state === 'upcoming') {
-    return `시작 ${formatWorkspaceMonthDay(item.startDate ?? item.dueDate)}`
-  }
-
-  if (state === 'past') {
-    return `일정 종료 ${formatWorkspaceMonthDay(item.dueDate ?? item.startDate)}`
-  }
-
-  return `시작 ${formatWorkspaceMonthDay(item.startDate ?? item.dueDate)}`
-}
 
 function getDueStatus(item: WorkItemRecord, todayTimestamp: number): { label: string; tone: DueStatusTone } {
   if (item.status === 'done') {
@@ -715,7 +692,6 @@ export function WorkspacePage() {
     () => buildTimeline(overview.visibleWorkItems, workspaceToday),
     [overview.visibleWorkItems, workspaceToday],
   )
-  const todayLinkedWorkItems = todayRelevantWorkItems.slice(0, DOCUMENT_LIMIT)
   const displayedFiles = (overview.files ?? []).slice(0, DOCUMENT_LIMIT)
   const workItemsById = new Map(overview.visibleWorkItems.map((item) => [item.workItemId, item]))
   const displayedActivities: ActivityRecord[] = [...(overview.activities ?? [])]
@@ -835,7 +811,7 @@ export function WorkspacePage() {
       ) : activeView === 'files' ? (
         <WorkspaceFilesTab
           workItems={overview.visibleWorkItems}
-          files={overview.files}
+          files={overview.allFiles ?? overview.files}
         />
       ) : activeView === 'members' ? (
         <WorkspaceMembersTab
@@ -1099,25 +1075,6 @@ export function WorkspacePage() {
                         ) : null}
                         <small title={`${uploaderName} · ${formatWorkspaceMonthDay(file.createdAt)}`}>
                           {uploaderName} · {formatWorkspaceMonthDay(file.createdAt)}
-                        </small>
-                      </span>
-                      <Icon name="arrowRight" size={14} />
-                    </Link>
-                  )
-                })
-              ) : todayLinkedWorkItems.length > 0 ? (
-                todayLinkedWorkItems.map((item) => {
-                  const ownerName = getMemberName(item.ownerUserId, overview.rootRoleMembers, overview.allRoleMembers, snapshot.users)
-                  return (
-                    <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.documentItem}>
-                      <span className={styles.documentIcon}>
-                        <Icon name="fileText" size={15} />
-                      </span>
-                      <span className={styles.documentCopy}>
-                        <strong>{item.title}</strong>
-                        <small>
-                          {ownerName} ·{' '}
-                          {getDocumentScheduleLabel(item, workspaceToday)}
                         </small>
                       </span>
                       <Icon name="arrowRight" size={14} />

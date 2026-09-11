@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
@@ -73,6 +73,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(() => workItems[0]?.workItemId ?? null)
   const [viewLayout, setViewLayout] = useState<'grid' | 'table'>('grid')
+  const [showDeletedFiles, setShowDeletedFiles] = useState(false)
 
   // 파일 뷰어 모달 상태
   const [viewerFile, setViewerFile] = useState<WorkItemFileRecord | null>(null)
@@ -80,30 +81,49 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
   const [isLoadingFile, setIsLoadingFile] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
 
-  // 각 업무별로 실제 등록된 파일만 매핑
+  // 휴지통에 있는 파일 총 개수
+  const deletedFilesCount = useMemo(() => {
+    return files.filter((f) => f.isDeleted).length
+  }, [files])
+
+  // 옵션 C: 휴지통 모드 중 복구 등으로 삭제된 파일이 0개가 되면 자동으로 기본 파일 화면으로 전환
+  useEffect(() => {
+    if (showDeletedFiles && deletedFilesCount === 0) {
+      setShowDeletedFiles(false)
+    }
+  }, [showDeletedFiles, deletedFilesCount])
+
+  // 각 업무별로 실제 등록된 파일만 매핑: 휴지통 모드일 때는 삭제된 파일만, 일반 모드일 때는 정상 파일만 필터링
   const filesByWorkItem = useMemo(() => {
     const map = new Map<string, WorkItemFileRecord[]>()
 
     workItems.forEach((item) => {
-      const realFiles = files.filter((f) => f.workItemId === item.workItemId && !f.isDeleted)
-      map.set(item.workItemId, realFiles)
+      const targetFiles = files.filter((f) => {
+        if (f.workItemId !== item.workItemId) return false
+        return showDeletedFiles ? Boolean(f.isDeleted) : !f.isDeleted
+      })
+      map.set(item.workItemId, targetFiles)
     })
 
     return map
-  }, [files, workItems])
+  }, [files, showDeletedFiles, workItems])
 
-  // 검색어 필터링 적용된 업무(폴더) 목록
+  // 검색어 필터링 적용된 업무(폴더) 목록 (휴지통 모드일 때는 삭제된 파일이 존재하는 폴더만 노출)
   const filteredFolders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    if (!query) return workItems
 
     return workItems.filter((item) => {
-      const matchTitle = item.title.toLowerCase().includes(query)
       const folderFiles = filesByWorkItem.get(item.workItemId) ?? []
+      if (showDeletedFiles && folderFiles.length === 0) {
+        return false
+      }
+      if (!query) return true
+
+      const matchTitle = item.title.toLowerCase().includes(query)
       const matchFile = folderFiles.some((f) => f.originalFileName.toLowerCase().includes(query))
       return matchTitle || matchFile
     })
-  }, [filesByWorkItem, searchQuery, workItems])
+  }, [filesByWorkItem, searchQuery, showDeletedFiles, workItems])
 
   // 현재 선택된 폴더 업무 객체
   const selectedWorkItem = useMemo(() => {
@@ -170,8 +190,8 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
         <div className={styles.toolbarLeft}>
           <div className={styles.breadcrumb}>
             <span className={styles.rootCrumb}>
-              <Icon name="folder" size={16} />
-              <span>파일 탐색기</span>
+              <Icon name={showDeletedFiles ? 'trash' : 'folder'} size={16} />
+              <span>{showDeletedFiles ? '휴지통' : '파일 탐색기'}</span>
             </span>
             {selectedWorkItem ? (
               <>
@@ -193,6 +213,16 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
             onChange={(e) => setSearchQuery(e.target.value)}
             containerClassName={styles.searchBox}
           />
+
+          <button
+            type="button"
+            className={[styles.trashToggleBtn, showDeletedFiles ? styles.trashToggleBtnActive : ''].join(' ')}
+            onClick={() => setShowDeletedFiles((prev) => !prev)}
+            title={showDeletedFiles ? '휴지통 파일 숨기기' : '휴지통 파일 보기'}
+          >
+            <Icon name="trash" size={14} />
+            <span>휴지통{deletedFilesCount > 0 ? ` (${deletedFilesCount})` : ''}</span>
+          </button>
 
           <div className={styles.viewToggleGroup}>
             <button
@@ -222,13 +252,17 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
         {/* 좌측 폴더(업무) 트리 네비게이션 */}
         <aside className={styles.folderSidebar} aria-label="업무 폴더 목록">
           <div className={styles.sidebarHeader}>
-            <span>업무 폴더 ({filteredFolders.length})</span>
-            <span className={styles.sidebarTotalFiles}>전체 {totalFilesCount}개 파일</span>
+            <span>{showDeletedFiles ? '삭제된 폴더' : '업무 폴더'} ({filteredFolders.length})</span>
+            <span className={styles.sidebarTotalFiles}>
+              {showDeletedFiles ? `휴지통 ${totalFilesCount}개` : `전체 ${totalFilesCount}개 파일`}
+            </span>
           </div>
 
           <div className={styles.folderList}>
             {filteredFolders.length === 0 ? (
-              <div className={styles.emptyFolderList}>검색된 폴더가 없습니다.</div>
+              <div className={styles.emptyFolderList}>
+                {showDeletedFiles ? '휴지통이 비어 있습니다.' : '검색된 폴더가 없습니다.'}
+              </div>
             ) : (
               filteredFolders.map((item) => {
                 const isSelected = selectedWorkItem?.workItemId === item.workItemId
@@ -308,7 +342,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                   return (
                     <div
                       key={file.id}
-                      className={styles.fileCard}
+                      className={[styles.fileCard, file.isDeleted ? styles.fileCardDeleted : ''].join(' ')}
                       onClick={() => handleOpenFile(file)}
                       onContextMenu={(event) => openFileContextMenu(event, file)}
                       role="button"
@@ -321,6 +355,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                       }}
                     >
                       <div className={styles.fileCardPreview}>
+                        {file.isDeleted ? <span className={styles.deletedBadge}>휴지통</span> : null}
                         <Icon name={iconName} size={30} className={styles.filePreviewIcon} />
                         <span className={styles.fileBadge}>{ext}</span>
                       </div>
@@ -355,7 +390,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                       return (
                         <tr
                           key={file.id}
-                          className={styles.fileTableRow}
+                          className={[styles.fileTableRow, file.isDeleted ? styles.fileTableRowDeleted : ''].join(' ')}
                           onClick={() => handleOpenFile(file)}
                           onContextMenu={(event) => openFileContextMenu(event, file)}
                           style={{ cursor: 'pointer' }}
@@ -365,6 +400,7 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                             <span className={styles.tableFileName} title={file.originalFileName}>
                               {file.originalFileName}
                             </span>
+                            {file.isDeleted ? <span className={styles.deletedBadge} style={{ position: 'static' }}>휴지통</span> : null}
                           </td>
                           <td className={styles.tdSize}>{formatFileSize(file.fileSize)}</td>
                           <td className={styles.tdDate}>{formatWorkspaceDate(file.createdAt)}</td>

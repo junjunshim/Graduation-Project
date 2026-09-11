@@ -54,6 +54,7 @@ export type IconName =
   | 'close'
   | 'moon'
   | 'sun'
+  | 'trash'
 
 type IconProps = SVGProps<SVGSVGElement> & {
   name: IconName
@@ -358,6 +359,14 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M19.2 12h2.3" />
       <path d="M4.9 19.1l1.6-1.6" />
       <path d="M17.5 6.5l1.6-1.6" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
     </>
   ),
 }

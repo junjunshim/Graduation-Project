@@ -99,6 +99,40 @@
   color: var(--text-primary);
 }
 
+.trashToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+  white-space: nowrap;
+}
+
+.trashToggleBtn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.trashToggleBtnActive {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
+}
+
+.trashToggleBtnActive:hover {
+  background: rgba(239, 68, 68, 0.16);
+  color: #dc2626;
+}
+
 /* 2열 탐색기 레이아웃 */
 .explorerGrid {
   --files-card-height: clamp(32rem, calc(100dvh - 12rem), 44rem);
@@ -392,6 +426,30 @@
   color: var(--text-muted);
 }
 
+.fileCardDeleted {
+  opacity: 0.65;
+  border-style: dashed;
+  background: rgba(239, 68, 68, 0.03);
+}
+
+.fileCardDeleted:hover {
+  opacity: 0.95;
+  border-color: #ef4444;
+}
+
+.deletedBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-xs);
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
 .fileCardBody {
   display: flex;
   flex-direction: column;
@@ -485,4 +543,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fileTableRowDeleted {
+  opacity: 0.65;
+  background: rgba(239, 68, 68, 0.02);
+}
+
+.fileTableRowDeleted:hover {
+  opacity: 0.95;
+  background: rgba(239, 68, 68, 0.06);
 }

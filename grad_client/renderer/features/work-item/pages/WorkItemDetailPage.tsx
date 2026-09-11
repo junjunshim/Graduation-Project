@@ -6,18 +6,23 @@ import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { formatActivityMessage } from '../../dashboard/model/activityFormatter'
 import { FileContentViewerModal } from '../../workspace/components/FileContentViewerModal'
+import { ConfirmDeleteModal } from '../../workspace/components/ConfirmDeleteModal'
 import { useFileContextMenu } from '../../workspace/components/useFileContextMenu'
 import { WorkItemFavoriteButton } from '../../workspace/components/WorkItemFavoriteButton'
 import { fetchWorkItemFileContent } from '../../workspace/data/fileService'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
-import { addWorkItemComment, fetchWorkItemDetail } from '../../workspace/data/workItemService'
+import { addWorkItemComment, deleteWorkItem, fetchWorkItemDetail } from '../../workspace/data/workItemService'
 import { subscribeToWorkspaceCache } from '../../workspace/data/workspaceCacheEvents'
 import {
   formatWorkspaceDate,
   formatWorkspaceTimestamp,
   getWorkItemDisplayCode,
 } from '../../workspace/model/formatters'
-import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../../workspace/model/labels'
+import {
+  getWorkItemPriorityMeta,
+  getWorkItemStatusLabel,
+  getWorkItemStatusTone,
+} from '../../workspace/model/labels'
 import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord, WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
@@ -45,26 +50,6 @@ function DetailProperty({ icon, label, children }: DetailPropertyProps) {
       <div className={styles.propertyValue}>{children}</div>
     </div>
   )
-}
-
-function getPriorityMeta(priority: number) {
-  if (priority <= 1) {
-    return { label: '매우 높음', symbol: '↑↑', tone: 'highest' }
-  }
-
-  if (priority === 2) {
-    return { label: '높음', symbol: '↑', tone: 'high' }
-  }
-
-  if (priority === 3) {
-    return { label: '보통', symbol: '−', tone: 'medium' }
-  }
-
-  if (priority === 4) {
-    return { label: '낮음', symbol: '↓', tone: 'low' }
-  }
-
-  return { label: '매우 낮음', symbol: '↓↓', tone: 'lowest' }
 }
 
 function formatFileSize(bytes: number) {
@@ -111,6 +96,9 @@ export function WorkItemDetailPage() {
     error: null,
     fromCache: false,
   })
+
+  // 업무 삭제 모달 상태
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
 
   // 로컬 스냅샷 구독 (캐시 갱신 시 자동 리프레시)
   useEffect(() => {
@@ -245,7 +233,9 @@ export function WorkItemDetailPage() {
   const allFiles = useMemo(() => {
     if (!detail) return []
     const fileMap = new Map<number, WorkItemFileRecord>()
-    serverFiles.forEach((f) => fileMap.set(f.id, f))
+    serverFiles
+      .filter((f) => !f.isDeleted)
+      .forEach((f) => fileMap.set(f.id, f))
     ;(snapshot.files ?? [])
       .filter((f) => f.workItemId === detail.item.workItemId && !f.isDeleted)
       .forEach((f) => {
@@ -335,7 +325,7 @@ export function WorkItemDetailPage() {
   if (!detail) return null
 
   const { item, ownerUser, parentWorkItem, childWorkItems } = detail
-  const priority = getPriorityMeta(item.priority)
+  const priority = getWorkItemPriorityMeta(item.priority)
   const progress = Math.min(100, Math.max(0, item.progress))
   const description = item.description.trim() || '업무 설명이 아직 등록되지 않았습니다.'
   const categoryTag = getWorkItemTag(item)
@@ -369,6 +359,14 @@ export function WorkItemDetailPage() {
             <Icon name="pencil" size={14} />
             수정
           </Link>
+          <button
+            type="button"
+            className={styles.deleteButton}
+            onClick={() => setIsDeleteModalOpen(true)}
+          >
+            <Icon name="trash" size={14} />
+            삭제
+          </button>
         </div>
       </div>
 
@@ -592,7 +590,13 @@ export function WorkItemDetailPage() {
                     type="button"
                     className={styles.fileCard}
                     onClick={() => handleOpenFileViewer(file)}
-                    onContextMenu={(event) => openFileContextMenu(event, file)}
+                    onContextMenu={(event) =>
+                      openFileContextMenu(event, file, async () => {
+                        if (workItemId) {
+                          await loadDetailFromServer(workItemId)
+                        }
+                      })
+                    }
                     title="클릭하여 파일 내용 보기"
                   >
                     <div className={styles.fileIconBox}>
@@ -711,6 +715,46 @@ export function WorkItemDetailPage() {
         isLoading={viewerModal.isLoading}
         error={viewerModal.error}
       />
+
+      {isDeleteModalOpen && (
+        <ConfirmDeleteModal
+          isOpen={isDeleteModalOpen}
+          title="업무 삭제"
+          itemName={item.title}
+          itemTypeLabel="업무"
+          warningText="삭제된 업무는 휴지통으로 이동되며 15일간 보관 후 영구 삭제됩니다."
+          onClose={() => setIsDeleteModalOpen(false)}
+          onConfirm={async () => {
+            try {
+              const { showToast } = await import('../../notification/data/toastEvents')
+              const res = await deleteWorkItem(item.workItemId)
+              if (res.status === 'error') {
+                showToast({
+                  title: '업무 삭제 실패',
+                  content: res.message || '업무를 삭제하지 못했습니다.',
+                  created_at: new Date().toISOString(),
+                })
+              } else {
+                showToast({
+                  title: '업무 삭제 완료',
+                  content: `'${item.title}' 업무가 삭제되어 휴지통으로 이동되었습니다.`,
+                  created_at: new Date().toISOString(),
+                })
+                navigate(`/workspace?nodeId=${item.ownerNodeId}`)
+              }
+            } catch (error) {
+              const { showToast } = await import('../../notification/data/toastEvents')
+              showToast({
+                title: '업무 삭제 실패',
+                content: error instanceof Error ? error.message : '업무를 삭제하지 못했습니다.',
+                created_at: new Date().toISOString(),
+              })
+            } finally {
+              setIsDeleteModalOpen(false)
+            }
+          }}
+        />
+      )}
     </section>
   )
 }

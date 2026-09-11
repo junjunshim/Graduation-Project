@@ -11,3 +11,29 @@
   cursor: wait;
   opacity: 0.6;
 }
+
+.deleteItem {
+  composes: contextMenuItem from '../pages/WorkspaceEntryPage.module.css';
+  color: #ef4444;
+}
+
+.deleteItem:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+}
+
+.restoreItem {
+  composes: contextMenuItem from '../pages/WorkspaceEntryPage.module.css';
+  color: #10b981;
+}
+
+.restoreItem:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.separator {
+  height: 1px;
+  background: var(--axis-line-default, #e2e8f0);
+  margin: 4px 0;
+}

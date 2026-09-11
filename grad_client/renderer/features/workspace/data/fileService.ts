@@ -2,6 +2,7 @@ import { apiRequest, getServerAccessToken } from './server/apiClient'
 import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
 import { isServerDataSource } from './workspaceMode'
+import { readWorkspaceDb, writeServerWorkspaceDb } from './localStore'
 
 export type CachedFileItem = {
   fileId: number
@@ -55,6 +56,72 @@ export async function uploadWorkItemFile(workItemId: string, file: File): Promis
   }
   if (response.status === 'error') {
     throw new Error(response.message || '파일을 등록하지 못했습니다.')
+  }
+}
+
+export async function deleteWorkItemFile(fileId: number): Promise<void> {
+  if (!isServerDataSource()) {
+    throw new Error('파일 삭제는 서버 연결 모드에서 사용할 수 있습니다.')
+  }
+
+  const response = await apiRequest<unknown>('/workItems/files', {
+    method: 'DELETE',
+    body: { file_id: fileId },
+  })
+
+  if (!isServerStatusResponse(response)) {
+    throw new Error('파일 삭제 응답 형식이 올바르지 않습니다.')
+  }
+
+  if (response.status === 'error') {
+    throw new Error(response.message || '파일을 삭제하지 못했습니다.')
+  }
+
+  // 삭제 성공 시 로컬 캐시(readWorkspaceDb)에 즉시 isDeleted = true 반영
+  try {
+    const currentDb = readWorkspaceDb()
+    if (currentDb.files) {
+      const fileIndex = currentDb.files.findIndex((f) => f.id === fileId)
+      if (fileIndex >= 0) {
+        currentDb.files[fileIndex].isDeleted = true
+        writeServerWorkspaceDb(currentDb)
+      }
+    }
+  } catch (err) {
+    console.warn('[fileService] 로컬 캐시 삭제 반영 실패:', err)
+  }
+}
+
+export async function restoreWorkItemFile(fileId: number): Promise<void> {
+  if (!isServerDataSource()) {
+    throw new Error('파일 복구는 서버 연결 모드에서 사용할 수 있습니다.')
+  }
+
+  const response = await apiRequest<unknown>('/workItems/files/restore', {
+    method: 'PATCH',
+    body: { file_id: fileId },
+  })
+
+  if (!isServerStatusResponse(response)) {
+    throw new Error('파일 복구 응답 형식이 올바르지 않습니다.')
+  }
+
+  if (response.status === 'error') {
+    throw new Error(response.message || '파일을 복구하지 못했습니다.')
+  }
+
+  // 복구 성공 시 로컬 캐시(readWorkspaceDb)에 즉시 isDeleted = false 반영
+  try {
+    const currentDb = readWorkspaceDb()
+    if (currentDb.files) {
+      const fileIndex = currentDb.files.findIndex((f) => f.id === fileId)
+      if (fileIndex >= 0) {
+        currentDb.files[fileIndex].isDeleted = false
+        writeServerWorkspaceDb(currentDb)
+      }
+    }
+  } catch (err) {
+    console.warn('[fileService] 로컬 캐시 복구 반영 실패:', err)
   }
 }
 

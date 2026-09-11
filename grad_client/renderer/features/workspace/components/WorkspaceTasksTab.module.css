@@ -887,9 +887,14 @@
   line-height: 1;
 }
 
-.priority[data-priority='high'] {
-  background: rgba(239, 68, 68, 0.1);
+.priority[data-priority='highest'] {
+  background: rgba(220, 38, 38, 0.12);
   color: #dc2626;
+}
+
+.priority[data-priority='high'] {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
 }
 
 .priority[data-priority='medium'] {
@@ -898,8 +903,13 @@
 }
 
 .priority[data-priority='low'] {
-  background: rgba(16, 185, 129, 0.1);
+  background: rgba(16, 185, 129, 0.12);
   color: #059669;
+}
+
+.priority[data-priority='lowest'] {
+  background: rgba(107, 114, 128, 0.12);
+  color: #6b7280;
 }
 
 .dueDateCell {

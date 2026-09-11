@@ -39,10 +39,11 @@ CREATE TABLE IF NOT EXISTS role_assignments (
     assignment_id SERIAL PRIMARY KEY,
     user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
-    role VARCHAR(50) NOT NULL,
+    role_id INTEGER NOT NULL,
+    is_top_role BOOLEAN NOT NULL DEFAULT FALSE, -- 정의의 속성을 FK로 검증하는 내부 무결성 컬럼
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT unique_assignments UNIQUE (user_id, node_id, role)
+    CONSTRAINT unique_assignments UNIQUE (user_id, node_id)
 );
 CREATE INDEX idx_assignments_user_id ON role_assignments(user_id);
 CREATE INDEX idx_assignments_node_id ON role_assignments(node_id);
@@ -56,9 +57,16 @@ CREATE TABLE IF NOT EXISTS role_authorities (
     authority BIT(24) NOT NULL, -- Bitmask 권한 (8 -> 24)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT unique_authorities UNIQUE (node_id, role)
+    is_top_role BOOLEAN NOT NULL DEFAULT FALSE,
+    CONSTRAINT unique_authorities UNIQUE (node_id, role),
+    CONSTRAINT unique_authority_node_id UNIQUE (node_id, authority_id, is_top_role)
 );
 CREATE INDEX idx_authorities_node_id ON role_authorities(node_id);
+CREATE UNIQUE INDEX unique_top_role ON role_authorities(node_id) WHERE is_top_role;
+ALTER TABLE role_assignments ADD CONSTRAINT assignment_role_fk FOREIGN KEY (node_id, role_id, is_top_role)
+    REFERENCES role_authorities(node_id, authority_id, is_top_role);
+CREATE UNIQUE INDEX unique_top_assignee ON role_assignments(node_id) WHERE is_top_role;
+CREATE INDEX idx_assignments_role_id ON role_assignments(role_id);
 
 -- 4.1 권한 상수 테이블 (하드코딩 방지)
 CREATE TABLE IF NOT EXISTS authority_constants (
@@ -71,7 +79,8 @@ CREATE TABLE IF NOT EXISTS authority_constants (
 -- 4.2 역할별 기본 권한 테이블
 CREATE TABLE IF NOT EXISTS role_defaults (
     role VARCHAR(50) PRIMARY KEY,
-    default_authority BIT(24) NOT NULL
+    default_authority BIT(24) NOT NULL,
+    is_top_role BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- 5. 업무와 프로젝트 데이터
@@ -147,6 +156,7 @@ CREATE INDEX idx_node_history_node_id ON organization_node_histories(node_id);
 
 
 CREATE TABLE role_assignment_histories (
+    role_id INTEGER,
     history_id SERIAL PRIMARY KEY,
     assignment_id INTEGER NOT NULL,
     user_id VARCHAR(50) NOT NULL,
@@ -163,6 +173,7 @@ CREATE INDEX idx_assignment_history_node_id ON role_assignment_histories(node_id
 
 
 CREATE TABLE role_authority_histories (
+    is_top_role BOOLEAN NOT NULL DEFAULT FALSE,
     history_id SERIAL PRIMARY KEY,
     authority_id INTEGER NOT NULL,
     node_id INTEGER NOT NULL,
@@ -261,4 +272,3 @@ CREATE TABLE IF NOT EXISTS work_item_files (
 );
 CREATE INDEX idx_files_work_item_id ON work_item_files(work_item_id);
 CREATE INDEX idx_files_is_deleted ON work_item_files(is_deleted);
-

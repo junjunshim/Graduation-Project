@@ -28,7 +28,7 @@ export function WorkItemCreatePage() {
   const activeComposer = composer
   const serverAvailabilityMessage = isServerMode
     ? !activeComposer.selectedNode
-      ? '업무를 생성할 직접 권한(ADMIN, MANAGER 또는 MEMBER)이 있는 조직이 없습니다.'
+      ? '업무를 생성할 직접 권한(업무 생성 권한)이 있는 조직이 없습니다.'
       : activeComposer.assignableUsers.length === 0
         ? '선택한 조직에 업무 담당자로 지정할 직접 멤버가 없습니다.'
         : null

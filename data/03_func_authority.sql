@@ -4,8 +4,8 @@ CREATE OR REPLACE FUNCTION default_node_authority(
 ) RETURNS VOID AS $$
 BEGIN
     -- 노드 생성 시, 해당 노드에 대한 기본 권한 설정 (role_defaults 테이블에서 가져옴)
-    INSERT INTO role_authorities (node_id, role, authority)
-    SELECT p_node_id, role, default_authority
+    INSERT INTO role_authorities (node_id, role, authority, is_top_role)
+    SELECT p_node_id, role, default_authority, is_top_role
     FROM role_defaults;
 END;
 $$ LANGUAGE plpgsql;
@@ -43,7 +43,7 @@ BEGIN
     -- 1단계: 현재 노드(p_node_id)에 직접 설정된 권한 확인 (여러 역할 합산)
     SELECT BIT_OR(auth.authority) INTO v_final_auth
     FROM role_assignments ra
-    JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role = auth.role
+    JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role_id = auth.authority_id
     WHERE ra.user_id = p_user_id AND ra.node_id = p_node_id;
 
     -- 2단계: 설정이 없을 경우, 부모 노드를 아래(가까운 쪽)부터 위로 탐색
@@ -58,7 +58,7 @@ BEGIN
             ORDER BY idx DESC
         ) AS sorted_path
         JOIN role_assignments ra ON ra.node_id = sorted_path.elem_id
-        JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role = auth.role
+        JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role_id = auth.authority_id
         WHERE ra.user_id = p_user_id
         GROUP BY sorted_path.idx
         ORDER BY sorted_path.idx DESC

@@ -27,6 +27,8 @@ export type OrganizationNodeRecord = {
 }
 
 export type RoleAssignmentRecord = {
+  roleId?: number
+  isTopRole?: boolean
   id: number
   userId: string
   nodeId: number
@@ -59,6 +61,7 @@ export type WorkItemRecord = {
 }
 
 export type AuthorityRecord = {
+  isTopRole?: boolean
   id: number
   nodeId: number
   roleName: RoleName
@@ -175,6 +178,7 @@ export type CreateSubNodeRequest = {
 }
 
 export type AssignRoleRequest = {
+  roleId: number
   email: string
   nodeId: number
   roleName: RoleName
@@ -188,6 +192,7 @@ export type UpdateNodeRequest = {
 }
 
 export type UpdateRoleRequest = {
+  roleId: number
   email: string
   nodeId: number
   roleName: RoleName
@@ -263,6 +268,8 @@ export type OnboardingStep = {
 }
 
 export type RoleMember = {
+  roleId?: number
+  isTopRole?: boolean
   assignmentId: number
   userId: string
   name: string

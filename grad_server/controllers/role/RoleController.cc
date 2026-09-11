@@ -13,11 +13,11 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
     // 1. 데이터 파싱 및 유효성 검사
     // 필수 파라미터 유효성 검사
     auto jsonPtr = req->getJsonObject();
-    if(!validateStrings(jsonPtr, "email", "role_name") || !validateInts(jsonPtr, "node_id")){
+    if(!validateStrings(jsonPtr, "email") || !validateInts(jsonPtr, "node_id", "role_id")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(email, node_id, role_name)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(email, node_id, role_id)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -31,7 +31,7 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
     // 요청 바디에서 JSON 데이터 파싱
     std::string target_email = (*jsonPtr)["email"].asString();
     int node_id = (*jsonPtr)["node_id"].asInt();
-    std::string role_name = (*jsonPtr)["role_name"].asString();
+    int role_id = (*jsonPtr)["role_id"].asInt();
 
     // 2. 비지니스 로직
     //데이터베이스 클라이언트 가져오기
@@ -70,7 +70,7 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
             callback(resp);
         },
         // DB 함수에 전달할 매개변수 (요청자 이메일, 대상 이메일, 노드 id, 역할 이름)
-        requester_email, target_email, node_id, role_name
+        requester_email, target_email, node_id, role_id
     );
 }
 
@@ -84,11 +84,11 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
     auto jsonPtr = req->getJsonObject();
     
     // 필수 파라미터 유효성 검사
-    if(!jsonPtr || !validateStrings(jsonPtr, "email", "role_name") || !validateInts(jsonPtr, "node_id")){
+    if(!jsonPtr || !validateStrings(jsonPtr, "email") || !validateInts(jsonPtr, "node_id", "role_id")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(email, node_id, role_name)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(email, node_id, role_id)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -98,7 +98,7 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
 
     std::string target_email = (*jsonPtr)["email"].asString();
     int node_id = (*jsonPtr)["node_id"].asInt();
-    std::string role_name = (*jsonPtr)["role_name"].asString();
+    int role_id = (*jsonPtr)["role_id"].asInt();
     
     // 2. 비지니스 로직
     // 데이터베이스 클라이언트 객체를 가져오기
@@ -140,7 +140,7 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
         requester_email, 
         target_email, 
         node_id, 
-        role_name
+        role_id
     );
 }
 
@@ -206,11 +206,11 @@ void RoleController::createRoleDefinition(const HttpRequestPtr &req, std::functi
 void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
     auto jsonPtr = req->getJsonObject();
-    if(!validateStrings(jsonPtr, "role_name", "authority") || !validateInts(jsonPtr, "node_id")){
+    if(!validateStrings(jsonPtr, "authority") || !validateInts(jsonPtr, "node_id", "role_id")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(node_id, role_name, authority)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(node_id, role_id, authority)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -220,7 +220,7 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
 
     std::string requester_email = req->attributes()->get<std::string>("user_email");
     int node_id = (*jsonPtr)["node_id"].asInt();
-    std::string role_name = (*jsonPtr)["role_name"].asString();
+    int role_id = (*jsonPtr)["role_id"].asInt();
     std::string authority = (*jsonPtr)["authority"].asString();
 
     if (authority.length() != 24) {
@@ -256,7 +256,7 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
             resp->setStatusCode(statusCode);
             callback(resp);
         },
-        requester_email, node_id, role_name, authority
+        requester_email, node_id, role_id, authority
     );
 }
 
@@ -264,11 +264,11 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
 void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 데이터 파싱 및 유효성 검사
     auto jsonPtr = req->getJsonObject();
-    if(!validateStrings(jsonPtr, "old_role_name", "new_role_name") || !validateInts(jsonPtr, "node_id")){
+    if(!validateStrings(jsonPtr, "new_role_name") || !validateInts(jsonPtr, "node_id", "role_id")){
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "필수 파라미터(node_id, old_role_name, new_role_name)가 누락되었습니다.";
+        ret["message"] = "필수 파라미터(node_id, role_id, new_role_name)가 누락되었습니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -278,7 +278,7 @@ void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::functi
 
     std::string requester_email = req->attributes()->get<std::string>("user_email");
     int node_id = (*jsonPtr)["node_id"].asInt();
-    std::string old_role_name = (*jsonPtr)["old_role_name"].asString();
+    int role_id = (*jsonPtr)["role_id"].asInt();
     std::string new_role_name = (*jsonPtr)["new_role_name"].asString();
 
     // 2. 비즈니스 로직 실행
@@ -302,6 +302,6 @@ void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::functi
             resp->setStatusCode(statusCode);
             callback(resp);
         },
-        requester_email, node_id, old_role_name, new_role_name
+        requester_email, node_id, role_id, new_role_name
     );
 }

@@ -1,3 +1,5 @@
+import { resolveRoleAssignments } from '../model/roleDefinitions'
+import { ensureMockRoleDefinitions } from './mockRoleDefinitions'
 import type {
   OrganizationNodeRecord,
   RoleAssignmentRecord,
@@ -198,7 +200,7 @@ function normalizeDb(
   const nodeIds = new Set(nodes.map((node) => node.id))
 
   const roles: RoleAssignmentRecord[] = rawDb.roles
-    .map((entry, index) => {
+    .map((entry, index): RoleAssignmentRecord | null => {
       const item = entry as Record<string, unknown>
       const nodeId = Number(item.nodeId ?? item.node_id)
       const userId =
@@ -229,6 +231,8 @@ function normalizeDb(
         id: Number(item.id ?? item.assignment_id ?? index + 1),
         userId,
         nodeId,
+        roleId: Number(item.roleId ?? item.role_id) || undefined,
+        isTopRole: Boolean(item.isTopRole ?? item.is_top_role),
         roleName: String(item.roleName ?? item.role_name ?? item.role ?? 'MEMBER') as RoleAssignmentRecord['roleName'],
         ...(isDeleted !== undefined ? { isDeleted } : {}),
         createdAt: String(item.createdAt ?? item.createAt ?? item.create_at ?? getDefaultTimestamp(index)),
@@ -243,7 +247,7 @@ function normalizeDb(
     }
 
     const personalRole = roles.find((role) => {
-      if (role.userId !== user.userId || role.roleName !== 'ADMIN') {
+      if (role.userId !== user.userId || !role.isTopRole) {
         return false
       }
 
@@ -353,7 +357,7 @@ function normalizeDb(
       : configuredMockSeed?.seedVersion ?? seedVersion,
     users,
     nodes,
-    roles,
+    roles: options.allowExternalDataset ? resolveRoleAssignments(roles, authorities as NonNullable<WorkspaceDatabase['authorities']>) : roles,
     workItems,
     authorities: authorities as WorkspaceDatabase['authorities'],
     mentions: mentions as WorkspaceDatabase['mentions'],
@@ -392,8 +396,9 @@ export function readWorkspaceDb(): WorkspaceDatabase {
   }
 
   try {
-    const normalized = normalizeDb(JSON.parse(raw))
+    const normalized = ensureMockRoleDefinitions(normalizeDb(JSON.parse(raw)))
     const changed = ensureSeedData(normalized)
+    ensureMockRoleDefinitions(normalized)
     const clearedInvalidSession = ensureSessionUserExists(normalized)
     const normalizedRaw = JSON.stringify(normalized)
 
@@ -411,6 +416,7 @@ export function readWorkspaceDb(): WorkspaceDatabase {
 }
 
 export function writeWorkspaceDb(db: WorkspaceDatabase) {
+  if (!isServerDataSource()) ensureMockRoleDefinitions(db)
   if (!hasStorage()) {
     return
   }

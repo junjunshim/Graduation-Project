@@ -1,3 +1,5 @@
+import { resolveRoleAssignments } from '../model/roleDefinitions'
+import { parseAuthorityBitSet } from '../model/authorityDefinitions'
 import type {
   OrganizationNodeRecord,
   RoleMember,
@@ -15,11 +17,12 @@ function getInheritedManagers(
   node: OrganizationNodeRecord,
   roles: Array<RoleMember & { nodeId: number }>,
   users: ReturnType<typeof getOrgSnapshot>['users'],
+  canManageRole: (role: RoleMember & { nodeId: number }) => boolean,
 ) {
   const inheritedIds = Array.from(
     new Set(
       roles
-        .filter((role) => node.path.includes(role.nodeId) && (role.roleName === 'ADMIN' || role.roleName === 'MANAGER'))
+        .filter((role) => node.path.includes(role.nodeId) && canManageRole(role))
         .map((role) => role.userId),
     ),
   )
@@ -40,6 +43,8 @@ function toRoleMembers(snapshot: ReturnType<typeof getOrgSnapshot>, nodeId: numb
         name: user?.name ?? role.userId,
         email: user?.email ?? '',
         roleName: role.roleName,
+      roleId: role.roleId,
+      isTopRole: role.isTopRole,
       }
     })
     .sort((left, right) => left.name.localeCompare(right.name, 'ko'))
@@ -51,7 +56,14 @@ export function getSelectedNodeDetail(
   providedSnapshot?: WorkspaceSnapshot,
   options: SelectedNodeDetailOptions = {},
 ): SelectedNodeDetail | null {
-  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const source = providedSnapshot ?? getOrgSnapshot()
+  const snapshot = { ...source, roles: resolveRoleAssignments(source.roles, source.authorities ?? []) }
+  const canManageRole = (role: RoleMember & { nodeId: number }) => {
+    const definition = snapshot.authorities?.find((a) => a.id === role.roleId && a.nodeId === role.nodeId)
+    if (!definition) return false
+    const bits = parseAuthorityBitSet(definition.authority)
+    return !bits.has(23) && (definition.isTopRole === true || bits.has(15))
+  }
   const accessibleNodeIds = userId
     ? getAccessibleNodeIdsForUser(userId, snapshot)
     : snapshot.nodes.map((node) => node.id)
@@ -77,6 +89,8 @@ export function getSelectedNodeDetail(
       name: user?.name ?? role.userId,
       email: user?.email ?? '',
       roleName: role.roleName,
+      roleId: role.roleId,
+      isTopRole: role.isTopRole,
     }
   })
   const childNodes = sortWorkspaceNodes(snapshot.nodes.filter((candidate) => candidate.parentNodeId === node.id))
@@ -89,7 +103,7 @@ export function getSelectedNodeDetail(
           (options.requireDirectManagementRole
             ? role.nodeId === node.id
             : node.path.includes(role.nodeId)) &&
-          (role.roleName === 'ADMIN' || role.roleName === 'MANAGER'),
+          canManageRole(role),
       ),
   )
 
@@ -103,9 +117,11 @@ export function getSelectedNodeDetail(
       name: role.name,
       email: role.email,
       roleName: role.roleName,
+      roleId: role.roleId,
+      isTopRole: role.isTopRole,
     })),
     directWorkItems,
-    inheritedManagers: getInheritedManagers(node, allRolesWithNodeId, snapshot.users),
+    inheritedManagers: getInheritedManagers(node, allRolesWithNodeId, snapshot.users, canManageRole),
     canManage,
     nextActions: [
       {

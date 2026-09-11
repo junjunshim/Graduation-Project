@@ -3,15 +3,15 @@ import { createPortal } from 'react-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getRoleBadgeStyle } from '../model/labels'
-import type { RoleName } from '../model/types'
+import type { AuthorityRecord } from '../model/types'
 import { ToastAlertModal } from '../../../design-system/primitives/ToastAlertModal'
 import styles from './AddMemberModal.module.css'
 
 export type AddMemberModalProps = {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (email: string, roleName: RoleName) => Promise<void>
-  availableRoles: RoleName[]
+  onConfirm: (email: string, roleId: number) => Promise<void>
+  availableRoles: AuthorityRecord[]
   isSubmitting?: boolean
 }
 
@@ -23,7 +23,7 @@ export function AddMemberModal({
   isSubmitting = false,
 }: AddMemberModalProps) {
   const [email, setEmail] = useState('')
-  const [selectedRole, setSelectedRole] = useState<RoleName>('MEMBER')
+  const [selectedRole, setSelectedRole] = useState<number>(0)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -34,11 +34,7 @@ export function AddMemberModal({
   useEffect(() => {
     if (isOpen) {
       setEmail('')
-      if (availableRoles.includes('MEMBER')) {
-        setSelectedRole('MEMBER')
-      } else if (availableRoles.length > 0) {
-        setSelectedRole(availableRoles[0])
-      }
+      setSelectedRole(availableRoles[0]?.id ?? 0)
       setIsDropdownOpen(false)
       setWarnMessage('')
     }
@@ -68,6 +64,7 @@ export function AddMemberModal({
       setWarnMessage('사용자 이메일을 입력해주세요.')
       return
     }
+    if (!availableRoles.some((role) => role.id === selectedRole && !role.isTopRole)) return
     onConfirm(trimmedEmail, selectedRole)
   }
 
@@ -128,8 +125,8 @@ export function AddMemberModal({
                   disabled={isSubmitting}
                 >
                   <div className={styles.selectedRoleContent}>
-                    <span className={styles.roleBadge} style={getRoleBadgeStyle(selectedRole)}>
-                      {selectedRole}
+                    <span className={styles.roleBadge} style={getRoleBadgeStyle(availableRoles.find((role) => role.id === selectedRole)?.roleName ?? '')}>
+                      {availableRoles.find((role) => role.id === selectedRole)?.roleName ?? '선택 가능한 역할 없음'}
                     </span>
                   </div>
                   <Icon
@@ -142,19 +139,19 @@ export function AddMemberModal({
                 {isDropdownOpen ? (
                   <div className={styles.roleDropdownMenu}>
                     {availableRoles.map((role) => {
-                      const isSelected = selectedRole === role
+                      const isSelected = selectedRole === role.id
                       return (
                         <button
-                          key={role}
+                          key={role.id}
                           type="button"
                           className={[styles.roleOption, isSelected ? styles.roleOptionActive : ''].join(' ')}
                           onClick={() => {
-                            setSelectedRole(role)
+                            setSelectedRole(role.id)
                             setIsDropdownOpen(false)
                           }}
                         >
-                          <span className={styles.roleBadge} style={getRoleBadgeStyle(role)}>
-                            {role}
+                          <span className={styles.roleBadge} style={getRoleBadgeStyle(role.roleName)}>
+                            {role.roleName}
                           </span>
                           {isSelected ? <Icon name="checkCircle" size={14} /> : null}
                         </button>

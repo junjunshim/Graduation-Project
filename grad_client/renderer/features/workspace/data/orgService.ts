@@ -1,3 +1,4 @@
+import { resolveRoleAssignments } from '../model/roleDefinitions'
 import type {
   AssignRoleRequest,
   CreateSubNodeRequest,
@@ -102,7 +103,7 @@ export function getOrgSnapshot(): WorkspaceSnapshot {
   return {
     users: db.users.map((user) => ({ ...user })),
     nodes: activeNodes.map((node) => ({ ...node, path: [...node.path] })),
-    roles: db.roles
+    roles: resolveRoleAssignments(db.roles, db.authorities ?? [])
       .filter((role) => !role.isDeleted && activeNodeIds.has(role.nodeId))
       .map((role) => ({ ...role })),
     workItems: db.workItems
@@ -314,8 +315,10 @@ export async function assignRoleToNode(payload: AssignRoleRequest) {
     }
   }
 
+  const definition = db.authorities?.find((a) => a.id === payload.roleId && a.nodeId === payload.nodeId)
+  if (!definition || definition.isTopRole) return { status: 'error' as const, message: '배정 가능한 역할을 선택해 주세요.' }
   const duplicatedRole = db.roles.find(
-    (role) => role.userId === user.userId && role.nodeId === payload.nodeId && role.roleName === payload.roleName,
+    (role) => role.userId === user.userId && role.nodeId === payload.nodeId,
   )
 
   if (duplicatedRole) {
@@ -329,7 +332,9 @@ export async function assignRoleToNode(payload: AssignRoleRequest) {
     id: db.counters.role,
     userId: user.userId,
     nodeId: payload.nodeId,
-    roleName: payload.roleName,
+    roleId: definition.id,
+    isTopRole: definition.isTopRole,
+    roleName: definition.roleName,
     createdAt: nowIso(),
   })
   db.counters.role += 1
@@ -416,7 +421,10 @@ export async function updateRole(payload: UpdateRoleRequest) {
     }
   }
 
-  role.roleName = payload.roleName
+  const definition = db.authorities?.find((a) => a.id === payload.roleId && a.nodeId === payload.nodeId)
+  if (!definition || definition.isTopRole || role.isTopRole) return { status: 'error' as const, message: '최상위 담당자는 변경할 수 없습니다.' }
+  role.roleId = definition.id
+  role.roleName = definition.roleName
   writeWorkspaceDb(db)
 
   return {

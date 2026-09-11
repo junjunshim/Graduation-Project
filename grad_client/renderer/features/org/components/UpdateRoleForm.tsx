@@ -1,9 +1,10 @@
 import type { FormEvent } from 'react'
-import { ROLE_OPTIONS } from '../../workspace/model/options'
+import type { AuthorityRecord } from '../../workspace/model/types'
 import type { RoleName, SelectedNodeDetail } from '../../workspace/model/types'
 import styles from '../styles/OrgManagePage.module.css'
 
 type UpdateRoleFormProps = {
+  roleDefinitions: AuthorityRecord[]
   selectedDetail: SelectedNodeDetail
   updateRoleEmail: string
   updateRoleName: RoleName
@@ -14,6 +15,7 @@ type UpdateRoleFormProps = {
 }
 
 export function UpdateRoleForm({
+  roleDefinitions,
   selectedDetail,
   updateRoleEmail,
   updateRoleName,
@@ -22,7 +24,8 @@ export function UpdateRoleForm({
   onUpdateRoleNameChange,
   onSubmit,
 }: UpdateRoleFormProps) {
-  const isDisabled = !selectedDetail.canManage || selectedDetail.directRoles.length === 0 || busy
+  const editableMembers = selectedDetail.directRoles.filter((role) => !role.isTopRole)
+  const isDisabled = !selectedDetail.canManage || editableMembers.length === 0 || busy
 
   return (
     <form className={styles.panel} onSubmit={onSubmit} aria-busy={busy}>
@@ -41,7 +44,7 @@ export function UpdateRoleForm({
           disabled={isDisabled}
           onChange={(event) => onUpdateRoleEmailChange(event.target.value)}
         >
-          {selectedDetail.directRoles.map((role) => (
+          {editableMembers.map((role) => (
             <option key={role.assignmentId} value={role.email}>
               {role.name} ({role.email})
             </option>
@@ -57,9 +60,10 @@ export function UpdateRoleForm({
           disabled={isDisabled}
           onChange={(event) => onUpdateRoleNameChange(event.target.value as RoleName)}
         >
-          {ROLE_OPTIONS.map((role) => (
-            <option key={role} value={role}>
-              {role}
+          <option value="">역할 선택</option>
+          {roleDefinitions.filter((role) => !role.isTopRole).map((role) => (
+            <option key={role.id} value={String(role.id)}>
+              {role.roleName}
             </option>
           ))}
         </select>

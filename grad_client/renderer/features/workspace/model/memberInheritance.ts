@@ -1,6 +1,6 @@
+import { resolveRoleAssignments } from './roleDefinitions'
 import {
   AUTHORITY_BITS,
-  DEFAULT_ROLE_AUTHORITIES,
   parseAuthorityBitSet,
 } from './authorityDefinitions'
 import type {
@@ -9,11 +9,12 @@ import type {
   RoleAssignmentRecord,
   RoleMember,
   RoleName,
-  StandardRoleName,
   UserRecord,
 } from './types'
 
 export type WorkspaceMemberDetail = {
+  effectiveRoleId?: number
+  isTopRole?: boolean
   userId: string
   name: string
   email: string
@@ -27,18 +28,12 @@ export type WorkspaceMemberDetail = {
   assignedNodeId: number
 }
 
-const PRESET_ROLES: StandardRoleName[] = ['ADMIN', 'MANAGER', 'MEMBER', 'VIEWER']
 
 export function getRolePriorityScore(
   role: string,
   roleBitmaskMap: Map<RoleName, string>,
 ): number {
-  if (role === 'ADMIN') return 999999
-  const mask =
-    roleBitmaskMap.get(role) ||
-    (role in DEFAULT_ROLE_AUTHORITIES
-      ? DEFAULT_ROLE_AUTHORITIES[role as keyof typeof DEFAULT_ROLE_AUTHORITIES]
-      : '000100110000001101010111')
+  const mask = roleBitmaskMap.get(role) ?? '000000000000000000000000'
   const bitSet = parseAuthorityBitSet(mask)
 
   let score = 0
@@ -65,14 +60,7 @@ export function buildRoleBitmaskMap(
   const map = new Map<RoleName, string>()
   const nodeAuthorities = authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
 
-  if (nodeAuthorities.length === 0) {
-    PRESET_ROLES.forEach((r) => map.set(r, DEFAULT_ROLE_AUTHORITIES[r]))
-  } else {
-    map.set('ADMIN', DEFAULT_ROLE_AUTHORITIES.ADMIN)
-    nodeAuthorities.forEach((a) => {
-      if (a.roleName) map.set(a.roleName, a.authority)
-    })
-  }
+  nodeAuthorities.forEach((a) => map.set(String(a.id), a.authority))
 
   return map
 }
@@ -101,17 +89,18 @@ export function analyzeWorkspaceMembers({
     return { all: [], direct: [], inherited: [], overridden: [] }
   }
 
-  const roleBitmaskMap = buildRoleBitmaskMap(authorities, rootNode)
+  roles = resolveRoleAssignments(roles, authorities)
+  const roleBitmaskMap = buildRoleBitmaskMap(authorities)
   const getRolePriority = (role: string) => getRolePriorityScore(role, roleBitmaskMap)
 
   const nodesById = new Map(nodes.map((n) => [n.id, n]))
   const usersById = new Map(users.map((u) => [u.userId, u]))
 
   // 1. 현재 노드에 직접 할당된 역할들
-  const directRoleMap = new Map<string, RoleName>()
+  const directRoleMap = new Map<string, RoleAssignmentRecord>()
   roles
     .filter((r) => r.nodeId === rootNode.id && !r.isDeleted)
-    .forEach((r) => directRoleMap.set(r.userId, r.roleName))
+    .forEach((r) => directRoleMap.set(r.userId, r))
 
   // 2. 상위 조상 노드 ID 집합 식별 (path 컬럼 활용)
   const ancestorNodeIdSet = new Set<number>()
@@ -142,14 +131,14 @@ export function analyzeWorkspaceMembers({
 
     let isOverridden = false
     let overrideReason = ''
-    let effectiveRole: RoleName = directRole ?? 'MEMBER'
+    let effectiveRole: RoleName = directRole?.roleName ?? '역할 정보 없음'
     let sourceNodeName = rootNode.name
 
     // 상위 조상 노드로부터 물려받은 최고 역할 계산
     const inheritedRole =
       ancestorRoles.length > 0
         ? ancestorRoles.reduce((prev, curr) =>
-            getRolePriority(curr.roleName) > getRolePriority(prev.roleName) ? curr : prev,
+            rootNode.path.indexOf(curr.nodeId) > rootNode.path.indexOf(prev.nodeId) ? curr : prev,
           )
         : null
 
@@ -157,11 +146,11 @@ export function analyzeWorkspaceMembers({
       const ancestorNode = nodesById.get(inheritedRole.nodeId)
       const ancestorNodeName = ancestorNode?.name || '상위 노드'
 
-      if (directRole && directRole !== inheritedRole.roleName) {
+      if (directRole && directRole.roleId !== inheritedRole.roleId) {
         // 상위 역할이 있는데 현재 노드에서 다르게 직접 재정의된 경우 => 오버라이드
         isOverridden = true
-        overrideReason = `${ancestorNodeName} (${inheritedRole.roleName}) ➔ ${rootNode.name} 직속 재정의 (${directRole})`
-        effectiveRole = directRole
+        overrideReason = `${ancestorNodeName} (${inheritedRole.roleName}) ➔ ${rootNode.name} 직속 재정의 (${directRole.roleName})`
+        effectiveRole = directRole.roleName
         sourceNodeName = rootNode.name
       } else if (!directRole) {
         // 직속 할당 없이 상위에서 상속받은 경우
@@ -183,7 +172,9 @@ export function analyzeWorkspaceMembers({
       name,
       email,
       effectiveRoleName: effectiveRole,
-      directRoleName: directRole,
+      effectiveRoleId: (directRole ?? inheritedRole)?.roleId,
+      isTopRole: (directRole ?? inheritedRole)?.isTopRole,
+      directRoleName: directRole?.roleName,
       inheritedRoleName: inheritedRole?.roleName,
       isDirect,
       isOverridden,
@@ -195,7 +186,7 @@ export function analyzeWorkspaceMembers({
 
   // 기본 정렬: 역할 우선순위 -> 이름순
   all.sort((a, b) => {
-    const priorityDiff = getRolePriority(b.effectiveRoleName) - getRolePriority(a.effectiveRoleName)
+    const priorityDiff = Number(Boolean(b.isTopRole)) - Number(Boolean(a.isTopRole)) || getRolePriority(String(b.effectiveRoleId)) - getRolePriority(String(a.effectiveRoleId))
     if (priorityDiff !== 0) return priorityDiff
     return a.name.localeCompare(b.name, 'ko')
   })

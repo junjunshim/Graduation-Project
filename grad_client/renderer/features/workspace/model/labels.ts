@@ -73,10 +73,10 @@ const ADMIN_STYLE = {
  * 역할 이름을 해싱 후 % 10 하여 10개 컬러 중 일관된 스타일을 반환합니다.
  * ADMIN은 항상 고정된 빨간색 스타일을 반환합니다.
  */
-export function getRoleBadgeStyle(roleName: string): React.CSSProperties {
+export function getRoleBadgeStyle(roleName: string, isTopRole = false): React.CSSProperties {
   const normalized = (roleName || '').trim().toUpperCase()
 
-  if (normalized === 'ADMIN') {
+  if (isTopRole) {
     return {
       backgroundColor: ADMIN_STYLE.bg,
       color: ADMIN_STYLE.color,

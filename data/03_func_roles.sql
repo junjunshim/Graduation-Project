@@ -5,13 +5,18 @@ CREATE OR REPLACE FUNCTION add_role(
     p_requester_email users.email%TYPE,
     p_target_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
-    p_role_name role_assignments.role%TYPE
+    p_role_id INTEGER
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
+    p_role_name role_authorities.role%TYPE;
     v_requester_id users.user_id%TYPE;
     v_target_id users.user_id%TYPE;
     v_new_id role_assignments.assignment_id%TYPE;
 BEGIN
+    SELECT role INTO p_role_name FROM role_authorities WHERE authority_id = p_role_id AND node_id = p_node_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0407]Role is not defined on this node' USING ERRCODE = 'P0407';
+    END IF;
     -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
 
@@ -35,7 +40,7 @@ BEGIN
     END IF;
 
     -- 4. 해당 노드에 등록된 역할인지 확인 (ADMIN이 아니면 role_authorities에 정의되어 있어야 함)
-    IF NOT EXISTS (SELECT 1 FROM role_authorities WHERE node_id = p_node_id AND role = p_role_name) THEN
+    IF NOT EXISTS (SELECT 1 FROM role_authorities WHERE node_id = p_node_id AND authority_id = p_role_id) THEN
         RAISE EXCEPTION '[P0407]Role is not defined on this node: %', p_role_name
         USING ERRCODE = 'P0407';
     END IF;
@@ -47,8 +52,11 @@ BEGIN
     END IF;
 
     -- 6. 권한 부여 실행
-    INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (v_target_id, p_node_id, p_role_name)
+    IF EXISTS (SELECT 1 FROM role_authorities WHERE authority_id = p_role_id AND is_top_role) THEN
+        RAISE EXCEPTION '[P0409]Cannot assign the top role' USING ERRCODE = 'P0409';
+    END IF;
+    INSERT INTO role_assignments (user_id, node_id, role_id)
+    VALUES (v_target_id, p_node_id, p_role_id)
     RETURNING assignment_id INTO v_new_id;
 
     -- 6.5 최근 활동 피드 로깅
@@ -66,7 +74,9 @@ BEGIN
         'user_id', r.user_id,
         'user_name', u.name,
         'email', u.email,
-        'role', r.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = r.role_id),
+        'role_id', r.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = r.role_id),
         'updated_at', r.updated_at
     )
     FROM role_assignments r
@@ -91,19 +101,24 @@ CREATE OR REPLACE FUNCTION update_role(
     p_requester_email users.email%TYPE,
     p_target_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
-    p_change_role_name role_assignments.role%TYPE
+    p_role_id INTEGER
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
+    p_change_role_name role_authorities.role%TYPE;
     v_requester_id users.user_id%TYPE;
     v_target_id users.user_id%TYPE;
-    v_old_role role_assignments.role%TYPE;
+    v_old_role role_authorities.role%TYPE;
     v_target_name users.name%TYPE;
 BEGIN
+    SELECT role INTO p_change_role_name FROM role_authorities WHERE authority_id = p_role_id AND node_id = p_node_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0407]Role is not defined on this node' USING ERRCODE = 'P0407';
+    END IF;
     -- 0. 입력 값 검증 (NULL and admin은 변경 불가)
     IF 
         p_change_role_name IS NULL
         OR
-        p_change_role_name = 'ADMIN'
+        EXISTS (SELECT 1 FROM role_authorities WHERE authority_id = p_role_id AND is_top_role)
     THEN
         RAISE EXCEPTION '[P0405]Invalid role provided for update : %', p_change_role_name
         USING ERRCODE = 'P0405';
@@ -132,27 +147,27 @@ BEGIN
     END IF;
 
     -- 4. 변경하려는 역할이 해당 노드에 등록되어 있는지 확인
-    IF NOT EXISTS (SELECT 1 FROM role_authorities WHERE node_id = p_node_id AND role = p_change_role_name) THEN
+    IF NOT EXISTS (SELECT 1 FROM role_authorities WHERE node_id = p_node_id AND authority_id = p_role_id) THEN
         RAISE EXCEPTION '[P0407]Role is not defined on this node: %', p_change_role_name
         USING ERRCODE = 'P0407';
     END IF;
 
     -- 5. 타켓 사용자가 해당 노드에 권한이 있는지 확인 및 기존 권한 가져오기
-    SELECT role INTO v_old_role FROM role_assignments WHERE user_id = v_target_id AND node_id = p_node_id;
+    SELECT a.role INTO v_old_role FROM role_assignments r JOIN role_authorities a ON a.authority_id = r.role_id WHERE r.user_id = v_target_id AND r.node_id = p_node_id;
     IF NOT FOUND THEN
         RAISE EXCEPTION '[P0403]Target user does not have a role on this node : %', p_target_email
         USING ERRCODE = 'P0403';
     END IF;
 
     -- 6. 타켓 사용자가 ADMIN 권한인 경우 변경 불가
-    IF v_old_role = 'ADMIN' THEN
+    IF EXISTS (SELECT 1 FROM role_assignments r JOIN role_authorities a ON a.authority_id = r.role_id WHERE r.user_id = v_target_id AND r.node_id = p_node_id AND a.is_top_role) THEN
         RAISE EXCEPTION '[P0404]Cannot change role of an ADMIN user : %', p_target_email
         USING ERRCODE = 'P0404';
     END IF;
 
     -- 7. 새로운 권한 부여
     UPDATE role_assignments
-    SET role = p_change_role_name
+    SET role_id = p_role_id
     WHERE user_id = v_target_id AND node_id = p_node_id;
 
     -- 7.5 최근 활동 피드 로깅
@@ -171,7 +186,9 @@ BEGIN
         'user_id', r.user_id,
         'user_name', u.name,
         'email', u.email,
-        'role', r.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = r.role_id),
+        'role_id', r.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = r.role_id),
         'updated_at', r.updated_at
     )
     FROM role_assignments r
@@ -206,11 +223,6 @@ BEGIN
         USING ERRCODE = 'P0408';
     END IF;
 
-    -- ADMIN 역할은 시스템 생성 전용
-    IF UPPER(p_role_name) = 'ADMIN' THEN
-        RAISE EXCEPTION '[P0409]Cannot create ADMIN role'
-        USING ERRCODE = 'P0409';
-    END IF;
 
     BEGIN
         v_authority_bit := p_authority::BIT(24);
@@ -250,6 +262,8 @@ BEGIN
     RETURN QUERY SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', a.authority_id,
+        'role_id', a.authority_id,
+        'is_top_role', a.is_top_role,
         'node_id', a.node_id,
         'role', a.role,
         'authority', a.authority::TEXT,
@@ -272,15 +286,20 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION update_role_authority(
     p_requester_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
-    p_role_name role_authorities.role%TYPE,
+    p_role_id INTEGER,
     p_authority VARCHAR(24)
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
+    p_role_name role_authorities.role%TYPE;
     v_requester_id users.user_id%TYPE;
     v_authority_id role_authorities.authority_id%TYPE;
     v_authority_bit BIT(24);
     v_old_authority BIT(24);
 BEGIN
+    SELECT role INTO p_role_name FROM role_authorities WHERE authority_id = p_role_id AND node_id = p_node_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0407]Role is not defined on this node' USING ERRCODE = 'P0407';
+    END IF;
     -- 0. 입력값 및 비트 변환 검증
     IF p_role_name IS NULL OR TRIM(p_role_name) = '' THEN
         RAISE EXCEPTION '[P0408]Role name cannot be empty'
@@ -288,7 +307,7 @@ BEGIN
     END IF;
 
     -- ADMIN 역할의 권한 임의 수정 방지
-    IF UPPER(p_role_name) = 'ADMIN' THEN
+    IF EXISTS (SELECT 1 FROM role_authorities WHERE authority_id = p_role_id AND is_top_role) THEN
         RAISE EXCEPTION '[P0409]Cannot modify ADMIN role authority'
         USING ERRCODE = 'P0409';
     END IF;
@@ -316,7 +335,7 @@ BEGIN
     -- 3. 기존 권한 조회 (수정 대상이 존재하는지 확인)
     SELECT authority_id, authority INTO v_authority_id, v_old_authority 
     FROM role_authorities 
-    WHERE node_id = p_node_id AND role = p_role_name;
+    WHERE node_id = p_node_id AND authority_id = p_role_id;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION '[P0407]Role is not defined on this node: %', p_role_name
@@ -335,6 +354,8 @@ BEGIN
     RETURN QUERY SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', a.authority_id,
+        'role_id', a.authority_id,
+        'is_top_role', a.is_top_role,
         'node_id', a.node_id,
         'role', a.role,
         'authority', a.authority::TEXT,
@@ -357,14 +378,19 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION rename_role_definition(
     p_requester_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
-    p_old_role_name role_authorities.role%TYPE,
+    p_role_id INTEGER,
     p_new_role_name role_authorities.role%TYPE
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
+    p_old_role_name role_authorities.role%TYPE;
     v_requester_id users.user_id%TYPE;
     v_authority_id role_authorities.authority_id%TYPE;
     v_authority_bit BIT(24);
 BEGIN
+    SELECT role INTO p_old_role_name FROM role_authorities WHERE authority_id = p_role_id AND node_id = p_node_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0407]Role is not defined on this node' USING ERRCODE = 'P0407';
+    END IF;
     -- 0. 입력값 검증
     IF p_old_role_name IS NULL OR TRIM(p_old_role_name) = '' THEN
         RAISE EXCEPTION '[P0408]Old role name cannot be empty'
@@ -374,26 +400,6 @@ BEGIN
     IF p_new_role_name IS NULL OR TRIM(p_new_role_name) = '' THEN
         RAISE EXCEPTION '[P0408]New role name cannot be empty'
         USING ERRCODE = 'P0408';
-    END IF;
-
-    -- ADMIN 역할은 이름 변경 불가 및 ADMIN으로의 변경도 불가
-    IF UPPER(p_old_role_name) = 'ADMIN' OR UPPER(p_new_role_name) = 'ADMIN' THEN
-        RAISE EXCEPTION '[P0409]Cannot rename ADMIN role'
-        USING ERRCODE = 'P0409';
-    END IF;
-
-    IF p_old_role_name = p_new_role_name THEN
-        RETURN QUERY SELECT jsonb_build_object(
-            'type', 'AUTHORITY',
-            'id', a.authority_id,
-            'node_id', a.node_id,
-            'role', a.role,
-            'authority', a.authority::TEXT,
-            'updated_at', a.updated_at
-        )
-        FROM role_authorities a
-        WHERE node_id = p_node_id AND role = p_old_role_name;
-        RETURN;
     END IF;
 
     -- 1. 요청자 id 가져오기 및 존재 여부 확인
@@ -412,7 +418,7 @@ BEGIN
     -- 3. 기존 역할 정의 조회
     SELECT authority_id, authority INTO v_authority_id, v_authority_bit 
     FROM role_authorities 
-    WHERE node_id = p_node_id AND role = p_old_role_name;
+    WHERE node_id = p_node_id AND authority_id = p_role_id;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION '[P0407]Role is not defined on this node: %', p_old_role_name
@@ -420,7 +426,7 @@ BEGIN
     END IF;
 
     -- 4. 신규 역할명이 이미 해당 노드에 존재하는지 확인 (중복 방지)
-    IF EXISTS (SELECT 1 FROM role_authorities WHERE node_id = p_node_id AND role = p_new_role_name) THEN
+    IF EXISTS (SELECT 1 FROM role_authorities WHERE node_id = p_node_id AND role = p_new_role_name AND authority_id <> p_role_id) THEN
         RAISE EXCEPTION '[P0412]Role already exists on this node: %', p_new_role_name
         USING ERRCODE = 'P0412';
     END IF;
@@ -430,11 +436,6 @@ BEGIN
     SET role = p_new_role_name
     WHERE authority_id = v_authority_id;
 
-    -- 6. 해당 노드의 role_assignments 테이블에서도 기존 역할을 새 역할명으로 일괄 갱신
-    UPDATE role_assignments
-    SET role = p_new_role_name
-    WHERE node_id = p_node_id AND role = p_old_role_name;
-
     -- 7. 최근 활동 피드 로깅
     PERFORM log_activity(p_node_id, p_requester_email, 'AUTHORITY', v_authority_id::VARCHAR, p_old_role_name, 'updated', 'role', p_old_role_name, p_new_role_name);
 
@@ -443,6 +444,8 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', a.authority_id,
+        'role_id', a.authority_id,
+        'is_top_role', a.is_top_role,
         'node_id', a.node_id,
         'role', a.role,
         'authority', a.authority::TEXT,
@@ -456,12 +459,14 @@ BEGIN
         'id', r.assignment_id,
         'node_id', r.node_id,
         'email', u.email,
-        'role', r.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = r.role_id),
+        'role_id', r.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = r.role_id),
         'updated_at', r.updated_at
     )
     FROM role_assignments r
     JOIN users u ON r.user_id = u.user_id
-    WHERE r.node_id = p_node_id AND r.role = p_new_role_name;
+    WHERE r.node_id = p_node_id AND r.role_id = p_role_id;
 
     EXCEPTION
         WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0407' OR SQLSTATE 'P0408' OR SQLSTATE 'P0409' OR SQLSTATE 'P0412' THEN
@@ -471,4 +476,3 @@ BEGIN
             USING ERRCODE = 'P0414';
 END;
 $$ LANGUAGE plpgsql;
-

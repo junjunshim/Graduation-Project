@@ -1,9 +1,10 @@
 import type { FormEvent } from 'react'
-import { ROLE_OPTIONS } from '../../workspace/model/options'
+import type { AuthorityRecord } from '../../workspace/model/types'
 import type { RoleName, UserRecord } from '../../workspace/model/types'
 import styles from '../styles/OrgManagePage.module.css'
 
 type AssignRoleFormProps = {
+  roleDefinitions: AuthorityRecord[]
   assignRoleName: RoleName
   roleEmail: string
   users: UserRecord[]
@@ -16,6 +17,7 @@ type AssignRoleFormProps = {
 }
 
 export function AssignRoleForm({
+  roleDefinitions,
   assignRoleName,
   roleEmail,
   users,
@@ -80,9 +82,10 @@ export function AssignRoleForm({
           disabled={disabled}
           onChange={(event) => onAssignRoleNameChange(event.target.value as RoleName)}
         >
-          {ROLE_OPTIONS.map((role) => (
-            <option key={role} value={role}>
-              {role}
+          <option value="">역할 선택</option>
+          {roleDefinitions.filter((role) => !role.isTopRole).map((role) => (
+            <option key={role.id} value={String(role.id)}>
+              {role.roleName}
             </option>
           ))}
         </select>

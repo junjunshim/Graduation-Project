@@ -1,3 +1,4 @@
+import { resolveRoleAssignments } from '../model/roleDefinitions'
 import type {
   OnboardingStep,
   OrganizationNodeRecord,
@@ -176,7 +177,8 @@ export function getWorkspaceOverview(
   providedSnapshot?: WorkspaceSnapshot,
   options?: WorkspaceOverviewOptions,
 ): WorkspaceOverview {
-  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const source = providedSnapshot ?? getOrgSnapshot()
+  const snapshot = { ...source, roles: resolveRoleAssignments(source.roles, source.authorities ?? []) }
   const currentUser = getCurrentUser(snapshot)
   const resolvedUserId = userId ?? currentUser?.userId
   const allAccessibleNodeIds = resolvedUserId ? getAccessibleNodeIdsForUser(resolvedUserId, snapshot) : []
@@ -282,26 +284,13 @@ export function getWorkspaceOverview(
   // 직속 역할 멤버: 하위 노드에 더 구체적으로 배정되지 않은 멤버 (만약 모두 하위에 배정되어 0명이면 ADMIN은 유지)
   let directRootRoles = rawRootRoles.filter((r) => !descendantAssignedUsers.has(r.userId))
   if (directRootRoles.length === 0 && rawRootRoles.length > 0) {
-    const adminRoles = rawRootRoles.filter((r) => r.roleName === 'ADMIN')
+    const adminRoles = rawRootRoles.filter((r) => r.isTopRole === true)
     directRootRoles = adminRoles.length > 0 ? adminRoles : [rawRootRoles[0]]
   }
 
-  const rootRoleMembers = rootNode
-    ? (rootNode.nodeType === 'USER'
-        ? (resolvedUser
-            ? [
-                toRoleMember(
-                  0,
-                  resolvedUser.userId,
-                  'ADMIN',
-                  usersById,
-                ),
-              ]
-            : [])
-        : directRootRoles
-            .map((role) => toRoleMember(role.id, role.userId, role.roleName, usersById))
-            .sort((left, right) => left.name.localeCompare(right.name, 'ko')))
-    : []
+  const rootRoleMembers = rootNode ? directRootRoles
+    .map((role) => ({ ...toRoleMember(role.id, role.userId, role.roleName, usersById), roleId: role.roleId, isTopRole: role.isTopRole }))
+    .sort((left, right) => left.name.localeCompare(right.name, 'ko')) : []
 
   // 현재 선택된 트리의 전체 노드 ID 집합 (rootNode 및 그 모든 자손 노드들만 포함)
   const scopedTreeIds = rootNode

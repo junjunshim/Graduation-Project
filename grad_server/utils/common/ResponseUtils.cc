@@ -215,7 +215,7 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             break;
         }
         case DbErrorCode::TargetIsAdmin:{
-            ret["message"] = "변경할 타켓이 ADMIN입니다.";
+            ret["message"] = "최상위 담당자의 역할은 변경할 수 없습니다.";
             ret["http_code"] = drogon::k400BadRequest;
             break;
         }
@@ -240,7 +240,7 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             break;
         }
         case DbErrorCode::CannotModifyAdminRole:{
-            ret["message"] = "ADMIN 역할은 임의로 생성하거나 수정할 수 없습니다.";
+            ret["message"] = "최상위 역할·담당자 제약에 위배되는 요청입니다.";
             ret["http_code"] = drogon::k400BadRequest;
             break;
         }

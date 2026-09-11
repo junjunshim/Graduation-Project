@@ -86,7 +86,7 @@ export function RoleSaveConfirmModal({
                 </strong>
                 <p className={styles.lockoutWarningDesc}>
                   현재 소속된 <strong>{roleName}</strong> 역할에서 <strong>[역할 권한 정의/수정]</strong> 권한을 제거하려고 합니다.
-                  이 변경사항을 저장하면 <strong>이후 본인을 포함한 {roleName} 역할의 모든 사용자는 권한 설정 탭을 수정할 수 없게 되며</strong>, 최고 관리자(ADMIN)만 복구할 수 있습니다.
+                  이 변경사항을 저장하면 <strong>이후 본인을 포함한 {roleName} 역할의 모든 사용자는 권한 설정 탭을 수정할 수 없게 되며</strong>, 최상위 담당자만 복구할 수 있습니다.
                 </p>
                 <label className={styles.lockoutAckLabel}>
                   <input

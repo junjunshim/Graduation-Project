@@ -1,3 +1,4 @@
+import { resolveRoleAssignments } from '../../model/roleDefinitions'
 import type {
   ActivityRecord,
   AuthorityRecord,
@@ -97,7 +98,7 @@ function normalizeNodeType(value: unknown): NodeType {
 }
 
 function normalizeRoleName(value: unknown): RoleName {
-  const normalized = toStringValue(value).trim().toUpperCase()
+  const normalized = toStringValue(value).trim()
 
   if (
     normalized === 'ADMIN' ||
@@ -391,12 +392,14 @@ export function normalizeServerContext(
       userId: user.userId,
       nodeId,
       roleName,
+      roleId: toNumberValue(item.role_id, 0) || undefined,
+      isTopRole: toBooleanValue(item.is_top_role, false),
       isDeleted: toBooleanValue(item.is_deleted, false),
       createdAt: toOptionalString(item.created_at ?? item.updated_at) ?? timestamp,
       updatedAt: toOptionalString(item.updated_at),
     })
 
-    if (roleName === 'ADMIN' && nodesById.get(nodeId)?.nodeType === 'USER') {
+    if (toBooleanValue(item.is_top_role, false) && nodesById.get(nodeId)?.nodeType === 'USER') {
       user.personalNodeId = nodeId
     }
   })
@@ -507,6 +510,7 @@ export function normalizeServerContext(
         nodeId,
         roleName: normalizeRoleName(item.role),
         authority: toStringValue(item.authority),
+        isTopRole: toBooleanValue(item.is_top_role, false),
         updatedAt: toOptionalString(item.updated_at),
       })
     }
@@ -617,7 +621,7 @@ export function normalizeServerContext(
       seedVersion: SERVER_SEED_VERSION,
       users: Array.from(usersById.values()),
       nodes,
-      roles: normalizedRoles,
+      roles: resolveRoleAssignments(normalizedRoles, authorities),
       workItems: normalizedWorkItems,
       authorities,
       mentions,

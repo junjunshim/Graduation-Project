@@ -49,6 +49,8 @@ export function getServerLoginTokens(response: ServerLoginResponse): ServerLogin
  * the adapter remains forward-compatible without leaking transport names into UI code.
  */
 export type ServerContextItem = {
+  role_id?: number | string
+  is_top_role?: boolean
   type?: string
   id?: string | number
   display_id?: string | number

@@ -33,11 +33,10 @@ BEGIN
     WHERE node_id = v_new_node_id;
 
     -- 3. 소유자 배정 (role_assignments 테이블)
-    INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (v_user_id, v_new_node_id, 'ADMIN');
-
-    -- 4. 노드에 대한 기본 권한 설정
     PERFORM default_node_authority(v_new_node_id);
+    INSERT INTO role_assignments (user_id, node_id, role_id)
+    SELECT v_user_id, v_new_node_id, authority_id FROM role_authorities
+    WHERE node_id = v_new_node_id AND is_top_role;
 
     -- 4.5 최근 활동 피드 로깅
     PERFORM log_activity(v_new_node_id, p_email, 'NODE', v_new_node_id::VARCHAR, p_name, 'inserted');
@@ -63,7 +62,9 @@ BEGIN
         'id', ra.assignment_id,
         'node_id', ra.node_id,
         'email', u.email,
-        'role', ra.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = ra.role_id),
+        'role_id', ra.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = ra.role_id),
         'updated_at', ra.updated_at
     )
     FROM role_assignments ra
@@ -75,6 +76,8 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', a.authority_id,
+        'role_id', a.authority_id,
+        'is_top_role', a.is_top_role,
         'node_id', a.node_id,
         'role', a.role,
         'authority', a.authority::TEXT,
@@ -152,11 +155,10 @@ BEGIN
     WHERE node_id = v_new_node_id;
     
     -- 5. 소유자 배정 (role_assignments 테이블)
-    INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (v_owner_user_id, v_new_node_id, 'ADMIN');
-
-    -- 6. 노드에 대한 기본 권한 설정
     PERFORM default_node_authority(v_new_node_id);
+    INSERT INTO role_assignments (user_id, node_id, role_id)
+    SELECT v_owner_user_id, v_new_node_id, authority_id FROM role_authorities
+    WHERE node_id = v_new_node_id AND is_top_role;
 
     -- 6.5 최근 활동 피드 로깅
     PERFORM log_activity(v_new_node_id, p_requester_email, 'NODE', v_new_node_id::VARCHAR, p_name, 'inserted');
@@ -182,7 +184,9 @@ BEGIN
         'id', ra.assignment_id,
         'node_id', ra.node_id,
         'email', u.email,
-        'role', ra.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = ra.role_id),
+        'role_id', ra.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = ra.role_id),
         'updated_at', ra.updated_at
     )
     FROM role_assignments ra
@@ -194,6 +198,8 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', a.authority_id,
+        'role_id', a.authority_id,
+        'is_top_role', a.is_top_role,
         'node_id', a.node_id,
         'role', a.role,
         'authority', a.authority::TEXT,
@@ -222,7 +228,7 @@ CREATE OR REPLACE FUNCTION update_node(
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
-    v_requester_role role_assignments.role%TYPE;
+    v_requester_role role_authorities.role%TYPE;
     v_old_name organization_nodes.name%TYPE;
     v_old_type organization_nodes.node_type%TYPE;
 BEGIN
@@ -437,7 +443,9 @@ BEGIN
         'user_id', ra.user_id,
         'user_name', u.name,
         'email', u.email,
-        'role', ra.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = ra.role_id),
+        'role_id', ra.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = ra.role_id),
         'updated_at', ra.updated_at
     )
     FROM role_assignments ra
@@ -465,6 +473,8 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', a.authority_id,
+        'role_id', a.authority_id,
+        'is_top_role', a.is_top_role,
         'node_id', a.node_id,
         'role', a.role,
         'authority', a.authority::TEXT,

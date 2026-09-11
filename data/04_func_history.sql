@@ -41,14 +41,14 @@ CREATE OR REPLACE FUNCTION log_role_assignments_history()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (TG_OP = 'DELETE') THEN
-        INSERT INTO role_assignment_histories (assignment_id, user_id, node_id, role, created_at, updated_at, change_status)
-        VALUES (OLD.assignment_id, OLD.user_id, OLD.node_id, OLD.role, OLD.created_at, OLD.updated_at, 'deleted');
+        INSERT INTO role_assignment_histories (assignment_id, user_id, node_id, role_id, role, created_at, updated_at, change_status)
+        VALUES (OLD.assignment_id, OLD.user_id, OLD.node_id, OLD.role_id, COALESCE((SELECT role FROM role_authorities WHERE authority_id = OLD.role_id), '[deleted]'), OLD.created_at, OLD.updated_at, 'deleted');
     ELSIF (TG_OP = 'UPDATE') THEN
-        INSERT INTO role_assignment_histories (assignment_id, user_id, node_id, role, created_at, updated_at, change_status)
-        VALUES (NEW.assignment_id, NEW.user_id, NEW.node_id, NEW.role, NEW.created_at, NEW.updated_at, 'updated');
+        INSERT INTO role_assignment_histories (assignment_id, user_id, node_id, role_id, role, created_at, updated_at, change_status)
+        VALUES (NEW.assignment_id, NEW.user_id, NEW.node_id, NEW.role_id, COALESCE((SELECT role FROM role_authorities WHERE authority_id = NEW.role_id), '[deleted]'), NEW.created_at, NEW.updated_at, 'updated');
     ELSIF (TG_OP = 'INSERT') THEN
-        INSERT INTO role_assignment_histories (assignment_id, user_id, node_id, role, created_at, updated_at, change_status)
-        VALUES (NEW.assignment_id, NEW.user_id, NEW.node_id, NEW.role, NEW.created_at, NEW.updated_at, 'inserted');
+        INSERT INTO role_assignment_histories (assignment_id, user_id, node_id, role_id, role, created_at, updated_at, change_status)
+        VALUES (NEW.assignment_id, NEW.user_id, NEW.node_id, NEW.role_id, COALESCE((SELECT role FROM role_authorities WHERE authority_id = NEW.role_id), '[deleted]'), NEW.created_at, NEW.updated_at, 'inserted');
     END IF;
     RETURN NULL;
 END;
@@ -60,14 +60,14 @@ CREATE OR REPLACE FUNCTION log_role_authorities_history()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (TG_OP = 'DELETE') THEN
-        INSERT INTO role_authority_histories (authority_id, node_id, role, authority, created_at, updated_at, change_status)
-        VALUES (OLD.authority_id, OLD.node_id, OLD.role, OLD.authority, OLD.created_at, OLD.updated_at, 'deleted');
+        INSERT INTO role_authority_histories (authority_id, node_id, role, authority, is_top_role, created_at, updated_at, change_status)
+        VALUES (OLD.authority_id, OLD.node_id, OLD.role, OLD.authority, OLD.is_top_role, OLD.created_at, OLD.updated_at, 'deleted');
     ELSIF (TG_OP = 'UPDATE') THEN
-        INSERT INTO role_authority_histories (authority_id, node_id, role, authority, created_at, updated_at, change_status)
-        VALUES (NEW.authority_id, NEW.node_id, NEW.role, NEW.authority, NEW.created_at, NEW.updated_at, 'updated');
+        INSERT INTO role_authority_histories (authority_id, node_id, role, authority, is_top_role, created_at, updated_at, change_status)
+        VALUES (NEW.authority_id, NEW.node_id, NEW.role, NEW.authority, NEW.is_top_role, NEW.created_at, NEW.updated_at, 'updated');
     ELSIF (TG_OP = 'INSERT') THEN
-        INSERT INTO role_authority_histories (authority_id, node_id, role, authority, created_at, updated_at, change_status)
-        VALUES (NEW.authority_id, NEW.node_id, NEW.role, NEW.authority, NEW.created_at, NEW.updated_at, 'inserted');
+        INSERT INTO role_authority_histories (authority_id, node_id, role, authority, is_top_role, created_at, updated_at, change_status)
+        VALUES (NEW.authority_id, NEW.node_id, NEW.role, NEW.authority, NEW.is_top_role, NEW.created_at, NEW.updated_at, 'inserted');
     END IF;
     RETURN NULL;
 END;

@@ -147,7 +147,7 @@ BEGIN
             PERFORM register_user(v_dept_leader_id, v_dept_leader_email, v_dept_leader_name, 'leader@1234');
             
             -- 3-2. 상위 회사 노드에 팀장을 MANAGER 역할로 먼저 등록 (선 조건 만족)
-            PERFORM add_role(v_comp_admin_email, v_dept_leader_email, v_company_node_id, 'MANAGER');
+            PERFORM add_role(v_comp_admin_email, v_dept_leader_email, v_company_node_id, (SELECT authority_id FROM role_authorities WHERE node_id = v_company_node_id AND role = 'MANAGER'));
             
             -- 3-3. 부서 노드 생성 (이때 팀장이 부서노드의 관리자(ADMIN)로 소속 및 지정됨)
             PERFORM create_sub_node(v_comp_admin_email, 'DEPARTMENT', v_company_node_id, v_companies[c_idx] || ' ' || v_depts[d_idx], v_dept_leader_email);
@@ -258,10 +258,10 @@ BEGIN
                 PERFORM register_user(v_member_id, v_member_email, v_member_name, 'member@1234');
                 
                 -- 팀원을 먼저 상위 회사 노드의 MEMBER로 추가
-                PERFORM add_role(v_comp_admin_email, v_member_email, v_company_node_id, 'MEMBER');
+                PERFORM add_role(v_comp_admin_email, v_member_email, v_company_node_id, (SELECT authority_id FROM role_authorities WHERE node_id = v_company_node_id AND role = 'MEMBER'));
                 
                 -- 이후 하위 부서 노드의 MEMBER로 역할 배정
-                PERFORM add_role(v_dept_leader_email, v_member_email, v_dept_node_id, 'MEMBER');
+                PERFORM add_role(v_dept_leader_email, v_member_email, v_dept_node_id, (SELECT authority_id FROM role_authorities WHERE node_id = v_dept_node_id AND role = 'MEMBER'));
                 
                 -- 팀원별로 개인 상세 할당 업무(Work Item) 1개씩 생성
                 v_curr_wi_id := 'WI-' || v_wi_counter;

@@ -684,7 +684,7 @@ export function WorkspacePage() {
     ? overview.rootRoleMembers
     : overview.allRoleMembers && overview.allRoleMembers.length > 0
       ? overview.allRoleMembers
-      : [{ userId: currentUser.userId, name: currentUser.name, email: '', roleName: 'ADMIN' as const, assignmentId: 0 }]
+      : []
   const visibleMembers = displayRoleMembers.slice(0, 4)
   const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : overview.rootRoleMembers.length
   const extraMemberCount = Math.max(0, totalMemberCount - visibleMembers.length)

@@ -1,10 +1,8 @@
 import {
-  DEFAULT_ROLE_AUTHORITIES,
   parseAuthorityBitSet,
 } from './authorityDefinitions'
 import type {
   RoleAssignmentRecord,
-  StandardRoleName,
   WorkspaceSnapshot,
 } from './types'
 
@@ -48,25 +46,14 @@ export function getEffectiveAuthorityBitSet(
   const combinedBitSet = new Set<number>()
 
   effectiveRoles.forEach((roleRecord) => {
-    const roleName = roleRecord.roleName
-    if (roleName === 'ADMIN') {
-      const adminBits = parseAuthorityBitSet(DEFAULT_ROLE_AUTHORITIES.ADMIN)
-      adminBits.forEach((bit) => combinedBitSet.add(bit))
-      return
-    }
 
     // 해당 노드(또는 기본 프리셋)의 권한 비트마스크 찾기
     const matchingAuth = snapshot.authorities?.find(
-      (a) => a.nodeId === roleRecord.nodeId && a.roleName === roleName,
+      (a) => a.nodeId === roleRecord.nodeId && a.id === roleRecord.roleId,
     )
 
-    let mask = matchingAuth?.authority
-    if (!mask) {
-      mask =
-        roleName in DEFAULT_ROLE_AUTHORITIES
-          ? DEFAULT_ROLE_AUTHORITIES[roleName as StandardRoleName]
-          : DEFAULT_ROLE_AUTHORITIES.MEMBER
-    }
+    const mask = matchingAuth?.authority
+    if (!mask) return
 
     const bits = parseAuthorityBitSet(mask)
     bits.forEach((bit) => combinedBitSet.add(bit))

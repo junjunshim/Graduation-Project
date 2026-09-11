@@ -1,4 +1,5 @@
 import type { WorkspaceDatabase } from '../model/types'
+import { ensureMockRoleDefinitions } from './mockRoleDefinitions'
 import {
   createTeam404WorkspaceSeed,
   TEAM_404_DEMO_USER_ID,
@@ -102,5 +103,5 @@ export function createMockScenarioSeed(scenario: WorkspaceMockScenario): Workspa
 }
 
 export function createConfiguredMockWorkspaceSeed() {
-  return createMockScenarioSeed(getWorkspaceMockScenario())
+  return ensureMockRoleDefinitions(createMockScenarioSeed(getWorkspaceMockScenario()))
 }

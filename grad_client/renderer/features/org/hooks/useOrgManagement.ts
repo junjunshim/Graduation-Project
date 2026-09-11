@@ -12,12 +12,12 @@ export function useOrgManagement(currentUser: UserRecord | null) {
   const [subNodeName, setSubNodeName] = useState('')
   const [managerEmail, setManagerEmail] = useState('')
   const [roleEmail, setRoleEmail] = useState('')
-  const [assignRoleName, setAssignRoleName] = useState<RoleName>('MEMBER')
+  const [assignRoleName, setAssignRoleName] = useState<RoleName>('')
   const [searchQuery, setSearchQuery] = useState('')
   const [editNodeName, setEditNodeName] = useState('')
   const [editNodeType, setEditNodeType] = useState<Exclude<NodeType, 'USER'>>('TEAM')
   const [updateRoleEmail, setUpdateRoleEmail] = useState('')
-  const [updateRoleName, setUpdateRoleName] = useState<RoleName>('MEMBER')
+  const [updateRoleName, setUpdateRoleName] = useState<RoleName>('')
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const pendingActionRef = useRef<string | null>(null)
@@ -106,8 +106,8 @@ export function useOrgManagement(currentUser: UserRecord | null) {
   const selectedDetailNodeId = selectedDetail?.node.id
   const selectedDetailNodeName = selectedDetail?.node.name ?? ''
   const selectedDetailNodeType = selectedDetail?.node.nodeType
-  const selectedDetailFirstRoleEmail = selectedDetail?.directRoles[0]?.email ?? ''
-  const selectedDetailFirstRoleName = selectedDetail?.directRoles[0]?.roleName ?? 'MEMBER'
+  const selectedDetailFirstRoleEmail = selectedDetail?.directRoles.find((role) => !role.isTopRole)?.email ?? ''
+  const selectedDetailFirstRoleName = String(selectedDetail?.directRoles.find((r) => !r.isTopRole)?.roleId ?? '')
 
   useEffect(() => {
     if (!selectedDetailNodeId) {
@@ -233,7 +233,8 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       assignRoleToNode({
         email: roleEmail,
         nodeId: selectedNodeId,
-        roleName: assignRoleName,
+        roleId: Number(assignRoleName),
+        roleName: snapshot.authorities?.find((a) => a.id === Number(assignRoleName))?.roleName ?? '',
       }),
     )
 
@@ -296,7 +297,8 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       updateRole({
         email: updateRoleEmail,
         nodeId: selectedDetail.node.id,
-        roleName: updateRoleName,
+        roleId: Number(updateRoleName),
+        roleName: snapshot.authorities?.find((a) => a.id === Number(updateRoleName))?.roleName ?? '',
       }),
     )
 

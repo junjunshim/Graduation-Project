@@ -17,7 +17,6 @@ import type {
   RoleAssignmentRecord,
   RoleMember,
   RoleName,
-  StandardRoleName,
   UserRecord,
 } from '../model/types'
 import { AddMemberModal } from './AddMemberModal'
@@ -37,7 +36,6 @@ type WorkspaceMembersTabProps = {
   allRoleMembers?: RoleMember[]
 }
 
-const PRESET_ROLES: StandardRoleName[] = ['ADMIN', 'MANAGER', 'MEMBER', 'VIEWER']
 
 export function WorkspaceMembersTab({
   rootNode,
@@ -71,14 +69,15 @@ export function WorkspaceMembersTab({
   }
 
   // 사용자 추가 확정 핸들러
-  const handleAddMember = async (targetEmail: string, targetRole: RoleName) => {
+  const handleAddMember = async (targetEmail: string, targetRole: number) => {
     if (!rootNode) return
     setIsAddingMember(true)
     try {
       const result = await assignRoleOnServer({
         nodeId: rootNode.id,
         email: targetEmail,
-        roleName: targetRole,
+        roleId: targetRole,
+        roleName: authorities.find((a) => a.id === targetRole)?.roleName ?? '',
       })
 
       if (result.status === 'error') {
@@ -87,7 +86,7 @@ export function WorkspaceMembersTab({
       }
 
       setIsAddModalOpen(false)
-      showAlert(`${targetEmail} 사용자를 ${targetRole} 역할로 추가했습니다.`, '추가 완료', 'success')
+      showAlert(`${targetEmail} 사용자를 ${authorities.find((a) => a.id === targetRole)?.roleName ?? ''} 역할로 추가했습니다.`, '추가 완료', 'success')
     } catch (err) {
       console.error('[WorkspaceMembersTab] 사용자 추가 실패:', err)
       showAlert('서버 통신 중 오류가 발생했습니다.', '통신 오류', 'error')
@@ -126,34 +125,10 @@ export function WorkspaceMembersTab({
     return (role: string): number => getRolePriorityScore(role, roleBitmaskMap)
   }, [roleBitmaskMap])
 
-  // 필터 드롭다운에 표시할 모든 고유 역할 목록 (서열 순 정렬)
-  const availableRoles = useMemo(() => {
-    const nodeAuthorities = authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
-    const roleSet = new Set<string>()
-
-    if (nodeAuthorities.length === 0) {
-      PRESET_ROLES.forEach((r) => roleSet.add(r))
-    } else {
-      roleSet.add('ADMIN')
-      nodeAuthorities.forEach((a) => {
-        if (a.roleName) roleSet.add(a.roleName)
-      })
-    }
-
-    // 소속 멤버들에게 부여된 역할도 포함
-    roles
-      .filter((r) => !r.isDeleted && (!rootNode || r.nodeId === rootNode.id))
-      .forEach((r) => {
-        if (r.roleName) roleSet.add(r.roleName)
-      })
-
-    return (Array.from(roleSet) as RoleName[]).sort((a, b) => {
-      const scoreA = getRolePriority(a)
-      const scoreB = getRolePriority(b)
-      if (scoreA !== scoreB) return scoreB - scoreA
-      return a.localeCompare(b)
-    })
-  }, [authorities, getRolePriority, roles, rootNode])
+  const availableRoles = useMemo(() => authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
+    .sort((a, b) => Number(Boolean(b.isTopRole)) - Number(Boolean(a.isTopRole)) || getRolePriority(String(b.id)) - getRolePriority(String(a.id))), [authorities, rootNode, getRolePriority])
+  const assignableRoles = useMemo(() => availableRoles.filter((a) => !a.isTopRole), [availableRoles])
+  const roleLabel = (id: string) => authorities.find((a) => String(a.id) === id)?.roleName ?? '역할 정보 없음'
 
   // 전체 멤버들의 상속 및 오버라이드 상태 분석
   const {
@@ -187,7 +162,7 @@ export function WorkspaceMembersTab({
     let list = segmentItems
 
     if (roleFilter !== 'all') {
-      list = list.filter((m) => m.effectiveRoleName === roleFilter)
+      list = list.filter((m) => String(m.effectiveRoleId) === roleFilter)
     }
 
     const query = searchQuery.trim().toLowerCase()
@@ -286,12 +261,12 @@ export function WorkspaceMembersTab({
               aria-label="역할 필터"
             >
               <span className={styles.roleTriggerLabel}>
-                {roleFilter === 'all' ? '모든 역할' : roleFilter}
+                {roleFilter === 'all' ? '모든 역할' : roleLabel(roleFilter)}
               </span>
               <span className={styles.roleTriggerCount}>
                 {roleFilter === 'all'
                   ? memberDetails.length
-                  : memberDetails.filter((m) => m.effectiveRoleName === roleFilter).length}
+                  : memberDetails.filter((m) => String(m.effectiveRoleId) === roleFilter).length}
               </span>
               <Icon
                 name="chevronDown"
@@ -318,8 +293,9 @@ export function WorkspaceMembersTab({
                   <span className={styles.roleItemCount}>{memberDetails.length}</span>
                 </button>
 
-                {availableRoles.map((role) => {
-                  const count = memberDetails.filter((m) => m.effectiveRoleName === role).length
+                {availableRoles.map((definition) => {
+                  const role = String(definition.id)
+                  const count = memberDetails.filter((m) => String(m.effectiveRoleId) === role).length
                   const isSelected = roleFilter === role
 
                   return (
@@ -337,9 +313,9 @@ export function WorkspaceMembersTab({
                     >
                       <span
                         className={styles.roleBadgeSmall}
-                        style={getRoleBadgeStyle(role)}
+                        style={getRoleBadgeStyle(roleLabel(role), definition.isTopRole)}
                       >
-                        {role}
+                        {roleLabel(role)}
                       </span>
                       <span className={styles.roleItemCount}>{count}명</span>
                     </button>
@@ -413,7 +389,7 @@ export function WorkspaceMembersTab({
                     <td className={styles.tdRole}>
                       <span
                         className={styles.roleBadge}
-                        style={getRoleBadgeStyle(member.effectiveRoleName)}
+                        style={getRoleBadgeStyle(member.effectiveRoleName, member.isTopRole)}
                       >
                         {member.effectiveRoleName}
                       </span>
@@ -543,7 +519,7 @@ export function WorkspaceMembersTab({
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onConfirm={handleAddMember}
-        availableRoles={availableRoles}
+        availableRoles={assignableRoles}
         isSubmitting={isAddingMember}
       />
 

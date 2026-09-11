@@ -57,7 +57,7 @@ BEGIN
             ra.node_id,
             BIT_OR(auth.authority) as authority
         FROM role_assignments ra
-        JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role = auth.role
+        JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role_id = auth.authority_id
         WHERE ra.user_id = v_user_id
         GROUP BY ra.node_id
     ),
@@ -161,7 +161,9 @@ BEGIN
         'user_id', ra.user_id,
         'email', u.email,
         'user_name', u.name,
-        'role', ra.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = ra.role_id),
+        'role_id', ra.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = ra.role_id),
         'updated_at', ra.updated_at
     )
     FROM role_assignments ra
@@ -193,6 +195,8 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', auth.authority_id,
+        'role_id', auth.authority_id,
+        'is_top_role', auth.is_top_role,
         'node_id', auth.node_id,
         'role', auth.role,
         'authority', auth.authority::TEXT,
@@ -200,7 +204,7 @@ BEGIN
     )
     FROM role_authorities auth
     JOIN filtered_nodes fn ON auth.node_id = fn.node_id
-    WHERE (fn.effective_authority & v_node_members_view) = v_node_members_view -- Bit 1: NODE_MEMBERS_VIEW
+    WHERE ((fn.effective_authority & v_node_members_view) = v_node_members_view OR EXISTS (SELECT 1 FROM role_assignments own WHERE own.role_id = auth.authority_id AND own.user_id = v_user_id)) -- Bit 1: NODE_MEMBERS_VIEW
 
     UNION ALL
 
@@ -365,7 +369,7 @@ BEGIN
             ra.node_id,
             BIT_OR(auth.authority) as authority
         FROM role_assignments ra
-        JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role = auth.role
+        JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role_id = auth.authority_id
         WHERE ra.user_id = v_user_id
         GROUP BY ra.node_id
     ),
@@ -504,7 +508,9 @@ BEGIN
         'user_id', ra.user_id,
         'email', u.email,
         'user_name', u.name,
-        'role', ra.role,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = ra.role_id),
+        'role_id', ra.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = ra.role_id),
         'updated_at', ra.updated_at
     )
     FROM role_assignments ra
@@ -554,6 +560,8 @@ BEGIN
     SELECT jsonb_build_object(
         'type', 'AUTHORITY',
         'id', auth.authority_id,
+        'role_id', auth.authority_id,
+        'is_top_role', auth.is_top_role,
         'node_id', auth.node_id,
         'role', auth.role,
         'authority', auth.authority::TEXT,
@@ -562,7 +570,7 @@ BEGIN
     FROM role_authorities auth
     JOIN filtered_nodes fn ON auth.node_id = fn.node_id
     WHERE auth.updated_at > p_last_synced_at
-        AND (fn.effective_authority & v_node_members_view) = v_node_members_view -- Bit 1: NODE_MEMBERS_VIEW
+        AND ((fn.effective_authority & v_node_members_view) = v_node_members_view OR EXISTS (SELECT 1 FROM role_assignments own WHERE own.role_id = auth.authority_id AND own.user_id = v_user_id)) -- Bit 1: NODE_MEMBERS_VIEW
 
     UNION ALL
 

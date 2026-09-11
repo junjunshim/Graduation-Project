@@ -139,6 +139,7 @@ export function OrgManagePage() {
           />
 
           <AssignRoleForm
+            roleDefinitions={(snapshot.authorities ?? []).filter((a) => a.nodeId === selectedDetail?.node.id)}
             assignRoleName={assignRoleName}
             roleEmail={roleEmail}
             users={snapshot.users.filter(
@@ -154,6 +155,7 @@ export function OrgManagePage() {
 
           {selectedDetail ? (
             <UpdateRoleForm
+            roleDefinitions={(snapshot.authorities ?? []).filter((a) => a.nodeId === selectedDetail?.node.id)}
               selectedDetail={selectedDetail}
               updateRoleEmail={updateRoleEmail}
               updateRoleName={updateRoleName}

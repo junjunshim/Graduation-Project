@@ -516,7 +516,7 @@ export async function assignRoleOnServer(payload: AssignRoleRequest) {
       body: {
         email: normalizeEmail(payload.email),
         node_id: payload.nodeId,
-        role_name: payload.roleName,
+        role_id: payload.roleId,
       },
     })
 
@@ -556,7 +556,7 @@ export async function updateRoleOnServer(payload: UpdateRoleRequest) {
       body: {
         email: normalizeEmail(payload.email),
         node_id: payload.nodeId,
-        role_name: payload.roleName,
+        role_id: payload.roleId,
       },
     })
 
@@ -632,6 +632,7 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
 }
 
 export type UpdateRoleAuthorityRequest = {
+  roleId: number
   nodeId: number
   roleName: string
   authority: string
@@ -643,7 +644,7 @@ export async function updateRoleAuthorityOnServer(payload: UpdateRoleAuthorityRe
       method: 'PATCH',
       body: {
         node_id: payload.nodeId,
-        role_name: payload.roleName,
+        role_id: payload.roleId,
         authority: payload.authority,
       },
     })
@@ -684,6 +685,7 @@ export async function createRoleDefinitionOnServer(payload: CreateRoleDefinition
 }
 
 export type RenameRoleDefinitionRequest = {
+  roleId: number
   nodeId: number
   oldRoleName: string
   newRoleName: string
@@ -695,7 +697,7 @@ export async function renameRoleDefinitionOnServer(payload: RenameRoleDefinition
       method: 'PATCH',
       body: {
         node_id: payload.nodeId,
-        old_role_name: payload.oldRoleName,
+        role_id: payload.roleId,
         new_role_name: payload.newRoleName,
       },
     })

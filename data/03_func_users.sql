@@ -54,11 +54,10 @@ BEGIN
     WHERE user_id = p_user_id;
 
     -- 5. 개인 노드에 대한 관리자(ADMIN) 권한 부여
-    INSERT INTO role_assignments (user_id, node_id, role)
-    VALUES (p_user_id, v_new_node_id, 'ADMIN');
-
-    -- 6. 개인 노드에 대한 기본 권한 설정
     PERFORM default_node_authority(v_new_node_id);
+    INSERT INTO role_assignments (user_id, node_id, role_id)
+    SELECT p_user_id, v_new_node_id, authority_id FROM role_authorities
+    WHERE node_id = v_new_node_id AND is_top_role;
 
     -- 7. 성공적으로 사용자 등록 완료
     RETURN TRUE;

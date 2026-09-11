@@ -234,9 +234,8 @@ static void processActivityNotification(const std::string &rawPayload)
     for (const auto &recipient : root["recipients"])
     {
         std::string email = recipient["email"].asString();
-        bool canView = recipient["can_view_work_items"].asBool();
-
-        if (canView || entityType != "WORK_ITEM") {
+        bool isWorkRelated = (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE");
+        if (canView || !isWorkRelated) {
             NotificationWebSocketController::sendNotificationToUser(email, fullMsg);
         } else {
             NotificationWebSocketController::sendNotificationToUser(email, maskedMsg);

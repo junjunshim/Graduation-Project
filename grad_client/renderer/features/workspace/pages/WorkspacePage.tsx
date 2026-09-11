@@ -570,17 +570,18 @@ export function WorkspacePage() {
     let isSubscribed = true
 
     if (activeWorkspaceRootId) {
-      const currentSnapshot = getOrgSnapshot()
-      const hasNodeInSnapshot = currentSnapshot.nodes.some(
+      // 1. 초기 렌더링된 snapshot 기준으로 해당 노드가 캐시에 있는지 확인 (추가적인 getOrgSnapshot() 호출 생략)
+      const hasNodeInSnapshot = snapshot.nodes.some(
         (node) => String(node.id) === String(activeWorkspaceRootId),
       )
 
-      // 캐시된 노드가 없는 첫 진입 시에만 스켈레톤/로딩 상태 활성화
+      // 캐시된 노드가 없는 첫 진입 시에만 로딩 상태 활성화
       if (!hasNodeInSnapshot) {
         setIsLoading(true)
       }
       setErrorInfo(null)
 
+      // 2. 즉각적인 비동기 API 요청 수행
       fetchNodeDetail(activeWorkspaceRootId)
         .then((latestSnapshot) => {
           if (isSubscribed) {
@@ -591,7 +592,6 @@ export function WorkspacePage() {
         .catch((error) => {
           console.warn('[WorkspacePage] 노드 상세 데이터 조회 실패:', error)
           if (isSubscribed) {
-            // 캐시 데이터조차 없는 경우 에러 화면 표시
             if (!hasNodeInSnapshot) {
               setErrorInfo(error instanceof Error ? error.message : '노드 상세 정보를 불러오지 못했습니다.')
             }
@@ -603,12 +603,11 @@ export function WorkspacePage() {
           }
         })
     } else {
-      setSnapshot(getOrgSnapshot())
       setIsLoading(false)
       setErrorInfo(null)
     }
 
-    // 캐시 변경 이벤트(다른 mutation 발생 시)에는 메모리/로컬 DB 스냅샷만 즉시 부드럽게 동기화
+    // 캐시 변경 이벤트(다른 탭/백그라운드 동기화 발생 시) 부드럽게 동기화
     const unsubscribe = subscribeToWorkspaceCache(() => {
       if (isSubscribed) {
         setSnapshot(getOrgSnapshot())

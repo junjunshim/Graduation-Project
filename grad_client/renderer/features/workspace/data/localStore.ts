@@ -377,13 +377,22 @@ export function normalizeServerWorkspaceDb(raw: unknown): WorkspaceDatabase {
   })
 }
 
+// In-memory cache to eliminate repetitive, expensive JSON.parse / JSON.stringify calls
+let inMemoryServerDb: WorkspaceDatabase | null = null
+let inMemoryMockDb: WorkspaceDatabase | null = null
+
 export function readWorkspaceDb(): WorkspaceDatabase {
   if (isServerDataSource()) {
     return readServerWorkspaceDb()
   }
 
+  if (inMemoryMockDb) {
+    return inMemoryMockDb
+  }
+
   if (!hasStorage()) {
-    return createConfiguredMockWorkspaceSeed()
+    inMemoryMockDb = createConfiguredMockWorkspaceSeed()
+    return inMemoryMockDb
   }
 
   const raw = window.localStorage.getItem(DB_STORAGE_KEY)
@@ -392,6 +401,7 @@ export function readWorkspaceDb(): WorkspaceDatabase {
     const seededDb = createConfiguredMockWorkspaceSeed()
     window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(seededDb))
     ensureSessionUserExists(seededDb)
+    inMemoryMockDb = seededDb
     return seededDb
   }
 
@@ -406,17 +416,20 @@ export function readWorkspaceDb(): WorkspaceDatabase {
       window.localStorage.setItem(DB_STORAGE_KEY, normalizedRaw)
     }
 
+    inMemoryMockDb = normalized
     return normalized
   } catch {
     const seededDb = createConfiguredMockWorkspaceSeed()
     window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(seededDb))
     ensureSessionUserExists(seededDb)
+    inMemoryMockDb = seededDb
     return seededDb
   }
 }
 
 export function writeWorkspaceDb(db: WorkspaceDatabase) {
   if (!isServerDataSource()) ensureMockRoleDefinitions(db)
+  inMemoryMockDb = db
   if (!hasStorage()) {
     return
   }
@@ -426,31 +439,34 @@ export function writeWorkspaceDb(db: WorkspaceDatabase) {
 }
 
 export function readServerWorkspaceDb(): WorkspaceDatabase {
+  if (inMemoryServerDb) {
+    return inMemoryServerDb
+  }
+
   if (!hasStorage()) {
-    return createEmptyServerWorkspace()
+    inMemoryServerDb = createEmptyServerWorkspace()
+    return inMemoryServerDb
   }
 
   const raw = window.localStorage.getItem(SERVER_DB_STORAGE_KEY)
 
   if (!raw) {
-    return createEmptyServerWorkspace()
+    inMemoryServerDb = createEmptyServerWorkspace()
+    return inMemoryServerDb
   }
 
   try {
     const normalized = normalizeServerWorkspaceDb(JSON.parse(raw))
-    const normalizedRaw = JSON.stringify(normalized)
-
-    if (normalizedRaw !== raw) {
-      window.localStorage.setItem(SERVER_DB_STORAGE_KEY, normalizedRaw)
-    }
-
+    inMemoryServerDb = normalized
     return normalized
   } catch {
-    return createEmptyServerWorkspace()
+    inMemoryServerDb = createEmptyServerWorkspace()
+    return inMemoryServerDb
   }
 }
 
 export function writeServerWorkspaceDb(db: WorkspaceDatabase) {
+  inMemoryServerDb = db
   if (!hasStorage()) {
     return
   }
@@ -460,6 +476,7 @@ export function writeServerWorkspaceDb(db: WorkspaceDatabase) {
 }
 
 export function clearServerWorkspaceDb() {
+  inMemoryServerDb = null
   if (!hasStorage()) {
     return
   }

@@ -1064,11 +1064,47 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
               can_view_detail: data.can_view_detail !== false,
             })
 
-            // 2. 워크스페이스 변경 활동인 경우, 백그라운드에서 최신 워크스페이스 상태 자동 재구성 (Replace)
-            if (payload.sub_type === 'ACTIVITY') {
-              loadServerWorkspace().catch((err) => {
-                console.warn('[WebSocket] 활동 알림 수신 후 워크스페이스 동기화 실패:', err)
-              })
+            // 2. 삭제 활동(action === 'deleted')인 경우, 서버 재호출 없이 로컬 캐시에서 즉시 제거하여 유령 데이터 소멸
+            if (data.action === 'deleted' && data.entity_id) {
+              try {
+                const currentDb = readWorkspaceDb()
+                let isModified = false
+                const targetId = String(data.entity_id)
+
+                if (data.entity_type === 'WORK_ITEM' || data.entity_type === 'COMMENT') {
+                  const itemIndex = currentDb.workItems.findIndex((w) => w.workItemId === targetId)
+                  if (itemIndex >= 0 && !currentDb.workItems[itemIndex].isDeleted) {
+                    currentDb.workItems[itemIndex].isDeleted = true
+                    isModified = true
+                  }
+                } else if (data.entity_type === 'NODE') {
+                  const nodeIndex = currentDb.nodes.findIndex((n) => String(n.id) === targetId)
+                  if (nodeIndex >= 0 && !currentDb.nodes[nodeIndex].isDeleted) {
+                    currentDb.nodes[nodeIndex].isDeleted = true
+                    isModified = true
+                  }
+                } else if (data.entity_type === 'ROLE') {
+                  const roleIndex = currentDb.roles.findIndex((r) => String(r.id) === targetId)
+                  if (roleIndex >= 0 && !currentDb.roles[roleIndex].isDeleted) {
+                    currentDb.roles[roleIndex].isDeleted = true
+                    isModified = true
+                  }
+                } else if (data.entity_type === 'FILE') {
+                  if (currentDb.files) {
+                    const fileIndex = currentDb.files.findIndex((f) => String(f.id) === targetId)
+                    if (fileIndex >= 0 && !currentDb.files[fileIndex].isDeleted) {
+                      currentDb.files[fileIndex].isDeleted = true
+                      isModified = true
+                    }
+                  }
+                }
+
+                if (isModified) {
+                  writeServerWorkspaceDb(currentDb)
+                }
+              } catch (err) {
+                console.warn('[WebSocket] 로컬 캐시 삭제 반영 실패:', err)
+              }
             }
           }
         } catch {

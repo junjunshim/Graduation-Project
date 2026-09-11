@@ -136,6 +136,27 @@
   color: var(--axis-text-muted);
 }
 
+.itemDeleted {
+  opacity: 0.72;
+}
+
+.itemDeleted .itemTitle {
+  color: var(--axis-text-muted);
+}
+
+.deletedBadge {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--axis-surface-muted, #f1f5f9);
+  color: var(--axis-text-muted, #64748b);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
 .itemMessage {
   font-size: 0.78rem;
   color: var(--axis-text-secondary);

@@ -248,9 +248,34 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_recipients JSONB;
     v_payload JSONB;
+    v_work_item_id VARCHAR(50) := NULL;
+    v_is_hidden BOOLEAN := FALSE;
 BEGIN
+    -- 대상이 업무, 댓글, 파일인 경우 연관된 work_item_id 및 hidden 여부 사전 확인
+    IF NEW.entity_type = 'WORK_ITEM' THEN
+        v_work_item_id := NEW.entity_id;
+        SELECT hidden INTO v_is_hidden FROM work_items WHERE work_item_id = v_work_item_id;
+    ELSIF NEW.entity_type = 'COMMENT' THEN
+        SELECT work_item_id INTO v_work_item_id
+        FROM work_item_comments
+        WHERE comment_id = NEW.entity_id::INTEGER;
+
+        IF v_work_item_id IS NOT NULL THEN
+            SELECT hidden INTO v_is_hidden FROM work_items WHERE work_item_id = v_work_item_id;
+        END IF;
+    ELSIF NEW.entity_type = 'FILE' THEN
+        SELECT work_item_id INTO v_work_item_id
+        FROM work_item_files
+        WHERE file_id = NEW.entity_id::INTEGER;
+
+        IF v_work_item_id IS NOT NULL THEN
+            SELECT hidden INTO v_is_hidden FROM work_items WHERE work_item_id = v_work_item_id;
+        END IF;
+    END IF;
+
     -- 1. 해당 노드에 대해 HISTORY_ALL_VIEW 권한을 가진 사용자 목록 및 업무 조회 가능 여부(can_view_work_items) 추출
     -- 본인(actor)은 알림 수신 대상에서 제외
+    -- 숨김 업무(hidden = TRUE)인 경우, WI_HIDDEN_VIEW 권한이 없는 사용자는 알림 대상에서 완전 제외
     WITH candidate_users AS (
         SELECT DISTINCT u.user_id, u.email
         FROM role_assignments ra
@@ -274,6 +299,10 @@ BEGIN
             check_authority_with_override(cu.user_id, NEW.node_id, 'WI_PUBLIC_VIEW') AS can_view_work_items
         FROM candidate_users cu
         WHERE check_authority_with_override(cu.user_id, NEW.node_id, 'HISTORY_ALL_VIEW') = TRUE
+          AND (
+              v_is_hidden IS NOT TRUE
+              OR check_authority_with_override(cu.user_id, NEW.node_id, 'WI_HIDDEN_VIEW') = TRUE
+          )
     )
     SELECT COALESCE(
         jsonb_agg(
@@ -289,20 +318,7 @@ BEGIN
 
     -- 2. 대상 수신자가 1명 이상 있을 때만 pg_notify 실행
     IF jsonb_array_length(v_recipients) > 0 THEN
-        DECLARE
-            v_work_item_id VARCHAR(50) := NULL;
         BEGIN
-            IF NEW.entity_type = 'WORK_ITEM' THEN
-                v_work_item_id := NEW.entity_id;
-            ELSIF NEW.entity_type = 'COMMENT' THEN
-                SELECT work_item_id INTO v_work_item_id
-                FROM work_item_comments
-                WHERE comment_id = NEW.entity_id::INTEGER;
-            ELSIF NEW.entity_type = 'FILE' THEN
-                SELECT work_item_id INTO v_work_item_id
-                FROM work_item_files
-                WHERE file_id = NEW.entity_id::INTEGER;
-            END IF;
 
             v_payload := jsonb_build_object(
                 'activity_id', NEW.log_id,

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { useNotificationStore, type NotificationItem } from '../data/notificationStore'
+import { readWorkspaceDb } from '../../workspace/data/localStore'
 import { navigateNotification } from './navigateNotification'
 import styles from './NotificationPopover.module.css'
 
@@ -99,26 +100,61 @@ export function NotificationPopover({ userId, buttonClassName }: NotificationPop
             {notifications.length === 0 ? (
               <div className={styles.emptyState}>새로운 알림이 없습니다.</div>
             ) : (
-              notifications.map((item) => (
-                <div
-                  key={item.id}
-                  className={`${styles.item} ${!item.is_read ? styles.itemUnread : ''}`}
-                  onClick={() => handleItemClick(item)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className={styles.itemTop}>
-                    <span className={styles.itemTitle}>
-                      {!item.is_read && <span className={styles.unreadDot} />}
-                      {item.title}
-                    </span>
-                    <span className={styles.itemTime}>
-                      {formatRelativeTime(item.created_at)}
-                    </span>
-                  </div>
-                  <div className={styles.itemMessage}>{item.content}</div>
-                </div>
-              ))
+              (() => {
+                let db: ReturnType<typeof readWorkspaceDb> | null = null
+                try {
+                  db = readWorkspaceDb()
+                } catch {
+                  // ignore
+                }
+
+                return notifications.map((item) => {
+                  const isDirectlyDeleted = item.action === 'deleted'
+                  let isDeleted = isDirectlyDeleted
+
+                  if (!isDeleted && db && item.entity_id) {
+                    if (
+                      item.entity_type === 'WORK_ITEM' ||
+                      item.entity_type === 'COMMENT' ||
+                      item.entity_type === 'FILE'
+                    ) {
+                      const found = db.workItems.find((w) => w.workItemId === item.entity_id)
+                      if (found && found.isDeleted) {
+                        isDeleted = true
+                      }
+                    } else if (item.entity_type === 'NODE') {
+                      const found = db.nodes.find((n) => String(n.id) === String(item.entity_id))
+                      if (found && found.isDeleted) {
+                        isDeleted = true
+                      }
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`${styles.item} ${!item.is_read ? styles.itemUnread : ''} ${
+                        isDeleted ? styles.itemDeleted : ''
+                      }`}
+                      onClick={() => handleItemClick(item)}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className={styles.itemTop}>
+                        <span className={styles.itemTitle}>
+                          {!item.is_read && <span className={styles.unreadDot} />}
+                          {item.title}
+                          {isDeleted && <span className={styles.deletedBadge}>삭제됨</span>}
+                        </span>
+                        <span className={styles.itemTime}>
+                          {formatRelativeTime(item.created_at)}
+                        </span>
+                      </div>
+                      <div className={styles.itemMessage}>{item.content}</div>
+                    </div>
+                  )
+                })
+              })()
             )}
           </div>
         </div>

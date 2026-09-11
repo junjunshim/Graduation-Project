@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
@@ -658,16 +658,64 @@ export function WorkspacePage() {
     )
   }
 
-  const overview = getWorkspaceOverview(currentUser.userId, snapshot, {
-    rootNodeId: activeWorkspaceRootId,
-    singleNodeOnly: true,
-  })
-  const counts = getWorkItemCounts(overview.visibleWorkItems)
-  const metrics = getWorkspaceMetrics(overview, snapshot)
-  const workspaceToday = getWorkspaceTodayTimestamp()
-  const todayRelevantWorkItems = sortWorkItemsByToday(overview.visibleWorkItems, workspaceToday)
-  const filteredWorkItems = filterWorkItems(todayRelevantWorkItems, statusFilter).slice(0, BOARD_ITEM_LIMIT)
-  const timeline = buildTimeline(overview.visibleWorkItems, workspaceToday)
+  // 사용자가 URL 등으로 상위 조상 식별용 노드에 직접 진입을 시도한 경우 차단 화면
+  if (activeWorkspaceRootId) {
+    const targetNodeId = Number(activeWorkspaceRootId)
+    if (Number.isFinite(targetNodeId)) {
+      const userRoles = snapshot.roles.filter(
+        (r) => !r.isDeleted && (r.userId === currentUser.userId || r.userId.toLowerCase() === currentUser.userId.toLowerCase()),
+      )
+      const directlyAssignedNodeIds = new Set(userRoles.map((r) => r.nodeId))
+      const targetNode = snapshot.nodes.find((n) => n.id === targetNodeId)
+
+      const isDirect = directlyAssignedNodeIds.has(targetNodeId)
+      const isInherited = targetNode?.path && Array.isArray(targetNode.path)
+        ? targetNode.path.some((ancestorId) => ancestorId !== targetNodeId && directlyAssignedNodeIds.has(ancestorId))
+        : false
+
+      if (!isDirect && !isInherited && targetNode) {
+        return (
+          <section className={styles.page}>
+            <div className={styles.errorStateContainer} role="alert">
+              <Icon name="lock" size={40} className={styles.errorStateIcon} />
+              <h2 className={styles.errorStateTitle}>접근 권한 제한</h2>
+              <p className={styles.errorStateMessage}>
+                &apos;{targetNode.name}&apos; 노드는 상위 계층 식별 전용 공간으로, 상세 워크스페이스 진입 권한이 없습니다.
+              </p>
+              <Link to="/workspace/select" className={styles.retryButton}>
+                <Icon name="folder" size={16} />
+                워크스페이스 목록으로 이동
+              </Link>
+            </div>
+          </section>
+        )
+      }
+    }
+  }
+
+  const overview = useMemo(
+    () =>
+      getWorkspaceOverview(currentUser.userId, snapshot, {
+        rootNodeId: activeWorkspaceRootId,
+        singleNodeOnly: true,
+      }),
+    [currentUser.userId, snapshot, activeWorkspaceRootId],
+  )
+  const counts = useMemo(() => getWorkItemCounts(overview.visibleWorkItems), [overview.visibleWorkItems])
+  const metrics = useMemo(() => getWorkspaceMetrics(overview, snapshot), [overview, snapshot])
+  const workspaceToday = useMemo(() => getWorkspaceTodayTimestamp(), [])
+  const todayRelevantWorkItems = useMemo(
+    () => sortWorkItemsByToday(overview.visibleWorkItems, workspaceToday),
+    [overview.visibleWorkItems, workspaceToday],
+  )
+  const filteredWorkItems = useMemo(
+    () => filterWorkItems(todayRelevantWorkItems, statusFilter).slice(0, BOARD_ITEM_LIMIT),
+    [todayRelevantWorkItems, statusFilter],
+  )
+  const timeline = useMemo(
+    () => buildTimeline(overview.visibleWorkItems, workspaceToday),
+    [overview.visibleWorkItems, workspaceToday],
+  )
   const todayLinkedWorkItems = todayRelevantWorkItems.slice(0, DOCUMENT_LIMIT)
   const displayedFiles = (overview.files ?? []).slice(0, DOCUMENT_LIMIT)
   const workItemsById = new Map(overview.visibleWorkItems.map((item) => [item.workItemId, item]))

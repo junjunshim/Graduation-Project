@@ -23,8 +23,14 @@
 }
 
 .shellTimeline .workspace {
+  height: 100%;
+  min-height: 0;
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
+}
+
+.shellTimeline .workspace.workspaceWithoutPageBar {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .titleBarSlot {
@@ -443,7 +449,7 @@
 .workspaceBodyTimeline {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  height: auto;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }

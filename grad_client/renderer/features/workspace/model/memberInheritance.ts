@@ -110,31 +110,37 @@ export function analyzeWorkspaceMembers({
     })
   }
 
-  // 3. 고유 사용자별 최종 상태 계산
-  const allUserIds = new Set<string>()
-  allRoleMembers.forEach((m) => allUserIds.add(m.userId))
+  // 상위 조상 노드에 배정된 역할들을 userId별로 사전 그룹화 (O(Roles) 1회 인덱싱)
+  const ancestorRolesByUserId = new Map<string, RoleAssignmentRecord[]>()
   roles.forEach((r) => {
-    if (!r.isDeleted) allUserIds.add(r.userId)
+    if (!r.isDeleted && ancestorNodeIdSet.has(r.nodeId)) {
+      const userRoles = ancestorRolesByUserId.get(r.userId) ?? []
+      userRoles.push(r)
+      ancestorRolesByUserId.set(r.userId, userRoles)
+    }
   })
+
+  // 3. 현재 노드의 대상 사용자: 현재 노드 직속 역할자 + 상위 조상 역할자만 검사 (500명 무의미한 순회 방지)
+  const candidateUserIds = new Set<string>()
+  directRoleMap.forEach((_, userId) => candidateUserIds.add(userId))
+  ancestorRolesByUserId.forEach((_, userId) => candidateUserIds.add(userId))
 
   const all: WorkspaceMemberDetail[] = []
 
-  allUserIds.forEach((userId) => {
+  candidateUserIds.forEach((userId) => {
     const user = usersById.get(userId)
     const directRole = directRoleMap.get(userId)
     const isDirect = Boolean(directRole)
 
-    // 상위 조상 노드들에 부여된 이 사용자의 역할 조회
-    const ancestorRoles = roles.filter(
-      (r) => !r.isDeleted && r.userId === userId && ancestorNodeIdSet.has(r.nodeId),
-    )
+    // 상위 조상 노드들에 부여된 이 사용자의 역할 조회 (Map에서 O(1) 즉시 가져옴)
+    const ancestorRoles = ancestorRolesByUserId.get(userId) ?? []
 
     let isOverridden = false
     let overrideReason = ''
     let effectiveRole: RoleName = directRole?.roleName ?? '역할 정보 없음'
     let sourceNodeName = rootNode.name
 
-    // 상위 조상 노드로부터 물려받은 최고 역할 계산
+    // 상위 조상 노드로부터 물려받은 최고 역할 계산 (가까운 노드 우선)
     const inheritedRole =
       ancestorRoles.length > 0
         ? ancestorRoles.reduce((prev, curr) =>
@@ -159,7 +165,6 @@ export function analyzeWorkspaceMembers({
       }
     }
 
-    // 직속도 아니고 상위 상속도 없는 경우(예: 다른 브랜치의 유저)는 현재 노드의 멤버 목록에서 제외
     if (!isDirect && !inheritedRole) {
       return
     }

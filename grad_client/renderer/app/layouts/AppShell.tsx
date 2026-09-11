@@ -139,11 +139,12 @@ export function AppShell() {
             subtitle: pageMeta.description,
           }
         : { type: 'none' }
+  const isWorkspaceSelectHierarchyRoute = isWorkspaceSelectRoute && !isWorkspaceSelectListView
   const shellClassName = [
     styles.shell,
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
     isSidebarCollapsed ? styles.shellCollapsed : '',
-    isWorkspaceTimelineRoute ? styles.shellTimeline : '',
+    isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.shellTimeline : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -187,7 +188,7 @@ export function AppShell() {
         <div
           className={[
             styles.workspaceBody,
-            isWorkspaceTimelineRoute ? styles.workspaceBodyTimeline : '',
+            isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.workspaceBodyTimeline : '',
             isWorkItemsRoute ? styles.workspaceBodyWorkItems : '',
           ]
             .filter(Boolean)
@@ -202,7 +203,7 @@ export function AppShell() {
           <main
             className={[
               styles.main,
-              isWorkspaceTimelineRoute ? styles.mainTimeline : '',
+              isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.mainTimeline : '',
               isWorkItemsRoute ? styles.mainWorkItems : '',
             ]
               .filter(Boolean)

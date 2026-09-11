@@ -1,5 +1,4 @@
 import { getAccessibleNodeIdsForUser } from '../data/orgService'
-import { getWorkspaceMemberSummary } from '../model/memberInheritance'
 import { getNodeTypeLabel } from '../model/labels'
 import { sortWorkspaceNodes } from '../model/sorters'
 import type { IconName } from '../../../design-system/primitives/Icon'
@@ -100,17 +99,39 @@ export function queryWorkspaceDirectory(
     childNodesByParentId.set(node.parentNodeId, siblings)
   })
 
-  // 모든 노드에 대해 단일 공통 함수(getWorkspaceMemberSummary)를 통해 팀원 지표를 사전 계산
-  const memberSummaryByNodeId = new Map<number, ReturnType<typeof getWorkspaceMemberSummary>>()
+  // 디렉터리 뷰 성능 최적화 (O(N)):
+  // 500개 이상의 노드 전체에 대해 매번 O(N^2) 상속 분석 및 문자열 정렬을 수행하면 메인 스레드 렉이 발생하므로,
+  // 디렉터리 카드에 필요한 직속 멤버 수를 1회 순회(Map 인덱싱)로 즉시 계산
+  const directMemberCountByNodeId = new Map<number, number>()
+  snapshot.roles.forEach((r) => {
+    if (!r.isDeleted) {
+      directMemberCountByNodeId.set(r.nodeId, (directMemberCountByNodeId.get(r.nodeId) ?? 0) + 1)
+    }
+  })
+
+  // 사용자가 직접 할당받았거나 상속받은(자식 노드로 내려가는) 노드 ID 집합 계산
+  // (상위 조상 노드는 식별용(NODE_PARENT_VIEW)으로만 보이며 역방향 상속이 없으므로 진입 불가)
+  const userRoles = snapshot.roles.filter(
+    (r) => !r.isDeleted && (r.userId === userId || r.userId.toLowerCase() === userId.toLowerCase()),
+  )
+  const directlyAssignedNodeIds = new Set(userRoles.map((r) => r.nodeId))
+  const enterableNodeIds = new Set<number>()
+
   visibleNodes.forEach((node) => {
-    const summary = getWorkspaceMemberSummary({
-      rootNode: node,
-      nodes: snapshot.nodes,
-      roles: snapshot.roles,
-      users: snapshot.users,
-      authorities: snapshot.authorities,
-    })
-    memberSummaryByNodeId.set(node.id, summary)
+    // 1) 직접 역할이 할당된 노드
+    if (directlyAssignedNodeIds.has(node.id)) {
+      enterableNodeIds.add(node.id)
+      return
+    }
+    // 2) path 상에 상위 노드 중 직접 역할이 있는 노드가 존재하는 경우 (상위 -> 하위 순방향 상속)
+    if (node.path && Array.isArray(node.path)) {
+      const hasInheritedRole = node.path.some(
+        (ancestorId) => ancestorId !== node.id && directlyAssignedNodeIds.has(ancestorId),
+      )
+      if (hasInheritedRole) {
+        enterableNodeIds.add(node.id)
+      }
+    }
   })
 
   const rootNodes = sortWorkspaceNodes(
@@ -133,13 +154,14 @@ export function queryWorkspaceDirectory(
       .filter((child) => !nextAncestors.has(child.id))
       .map((child) => buildItem(child, rootId, rootTone, nextAncestors))
 
-    const memberSummary = memberSummaryByNodeId.get(node.id) ?? {
-      totalCount: 0,
-      directCount: 0,
+    const directCount = directMemberCountByNodeId.get(node.id) ?? 0
+    const memberSummary = {
+      totalCount: directCount,
+      directCount,
       inheritedCount: 0,
       overriddenCount: 0,
-      displayValue: '0',
-      description: '직속 0',
+      displayValue: String(directCount),
+      description: `직속 ${directCount}`,
     }
 
     const isRoot = node.id.toString() === rootId
@@ -161,6 +183,7 @@ export function queryWorkspaceDirectory(
       createdAt: getCreatedDate(node.createdAt),
       isRoot,
       isFavorite: false,
+      canEnter: enterableNodeIds.has(node.id),
       ...visualMetadata,
       children: childResults,
     }

@@ -27,4 +27,5 @@ export type WorkspaceDirectoryItem = {
   tone: WorkspaceDirectoryTone
   iconName: IconName
   children: WorkspaceDirectoryItem[]
+  canEnter?: boolean
 }

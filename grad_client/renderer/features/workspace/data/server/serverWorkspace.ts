@@ -272,6 +272,60 @@ export async function loadServerWorkspace(email = getCurrentServerEmail()) {
   return db
 }
 
+// 워크스페이스 진입점 화면용 경량 스코프 동기화 함수
+// 접근 가능한 노드 트리 + 각 노드의 역할/권한만 가볍게 받아와서 트리에서 삭제/박탈된 노드를 완전 교체(Replace)
+export async function loadWorkspaceDirectoryScopeOnServer(email = getCurrentServerEmail()) {
+  const response = await apiRequest<unknown>('/context/scope')
+
+  if (!isServerStatusResponse(response)) {
+    throw new Error('서버 스코프 응답 형식이 올바르지 않습니다.')
+  }
+
+  if (response.status === 'error') {
+    throw new Error(response.message ?? '워크스페이스 목록을 불러오지 못했습니다.')
+  }
+
+  const items = parseServerContextItems((response as ServerContextResponse).data)
+  const current = readWorkspaceDb()
+  const { workspace: updates } = normalizeServerContext(items, email, { referenceWorkspace: current })
+
+  // 노드 트리는 이번에 서버에서 온 유효 노드 목록으로 완전 교체 (이전에 캐시된 유령/삭제 노드 제거)
+  const validNodeIds = new Set(updates.nodes.map((n) => n.id))
+
+  // 기존 캐시의 업무/파일 중 여전히 유효한 노드에 속한 것만 보존
+  const preservedWorkItems = current.workItems.filter((w) => validNodeIds.has(w.ownerNodeId))
+  const preservedFiles = (current.files ?? []).filter((f) => {
+    const parentWorkItem = preservedWorkItems.find((w) => w.workItemId === f.workItemId)
+    return Boolean(parentWorkItem)
+  })
+
+  const updatedDb: WorkspaceDatabase = {
+    ...current,
+    nodes: updates.nodes,
+    roles: updates.roles,
+    authorities: updates.authorities ?? [],
+    workItems: preservedWorkItems,
+    files: preservedFiles,
+    counters: {
+      ...current.counters,
+      node: Math.max(0, ...updates.nodes.map((node) => node.id)) + 1,
+      role: Math.max(0, ...updates.roles.map((role) => role.id)) + 1,
+    },
+  }
+
+  writeServerWorkspaceDb(updatedDb)
+
+  // 최신 노드 목록 기준으로 즐겨찾기 목록 동기화
+  try {
+    const validNodeIdStrings = new Set(updates.nodes.map((n) => String(n.id)))
+    pruneFavoriteWorkspaceIds(validNodeIdStrings, current.users.find((u) => u.email === email)?.userId)
+  } catch {
+    // ignore
+  }
+
+  return updatedDb
+}
+
 export async function syncServerWorkspace(lastSyncedAt = '1970-01-01 00:00:00') {
   const response = await apiRequest<unknown>(
     `/context/sync?last_synced_at=${encodeURIComponent(lastSyncedAt)}`,

@@ -6,7 +6,7 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { Panel } from '../../../design-system/primitives/Panel'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceEntryViewToggle } from '../components/WorkspaceEntryViewToggle'
-import { getOrgSnapshot } from '../data/orgService'
+import { getOrgSnapshot, fetchWorkspaceDirectoryScope } from '../data/orgService'
 import { subscribeToWorkspaceCache } from '../data/workspaceCacheEvents'
 import {
   getActiveWorkspaceRootId,
@@ -1033,10 +1033,29 @@ export function WorkspaceEntryPage() {
   }
 
   useEffect(() => {
+    let isMounted = true
+
+    // 진입점 화면 진입 시: 캐시로 즉시 띄우되, 백그라운드에서 최신 스코프(트리/역할)를 경량 동기화하여 삭제/권한 박탈된 노드 자동 갱신
+    fetchWorkspaceDirectoryScope()
+      .then((latestSnapshot) => {
+        if (isMounted) {
+          setSnapshot(latestSnapshot)
+        }
+      })
+      .catch((err) => {
+        console.warn('[WorkspaceEntryPage] 워크스페이스 스코프 갱신 실패:', err)
+      })
+
     const unsubscribe = subscribeToWorkspaceCache(() => {
-      setSnapshot(getOrgSnapshot())
+      if (isMounted) {
+        setSnapshot(getOrgSnapshot())
+      }
     })
-    return () => unsubscribe()
+
+    return () => {
+      isMounted = false
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {

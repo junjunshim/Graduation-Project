@@ -714,3 +714,141 @@ BEGIN
         USING ERRCODE = 'P0202';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- 워크스페이스 진입점 화면용 경량 스코프 조회 함수
+-- 접근 가능한 노드 목록(NODE) + 각 노드의 역할(ROLE) + 권한(AUTHORITY) + 직속 멤버 정보를 가볍게 반환 (업무/파일/활동 제외)
+CREATE OR REPLACE FUNCTION get_workspace_directory_scope(
+    p_user_email users.email%TYPE
+)
+RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user_id users.user_id%TYPE;
+    v_node_info_view BIT(24);
+    v_node_members_view BIT(24);
+    v_node_sub_view BIT(24);
+    v_node_parent_view BIT(24);
+    v_deny BIT(24);
+BEGIN
+    -- 0. 노드 식별 및 권한 관련 필수 비트 로드
+    SELECT 
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+    INTO 
+        v_node_info_view, v_node_members_view, v_node_sub_view, v_node_parent_view, v_deny
+    FROM authority_constants
+    WHERE name IN ('NODE_INFO_VIEW', 'NODE_MEMBERS_VIEW', 'NODE_SUB_VIEW', 'NODE_PARENT_VIEW', 'DENY');
+
+    -- 1. 유저 존재 여부 확인
+    SELECT user_id INTO v_user_id FROM users WHERE email = p_user_email;
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]User does not exist : %', p_user_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 유저가 접근 가능한 노드 및 권한 계산 (Path 기반 비재귀 스코프)
+    RETURN QUERY
+    WITH assigned_nodes AS (
+        SELECT 
+            ra.node_id,
+            BIT_OR(auth.authority) as authority
+        FROM role_assignments ra
+        JOIN role_authorities auth ON ra.node_id = auth.node_id AND ra.role_id = auth.authority_id
+        WHERE ra.user_id = v_user_id
+        GROUP BY ra.node_id
+    ),
+    visible_node_ids AS (
+        -- 직접 할당된 노드
+        SELECT node_id FROM assigned_nodes
+        WHERE (authority & v_node_info_view) = v_node_info_view
+        UNION
+        -- 하위 노드 탐색 (모든 후손 노드)
+        SELECT n.node_id
+        FROM organization_nodes n
+        JOIN assigned_nodes an ON n.path @> ARRAY[an.node_id]
+        WHERE (an.authority & v_node_sub_view) = v_node_sub_view
+        UNION
+        -- 상위 조상 노드 식별
+        SELECT unnest(an_node.path)
+        FROM organization_nodes an_node
+        JOIN assigned_nodes an ON an.node_id = an_node.node_id
+        WHERE (an.authority & v_node_parent_view) = v_node_parent_view
+    ),
+    final_visible_nodes AS (
+        SELECT 
+            vn.node_id,
+            get_effective_authority(v_user_id, vn.node_id) as effective_authority
+        FROM (SELECT DISTINCT node_id FROM visible_node_ids) vn
+    ),
+    filtered_nodes AS (
+        SELECT * FROM final_visible_nodes
+        WHERE (effective_authority & v_deny) != v_deny
+           OR effective_authority IS NULL
+    )
+
+    -- A. 접근 가능한 NODE 메타데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'NODE',
+        'id', n.node_id,
+        'node_type', n.node_type,
+        'parent_id', n.parent_node_id,
+        'title', n.name,
+        'path', n.path,
+        'is_deleted', n.is_deleted,
+        'created_at', to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+        'updated_at', to_char(n.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+    )
+    FROM organization_nodes n
+    WHERE n.node_id IN (SELECT node_id FROM filtered_nodes)
+      AND n.is_deleted = FALSE
+
+    UNION ALL
+
+    -- B. 각 노드의 ROLE 데이터 반환 (본인 역할 또는 멤버 열람 권한 있는 역할)
+    SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'id', ra.assignment_id,
+        'node_id', ra.node_id,
+        'user_id', ra.user_id,
+        'email', u.email,
+        'user_name', u.name,
+        'role', (SELECT role FROM role_authorities WHERE authority_id = ra.role_id),
+        'role_id', ra.role_id,
+        'is_top_role', (SELECT is_top_role FROM role_authorities WHERE authority_id = ra.role_id),
+        'updated_at', to_char(ra.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+    )
+    FROM role_assignments ra
+    JOIN users u ON ra.user_id = u.user_id
+    JOIN filtered_nodes fn ON ra.node_id = fn.node_id
+    WHERE ((fn.effective_authority & v_node_members_view) = v_node_members_view OR ra.user_id = v_user_id)
+      AND u.is_deleted = FALSE
+
+    UNION ALL
+
+    -- C. 각 노드의 AUTHORITY 정의 데이터 반환
+    SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'id', auth.authority_id,
+        'role_id', auth.authority_id,
+        'is_top_role', auth.is_top_role,
+        'node_id', auth.node_id,
+        'role', auth.role,
+        'authority', auth.authority::TEXT,
+        'updated_at', to_char(auth.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+    )
+    FROM role_authorities auth
+    JOIN filtered_nodes fn ON auth.node_id = fn.node_id
+    WHERE ((fn.effective_authority & v_node_members_view) = v_node_members_view 
+       OR EXISTS (SELECT 1 FROM role_assignments own WHERE own.role_id = auth.authority_id AND own.user_id = v_user_id));
+
+    EXCEPTION 
+        WHEN SQLSTATE 'P0001' THEN
+        RAISE;
+        WHEN OTHERS THEN
+        RAISE EXCEPTION '[P0202]Error fetching workspace directory scope for user: % (REASON: %)', p_user_email, SQLERRM
+        USING ERRCODE = 'P0202';
+END;
+$$ LANGUAGE plpgsql;

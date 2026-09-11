@@ -16,6 +16,7 @@ import {
   createSubNodeOnServer,
   createTopNodeOnServer,
   fetchNodeDetailOnServer,
+  loadWorkspaceDirectoryScopeOnServer,
   updateNodeOnServer,
   updateRoleOnServer,
 } from './serverWorkspace'
@@ -119,6 +120,13 @@ export function getOrgSnapshot(): WorkspaceSnapshot {
 export async function fetchNodeDetail(nodeId: number | string): Promise<WorkspaceSnapshot> {
   if (isServerDataSource()) {
     await fetchNodeDetailOnServer(nodeId)
+  }
+  return getOrgSnapshot()
+}
+
+export async function fetchWorkspaceDirectoryScope(): Promise<WorkspaceSnapshot> {
+  if (isServerDataSource()) {
+    await loadWorkspaceDirectoryScopeOnServer()
   }
   return getOrgSnapshot()
 }

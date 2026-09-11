@@ -17,6 +17,7 @@ class ContextController : public drogon::HttpController<ContextController>
 
     ADD_METHOD_TO(ContextController::getInitialContext, "/api/context/init", Get, "JwtFilter");
     ADD_METHOD_TO(ContextController::syncContext, "/api/context/sync", Get, "JwtFilter");
+    ADD_METHOD_TO(ContextController::getWorkspaceDirectoryScope, "/api/context/scope", Get, "JwtFilter");
 
     METHOD_LIST_END
     // your declaration of processing function maybe like this:
@@ -25,5 +26,6 @@ class ContextController : public drogon::HttpController<ContextController>
 
     void getInitialContext(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void syncContext(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void getWorkspaceDirectoryScope(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

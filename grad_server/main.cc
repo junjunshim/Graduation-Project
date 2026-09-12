@@ -10,6 +10,7 @@ int main() {
     // 0. 파일 업로드 기본 디렉터리 자동 생성
     try {
         std::filesystem::create_directories("./uploads/work_items");
+        std::filesystem::create_directories("./uploads/recurring_rules");
     } catch (const std::exception& e) {
         LOG_ERROR << "Failed to initialize uploads directory: " << e.what();
     }

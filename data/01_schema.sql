@@ -272,3 +272,72 @@ CREATE TABLE IF NOT EXISTS work_item_files (
 );
 CREATE INDEX idx_files_work_item_id ON work_item_files(work_item_id);
 CREATE INDEX idx_files_is_deleted ON work_item_files(is_deleted);
+
+-- 11. 정기/반복 일정 및 루틴 규칙 테이블
+CREATE TABLE IF NOT EXISTS recurring_rules (
+    rule_id SERIAL PRIMARY KEY,
+    owner_node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
+    creator_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    assignee_user_id VARCHAR(50) REFERENCES users(user_id) ON DELETE SET NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    category VARCHAR(50) NOT NULL DEFAULT 'ROUTINE', -- 'ROUTINE', 'REPORT', 'INSPECTION', 'MEETING', 'EVENT'
+    
+    -- 반복 주기 속성
+    frequency VARCHAR(20) NOT NULL,          -- 'DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'
+    interval_value INTEGER NOT NULL DEFAULT 1, -- N일/N주/N개월 주기
+    by_day VARCHAR(50),                      -- 주간 요일 ('MO', 'TU,TH', 'MO,WE,FR')
+    by_month_day INTEGER,                    -- 월간 일자 (1~31)
+    by_set_pos INTEGER,                      -- 주차 (1: 첫째주, 2: 둘째주 ... -1: 마지막주)
+    
+    -- 시간 및 유효 기간
+    start_time TIME,                         -- 시작 시간 (예: '10:00:00')
+    duration_minutes INTEGER DEFAULT 60,     -- 소요 시간(분)
+    repeat_start_date DATE NOT NULL,         -- 반복 시작 기준일
+    repeat_end_date DATE,                    -- 반복 종료일 (NULL: 무기한)
+    max_occurrences INTEGER,                 -- 최대 반복 횟수
+    
+    -- 공휴일 처리 정책
+    exclude_holidays BOOLEAN NOT NULL DEFAULT TRUE,
+    holiday_action VARCHAR(20) NOT NULL DEFAULT 'SKIP', -- 'SKIP' | 'NEXT_WORKDAY' | 'PREV_WORKDAY'
+    
+    -- 실행 모드
+    auto_create_task BOOLEAN NOT NULL DEFAULT FALSE,
+    
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_recurring_rules_node ON recurring_rules(owner_node_id);
+CREATE INDEX idx_recurring_rules_creator ON recurring_rules(creator_user_id);
+CREATE INDEX idx_recurring_rules_category ON recurring_rules(category);
+CREATE INDEX idx_recurring_rules_active ON recurring_rules(is_active, is_deleted);
+
+-- 12. 정기 일정 체크리스트 템플릿 테이블
+CREATE TABLE IF NOT EXISTS recurring_rule_checklists (
+    checklist_id SERIAL PRIMARY KEY,
+    rule_id INTEGER NOT NULL REFERENCES recurring_rules(rule_id) ON DELETE CASCADE,
+    content VARCHAR(255) NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_recurring_checklists_rule ON recurring_rule_checklists(rule_id);
+
+-- 13. 정기 일정 전용 독립 첨부파일 테이블 (양식, 매뉴얼 등)
+CREATE TABLE IF NOT EXISTS recurring_rule_files (
+    file_id SERIAL PRIMARY KEY,
+    rule_id INTEGER NOT NULL REFERENCES recurring_rules(rule_id) ON DELETE CASCADE,
+    uploader_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    original_file_name VARCHAR(255) NOT NULL,
+    stored_file_name VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size BIGINT NOT NULL,
+    mime_type VARCHAR(100),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_recurring_files_rule_id ON recurring_rule_files(rule_id);
+CREATE INDEX idx_recurring_files_is_deleted ON recurring_rule_files(is_deleted);
+

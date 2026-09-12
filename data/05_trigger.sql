@@ -53,6 +53,8 @@ DROP TRIGGER IF EXISTS trg_update_tokens_time ON user_refresh_tokens;
 DROP TRIGGER IF EXISTS trg_update_comments_time ON work_item_comments;
 DROP TRIGGER IF EXISTS trg_update_mentions_time ON comment_mentions;
 DROP TRIGGER IF EXISTS trg_update_files_time ON work_item_files;
+DROP TRIGGER IF EXISTS trg_update_recurring_rules_time ON recurring_rules;
+DROP TRIGGER IF EXISTS trg_update_recurring_files_time ON recurring_rule_files;
 
 CREATE TRIGGER trg_update_nodes_time BEFORE UPDATE ON organization_nodes FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_users_time BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_modified_column();
@@ -63,6 +65,9 @@ CREATE TRIGGER trg_update_tokens_time BEFORE UPDATE ON user_refresh_tokens FOR E
 CREATE TRIGGER trg_update_comments_time BEFORE UPDATE ON work_item_comments FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_mentions_time BEFORE UPDATE ON comment_mentions FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_files_time BEFORE UPDATE ON work_item_files FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER trg_update_recurring_rules_time BEFORE UPDATE ON recurring_rules FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER trg_update_recurring_files_time BEFORE UPDATE ON recurring_rule_files FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
 
 
 -- 3. 히스토리 테이블에 등록하는 함수를 각 테이블의 AFTER 트리거로 설정
@@ -130,6 +135,17 @@ BEGIN
     IF NEW.is_deleted = TRUE AND OLD.is_deleted = FALSE THEN
         -- 소속 업무들 연쇄 소프트 딜리트 (업무 트리거가 파일까지 연쇄 딜리트 처리)
         UPDATE work_items
+        SET is_deleted = TRUE
+        WHERE owner_node_id = NEW.node_id
+          AND is_deleted = FALSE;
+
+        -- 소속 정기 규칙 및 전용 파일들 연쇄 소프트 딜리트
+        UPDATE recurring_rule_files
+        SET is_deleted = TRUE
+        WHERE rule_id IN (SELECT rule_id FROM recurring_rules WHERE owner_node_id = NEW.node_id)
+          AND is_deleted = FALSE;
+
+        UPDATE recurring_rules
         SET is_deleted = TRUE
         WHERE owner_node_id = NEW.node_id
           AND is_deleted = FALSE;

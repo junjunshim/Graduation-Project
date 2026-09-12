@@ -151,14 +151,53 @@
 
 /* 좌측 폴더 사이드바 */
 .folderSidebar {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-lg);
   background: var(--surface-panel);
+}
+
+.sidebarModeToggle {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  background: var(--surface-panel-subtle);
+  border-bottom: 1px solid var(--line-default);
+  gap: 4px;
+}
+
+.modeToggleBtn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.modeToggleBtn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.modeToggleBtnActive {
+  background: var(--surface-panel);
+  border-color: var(--line-default);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.05));
 }
 
 .sidebarHeader {

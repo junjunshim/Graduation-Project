@@ -49,7 +49,8 @@ aux_source_directory(controllers/work CTL_WORK_SRC)
 aux_source_directory(controllers/role CTL_ROLE_SRC)
 aux_source_directory(controllers/context CTL_CONTEXT_SRC)
 aux_source_directory(controllers/notification CTL_NOTIFICATION_SRC)
-set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC})
+aux_source_directory(controllers/recurring CTL_RECURRING_SRC)
+set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC} ${CTL_RECURRING_SRC})
 
 aux_source_directory(filters/auth FILTER_SRC)
 aux_source_directory(plugins PLUGIN_SRC)
@@ -80,6 +81,7 @@ target_include_directories(${PROJECT_NAME}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/role
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/context
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/notification
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/recurring
                                    ${CMAKE_CURRENT_SOURCE_DIR}/filters/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/node

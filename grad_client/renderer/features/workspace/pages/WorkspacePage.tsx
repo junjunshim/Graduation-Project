@@ -6,10 +6,15 @@ import { getCurrentUser } from '../../auth/api'
 import { WorkspaceFilesTab } from '../components/WorkspaceFilesTab'
 import { WorkspaceMembersTab } from '../components/WorkspaceMembersTab'
 import { WorkspaceRolesTab } from '../components/WorkspaceRolesTab'
+import { WorkspaceSchedulesTab } from '../components/WorkspaceSchedulesTab'
 import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
 import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
-import { subscribeToWorkspaceCache } from '../data/workspaceCacheEvents'
+import {
+  subscribeToWorkspaceCache,
+  subscribeToLiveNotifications,
+  notifyRecurringCacheUpdated,
+} from '../data/workspaceCacheEvents'
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
@@ -65,7 +70,7 @@ type TimelineView = {
   todayLeft: number
 }
 
-type WorkspaceView = 'overview' | 'tasks' | 'timeline' | 'files' | 'members' | 'roles'
+type WorkspaceView = 'overview' | 'tasks' | 'timeline' | 'schedules' | 'files' | 'members' | 'roles'
 
 type WorkspaceTab = {
   label: string
@@ -77,6 +82,7 @@ const workspaceTabs: WorkspaceTab[] = [
   { label: '개요', to: '/workspace', view: 'overview' },
   { label: '업무', to: '/workspace?view=tasks', view: 'tasks' },
   { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
+  { label: '일정', to: '/workspace?view=schedules', view: 'schedules' },
   { label: '파일', to: '/workspace?view=files', view: 'files' },
   { label: '사용자', to: '/workspace?view=members', view: 'members' },
   { label: '역할/권한', to: '/workspace?view=roles', view: 'roles' },
@@ -411,7 +417,6 @@ function getWorkspaceMetrics(
     roles: snapshot.roles,
     users: snapshot.users,
     authorities: snapshot.authorities,
-    allRoleMembers: overview.allRoleMembers,
   })
 
   return [
@@ -534,6 +539,7 @@ export function WorkspacePage() {
   const activeView: WorkspaceView =
     requestedView === 'tasks' ||
     requestedView === 'timeline' ||
+    requestedView === 'schedules' ||
     requestedView === 'files' ||
     requestedView === 'members' ||
     requestedView === 'roles'
@@ -586,15 +592,49 @@ export function WorkspacePage() {
     }
 
     // 캐시 변경 이벤트(다른 탭/백그라운드 동기화 발생 시) 부드럽게 동기화
-    const unsubscribe = subscribeToWorkspaceCache(() => {
+    const unsubscribeCache = subscribeToWorkspaceCache(() => {
       if (isSubscribed) {
         setSnapshot(getOrgSnapshot())
       }
     })
 
+    // 실시간 WebSocket 알림 수신 시 현재 열람 중인 노드 데이터 자동 최신화
+    const unsubscribeLive = subscribeToLiveNotifications((payload) => {
+      if (!isSubscribed || !activeWorkspaceRootId) return
+
+      const notifNodeId = payload.node_id != null ? Number(payload.node_id) : null
+      const currentNodeId = Number(activeWorkspaceRootId)
+
+      // 알림의 소속 노드가 현재 보고 있는 노드와 일치할 때
+      if (notifNodeId === currentNodeId) {
+        // 1. 일정 관련 알림 (일정 생성/수정/삭제/복구 또는 일정 양식 파일)인 경우:
+        //    일정 전용 캐시 갱신 브로드캐스트만 수행 (fetchNodeDetail 중복 호출 방지)
+        const isRecurringEvent =
+          payload.link_url?.includes('view=schedules') ||
+          payload.target_name?.includes('정기') ||
+          payload.target_name?.includes('recurring')
+
+        if (isRecurringEvent) {
+          notifyRecurringCacheUpdated(currentNodeId)
+        } else {
+          // 2. 일반 업무, 노드, 권한, 파일 등 일반 노드 활동인 경우에만 fetchNodeDetail 호출
+          fetchNodeDetail(activeWorkspaceRootId)
+            .then((latestSnapshot) => {
+              if (isSubscribed) {
+                setSnapshot(latestSnapshot)
+              }
+            })
+            .catch((err) => {
+              console.warn('[WorkspacePage] 실시간 알림 수신 후 자동 최신화 실패:', err)
+            })
+        }
+      }
+    })
+
     return () => {
       isSubscribed = false
-      unsubscribe()
+      unsubscribeCache()
+      unsubscribeLive()
     }
   }, [activeWorkspaceRootId, reloadTrigger])
 
@@ -814,8 +854,15 @@ export function WorkspacePage() {
           members={snapshot.users}
           workspaces={overview.visibleNodes}
         />
+      ) : activeView === 'schedules' ? (
+        <WorkspaceSchedulesTab
+          activeNodeId={overview.rootNode ? overview.rootNode.id : 1}
+          members={overview.allRoleMembers && overview.allRoleMembers.length > 0 ? overview.allRoleMembers : overview.rootRoleMembers}
+          workspaces={overview.visibleNodes}
+        />
       ) : activeView === 'files' ? (
         <WorkspaceFilesTab
+          nodeId={overview.rootNode ? overview.rootNode.id : (activeWorkspaceRootId ? Number(activeWorkspaceRootId) : 1)}
           workItems={overview.visibleWorkItems}
           files={overview.allFiles ?? overview.files}
         />
@@ -826,8 +873,6 @@ export function WorkspacePage() {
           roles={snapshot.roles}
           users={snapshot.users}
           authorities={snapshot.authorities}
-          rootRoleMembers={overview.rootRoleMembers}
-          allRoleMembers={overview.allRoleMembers}
         />
       ) : activeView === 'roles' ? (
         <WorkspaceRolesTab

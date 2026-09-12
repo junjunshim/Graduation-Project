@@ -1,5 +1,6 @@
 export const WORKSPACE_CACHE_UPDATED_EVENT = 'grad-client-workspace-cache-updated'
 export const WORKSPACE_CACHE_REFRESH_FAILED_EVENT = 'grad-client-workspace-cache-refresh-failed'
+export const RECURRING_CACHE_UPDATED_EVENT = 'grad-client-recurring-cache-updated'
 
 export function notifyWorkspaceCacheUpdated() {
   if (typeof window === 'undefined') {
@@ -7,6 +8,31 @@ export function notifyWorkspaceCacheUpdated() {
   }
 
   window.dispatchEvent(new Event(WORKSPACE_CACHE_UPDATED_EVENT))
+}
+
+export function notifyRecurringCacheUpdated(nodeId?: number) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(new CustomEvent(RECURRING_CACHE_UPDATED_EVENT, { detail: { nodeId } }))
+}
+
+export function subscribeToRecurringCache(listener: (event: { nodeId?: number }) => void) {
+  if (typeof window === 'undefined') {
+    return () => undefined
+  }
+
+  const handle = (e: Event) => {
+    if (e instanceof CustomEvent) {
+      listener(e.detail || {})
+    } else {
+      listener({})
+    }
+  }
+
+  window.addEventListener(RECURRING_CACHE_UPDATED_EVENT, handle)
+  return () => window.removeEventListener(RECURRING_CACHE_UPDATED_EVENT, handle)
 }
 
 export function subscribeToWorkspaceCache(listener: () => void) {
@@ -55,6 +81,7 @@ export type LiveNotificationPayload = {
   action?: string
   actor_user_id?: string
   actor_name?: string
+  target_name?: string
   title: string
   content: string
   link_url?: string

@@ -3,8 +3,6 @@ import type {
   OnboardingStep,
   OrganizationNodeRecord,
   RoleMember,
-  RoleName,
-  UserRecord,
   WorkItemRecord,
   WorkspaceNodeView,
   WorkspaceOverview,
@@ -14,6 +12,7 @@ import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from
 import { getCurrentUser } from '../data/userService'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
 import { isWorkItemDueSoon } from '../model/workItemDue'
+import { analyzeWorkspaceMembers } from '../model/memberInheritance'
 
 type WorkspaceOverviewOptions = {
   rootNodeId?: string | null
@@ -113,23 +112,6 @@ function buildOnboardingSteps({
       status,
     }
   })
-}
-
-function toRoleMember(
-  assignmentId: number,
-  userId: string,
-  roleName: RoleName,
-  usersById: ReadonlyMap<string, UserRecord>,
-): RoleMember {
-  const user = usersById.get(userId)
-
-  return {
-    assignmentId,
-    userId,
-    name: user?.name ?? userId,
-    email: user?.email ?? '',
-    roleName,
-  }
 }
 
 function buildWorkspaceTree(nodes: OrganizationNodeRecord[], workItems: WorkItemRecord[]): WorkspaceNodeView[] {
@@ -270,51 +252,36 @@ export function getWorkspaceOverview(
   const rootNode = scopedRootNode ?? visibleNodes[0]
   const scopedNodeId = scopedRootNode?.id
 
-  const usersById = new Map(snapshot.users.map((user) => [user.userId, user]))
+  // analyzeWorkspaceMembers를 사용하여 해당 노드의 직속 및 상속 팀원 전체를 표준 계산
+  const memberAnalysis = rootNode
+    ? analyzeWorkspaceMembers({
+        rootNode,
+        nodes: snapshot.nodes,
+        roles: snapshot.roles,
+        users: snapshot.users,
+        authorities: snapshot.authorities ?? [],
+      })
+    : { all: [], direct: [], inherited: [], overridden: [] }
 
-  // 하위 자손 노드 ID 목록
-  const descendantNodeIds = rootNode ? getDescendantNodeIds(rootNode.id, snapshot.nodes) : new Set<number>()
-  descendantNodeIds.delete(rootNode?.id ?? -1) // 자기 자신 제외
+  const rootRoleMembers: RoleMember[] = memberAnalysis.direct.map((m, idx) => ({
+    assignmentId: idx + 1,
+    userId: m.userId,
+    name: m.name,
+    email: m.email,
+    roleName: m.directRoleName ?? m.effectiveRoleName,
+    roleId: m.effectiveRoleId,
+    isTopRole: m.isTopRole,
+  }))
 
-  const descendantAssignedUsers = new Set<string>()
-  snapshot.roles.forEach((r) => {
-    if (!r.isDeleted && descendantNodeIds.has(r.nodeId)) {
-      descendantAssignedUsers.add(r.userId)
-    }
-  })
-
-  const rawRootRoles = rootNode && rootNode.nodeType !== 'USER'
-    ? snapshot.roles.filter((role) => role.nodeId === rootNode.id && !role.isDeleted)
-    : []
-
-  // 직속 역할 멤버: 하위 노드에 더 구체적으로 배정되지 않은 멤버 (만약 모두 하위에 배정되어 0명이면 ADMIN은 유지)
-  let directRootRoles = rawRootRoles.filter((r) => !descendantAssignedUsers.has(r.userId))
-  if (directRootRoles.length === 0 && rawRootRoles.length > 0) {
-    const adminRoles = rawRootRoles.filter((r) => r.isTopRole === true)
-    directRootRoles = adminRoles.length > 0 ? adminRoles : [rawRootRoles[0]]
-  }
-
-  const rootRoleMembers = rootNode ? directRootRoles
-    .map((role) => ({ ...toRoleMember(role.id, role.userId, role.roleName, usersById), roleId: role.roleId, isTopRole: role.isTopRole }))
-    .sort((left, right) => left.name.localeCompare(right.name, 'ko')) : []
-
-  // 현재 선택된 트리의 전체 노드 ID 집합 (rootNode 및 그 모든 자손 노드들만 포함)
-  const scopedTreeIds = rootNode
-    ? new Set<number>([rootNode.id, ...Array.from(descendantNodeIds)])
-    : accessibleNodeIdSet
-
-  // 하위 포함 고유 팀원 목록 (현재 트리에 속한 역할만 집계)
-  const allRoleMemberMap = new Map<string, RoleMember>()
-  snapshot.roles
-    .filter((role) => !role.isDeleted && scopedTreeIds.has(role.nodeId))
-    .forEach((role) => {
-      if (!allRoleMemberMap.has(role.userId)) {
-        allRoleMemberMap.set(role.userId, toRoleMember(role.id, role.userId, role.roleName, usersById))
-      }
-    })
-  const allRoleMembers = Array.from(allRoleMemberMap.values()).sort((left, right) =>
-    left.name.localeCompare(right.name, 'ko'),
-  )
+  const allRoleMembers: RoleMember[] = memberAnalysis.all.map((m, idx) => ({
+    assignmentId: idx + 1,
+    userId: m.userId,
+    name: m.name,
+    email: m.email,
+    roleName: m.effectiveRoleName,
+    roleId: m.effectiveRoleId,
+    isTopRole: m.isTopRole,
+  }))
 
   const nodeActivities = (snapshot.activities ?? []).filter(
     (act) => scopedNodeId === undefined || act.nodeId === scopedNodeId,

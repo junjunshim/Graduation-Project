@@ -71,7 +71,6 @@ export function analyzeWorkspaceMembers({
   roles = [],
   users = [],
   authorities = [],
-  allRoleMembers = [],
 }: {
   rootNode?: OrganizationNodeRecord | null
   nodes?: OrganizationNodeRecord[]
@@ -169,8 +168,8 @@ export function analyzeWorkspaceMembers({
       return
     }
 
-    const name = user?.name || allRoleMembers.find((m) => m.userId === userId)?.name || userId
-    const email = user?.email || allRoleMembers.find((m) => m.userId === userId)?.email || ''
+    const name = user?.name || userId
+    const email = user?.email || ''
 
     all.push({
       userId,
@@ -221,7 +220,6 @@ export function getWorkspaceMemberSummary({
   roles = [],
   users = [],
   authorities = [],
-  allRoleMembers = [],
 }: {
   rootNode?: OrganizationNodeRecord | null
   nodes?: OrganizationNodeRecord[]
@@ -236,7 +234,6 @@ export function getWorkspaceMemberSummary({
     roles,
     users,
     authorities,
-    allRoleMembers,
   })
 
   const totalCount = analysis.all.length

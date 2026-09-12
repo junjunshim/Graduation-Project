@@ -36,14 +36,12 @@ type WorkspaceMembersTabProps = {
   allRoleMembers?: RoleMember[]
 }
 
-
 export function WorkspaceMembersTab({
   rootNode,
   nodes = [],
   roles = [],
   users = [],
   authorities = [],
-  allRoleMembers = [],
 }: WorkspaceMembersTabProps) {
   const [activeSegment, setActiveSegment] = useState<MemberSegmentType>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -144,9 +142,8 @@ export function WorkspaceMembersTab({
         roles,
         users,
         authorities,
-        allRoleMembers,
       }),
-    [allRoleMembers, authorities, nodes, roles, rootNode, users],
+    [authorities, nodes, roles, rootNode, users],
   )
 
   // 현재 활성 세그먼트 데이터

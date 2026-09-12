@@ -1519,3 +1519,81 @@
   font-size: 0.72rem;
   font-weight: 650;
 }
+
+/* ==========================================================================
+   정기 일정 관리 버튼 및 뷰 스타일
+   ========================================================================== */
+.recurringToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--axis-line-default, #dce2ed);
+  border-radius: var(--axis-radius-panel, 8px);
+  background: var(--axis-surface-panel, #ffffff);
+  color: var(--axis-text-secondary, #535e77);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.recurringToggleBtn:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #6366f1;
+}
+
+.recurringToggleBtnActive {
+  background: #6366f1 !important;
+  border-color: #6366f1 !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.25);
+}
+
+.recurringCard {
+  background: var(--axis-surface-panel, #ffffff);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: box-shadow 0.15s ease;
+}
+
+.recurringCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.recurringCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.recurringCardTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.recurringCardTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--axis-text-primary, #0f172a);
+}
+
+.recurringCardActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.recurringCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  padding: 1rem 0;
+}

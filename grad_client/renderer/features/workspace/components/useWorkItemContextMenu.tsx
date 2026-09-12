@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getOrgSnapshot } from '../data/orgService'
+import { getCascadeWorkItemSummary } from '../data/cascadeWorkItemHelper'
 import { WorkItemFavoriteButton } from './WorkItemFavoriteButton'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 import styles from './FileContextMenu.module.css'
@@ -13,6 +14,9 @@ export function useWorkItemContextMenu() {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
     id: string
     title: string
+    attachedFiles: Array<{ id: number; name: string; size?: number; workItemTitle?: string }>
+    childWorkItems: Array<{ id: string; title: string }>
+    childCount: number
   } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -33,9 +37,8 @@ export function useWorkItemContextMenu() {
     window.addEventListener('resize', close)
     return () => { window.removeEventListener('pointerdown', pointer); window.removeEventListener('keydown', key); window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close) }
   }, [menu])
-  function onWorkItemContextMenu(event: MouseEvent) {
-    const target = (event.target as Element).closest<HTMLElement>('[data-work-item-id]')
-    const id = target?.dataset.workItemId
+  function onWorkItemContextMenu(event: MouseEvent, targetWorkItemId?: string) {
+    const id = targetWorkItemId || (event.target as Element).closest<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
     if (!id) return
     event.preventDefault()
     event.stopPropagation()
@@ -73,10 +76,25 @@ export function useWorkItemContextMenu() {
                 className={styles.deleteItem}
                 role="menuitem"
                 onClick={() => {
-                  const targetItem = getOrgSnapshot().workItems.find((w) => w.workItemId === menu.id)
+                  const snapshot = getOrgSnapshot()
+                  const summary = getCascadeWorkItemSummary(
+                    menu.id,
+                    snapshot.workItems,
+                    snapshot.files ?? [],
+                    false,
+                  )
+                  const targetItem = snapshot.workItems.find((w) => w.workItemId === menu.id)
+                  const attachedFiles = summary ? summary.allFiles : []
+                  const childWorkItems = summary
+                    ? summary.descendantWorkItems.map((c) => ({ id: c.workItemId, title: c.title }))
+                    : []
+
                   setDeleteConfirmTarget({
                     id: menu.id,
                     title: targetItem?.title || menu.id,
+                    attachedFiles,
+                    childWorkItems,
+                    childCount: childWorkItems.length,
                   })
                   setMenu(null)
                 }}
@@ -96,6 +114,9 @@ export function useWorkItemContextMenu() {
           itemName={deleteConfirmTarget.title}
           itemTypeLabel="업무"
           warningText="삭제된 업무는 휴지통으로 이동되며 15일간 보관 후 영구 삭제됩니다."
+          attachedFiles={deleteConfirmTarget.attachedFiles}
+          childWorkItems={deleteConfirmTarget.childWorkItems}
+          childCount={deleteConfirmTarget.childCount}
           onClose={() => setDeleteConfirmTarget(null)}
           onConfirm={async () => {
             const target = deleteConfirmTarget

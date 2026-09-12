@@ -12,7 +12,7 @@ export function getSelectedWorkItemDetail(
     ? getAccessibleNodeIdsForUser(userId, snapshot)
     : snapshot.nodes.map((node) => node.id)
   const accessibleNodeIdSet = new Set(accessibleNodeIds)
-  const visibleWorkItems = snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId))
+  const visibleWorkItems = snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId) && !item.isDeleted)
   const visibleWorkItemIds = new Set(visibleWorkItems.map((item) => item.workItemId))
   const item = visibleWorkItems.find((candidate) => candidate.workItemId === workItemId)
 

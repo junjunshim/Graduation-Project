@@ -1105,8 +1105,14 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
                                   </button>
                                 )}
                               {viewMode === 'category' ? (
-                                <Link to={`/work-items/${entry.item.workItemId}`} className={styles.taskLink} title={entry.item.title}
-                                  aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}`}>
+                                <Link
+                                  to={`/work-items/${entry.item.workItemId}`}
+                                  className={styles.taskLink}
+                                  title={entry.item.title}
+                                  data-work-item-id={entry.item.workItemId}
+                                  onContextMenu={onWorkItemContextMenu}
+                                  aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}`}
+                                >
                                   <span className={styles.taskIcon} aria-hidden="true"><Icon name="checkCircle" size={timelineIconSize} /></span>
                                   <span className={styles.taskCopy}><strong>{entry.item.title}</strong></span>
                                 </Link>
@@ -1114,6 +1120,8 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
                                 type="button"
                                 className={styles.taskLink}
                                 title={entry.item.title}
+                                data-work-item-id={entry.item.workItemId}
+                                onContextMenu={onWorkItemContextMenu}
                                 aria-pressed={selectedTaskId === entry.item.workItemId}
                                 aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}, 업무와 하위 업무 강조`}
                                 onClick={() => setSelectedTaskId((current) => current === entry.item.workItemId ? null : entry.item.workItemId)}

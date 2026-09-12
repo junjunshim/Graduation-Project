@@ -77,9 +77,88 @@
 }
 
 .warningNote {
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
   font-size: 0.8rem;
   color: var(--axis-text-muted, #64748b);
+}
+
+.attachedFilesWarning {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.8rem;
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px dashed rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+}
+
+.attachedFilesWarningHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 0.4rem;
+}
+
+.attachedFilesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.attachedFileItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--axis-text-primary, #0f172a);
+}
+
+.attachedFileIcon {
+  color: var(--axis-text-muted, #64748b);
+  flex-shrink: 0;
+}
+
+.attachedFileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.attachedFileTaskTag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--axis-primary-default, #2563eb);
+  background: rgba(37, 99, 235, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachedFileSize {
+  font-size: 0.7rem;
+  color: var(--axis-text-muted, #64748b);
+  flex-shrink: 0;
+}
+
+.childCountWarning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #d97706;
 }
 
 .footer {
@@ -129,3 +208,52 @@
   opacity: 0.6;
   cursor: wait;
 }
+
+.restoreOptionsCard {
+  margin-top: 0.9rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--axis-surface-panel-subtle, #f8fafc);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.restoreOptionsTitle {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--axis-text-primary, #0f172a);
+}
+
+.restoreOptionLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: var(--axis-text-secondary, #334155);
+  cursor: pointer;
+}
+
+.restoreOptionRadio {
+  margin-top: 0.15rem;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+.restoreOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.restoreOptionPrimary {
+  font-weight: 600;
+  color: var(--axis-text-primary, #0f172a);
+}
+
+.restoreOptionDesc {
+  font-size: 0.74rem;
+  color: var(--axis-text-muted, #64748b);
+}
+

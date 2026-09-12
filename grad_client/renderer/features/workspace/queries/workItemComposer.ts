@@ -68,6 +68,7 @@ export function getWorkItemComposerContext(
         options.enforceServerCreateContract && resolvedUserId
           ? getServerAvailableParentItems(resolvedUserId, selectedNode.id, snapshot)
           : snapshot.workItems.filter((item) => {
+              if (item.isDeleted) return false
               const allowedNodeIds = new Set<number>([selectedNode.id])
               if (selectedNode.parentNodeId) allowedNodeIds.add(selectedNode.parentNodeId)
               return allowedNodeIds.has(item.ownerNodeId)
@@ -81,14 +82,14 @@ export function getWorkItemComposerContext(
       : Array.from(
           new Set(
             snapshot.workItems
-              .filter((item) => item.ownerNodeId === selectedNode.id && item.category?.trim())
+              .filter((item) => !item.isDeleted && item.ownerNodeId === selectedNode.id && item.category?.trim())
               .map((item) => item.category!.trim()),
           ),
         ).sort((a, b) => a.localeCompare(b, 'ko'))
     : []
 
   const nodeWorkItems = selectedNode
-    ? snapshot.workItems.filter((item) => item.ownerNodeId === selectedNode.id)
+    ? snapshot.workItems.filter((item) => !item.isDeleted && item.ownerNodeId === selectedNode.id)
     : []
   const maxDisplayId = nodeWorkItems.reduce((max, item) => Math.max(max, item.displayId ?? 0), 0)
   const suggestedDisplayCode = `WI-${maxDisplayId + 1}`

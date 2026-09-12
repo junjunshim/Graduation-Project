@@ -269,15 +269,41 @@ export async function deleteWorkItem(workItemId: string) {
 
   await delay()
   const db = readWorkspaceDb()
-  const itemIndex = db.workItems.findIndex((w) => w.workItemId === workItemId)
-  if (itemIndex < 0) {
+  const targetIds = new Set<string>([workItemId])
+  let added = true
+  while (added) {
+    added = false
+    for (const item of db.workItems) {
+      if (item.parentWorkItemId && targetIds.has(item.parentWorkItemId) && !targetIds.has(item.workItemId)) {
+        targetIds.add(item.workItemId)
+        added = true
+      }
+    }
+  }
+
+  let found = false
+  db.workItems.forEach((w) => {
+    if (targetIds.has(w.workItemId)) {
+      w.isDeleted = true
+      found = true
+    }
+  })
+
+  if (!found) {
     return {
       status: 'error' as const,
       message: '요청한 업무를 찾을 수 없습니다.',
     }
   }
 
-  db.workItems[itemIndex].isDeleted = true
+  if (db.files) {
+    db.files.forEach((f) => {
+      if (targetIds.has(f.workItemId)) {
+        f.isDeleted = true
+      }
+    })
+  }
+
   writeWorkspaceDb(db)
 
   return {
@@ -315,5 +341,68 @@ export async function addWorkItemComment(workItemId: string, content: string) {
 
   await delay()
   return { status: 'success' as const }
+}
+
+export type RestoreWorkItemOptions = {
+  cascade?: boolean
+  newParentId?: string
+}
+
+export async function restoreWorkItem(workItemId: string, options: RestoreWorkItemOptions = { cascade: true }) {
+  if (isServerDataSource()) {
+    const { restoreWorkItemOnServer } = await import('./server/serverWorkspace')
+    return restoreWorkItemOnServer(workItemId, options)
+  }
+
+  await delay()
+  const db = readWorkspaceDb()
+  const cascade = options.cascade ?? true
+  const targetIds = new Set<string>([workItemId])
+
+  if (cascade) {
+    let added = true
+    while (added) {
+      added = false
+      for (const item of db.workItems) {
+        if (item.parentWorkItemId && targetIds.has(item.parentWorkItemId) && !targetIds.has(item.workItemId)) {
+          targetIds.add(item.workItemId)
+          added = true
+        }
+      }
+    }
+  }
+
+  let found = false
+  db.workItems.forEach((w) => {
+    if (targetIds.has(w.workItemId)) {
+      w.isDeleted = false
+      if (w.workItemId === workItemId && options.newParentId !== undefined) {
+        w.parentWorkItemId = options.newParentId
+      }
+      found = true
+    }
+  })
+
+  if (!found) {
+    return {
+      status: 'error' as const,
+      message: '복구할 업무를 찾을 수 없습니다.',
+    }
+  }
+
+  if (db.files) {
+    db.files.forEach((f) => {
+      if (targetIds.has(f.workItemId)) {
+        f.isDeleted = false
+      }
+    })
+  }
+
+  writeWorkspaceDb(db)
+
+  return {
+    status: 'success' as const,
+    workItemId,
+  }
 }
 

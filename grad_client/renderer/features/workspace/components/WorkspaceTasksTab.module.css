@@ -1398,3 +1398,124 @@
     overflow-x: auto;
   }
 }
+
+/* ==========================================================================
+   휴지통 토글 버튼 및 휴지통 트리 뷰 스타일
+   ========================================================================== */
+.trashToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--axis-line-default, #dce2ed);
+  border-radius: var(--axis-radius-panel, 8px);
+  background: var(--axis-surface-panel, #ffffff);
+  color: var(--axis-text-secondary, #535e77);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.trashToggleBtn:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #dc2626;
+}
+
+.trashToggleBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.trashToggleBtnActive {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
+}
+
+.trashNoticeBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--radius-lg, 10px);
+  color: #991b1b;
+  font-size: 0.82rem;
+}
+
+.trashNoticeLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.trashNoticeCount {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.15);
+  font-size: 0.74rem;
+  font-weight: 750;
+  color: #b91c1c;
+}
+
+.trashRestoreButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid #2563eb;
+  border-radius: var(--radius-xs, 4px);
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+  white-space: nowrap;
+}
+
+.trashRestoreButton:hover {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.trashCardDeleted {
+  border-color: rgba(239, 68, 68, 0.25) !important;
+  background: rgba(254, 242, 242, 0.4) !important;
+}
+
+.trashDeletedBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  font-size: 0.7rem;
+  font-weight: 750;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  margin-right: 4px;
+}
+
+.trashFilesCountBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 650;
+}

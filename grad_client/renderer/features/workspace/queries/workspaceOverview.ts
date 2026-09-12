@@ -215,6 +215,12 @@ export function getWorkspaceOverview(
   const visibleWorkItems = sortWorkspaceWorkItems(
     snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId) && !item.isDeleted),
   )
+  const deletedWorkItems = sortWorkspaceWorkItems(
+    snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId) && Boolean(item.isDeleted)),
+  )
+  const allWorkItems = sortWorkspaceWorkItems(
+    snapshot.workItems.filter((item) => accessibleNodeIdSet.has(item.ownerNodeId)),
+  )
 
   const summarySnapshot = scopedRootNode
     ? {
@@ -330,6 +336,8 @@ export function getWorkspaceOverview(
     accessibleNodeIds,
     visibleNodes,
     visibleWorkItems,
+    deletedWorkItems,
+    allWorkItems,
     roots,
     urgentWorkItems,
     recentWorkItems: [...visibleWorkItems]

@@ -3,17 +3,16 @@ import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import styles from './ConfirmDeleteModal.module.css'
 
-export type ConfirmDeleteModalProps = {
+export type ConfirmRestoreModalProps = {
   isOpen: boolean
   title: string
   itemName: string
-  itemTypeLabel: string
-  warningText?: string
+  itemTypeLabel?: string
   attachedFiles?: Array<{ id: number; name: string; size?: number; workItemTitle?: string }>
   childWorkItems?: Array<{ id: string; title: string }>
   childCount?: number
   onClose: () => void
-  onConfirm: () => Promise<void> | void
+  onConfirm: (cascade: boolean) => Promise<void> | void
 }
 
 function formatFileSize(bytes?: number) {
@@ -24,23 +23,24 @@ function formatFileSize(bytes?: number) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
-export function ConfirmDeleteModal({
+export function ConfirmRestoreModal({
   isOpen,
   title,
   itemName,
-  itemTypeLabel,
-  warningText,
+  itemTypeLabel = '업무',
   attachedFiles = [],
   childWorkItems = [],
   childCount = 0,
   onClose,
   onConfirm,
-}: ConfirmDeleteModalProps) {
-  const [isDeleting, setIsDeleting] = useState(false)
+}: ConfirmRestoreModalProps) {
+  const [isRestoring, setIsRestoring] = useState(false)
+  const [cascade, setCascade] = useState(true)
   const confirmBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!isOpen) return
+    setCascade(true)
     confirmBtnRef.current?.focus()
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -52,12 +52,14 @@ export function ConfirmDeleteModal({
 
   if (!isOpen || typeof document === 'undefined') return null
 
+  const hasChildrenOrFiles = childWorkItems.length > 0 || childCount > 0 || attachedFiles.length > 0
+
   const handleConfirmClick = async () => {
-    setIsDeleting(true)
+    setIsRestoring(true)
     try {
-      await onConfirm()
+      await onConfirm(cascade)
     } finally {
-      setIsDeleting(false)
+      setIsRestoring(false)
       onClose()
     }
   }
@@ -66,22 +68,22 @@ export function ConfirmDeleteModal({
     <div className={styles.overlay} onClick={onClose} role="dialog" aria-modal="true">
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <div className={styles.iconWrap}>
-            <Icon name="trash" size={20} />
+          <div className={styles.iconWrap} style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb' }}>
+            <Icon name="restore" size={20} />
           </div>
           <h3 className={styles.title}>{title}</h3>
         </div>
 
         <div className={styles.body}>
           <p>
-            정말로 <span className={styles.targetName}>{itemName}</span> {itemTypeLabel}을(를) 삭제하시겠습니까?
+            정말로 <span className={styles.targetName}>{itemName}</span> {itemTypeLabel}을(를) 복구하시겠습니까?
           </p>
 
           {childWorkItems.length > 0 && (
-            <div className={styles.attachedFilesWarning} style={{ borderColor: 'rgba(217, 119, 6, 0.4)', background: 'rgba(217, 119, 6, 0.05)' }}>
-              <div className={styles.attachedFilesWarningHeader} style={{ color: '#d97706' }}>
-                <Icon name="alertTriangle" size={14} />
-                <span>함께 연쇄 삭제되는 하위 업무 ({childWorkItems.length}개):</span>
+            <div className={styles.attachedFilesWarning} style={{ borderColor: 'rgba(37, 99, 235, 0.3)', background: 'rgba(37, 99, 235, 0.05)' }}>
+              <div className={styles.attachedFilesWarningHeader} style={{ color: '#2563eb' }}>
+                <Icon name="helpCircle" size={14} />
+                <span>함께 일괄 복구되는 하위 업무 ({childWorkItems.length}개):</span>
               </div>
               <ul className={styles.attachedFilesList}>
                 {childWorkItems.map((c) => (
@@ -97,10 +99,10 @@ export function ConfirmDeleteModal({
           )}
 
           {attachedFiles.length > 0 && (
-            <div className={styles.attachedFilesWarning}>
-              <div className={styles.attachedFilesWarningHeader}>
-                <Icon name="alertTriangle" size={14} />
-                <span>함께 삭제(휴지통 이동)되는 첨부파일 ({attachedFiles.length}개):</span>
+            <div className={styles.attachedFilesWarning} style={{ borderColor: 'rgba(37, 99, 235, 0.3)', background: 'rgba(37, 99, 235, 0.05)' }}>
+              <div className={styles.attachedFilesWarningHeader} style={{ color: '#2563eb' }}>
+                <Icon name="helpCircle" size={14} />
+                <span>함께 일괄 복구되는 첨부파일 ({attachedFiles.length}개):</span>
               </div>
               <ul className={styles.attachedFilesList}>
                 {attachedFiles.map((f) => (
@@ -122,14 +124,50 @@ export function ConfirmDeleteModal({
           )}
 
           {childWorkItems.length === 0 && childCount > 0 && (
-            <div className={styles.childCountWarning}>
-              <Icon name="alertTriangle" size={14} />
-              <span>하위 업무 {childCount}개도 함께 삭제됩니다.</span>
+            <div className={styles.childCountWarning} style={{ color: '#2563eb' }}>
+              <Icon name="helpCircle" size={14} />
+              <span>하위 업무 {childCount}개도 함께 복구됩니다.</span>
+            </div>
+          )}
+
+          {hasChildrenOrFiles && (
+            <div className={styles.restoreOptionsCard}>
+              <div className={styles.restoreOptionsTitle}>복구 범위 선택</div>
+              <label className={styles.restoreOptionLabel}>
+                <input
+                  type="radio"
+                  name="restoreCascade"
+                  className={styles.restoreOptionRadio}
+                  checked={cascade}
+                  onChange={() => setCascade(true)}
+                />
+                <div className={styles.restoreOptionText}>
+                  <span className={styles.restoreOptionPrimary}>하위 업무 및 첨부파일 함께 복구 (권장)</span>
+                  <span className={styles.restoreOptionDesc}>
+                    연관된 모든 하위 업무와 파일이 온전하게 일괄 복원됩니다.
+                  </span>
+                </div>
+              </label>
+              <label className={styles.restoreOptionLabel}>
+                <input
+                  type="radio"
+                  name="restoreCascade"
+                  className={styles.restoreOptionRadio}
+                  checked={!cascade}
+                  onChange={() => setCascade(false)}
+                />
+                <div className={styles.restoreOptionText}>
+                  <span className={styles.restoreOptionPrimary}>이 업무만 단독 복구</span>
+                  <span className={styles.restoreOptionDesc}>
+                    선택한 상위 업무만 복구하며, 하위 업무는 휴지통에 보존됩니다.
+                  </span>
+                </div>
+              </label>
             </div>
           )}
 
           <p className={styles.warningNote}>
-            {warningText || '삭제된 항목은 휴지통으로 이동되며 15일간 보관 후 영구 삭제됩니다.'}
+            복구된 업무는 원래 소속 워크스페이스와 업무 목록으로 정상 복원됩니다.
           </p>
         </div>
 
@@ -138,7 +176,7 @@ export function ConfirmDeleteModal({
             type="button"
             className={styles.cancelBtn}
             onClick={onClose}
-            disabled={isDeleting}
+            disabled={isRestoring}
           >
             취소
           </button>
@@ -146,10 +184,11 @@ export function ConfirmDeleteModal({
             ref={confirmBtnRef}
             type="button"
             className={styles.deleteBtn}
+            style={{ background: '#2563eb', borderColor: '#2563eb' }}
             onClick={handleConfirmClick}
-            disabled={isDeleting}
+            disabled={isRestoring}
           >
-            {isDeleting ? '삭제 중…' : '삭제'}
+            {isRestoring ? '복구 중…' : '복구'}
           </button>
         </div>
       </div>

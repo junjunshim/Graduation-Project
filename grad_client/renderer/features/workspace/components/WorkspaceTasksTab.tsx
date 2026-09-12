@@ -17,11 +17,17 @@ import type { WorkItemTagId } from '../model/workItemTags'
 import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItemDue'
 import type { DueScheduleType } from '../model/workItemDue'
 import { getNodeVisualMetadata } from '../queries/workspaceDirectory'
+import { getOrgSnapshot } from '../data/orgService'
+import { restoreWorkItem } from '../data/workItemService'
+import { getCascadeWorkItemSummary } from '../data/cascadeWorkItemHelper'
+import { ConfirmRestoreModal } from './ConfirmRestoreModal'
 import styles from './WorkspaceTasksTab.module.css'
 import { useWorkItemContextMenu } from './useWorkItemContextMenu'
 
 type WorkspaceTasksTabProps = {
   workItems: WorkItemRecord[]
+  deletedWorkItems?: WorkItemRecord[]
+  allWorkItems?: WorkItemRecord[]
   members: Array<Pick<UserRecord, 'userId' | 'name'> & Partial<Pick<UserRecord, 'email'>>>
   workspaces?: Array<Pick<OrganizationNodeRecord, 'id' | 'name' | 'nodeType' | 'path'>>
   tableLabel?: string
@@ -100,12 +106,16 @@ function TaskTreeNodeCard({
   members,
   collapsedMap,
   onToggleCollapse,
+  isTrashMode = false,
+  onRestore,
 }: {
   node: TaskTreeNode
   depth?: number
   members: Array<Pick<UserRecord, 'userId' | 'name'>>
   collapsedMap: ReadonlyMap<string, boolean>
   onToggleCollapse: (id: string) => void
+  isTrashMode?: boolean
+  onRestore?: (item: WorkItemRecord) => void
 }) {
   const { item, children } = node
   const hasChildren = children.length > 0
@@ -119,7 +129,10 @@ function TaskTreeNodeCard({
 
   return (
     <div className={styles.treeNodeContainer} style={{ '--tree-depth': depth } as React.CSSProperties}>
-      <div className={styles.treeCard} data-work-item-id={item.workItemId}>
+      <div
+        className={[styles.treeCard, isTrashMode ? styles.trashCardDeleted : ''].join(' ')}
+        data-work-item-id={item.workItemId}
+      >
         <div className={styles.treeCardMain}>
           <div className={styles.treeCardLeft}>
             {hasChildren ? (
@@ -136,10 +149,21 @@ function TaskTreeNodeCard({
             )}
 
             <div className={styles.treeCardTitleGroup}>
-              <Link to={`/work-items/${item.workItemId}`} className={styles.treeCardTitle}>
+              <div className={styles.treeCardTitle} style={{ cursor: isTrashMode ? 'default' : 'pointer' }}>
+                {isTrashMode ? (
+                  <span className={styles.trashDeletedBadge}>삭제됨</span>
+                ) : null}
                 <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
-                <span className={styles.taskTitleText}>{item.title}</span>
-              </Link>
+                {isTrashMode ? (
+                  <span className={styles.taskTitleText} style={{ textDecoration: 'line-through', color: '#64748b' }}>
+                    {item.title}
+                  </span>
+                ) : (
+                  <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitleText}>
+                    {item.title}
+                  </Link>
+                )}
+              </div>
               {item.description ? (
                 <p className={styles.treeCardDescription}>{item.description}</p>
               ) : null}
@@ -184,6 +208,18 @@ function TaskTreeNodeCard({
                 하위 {children.length}건
               </span>
             ) : null}
+
+            {isTrashMode && onRestore ? (
+              <button
+                type="button"
+                className={styles.trashRestoreButton}
+                onClick={() => onRestore(item)}
+                title="업무 복구하기"
+              >
+                <Icon name="restore" size={12} />
+                <span>복구</span>
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -208,6 +244,8 @@ function TaskTreeNodeCard({
               members={members}
               collapsedMap={collapsedMap}
               onToggleCollapse={onToggleCollapse}
+              isTrashMode={isTrashMode}
+              onRestore={onRestore}
             />
           ))}
         </div>
@@ -220,10 +258,14 @@ function TaskTreeView({
   trees,
   members,
   totalCount,
+  isTrashMode = false,
+  onRestore,
 }: {
   trees: TaskTreeNode[]
   members: Array<Pick<UserRecord, 'userId' | 'name'>>
   totalCount: number
+  isTrashMode?: boolean
+  onRestore?: (item: WorkItemRecord) => void
 }) {
   const [collapsedMap, setCollapsedMap] = useState<Map<string, boolean>>(() => new Map())
 
@@ -286,6 +328,8 @@ function TaskTreeView({
             members={members}
             collapsedMap={collapsedMap}
             onToggleCollapse={toggleCollapse}
+            isTrashMode={isTrashMode}
+            onRestore={onRestore}
           />
         ))}
       </div>
@@ -295,6 +339,8 @@ function TaskTreeView({
 
 export function WorkspaceTasksTab({
   workItems,
+  deletedWorkItems = [],
+  allWorkItems = [],
   members,
   workspaces = [],
   tableLabel = '워크스페이스 업무 목록',
@@ -306,6 +352,13 @@ export function WorkspaceTasksTab({
 }: WorkspaceTasksTabProps) {
   const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
   const [viewMode, setViewMode] = useState<TaskViewMode>('list')
+  const [showDeletedTasks, setShowDeletedTasks] = useState(false)
+  const [restoreConfirmTarget, setRestoreConfirmTarget] = useState<{
+    item: WorkItemRecord
+    attachedFiles: Array<{ id: number; name: string; size?: number; workItemTitle?: string }>
+    childWorkItems: Array<{ id: string; title: string }>
+    childCount: number
+  } | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [workspaceFilter, setWorkspaceFilter] = useState('all')
   const [ownerFilter, setOwnerFilter] = useState('all')
@@ -417,10 +470,28 @@ export function WorkspaceTasksTab({
     }
   }, [scheduleFilter])
 
+  const effectiveWorkItems = useMemo(() => {
+    if (showDeletedTasks) {
+      return deletedWorkItems
+    }
+    return workItems
+  }, [showDeletedTasks, deletedWorkItems, workItems])
+
+  const prevDeletedTasksCountRef = useRef(deletedWorkItems.length)
+
+  // 옵션 C: 휴지통 모드 중 복구 등으로 삭제된 업무가 0개가 되면 자동으로 기본 업무 화면으로 전환
+  // (0개 상태에서 클릭하여 진입 시 튕겨져 나가는 깜박임 현상 방지: 이전 카운트가 1 이상이었다가 0이 된 경우에만 자동 전환)
+  useEffect(() => {
+    if (showDeletedTasks && prevDeletedTasksCountRef.current > 0 && deletedWorkItems.length === 0) {
+      setShowDeletedTasks(false)
+    }
+    prevDeletedTasksCountRef.current = deletedWorkItems.length
+  }, [showDeletedTasks, deletedWorkItems.length])
+
   const filteredWorkItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
 
-    return workItems.filter((item) => {
+    return effectiveWorkItems.filter((item) => {
       const selectedWorkspace = workspaceOptions.find(
         (workspace) => String(workspace.id) === workspaceFilter,
       )
@@ -433,6 +504,12 @@ export function WorkspaceTasksTab({
         item.title.toLocaleLowerCase('ko-KR').includes(normalizedQuery) ||
         (filterLayout === 'sidebar' && ownerName.toLocaleLowerCase('ko-KR').includes(normalizedQuery))
       const matchesOwner = ownerFilter === 'all' || item.ownerUserId === ownerFilter
+
+      // 휴지통 모드일 때는 일반 상태/일정 필터를 무시하고 오직 삭제된 업무 전체를 대상 처리
+      if (showDeletedTasks) {
+        return matchesWorkspace && matchesQuery && matchesOwner
+      }
+
       const matchesStatus =
         filterLayout === 'toolbar'
           ? statusFilter === 'all'
@@ -485,7 +562,8 @@ export function WorkspaceTasksTab({
     workspaceFilter,
     workspaceOptions,
     workspaces,
-    workItems,
+    effectiveWorkItems,
+    showDeletedTasks,
   ])
 
   const visibleWorkItems = filteredWorkItems.slice(0, MAX_VISIBLE_WORK_ITEMS)
@@ -543,24 +621,51 @@ export function WorkspaceTasksTab({
 
   const taskTrees = useMemo(() => buildTaskTrees(filteredWorkItems), [filteredWorkItems])
 
+  function handleRestoreClick(item: WorkItemRecord) {
+    const snapshot = getOrgSnapshot()
+    const summary = getCascadeWorkItemSummary(
+      item.workItemId,
+      allWorkItems.length > 0 ? allWorkItems : snapshot.workItems,
+      snapshot.files ?? [],
+      true,
+    )
+    const attachedFiles = summary ? summary.allFiles : []
+    const childWorkItems = summary
+      ? summary.descendantWorkItems.map((c) => ({ id: c.workItemId, title: c.title }))
+      : []
+
+    setRestoreConfirmTarget({
+      item,
+      attachedFiles,
+      childWorkItems,
+      childCount: childWorkItems.length,
+    })
+  }
+
   return (
     <section
       className={styles.panel}
-      onContextMenu={onWorkItemContextMenu}
+      onContextMenu={showDeletedTasks ? undefined : onWorkItemContextMenu}
       aria-labelledby={showHeading ? 'workspace-tasks-title' : undefined}
       aria-label={showHeading ? undefined : tableLabel}
     >
-      {workItemContextMenu}
+      {!showDeletedTasks && workItemContextMenu}
       {showHeading ? (
         <header className={styles.pageHeader}>
           <div className={styles.pageHeaderTitleGroup}>
             <h2 id="workspace-tasks-title">
-              {viewMode === 'list' ? '업무 목록' : '업무 트리'}
+              {showDeletedTasks
+                ? '휴지통 (삭제된 업무)'
+                : viewMode === 'list'
+                  ? '업무 목록'
+                  : '업무 트리'}
             </h2>
             <p>
-              {viewMode === 'list'
-                ? '워크스페이스에 등록된 모든 업무를 표 형태로 조회하고 관리합니다.'
-                : '루트 업무부터 하위 세부 과제까지 계층 구조로 한눈에 파악합니다.'}
+              {showDeletedTasks
+                ? '삭제된 업무와 하위 과제를 확인하고 원래 상태로 복구합니다.'
+                : viewMode === 'list'
+                  ? '워크스페이스에 등록된 모든 업무를 표 형태로 조회하고 관리합니다.'
+                  : '루트 업무부터 하위 세부 과제까지 계층 구조로 한눈에 파악합니다.'}
             </p>
           </div>
 
@@ -568,27 +673,59 @@ export function WorkspaceTasksTab({
             <div className={styles.viewSegmentGroup} role="group" aria-label="업무 보기 방식">
               <Button
                 type="button"
-                variant={viewMode === 'list' ? 'primary' : 'secondary'}
-                className={[styles.viewSegmentButton, viewMode === 'list' ? styles.viewSegmentActive : ''].join(' ')}
-                aria-pressed={viewMode === 'list'}
-                onClick={() => setViewMode('list')}
+                variant={!showDeletedTasks && viewMode === 'list' ? 'primary' : 'secondary'}
+                className={[styles.viewSegmentButton, !showDeletedTasks && viewMode === 'list' ? styles.viewSegmentActive : ''].join(' ')}
+                aria-pressed={!showDeletedTasks && viewMode === 'list'}
+                onClick={() => {
+                  setShowDeletedTasks(false)
+                  setViewMode('list')
+                }}
               >
                 <Icon name="list" size={15} />
                 업무 목록
               </Button>
               <Button
                 type="button"
-                variant={viewMode === 'tree' ? 'primary' : 'secondary'}
-                className={[styles.viewSegmentButton, viewMode === 'tree' ? styles.viewSegmentActive : ''].join(' ')}
-                aria-pressed={viewMode === 'tree'}
-                onClick={() => setViewMode('tree')}
+                variant={!showDeletedTasks && viewMode === 'tree' ? 'primary' : 'secondary'}
+                className={[styles.viewSegmentButton, !showDeletedTasks && viewMode === 'tree' ? styles.viewSegmentActive : ''].join(' ')}
+                aria-pressed={!showDeletedTasks && viewMode === 'tree'}
+                onClick={() => {
+                  setShowDeletedTasks(false)
+                  setViewMode('tree')
+                }}
               >
                 <Icon name="orgChart" size={15} />
                 업무 트리
               </Button>
             </div>
 
-            {filterLayout === 'sidebar' && !isFilterOpen ? (
+            <button
+              type="button"
+              className={[styles.trashToggleBtn, showDeletedTasks ? styles.trashToggleBtnActive : ''].join(' ')}
+              disabled={deletedWorkItems.length === 0}
+              onClick={() => {
+                if (deletedWorkItems.length === 0) return
+                setShowDeletedTasks((prev) => {
+                  const next = !prev
+                  if (next) {
+                    setViewMode('tree') // 휴지통 모드 진입 시 계층형 트리 형태로 직관적 확인
+                  }
+                  return next
+                })
+              }}
+              title={
+                deletedWorkItems.length === 0
+                  ? '휴지통이 비어 있습니다'
+                  : showDeletedTasks
+                    ? '삭제된 업무 숨기기'
+                    : '휴지통 업무 보기'
+              }
+            >
+              <Icon name="trash" size={14} />
+              <span>휴지통{deletedWorkItems.length > 0 ? ` (${deletedWorkItems.length})` : ''}</span>
+            </button>
+
+            {!showDeletedTasks && filterLayout === 'sidebar' && !isFilterOpen ? (
               <button type="button" className={styles.secondaryButton} onClick={() => setIsFilterOpen(true)}>
                 필터 열기
               </button>
@@ -928,10 +1065,28 @@ export function WorkspaceTasksTab({
         </div>
       ) : null}
 
+      {showDeletedTasks ? (
+        <div className={styles.trashNoticeBanner} role="status">
+          <div className={styles.trashNoticeLeft}>
+            <Icon name="alertTriangle" size={16} />
+            <span>휴지통 모드: 삭제된 업무는 15일간 보관 후 영구 삭제됩니다.</span>
+            <span className={styles.trashNoticeCount}>총 {deletedWorkItems.length}개 삭제됨</span>
+          </div>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            style={{ fontSize: '0.75rem', padding: '3px 10px', height: 'auto' }}
+            onClick={() => setShowDeletedTasks(false)}
+          >
+            기본 업무 목록으로 돌아가기
+          </button>
+        </div>
+      ) : null}
+
       <div
         className={[
           styles.contentGrid,
-          filterLayout === 'toolbar' || !isFilterOpen ? styles.contentGridFull : '',
+          showDeletedTasks || filterLayout === 'toolbar' || !isFilterOpen ? styles.contentGridFull : '',
         ].filter(Boolean).join(' ')}
       >
         {viewMode === 'tree' ? (
@@ -939,6 +1094,8 @@ export function WorkspaceTasksTab({
             trees={taskTrees}
             members={members}
             totalCount={filteredWorkItems.length}
+            isTrashMode={showDeletedTasks}
+            onRestore={handleRestoreClick}
           />
         ) : (
           <div className={styles.tableCard}>
@@ -992,10 +1149,20 @@ export function WorkspaceTasksTab({
                         </span>
 
                         <span role="cell" className={styles.titleCell}>
-                          <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
-                            <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
-                            <span className={styles.taskTitleText}>{item.title}</span>
-                          </Link>
+                          {showDeletedTasks ? (
+                            <div className={styles.taskTitle} style={{ cursor: 'default' }}>
+                              <span className={styles.trashDeletedBadge}>삭제됨</span>
+                              <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+                              <span className={styles.taskTitleText} style={{ textDecoration: 'line-through', color: '#64748b' }}>
+                                {item.title}
+                              </span>
+                            </div>
+                          ) : (
+                            <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
+                              <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+                              <span className={styles.taskTitleText}>{item.title}</span>
+                            </Link>
+                          )}
                         </span>
 
                         <span role="cell" className={styles.ownerCell}>
@@ -1054,13 +1221,25 @@ export function WorkspaceTasksTab({
                         </span>
 
                         <span role="cell" className={styles.actionCell}>
-                          <Link
-                            to={`/work-items?view=edit&id=${item.workItemId}`}
-                            className={styles.iconButton}
-                            title="업무 수정"
-                          >
-                            <span className={styles.moreDots} aria-hidden="true" />
-                          </Link>
+                          {showDeletedTasks ? (
+                            <button
+                              type="button"
+                              className={styles.trashRestoreButton}
+                              onClick={() => handleRestoreClick(item)}
+                              title="업무 복구하기"
+                            >
+                              <Icon name="restore" size={12} />
+                              <span>복구</span>
+                            </button>
+                          ) : (
+                            <Link
+                              to={`/work-items?view=edit&id=${item.workItemId}`}
+                              className={styles.iconButton}
+                              title="업무 수정"
+                            >
+                              <span className={styles.moreDots} aria-hidden="true" />
+                            </Link>
+                          )}
                         </span>
                       </div>
                     )
@@ -1121,7 +1300,7 @@ export function WorkspaceTasksTab({
           </div>
         )}
 
-        {filterLayout === 'sidebar' && isFilterOpen ? (
+        {!showDeletedTasks && filterLayout === 'sidebar' && isFilterOpen ? (
           <aside className={styles.filterPanel} aria-label="업무 필터">
             <div className={styles.filterHeader}>
               <strong>필터</strong>
@@ -1259,6 +1438,50 @@ export function WorkspaceTasksTab({
           </aside>
         ) : null}
       </div>
+
+      {restoreConfirmTarget && (
+        <ConfirmRestoreModal
+          isOpen={Boolean(restoreConfirmTarget)}
+          title="업무 복구"
+          itemName={restoreConfirmTarget.item.title}
+          itemTypeLabel="업무"
+          attachedFiles={restoreConfirmTarget.attachedFiles}
+          childWorkItems={restoreConfirmTarget.childWorkItems}
+          childCount={restoreConfirmTarget.childCount}
+          onClose={() => setRestoreConfirmTarget(null)}
+          onConfirm={async (cascade: boolean) => {
+            const target = restoreConfirmTarget
+            try {
+              const { showToast } = await import('../../notification/data/toastEvents')
+              const res = await restoreWorkItem(target.item.workItemId, { cascade })
+              if (res.status === 'error') {
+                showToast({
+                  title: '업무 복구 실패',
+                  content: res.message || '업무를 복구하지 못했습니다.',
+                  created_at: new Date().toISOString(),
+                })
+              } else {
+                showToast({
+                  title: '업무 복구 완료',
+                  content: cascade
+                    ? `'${target.item.title}' 업무와 관련 하위 업무/파일이 정상 복구되었습니다.`
+                    : `'${target.item.title}' 업무가 정상 복구되었습니다.`,
+                  created_at: new Date().toISOString(),
+                })
+              }
+            } catch (err) {
+              const { showToast } = await import('../../notification/data/toastEvents')
+              showToast({
+                title: '업무 복구 실패',
+                content: err instanceof Error ? err.message : '업무를 복구하지 못했습니다.',
+                created_at: new Date().toISOString(),
+              })
+            } finally {
+              setRestoreConfirmTarget(null)
+            }
+          }}
+        />
+      )}
     </section>
   )
 }

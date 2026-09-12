@@ -20,6 +20,7 @@ import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import { canCreateSubNode } from '../model/effectiveAuthority'
 import type { ActivityRecord, RoleMember, UserRecord, WorkItemRecord, WorkItemStatus, WorkspaceOverview } from '../model/types'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
+import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
 import styles from './WorkspacePage.module.css'
 
 type WorkspaceStatusFilter = 'all' | WorkItemStatus
@@ -718,6 +719,8 @@ export function WorkspacePage() {
     { id: 'done', label: '완료', count: counts.done },
   ]
 
+  const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
+
   return (
     <section
       className={[
@@ -728,6 +731,7 @@ export function WorkspacePage() {
         .filter(Boolean)
         .join(' ')}
     >
+      {workItemContextMenu}
       <div className={styles.workspaceNavBar}>
         <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
           {workspaceTabs.map((tab) => {
@@ -805,6 +809,8 @@ export function WorkspacePage() {
         <WorkspaceTasksTab
           createHref={overview.rootNode ? `/work-items/new?nodeId=${overview.rootNode.id}` : '/work-items/new'}
           workItems={overview.visibleWorkItems}
+          deletedWorkItems={overview.deletedWorkItems}
+          allWorkItems={overview.allWorkItems}
           members={snapshot.users}
           workspaces={overview.visibleNodes}
         />
@@ -917,7 +923,13 @@ export function WorkspacePage() {
                   const ownerName = getMemberName(item.ownerUserId, overview.rootRoleMembers, overview.allRoleMembers, snapshot.users)
 
                   return (
-                    <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.workRow}>
+                    <Link
+                      key={item.workItemId}
+                      to={`/work-items/${item.workItemId}`}
+                      className={styles.workRow}
+                      data-work-item-id={item.workItemId}
+                      onContextMenu={onWorkItemContextMenu}
+                    >
                     <span
                       className={[
                         styles.checkCell,
@@ -1022,7 +1034,13 @@ export function WorkspacePage() {
               ) : null}
               {timeline.items.length > 0 ? (
                 timeline.items.map(({ item, left, width }) => (
-                  <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={styles.timelineItem}>
+                  <Link
+                    key={item.workItemId}
+                    to={`/work-items/${item.workItemId}`}
+                    className={styles.timelineItem}
+                    data-work-item-id={item.workItemId}
+                    onContextMenu={onWorkItemContextMenu}
+                  >
                     <span className={styles.timelineItemCopy}>
                       <strong title={item.title}>{item.title}</strong>
                       <small>{getTimelineRangeLabel(item)}</small>

@@ -689,21 +689,110 @@ export async function deleteWorkItemOnServer(workItemId: string) {
       return { status: 'error' as const, message: response.message ?? '업무를 삭제하지 못했습니다.' }
     }
 
-    // 본인이 삭제한 업무는 웹소켓 알림이 오지 않으므로 로컬 캐시(readWorkspaceDb)에 즉시 isDeleted = true 반영
+    // 본인이 삭제한 업무는 웹소켓 알림이 오지 않으므로 로컬 캐시(readWorkspaceDb)에 즉시 isDeleted = true 반영 (자손 업무 및 소속 파일 포함)
     try {
       const currentDb = readWorkspaceDb()
-      const itemIndex = currentDb.workItems.findIndex((w) => w.workItemId === workItemId)
-      if (itemIndex >= 0) {
-        currentDb.workItems[itemIndex].isDeleted = true
-        writeServerWorkspaceDb(currentDb)
+      const targetIds = new Set<string>([workItemId])
+      let added = true
+      while (added) {
+        added = false
+        for (const item of currentDb.workItems) {
+          if (item.parentWorkItemId && targetIds.has(item.parentWorkItemId) && !targetIds.has(item.workItemId)) {
+            targetIds.add(item.workItemId)
+            added = true
+          }
+        }
       }
+
+      // 업무 isDeleted = true 반영
+      currentDb.workItems.forEach((w) => {
+        if (targetIds.has(w.workItemId)) {
+          w.isDeleted = true
+        }
+      })
+
+      // 소속 파일 isDeleted = true 반영
+      if (currentDb.files) {
+        currentDb.files.forEach((f) => {
+          if (targetIds.has(f.workItemId)) {
+            f.isDeleted = true
+          }
+        })
+      }
+
+      writeServerWorkspaceDb(currentDb)
     } catch (err) {
       console.warn('[serverWorkspace] 업무 삭제 로컬 캐시 반영 실패:', err)
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
     return { status: 'success' as const, workItemId }
   }, '업무를 삭제하지 못했습니다.')
+}
+
+export type RestoreWorkItemOptions = {
+  cascade?: boolean
+  newParentId?: string
+}
+
+export async function restoreWorkItemOnServer(workItemId: string, options: RestoreWorkItemOptions = { cascade: true }) {
+  return withServerOperationError(async () => {
+    const cascade = options.cascade ?? true
+    const response = await requestServerStatus('/workItems/restore', {
+      method: 'PATCH',
+      body: {
+        work_item_id: workItemId,
+        cascade,
+        ...(options.newParentId ? { parent_id: options.newParentId } : {}),
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '업무를 복구하지 못했습니다.' }
+    }
+
+    // 로컬 캐시(readWorkspaceDb)에 즉시 isDeleted = false 반영
+    try {
+      const currentDb = readWorkspaceDb()
+      const targetIds = new Set<string>([workItemId])
+
+      if (cascade) {
+        let added = true
+        while (added) {
+          added = false
+          for (const item of currentDb.workItems) {
+            if (item.parentWorkItemId && targetIds.has(item.parentWorkItemId) && !targetIds.has(item.workItemId)) {
+              targetIds.add(item.workItemId)
+              added = true
+            }
+          }
+        }
+      }
+
+      currentDb.workItems.forEach((w) => {
+        if (targetIds.has(w.workItemId)) {
+          w.isDeleted = false
+          if (w.workItemId === workItemId && options.newParentId !== undefined) {
+            w.parentWorkItemId = options.newParentId
+          }
+        }
+      })
+
+      // cascade가 true일 때만 소속 파일들도 복구됨 (DB의 restore_work_item 로직과 일치)
+      if (cascade && currentDb.files) {
+        currentDb.files.forEach((f) => {
+          if (targetIds.has(f.workItemId)) {
+            f.isDeleted = false
+          }
+        })
+      }
+
+      writeServerWorkspaceDb(currentDb)
+    } catch (err) {
+      console.warn('[serverWorkspace] 업무 복구 로컬 캐시 반영 실패:', err)
+    }
+
+    return { status: 'success' as const, workItemId }
+  }, '업무를 복구하지 못했습니다.')
 }
 
 export type UpdateRoleAuthorityRequest = {

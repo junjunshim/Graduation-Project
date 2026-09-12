@@ -282,6 +282,8 @@ export type WorkspaceOverview = {
   accessibleNodeIds: number[]
   visibleNodes: OrganizationNodeRecord[]
   visibleWorkItems: WorkItemRecord[]
+  deletedWorkItems?: WorkItemRecord[]
+  allWorkItems?: WorkItemRecord[]
   roots: WorkspaceNodeView[]
   urgentWorkItems: WorkItemRecord[]
   recentWorkItems: WorkItemRecord[]

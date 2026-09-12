@@ -108,7 +108,7 @@ export function getOrgSnapshot(): WorkspaceSnapshot {
       .filter((role) => !role.isDeleted && activeNodeIds.has(role.nodeId))
       .map((role) => ({ ...role })),
     workItems: db.workItems
-      .filter((item) => !item.isDeleted && activeNodeIds.has(item.ownerNodeId))
+      .filter((item) => activeNodeIds.has(item.ownerNodeId))
       .map((item) => ({ ...item })),
     authorities: (db.authorities ?? []).map((auth) => ({ ...auth })),
     mentions: (db.mentions ?? []).map((m) => ({ ...m })),

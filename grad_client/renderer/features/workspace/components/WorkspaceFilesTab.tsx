@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
@@ -9,6 +9,7 @@ import type { WorkItemFileRecord, WorkItemRecord } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import { FileContentViewerModal } from './FileContentViewerModal'
 import { useFileContextMenu } from './useFileContextMenu'
+import { useWorkItemContextMenu } from './useWorkItemContextMenu'
 import styles from './WorkspaceFilesTab.module.css'
 
 type WorkspaceFilesTabProps = {
@@ -70,6 +71,7 @@ function getSampleDocumentContent(fileName: string, itemTitle: string) {
 
 export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabProps) {
   const { openFileContextMenu, openUploadContextMenu, fileContextMenu } = useFileContextMenu()
+  const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(() => workItems[0]?.workItemId ?? null)
   const [viewLayout, setViewLayout] = useState<'grid' | 'table'>('grid')
@@ -86,11 +88,15 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
     return files.filter((f) => f.isDeleted).length
   }, [files])
 
+  const prevDeletedFilesCountRef = useRef(deletedFilesCount)
+
   // 옵션 C: 휴지통 모드 중 복구 등으로 삭제된 파일이 0개가 되면 자동으로 기본 파일 화면으로 전환
+  // (0개 상태에서 클릭하여 진입 시 튕겨져 나가는 깜박임 현상 방지: 이전 카운트가 1 이상이었다가 0이 된 경우에만 자동 전환)
   useEffect(() => {
-    if (showDeletedFiles && deletedFilesCount === 0) {
+    if (showDeletedFiles && prevDeletedFilesCountRef.current > 0 && deletedFilesCount === 0) {
       setShowDeletedFiles(false)
     }
+    prevDeletedFilesCountRef.current = deletedFilesCount
   }, [showDeletedFiles, deletedFilesCount])
 
   // 각 업무별로 실제 등록된 파일만 매핑: 휴지통 모드일 때는 삭제된 파일만, 일반 모드일 때는 정상 파일만 필터링
@@ -217,8 +223,18 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
           <button
             type="button"
             className={[styles.trashToggleBtn, showDeletedFiles ? styles.trashToggleBtnActive : ''].join(' ')}
-            onClick={() => setShowDeletedFiles((prev) => !prev)}
-            title={showDeletedFiles ? '휴지통 파일 숨기기' : '휴지통 파일 보기'}
+            disabled={deletedFilesCount === 0}
+            onClick={() => {
+              if (deletedFilesCount === 0) return
+              setShowDeletedFiles((prev) => !prev)
+            }}
+            title={
+              deletedFilesCount === 0
+                ? '휴지통이 비어 있습니다'
+                : showDeletedFiles
+                  ? '휴지통 파일 숨기기'
+                  : '휴지통 파일 보기'
+            }
           >
             <Icon name="trash" size={14} />
             <span>휴지통{deletedFilesCount > 0 ? ` (${deletedFilesCount})` : ''}</span>
@@ -273,8 +289,10 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
                   <button
                     key={item.workItemId}
                     type="button"
+                    data-work-item-id={item.workItemId}
                     className={[styles.folderItem, isSelected ? styles.folderItemActive : ''].join(' ')}
                     onClick={() => setSelectedFolderId(item.workItemId)}
+                    onContextMenu={showDeletedFiles ? undefined : ((event) => onWorkItemContextMenu(event, item.workItemId))}
                   >
                     <span className={styles.folderIcon}>
                       <Icon name="folder" size={17} />
@@ -324,9 +342,9 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
             </div>
           ) : null}
 
-          {/* 파일 리스트 영역 */}
+          {/* 파일 리스트 영역 (휴지통 모드일 때는 빈 영역 우클릭 파일 등록 방지) */}
           <div className={styles.filesContent} onContextMenu={(event) => {
-            if (selectedWorkItem) openUploadContextMenu(event, selectedWorkItem)
+            if (!showDeletedFiles && selectedWorkItem) openUploadContextMenu(event, selectedWorkItem)
           }}>
             {activeFiles.length === 0 ? (
               <div className={styles.emptyFilesState}>
@@ -415,6 +433,12 @@ export function WorkspaceFilesTab({ workItems, files = [] }: WorkspaceFilesTabPr
           </div>
         </main>
       </div>
+
+      {/* 업무 컨텍스트 메뉴 포털 */}
+      {workItemContextMenu}
+
+      {/* 파일 컨텍스트 메뉴 포털 */}
+      {fileContextMenu}
 
       {/* GitHub 스타일 파일 뷰어 모달 */}
       {viewerFile ? (

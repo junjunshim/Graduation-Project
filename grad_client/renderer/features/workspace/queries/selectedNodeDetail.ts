@@ -93,8 +93,8 @@ export function getSelectedNodeDetail(
       isTopRole: role.isTopRole,
     }
   })
-  const childNodes = sortWorkspaceNodes(snapshot.nodes.filter((candidate) => candidate.parentNodeId === node.id))
-  const directWorkItems = sortWorkspaceWorkItems(snapshot.workItems.filter((item) => item.ownerNodeId === node.id))
+  const childNodes = sortWorkspaceNodes(snapshot.nodes.filter((candidate) => candidate.parentNodeId === node.id && !candidate.isDeleted))
+  const directWorkItems = sortWorkspaceWorkItems(snapshot.workItems.filter((item) => item.ownerNodeId === node.id && !item.isDeleted))
   const canManage = Boolean(
     userId &&
       allRolesWithNodeId.some(

@@ -29,6 +29,8 @@ export function WorkItemsPage() {
           <WorkspaceTasksTab
             key={[requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
             workItems={overview.visibleWorkItems}
+            deletedWorkItems={overview.deletedWorkItems}
+            allWorkItems={overview.allWorkItems}
             members={visibleMembers}
             workspaces={overview.visibleNodes}
             tableLabel="접근 가능한 전체 업무 목록"

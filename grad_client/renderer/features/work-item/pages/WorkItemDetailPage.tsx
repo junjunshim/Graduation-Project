@@ -11,6 +11,7 @@ import { useFileContextMenu } from '../../workspace/components/useFileContextMen
 import { WorkItemFavoriteButton } from '../../workspace/components/WorkItemFavoriteButton'
 import { fetchWorkItemFileContent } from '../../workspace/data/fileService'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
+import { getCascadeWorkItemSummary } from '../../workspace/data/cascadeWorkItemHelper'
 import { addWorkItemComment, deleteWorkItem, fetchWorkItemDetail } from '../../workspace/data/workItemService'
 import { subscribeToWorkspaceCache } from '../../workspace/data/workspaceCacheEvents'
 import {
@@ -716,15 +717,30 @@ export function WorkItemDetailPage() {
         error={viewerModal.error}
       />
 
-      {isDeleteModalOpen && (
-        <ConfirmDeleteModal
-          isOpen={isDeleteModalOpen}
-          title="업무 삭제"
-          itemName={item.title}
-          itemTypeLabel="업무"
-          warningText="삭제된 업무는 휴지통으로 이동되며 15일간 보관 후 영구 삭제됩니다."
-          onClose={() => setIsDeleteModalOpen(false)}
-          onConfirm={async () => {
+      {isDeleteModalOpen && (() => {
+        const cascadeSummary = getCascadeWorkItemSummary(
+          item.workItemId,
+          snapshot.workItems,
+          snapshot.files ?? [],
+          false,
+        )
+        const cascadeFiles = cascadeSummary ? cascadeSummary.allFiles : allFiles.map((f) => ({ id: f.id, name: f.originalFileName, size: f.fileSize, workItemId: f.workItemId, workItemTitle: item.title }))
+        const cascadeChildren = cascadeSummary
+          ? cascadeSummary.descendantWorkItems.map((c) => ({ id: c.workItemId, title: c.title }))
+          : directChildren.map((c: WorkItemRecord) => ({ id: c.workItemId, title: c.title }))
+
+        return (
+          <ConfirmDeleteModal
+            isOpen={isDeleteModalOpen}
+            title="업무 삭제"
+            itemName={item.title}
+            itemTypeLabel="업무"
+            warningText="삭제된 업무는 휴지통으로 이동되며 15일간 보관 후 영구 삭제됩니다."
+            attachedFiles={cascadeFiles}
+            childWorkItems={cascadeChildren}
+            childCount={cascadeChildren.length}
+            onClose={() => setIsDeleteModalOpen(false)}
+            onConfirm={async () => {
             try {
               const { showToast } = await import('../../notification/data/toastEvents')
               const res = await deleteWorkItem(item.workItemId)
@@ -754,7 +770,7 @@ export function WorkItemDetailPage() {
             }
           }}
         />
-      )}
+      )})()}
     </section>
   )
 }

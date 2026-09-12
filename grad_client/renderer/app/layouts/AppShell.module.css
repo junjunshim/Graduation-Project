@@ -35,20 +35,21 @@
 
 .titleBarSlot {
   grid-column: 1 / -1;
+  background: var(--surface-shell, #F7F6F2);
 }
 
 .sidebar {
   --sidebar-padding: 0.7rem;
-  --surface-sidebar: var(--axis-surface-panel);
+  --surface-sidebar: var(--surface-sidebar, #F7F6F2);
   --surface-panel: var(--axis-surface-panel);
   --surface-panel-subtle: var(--axis-surface-muted);
-  --surface-hover: var(--axis-surface-muted);
+  --surface-hover: #EFECE4;
   --text-primary: var(--axis-text-primary);
   --text-secondary: var(--axis-text-secondary);
   --text-muted: var(--axis-text-muted);
   --line-default: var(--axis-line-default);
   --line-strong: var(--axis-line-strong);
-  --line-selected: var(--axis-focus-outline);
+  --line-selected: #D0C9BA;
   --radius-sm: var(--axis-radius-action);
   --radius-xs: var(--axis-radius-action);
   --shadow-hover: var(--axis-shadow-popover);
@@ -57,7 +58,7 @@
   min-width: 0;
   min-height: 100vh;
   border-right: 1px solid var(--line-default);
-  background: var(--surface-sidebar);
+  background: var(--surface-sidebar, #F7F6F2) !important;
   color: var(--text-secondary);
   overflow: visible;
 }
@@ -168,9 +169,9 @@
 
 .navItemActive,
 .navItemActive:hover {
-  border-color: var(--axis-brand-border);
-  background: var(--axis-brand-primary-soft);
-  color: var(--axis-text-selected);
+  border-color: #D7D1C1;
+  background: #E7E3DA;
+  color: #1C1B18;
   font-weight: 700;
 }
 

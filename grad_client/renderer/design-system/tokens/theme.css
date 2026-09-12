@@ -73,57 +73,81 @@
 
 :root,
 [data-theme='light'] {
-  --axis-surface-canvas: #ffffff;
-  --axis-surface-panel: #ffffff;
-  --axis-surface-muted: #f8f9fc;
+  --axis-surface-canvas: #F4F2EC;
+  --axis-surface-panel: #F7F6F2;
+  --axis-surface-muted: #EBE7DE;
 
-  --axis-text-primary: #10172d;
-  --axis-text-secondary: #535e77;
-  --axis-text-muted: #657089;
-  --axis-dialog-text-muted: #657089;
+  --axis-text-primary: #1C1B18;
+  --axis-text-secondary: #5C5850;
+  --axis-text-muted: #878278;
+  --axis-dialog-text-muted: #878278;
 
-  --axis-line-default: #dce2ed;
-  --axis-line-strong: #c9d1df;
-  --axis-dialog-divider: #edf0f5;
+  --axis-line-default: #E2DDD2;
+  --axis-line-strong: #D5CFC2;
+  --axis-dialog-divider: #E2DDD2;
 
-  --axis-brand-primary: #625cf2;
-  --axis-brand-primary-hover: #5650e8;
-  --axis-brand-primary-soft: #f0efff;
-  --axis-brand-border: #c8c7ff;
-  --axis-brand-badge-surface: #f7f6ff;
+  --axis-brand-primary: #7A5C43;
+  --axis-brand-primary-hover: #694E37;
+  --axis-brand-primary-soft: #F1ECE6;
+  --axis-brand-border: #D0C5B8;
+  --axis-brand-badge-surface: #F7F4F0;
 
-  --axis-text-selected: #5650e8;
+  --axis-text-selected: #7A5C43;
   --axis-danger: #b42318;
   --axis-danger-soft: rgba(180, 35, 24, 0.12);
-  --axis-status-info: #2f5fb8;
-  --axis-status-info-soft: #edf4ff;
-  --axis-status-success: #217346;
-  --axis-status-success-soft: #edf7ee;
-  --axis-status-warning: #8b6415;
-  --axis-status-warning-soft: #fcf3d9;
+  --axis-status-info: #455A75;
+  --axis-status-info-soft: #ECEFF4;
+  --axis-status-info-border: #D1D9E4;
 
-  --axis-focus-outline: #625cf2;
+  --axis-status-success: #3D684D;
+  --axis-status-success-soft: #EDF3EE;
+  --axis-status-success-border: #CFE0D5;
 
-  --surface-app: #ffffff;
-  --surface-shell: #fbfbfa;
-  --surface-sidebar: #f7f7f5;
-  --surface-page: #ffffff;
-  --surface-panel: #ffffff;
-  --surface-panel-muted: #f6f6f4;
-  --surface-panel-subtle: #fafaf9;
-  --surface-hover: #f4f4f2;
-  --surface-selected: #f0f5ff;
-  --surface-selected-strong: #e5eeff;
-  --surface-input: #ffffff;
-  --surface-input-disabled: #f7f7f5;
+  --axis-status-warning: #93631A;
+  --axis-status-warning-soft: #FBF3E3;
+  --axis-status-warning-border: #EEDBB7;
 
-  --text-primary: #37352f;
-  --text-secondary: #5f5b53;
-  --text-muted: #8f8a80;
-  --text-inverse: #ffffff;
+  --axis-status-danger: #A83B2E;
+  --axis-status-danger-soft: #FBECE9;
+  --axis-status-danger-border: #F1CEC9;
 
-  --line-default: #e7e5df;
-  --line-strong: #d4d1c8;
+  --axis-status-neutral: #6B665E;
+  --axis-status-neutral-soft: #ECE9E2;
+  --axis-status-neutral-border: #DCD7CE;
+
+  --axis-badge-brand-text: #7A5C43;
+  --axis-badge-brand-bg: #F1ECE6;
+  --axis-badge-brand-border: #E2DDD2;
+
+  --axis-surface-panel-hover: #EFECE4;
+  --axis-surface-selected: #F2EFE9;
+
+  --axis-glyph-background: #EBE7DE;
+  --axis-glyph-color: #7A5C43;
+  --axis-glyph-border: #DDD8CB;
+
+  --axis-focus-outline: #7A5C43;
+
+  --surface-app: #F4F2EC;
+  --surface-shell: #F7F6F2;
+  --surface-sidebar: #F7F6F2;
+  --surface-page: #F4F2EC;
+  --surface-panel: #F7F6F2;
+  --surface-panel-muted: #EBE7DE;
+  --surface-panel-subtle: #F0EDE6;
+  --surface-hover: #EBE7DE;
+  --surface-selected: #D7D1C1;
+  --surface-selected-strong: #C4BDA9;
+  --surface-input: #F7F6F2;
+  --surface-input-disabled: #F0EDE6;
+
+  --text-primary: #1C1B18;
+  --text-secondary: #5C5850;
+  --text-muted: #878278;
+  --text-inverse: #FFFFFF;
+
+  --line-default: #D7D1C1;
+  --line-strong: #C4BDA9;
   --line-selected: #b9c8ef;
 
   --accent-blue-soft: #edf4ff;
@@ -165,10 +189,34 @@
   --axis-danger-soft: rgba(180, 35, 24, 0.2);
   --axis-status-info: #93afe8;
   --axis-status-info-soft: rgba(88, 124, 194, 0.18);
+  --axis-status-info-border: rgba(147, 175, 232, 0.35);
+
   --axis-status-success: #8fe0ad;
   --axis-status-success-soft: rgba(33, 115, 70, 0.22);
+  --axis-status-success-border: rgba(143, 224, 173, 0.35);
+
   --axis-status-warning: #f0c266;
   --axis-status-warning-soft: rgba(138, 104, 24, 0.2);
+  --axis-status-warning-border: rgba(240, 194, 102, 0.35);
+
+  --axis-status-danger: #ff9b90;
+  --axis-status-danger-soft: rgba(180, 35, 24, 0.2);
+  --axis-status-danger-border: rgba(255, 155, 144, 0.35);
+
+  --axis-status-neutral: #a09d95;
+  --axis-status-neutral-soft: rgba(160, 157, 149, 0.15);
+  --axis-status-neutral-border: rgba(160, 157, 149, 0.25);
+
+  --axis-badge-brand-text: #c5beff;
+  --axis-badge-brand-bg: rgba(145, 140, 255, 0.15);
+  --axis-badge-brand-border: rgba(145, 140, 255, 0.3);
+
+  --axis-surface-panel-hover: #292a33;
+  --axis-surface-selected: #323542;
+
+  --axis-glyph-background: #2a2c35;
+  --axis-glyph-color: #c5beff;
+  --axis-glyph-border: #3d404f;
 
   --axis-focus-outline: #918cff;
 

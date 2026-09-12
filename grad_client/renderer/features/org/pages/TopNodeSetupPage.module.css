@@ -56,8 +56,9 @@
   height: 1.85rem;
   flex: 0 0 1.85rem;
   border-radius: var(--axis-radius-pill, 999px);
-  background: var(--axis-brand-primary-soft, #f0efff);
-  color: var(--axis-brand-primary, #625cf2);
+  background: var(--axis-badge-brand-bg, #F1ECE6);
+  color: var(--axis-badge-brand-text, #7A5C43);
+  border: 1px solid var(--axis-badge-brand-border, #E2DDD2);
   font-size: 0.8rem;
   font-weight: 800;
 }
@@ -89,9 +90,9 @@
   align-items: center;
   gap: 0.9rem;
   padding: 0.85rem 1rem;
-  border: 1px solid var(--axis-line-default, #dce2ed);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
   border-radius: var(--axis-radius-surface, 8px);
-  background: var(--axis-surface-muted, #f8f9fc);
+  background: var(--axis-surface-panel, #F7F6F2);
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -102,14 +103,14 @@
 }
 
 .typeCard:hover {
-  border-color: var(--axis-brand-border, #c8c7ff);
-  background: var(--axis-surface-panel, #ffffff);
+  border-color: var(--axis-brand-border, #D0C5B8);
+  background: var(--axis-surface-panel-hover, #EFECE4);
 }
 
 .typeCardSelected {
-  border-color: var(--axis-brand-primary, #625cf2);
-  background: var(--axis-brand-badge-surface, #f7f6ff);
-  box-shadow: 0 0 0 1px var(--axis-brand-primary, #625cf2);
+  border-color: var(--axis-brand-primary, #7A5C43);
+  background: var(--axis-surface-selected, #EBE7DE);
+  box-shadow: 0 0 0 1.5px var(--axis-brand-primary, #7A5C43);
 }
 
 .typeIcon {
@@ -122,34 +123,15 @@
   border-radius: var(--axis-radius-surface, 8px);
 }
 
-.typeCompany {
-  background: #eef2ff;
-  color: #4f46e5;
-}
-
-.typeDivision {
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.typeDepartment {
-  background: #f0fdfa;
-  color: #0d9488;
-}
-
-.typeTeam {
-  background: #f0fdf4;
-  color: #16a34a;
-}
-
-.typeProject {
-  background: #faf5ff;
-  color: #9333ea;
-}
-
+.typeCompany,
+.typeDivision,
+.typeDepartment,
+.typeTeam,
+.typeProject,
 .typeCustom {
-  background: #fff7ed;
-  color: #ea580c;
+  background: var(--axis-glyph-background, #EBE7DE);
+  color: var(--axis-glyph-color, #7A5C43);
+  border: 1px solid var(--axis-glyph-border, #DDD8CB);
 }
 
 .customTypeCollapse {
@@ -293,10 +275,10 @@
 }
 
 .customIconButtonActive {
-  border-color: #ea580c;
-  background: #fff7ed;
-  color: #ea580c;
-  box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.2);
+  border-color: var(--axis-brand-primary, #7A5C43);
+  background: var(--axis-surface-selected, #EBE7DE);
+  color: var(--axis-brand-primary, #7A5C43);
+  box-shadow: 0 0 0 2px rgba(122, 92, 67, 0.2);
 }
 
 .typeCopy {
@@ -331,7 +313,7 @@
 }
 
 .typeCardSelected .typeRadioMark {
-  border-color: var(--axis-brand-primary, #625cf2);
+  border-color: var(--axis-brand-primary, #7A5C43);
 }
 
 .typeRadioMark i {
@@ -343,7 +325,7 @@
 }
 
 .typeCardSelected .typeRadioMark i {
-  background: var(--axis-brand-primary, #625cf2);
+  background: var(--axis-brand-primary, #7A5C43);
 }
 
 .inputGroup {
@@ -456,8 +438,9 @@
   align-items: center;
   padding: 0.22rem 0.6rem;
   border-radius: var(--axis-radius-pill, 999px);
-  background: var(--axis-brand-primary-soft, #f0efff);
-  color: var(--axis-brand-primary, #625cf2);
+  background: var(--axis-badge-brand-bg, #F1ECE6);
+  color: var(--axis-badge-brand-text, #7A5C43);
+  border: 1px solid var(--axis-badge-brand-border, #E2DDD2);
   font-size: 0.74rem;
   font-weight: 800;
 }
@@ -467,9 +450,9 @@
   align-items: center;
   gap: 1rem;
   padding: 1.05rem 1.15rem;
-  border: 1px solid var(--axis-line-default, #dce2ed);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
   border-radius: var(--axis-radius-surface, 8px);
-  background: var(--axis-surface-muted, #f8f9fc);
+  background: var(--axis-surface-selected, #F2EFE9);
   flex: 1 1 auto;
 }
 
@@ -518,8 +501,9 @@
   align-items: center;
   gap: 0.85rem;
   padding: 0.85rem 1rem;
+  border: 1px solid var(--axis-line-default, #E2DDD2);
   border-radius: var(--axis-radius-surface, 8px);
-  background: var(--axis-surface-muted, #f8f9fc);
+  background: var(--axis-surface-selected, #F2EFE9);
 }
 
 .creatorMeta {
@@ -548,8 +532,9 @@
   align-items: center;
   padding: 0.22rem 0.55rem;
   border-radius: var(--axis-radius-xs, 4px);
-  background: #fdf2f2;
-  color: #c81e1e;
+  background: var(--axis-status-danger-soft, #FBECE9);
+  color: var(--axis-status-danger, #A83B2E);
+  border: 1px solid var(--axis-status-danger-border, #F1CEC9);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.02em;

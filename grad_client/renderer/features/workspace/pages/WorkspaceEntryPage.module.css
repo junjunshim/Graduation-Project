@@ -16,7 +16,7 @@
 .page {
   min-width: 0;
   min-height: 100%;
-  padding: 1.55rem 1.5rem 2.75rem;
+  padding: 1.25rem 1.5rem 1.25rem;
   overflow: hidden;
   background: var(--entry-background);
   color: var(--entry-text);
@@ -198,14 +198,16 @@
 }
 
 .workspaceGlyph {
-  --glyph-color: #625cf2;
-  --glyph-background: #eeedff;
+  --glyph-color: var(--axis-glyph-color, #7A5C43);
+  --glyph-background: var(--axis-glyph-background, #EBE7DE);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
   background: var(--glyph-background);
   color: var(--glyph-color);
+  border: 1px solid var(--axis-glyph-border, #DDD8CB);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .workspaceGlyphRoot,
@@ -241,39 +243,15 @@
   height: 3.5rem;
 }
 
-.toneIndigo {
-  --glyph-color: #544ee2;
-  --glyph-background: linear-gradient(145deg, #d9d7ff, #8f8bf8);
-}
-
-.toneTeal {
-  --glyph-color: #237e84;
-  --glyph-background: #dff2f2;
-}
-
-.toneBlue {
-  --glyph-color: #1572d3;
-  --glyph-background: #e4f1ff;
-}
-
-.toneGreen {
-  --glyph-color: #13a960;
-  --glyph-background: #e2f8eb;
-}
-
-.toneViolet {
-  --glyph-color: #7357ea;
-  --glyph-background: #eee8ff;
-}
-
-.toneOrange {
-  --glyph-color: #dd8411;
-  --glyph-background: #fff0df;
-}
-
+.toneIndigo,
+.toneTeal,
+.toneBlue,
+.toneGreen,
+.toneViolet,
+.toneOrange,
 .tonePink {
-  --glyph-color: #be3b88;
-  --glyph-background: #fde6f3;
+  --glyph-color: var(--axis-glyph-color, #7A5C43);
+  --glyph-background: var(--axis-glyph-background, #EBE7DE);
 }
 
 .rootCardCopy,
@@ -401,8 +379,8 @@
 
 .dendroCard:hover {
   transform: translateY(-3px);
-  border-color: var(--axis-brand-primary, #625cf2);
-  box-shadow: 0 10px 22px rgba(98, 92, 242, 0.14);
+  border-color: var(--axis-brand-primary, #7A5C43);
+  box-shadow: 0 8px 20px rgba(122, 92, 67, 0.12);
 }
 
 .dendroCardDisabled {
@@ -412,22 +390,23 @@
 
 .dendroCardDisabled:hover {
   transform: none;
-  border-color: var(--axis-line-default, #dce2ed);
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
+  border-color: var(--axis-line-default, #E2DDD2);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.04);
 }
 
 .dendroCardLevel1 {
-  background: var(--axis-surface-panel, #ffffff);
-  border-color: var(--axis-brand-border, #c8c7ff);
+  background: var(--axis-surface-panel, #F7F6F2);
+  border-color: var(--axis-brand-border, #D0C5B8);
 }
 
 .dendroCardLevel2 {
-  background: var(--axis-surface-panel, #ffffff);
+  background: var(--axis-surface-panel, #F7F6F2);
+  border-color: var(--axis-line-default, #E2DDD2);
 }
 
 .dendroCardLevelDeep {
-  background: var(--axis-surface-panel, #ffffff);
-  border-color: var(--axis-line-default, #e2e8f0);
+  background: var(--axis-surface-panel, #F7F6F2);
+  border-color: var(--axis-line-default, #E2DDD2);
 }
 
 .dendroGlyphWrapper {

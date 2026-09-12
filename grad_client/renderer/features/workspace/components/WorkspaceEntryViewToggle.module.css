@@ -11,9 +11,9 @@
   display: inline-flex;
   align-items: center;
   padding: 0.22rem;
-  border: 1px solid var(--axis-line-default, #e0e0e0);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
   border-radius: var(--axis-radius-surface, 8px);
-  background: var(--axis-surface-muted, #f4f5f7);
+  background: var(--axis-surface-muted, #EBE7DE);
   gap: 0.2rem;
 }
 
@@ -24,24 +24,32 @@
   gap: 0.45rem;
   font-size: 0.82rem;
   font-weight: 600;
-  border: 0;
+  border: 1px solid transparent !important;
   box-shadow: none;
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
 .viewSegmentButton:not(.viewSegmentActive) {
-  background: transparent;
-  color: var(--axis-text-secondary, #5e6c84);
+  background: transparent !important;
+  color: var(--axis-text-secondary, #5C5850) !important;
 }
 
 .viewSegmentButton:not(.viewSegmentActive):hover {
-  background: color-mix(in srgb, var(--axis-surface-panel, #ffffff) 65%, transparent);
-  color: var(--axis-text-primary, #172b4d);
+  background: #F0EDE6 !important;
+  color: var(--axis-text-primary, #1C1B18) !important;
 }
 
-.viewSegmentActive {
-  background: var(--axis-surface-panel, #ffffff);
-  color: var(--axis-brand-primary, #5e35b1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+.viewSegmentActive,
+.viewSegmentActive:hover {
+  background: var(--axis-surface-panel, #F7F6F2) !important;
+  border-color: #D7D1C1 !important;
+  color: var(--axis-text-primary, #1C1B18) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+.viewSegmentActive svg,
+.viewSegmentActive:hover svg {
+  color: var(--axis-brand-primary, #7A5C43) !important;
 }
 
 .actionGroup {

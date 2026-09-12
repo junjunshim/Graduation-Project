@@ -12,10 +12,11 @@
   border-bottom: 1px solid var(--line-default);
   -webkit-app-region: drag;
   user-select: none;
+  background: var(--surface-shell, #F7F6F2);
 }
 
 .workspace {
-  --surface-shell: var(--axis-surface-canvas);
+  --surface-shell: var(--surface-shell, #F7F6F2);
   --surface-panel: var(--axis-surface-panel);
   --surface-hover: var(--axis-surface-muted);
   --text-primary: var(--axis-text-primary);
@@ -27,7 +28,7 @@
   --shadow-hover: var(--axis-shadow-popover);
   --accent-red: var(--axis-danger);
   --titlebar-danger-soft: var(--axis-danger-soft);
-  background: var(--surface-shell);
+  background: var(--surface-shell, #F7F6F2) !important;
 }
 
 .auth {

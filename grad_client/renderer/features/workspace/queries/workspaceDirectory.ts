@@ -30,7 +30,7 @@ const ROOT_TONES: WorkspaceDirectoryTone[] = [
 ]
 
 const NODE_VISUAL_METADATA: Record<string, DirectoryVisualMetadata> = {
-  USER: { tone: 'violet', iconName: 'folder' },
+  USER: { tone: 'violet', iconName: 'user' },
   COMPANY: { tone: 'indigo', iconName: 'building' },
   DIVISION: { tone: 'blue', iconName: 'orgChart' },
   DEPARTMENT: { tone: 'teal', iconName: 'folder' },
@@ -39,13 +39,20 @@ const NODE_VISUAL_METADATA: Record<string, DirectoryVisualMetadata> = {
 }
 
 export function getNodeVisualMetadata(nodeType: string): DirectoryVisualMetadata {
-  if (typeof nodeType === 'string' && nodeType.startsWith('CUSTOM:')) {
-    const parts = nodeType.split(':')
+  if (!nodeType || typeof nodeType !== 'string') {
+    return { tone: 'orange', iconName: 'sparkles' }
+  }
+
+  const trimmed = nodeType.trim()
+
+  if (trimmed.startsWith('CUSTOM:')) {
+    const parts = trimmed.split(':')
     const customIcon = (parts[2] as IconName) || 'sparkles'
     return { tone: 'orange', iconName: customIcon }
   }
 
-  return NODE_VISUAL_METADATA[nodeType] ?? { tone: 'orange', iconName: 'sparkles' }
+  const upperType = trimmed.toUpperCase()
+  return NODE_VISUAL_METADATA[upperType] ?? { tone: 'orange', iconName: 'sparkles' }
 }
 
 function getCreatedDate(createdAt: string) {

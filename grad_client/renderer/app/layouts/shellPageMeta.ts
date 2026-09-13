@@ -35,7 +35,7 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean, searc
       title: '업무 생성',
       description: '업무를 생성해보세요.',
       actionLabel: '업무 목록',
-      actionTo: '/work-items',
+      actionTo: '/workspace?view=tasks',
     }
   }
 

@@ -127,12 +127,12 @@ export function getSelectedNodeDetail(
       {
         label: '하위 조직 추가',
         description: '선택한 조직 아래 새 팀이나 프로젝트를 추가합니다.',
-        href: '/org/manage',
+        href: `/setup/sub-node?parentNodeId=${node.id}`,
       },
       {
         label: '권한 부여',
         description: '운영에 필요한 권한을 사용자에게 추가합니다.',
-        href: '/org/manage',
+        href: `/workspace?nodeId=${node.id}&view=roles`,
       },
       {
         label: '업무 등록',

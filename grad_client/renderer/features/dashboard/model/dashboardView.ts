@@ -300,7 +300,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       description: '전체 진행 중 / 내 진행 중',
       icon: 'clock',
       tone: 'neutral',
-      href: '/work-items?status=in-progress',
+      href: '/workspace?view=tasks&status=in-progress',
     },
     {
       label: '마감 임박',
@@ -308,7 +308,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       description: '전체 마감 임박 / 내 마감 임박',
       icon: 'alertTriangle',
       tone: 'amber',
-      href: '/work-items?schedule=dueSoon',
+      href: '/workspace?view=tasks&schedule=dueSoon',
     },
     {
       label: '완료한 업무',
@@ -316,7 +316,7 @@ export function getDashboardMetrics(overview: WorkspaceOverview): DashboardMetri
       description: '전체 완료 / 내 완료',
       icon: 'checkCircle',
       tone: 'green',
-      href: '/work-items?status=done',
+      href: '/workspace?view=tasks&status=done',
     },
   ]
 }

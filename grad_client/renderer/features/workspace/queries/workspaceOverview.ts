@@ -85,7 +85,7 @@ function buildOnboardingSteps({
       id: 'sub-node-role',
       title: '조직과 권한 설정',
       description: '하위 조직을 만들고 담당 권한을 배치해 주세요.',
-      href: '/org/manage',
+      href: '/workspace?view=roles',
     },
     {
       id: 'work-item',

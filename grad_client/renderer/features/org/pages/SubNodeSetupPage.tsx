@@ -6,7 +6,7 @@ import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { createSubNode, fetchNodeDetail, getNodePathLabel, getOrgSnapshot } from '../../workspace/data/orgService'
 import { ORG_NODE_TYPE_OPTIONS } from '../../workspace/model/options'
-import { getNodeTypeLabel } from '../../workspace/model/labels'
+import { getNodeTypeLabel, getRoleBadgeStyle } from '../../workspace/model/labels'
 import { analyzeWorkspaceMembers } from '../../workspace/model/memberInheritance'
 import { canCreateSubNode, isEligibleAsSubNodeOwner } from '../../workspace/model/effectiveAuthority'
 import type { StandardNodeType, WorkspaceSnapshot } from '../../workspace/model/types'
@@ -62,6 +62,23 @@ const CUSTOM_ICON_OPTIONS: { icon: IconName; label: string }[] = [
   { icon: 'pencil', label: '디자인/창작' },
   { icon: 'folder', label: '자료/그룹' },
 ]
+
+function getNodeTypeIcon(nodeType: string): IconName {
+  if (nodeType.startsWith('CUSTOM:')) {
+    const parts = nodeType.split(':')
+    if (parts[2]) {
+      return parts[2] as IconName
+    }
+    return 'sparkles'
+  }
+
+  const standardOption = nodeType as NodeTypeOption
+  if (NODE_TYPE_DETAILS[standardOption]) {
+    return NODE_TYPE_DETAILS[standardOption].icon
+  }
+
+  return 'folder'
+}
 
 export function SubNodeSetupPage() {
   const navigate = useNavigate()
@@ -434,17 +451,15 @@ export function SubNodeSetupPage() {
                       </div>
 
                       <div className={styles.ownerTriggerBadges}>
-                        <span className={styles.ownerRoleBadge}>{selectedOwner.effectiveRoleName}</span>
-                        <span className={styles.ownerSourceBadge}>
-                          {'isDirect' in selectedOwner && selectedOwner.isDirect
-                            ? '직속'
-                            : 'isOverridden' in selectedOwner && selectedOwner.isOverridden
-                            ? `오버라이드 (${selectedOwner.sourceNodeName})`
-                            : `${('sourceNodeName' in selectedOwner && selectedOwner.sourceNodeName) || '상위'} 상속`}
+                        <span
+                          className={styles.ownerRoleBadge}
+                          style={getRoleBadgeStyle(
+                            selectedOwner.effectiveRoleName,
+                            'isTopRole' in selectedOwner ? Boolean(selectedOwner.isTopRole) : false,
+                          )}
+                        >
+                          {selectedOwner.effectiveRoleName}
                         </span>
-                        {selectedOwner.userId === currentUser.userId && (
-                          <span className={styles.ownerMeBadge}>나</span>
-                        )}
                       </div>
 
                       <Icon
@@ -460,14 +475,6 @@ export function SubNodeSetupPage() {
                         {eligibleOwners.map((owner) => {
                           const isSelected =
                             owner.email === ownerEmail || owner.userId === ownerEmail
-                          const isMe =
-                            owner.userId === currentUser.userId ||
-                            owner.email === currentUser.email
-                          const sourceLabel = owner.isOverridden
-                            ? `오버라이드 (${owner.sourceNodeName})`
-                            : owner.isDirect
-                            ? '직속'
-                            : `${owner.sourceNodeName || '상위'} 상속`
 
                           return (
                             <button
@@ -496,7 +503,13 @@ export function SubNodeSetupPage() {
                                   <strong className={styles.ownerOptionName}>
                                     {owner.name}
                                   </strong>
-                                  {isMe && <span className={styles.ownerMeBadge}>나</span>}
+                                  {isSelected && (
+                                    <Icon
+                                      name="checkCircle"
+                                      size={14}
+                                      className={styles.ownerSelectedCheck}
+                                    />
+                                  )}
                                 </div>
                                 <span className={styles.ownerOptionEmail}>
                                   {owner.email || owner.userId}
@@ -504,28 +517,13 @@ export function SubNodeSetupPage() {
                               </div>
 
                               <div className={styles.ownerOptionBadges}>
-                                <span className={styles.ownerRoleBadge}>
+                                <span
+                                  className={styles.ownerRoleBadge}
+                                  style={getRoleBadgeStyle(owner.effectiveRoleName, Boolean(owner.isTopRole))}
+                                >
                                   {owner.effectiveRoleName}
                                 </span>
-                                <span
-                                  className={[
-                                    styles.ownerSourceBadge,
-                                    owner.isDirect ? styles.ownerSourceDirect : styles.ownerSourceInherited,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' ')}
-                                >
-                                  {sourceLabel}
-                                </span>
                               </div>
-
-                              {isSelected && (
-                                <Icon
-                                  name="checkCircle"
-                                  size={16}
-                                  className={styles.ownerSelectedCheck}
-                                />
-                              )}
                             </button>
                           )
                         })}
@@ -604,7 +602,7 @@ export function SubNodeSetupPage() {
               <div className={styles.parentBox}>
                 <div className={styles.parentHeader}>
                   <span className={styles.parentIcon}>
-                    <Icon name="folder" size={18} />
+                    <Icon name={getNodeTypeIcon(parentNode.nodeType)} size={18} />
                   </span>
                   <strong className={styles.parentName}>{parentNode.name}</strong>
                   <span className={styles.parentTypeBadge}>{getNodeTypeLabel(parentNode.nodeType)}</span>
@@ -630,7 +628,7 @@ export function SubNodeSetupPage() {
                   {siblingNodes.map((sibling) => (
                     <div key={sibling.id} className={styles.siblingItem}>
                       <span className={styles.siblingIcon}>
-                        <Icon name="folder" size={14} />
+                        <Icon name={getNodeTypeIcon(sibling.nodeType)} size={14} />
                       </span>
                       <span className={styles.siblingName} title={sibling.name}>
                         {sibling.name}

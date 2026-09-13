@@ -22,7 +22,6 @@ import {
 import { formatActivityMessage } from '../../dashboard/model/activityFormatter'
 import { formatWorkspaceMonthDay } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
-import { canCreateSubNode } from '../model/effectiveAuthority'
 import type { ActivityRecord, RoleMember, UserRecord, WorkItemRecord, WorkItemStatus, WorkspaceOverview } from '../model/types'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
@@ -536,6 +535,8 @@ export function WorkspacePage() {
     getDefaultWorkspaceRootId(currentUser?.userId)
   const [statusFilter, setStatusFilter] = useState<WorkspaceStatusFilter>('all')
   const requestedView = searchParams.get('view')
+  const requestedStatus = searchParams.get('status')
+  const requestedSchedule = searchParams.get('schedule')
   const activeView: WorkspaceView =
     requestedView === 'tasks' ||
     requestedView === 'timeline' ||
@@ -765,7 +766,7 @@ export function WorkspacePage() {
     <section
       className={[
         styles.page,
-        activeView === 'overview' ? styles.overviewPage : '',
+        activeView === 'overview' ? styles.overviewPage : styles.fullHeightPage,
         activeView === 'timeline' ? styles.timelinePage : '',
       ]
         .filter(Boolean)
@@ -818,17 +819,6 @@ export function WorkspacePage() {
             {extraMemberCount > 0 ? <strong data-member-name={`외 ${extraMemberCount}명 (전체 ${totalMemberCount}명)`}>+{extraMemberCount}</strong> : null}
           </div>
 
-          {overview.rootNode && canCreateSubNode(currentUser.userId, overview.rootNode.id, snapshot) ? (
-            <Link
-              to={`/setup/sub-node?parentNodeId=${overview.rootNode.id}`}
-              className={styles.primaryAction}
-              title="현재 워크스페이스 하위에 새 워크스페이스를 생성합니다."
-            >
-              <Icon name="plus" size={15} />
-              하위 워크스페이스 생성
-            </Link>
-          ) : null}
-
           <button type="button" className={styles.secondaryAction}>
             <Icon name="users" size={15} />
             공유
@@ -847,12 +837,15 @@ export function WorkspacePage() {
         />
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
+          key={[requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
           createHref={overview.rootNode ? `/work-items/new?nodeId=${overview.rootNode.id}` : '/work-items/new'}
           workItems={overview.visibleWorkItems}
           deletedWorkItems={overview.deletedWorkItems}
           allWorkItems={overview.allWorkItems}
           members={snapshot.users}
           workspaces={overview.visibleNodes}
+          initialStatus={requestedStatus ?? undefined}
+          initialSchedule={requestedSchedule ?? undefined}
         />
       ) : activeView === 'schedules' ? (
         <WorkspaceSchedulesTab
@@ -1155,7 +1148,10 @@ export function WorkspacePage() {
               <div>
                 <h3 className={styles.panelTitle}>최근 활동</h3>
               </div>
-              <Link to="/work-items" className={styles.textAction}>
+              <Link
+                to={workspaceRootParam ? `/workspace?view=tasks&nodeId=${encodeURIComponent(workspaceRootParam)}` : '/workspace?view=tasks'}
+                className={styles.textAction}
+              >
                 업무 보기
                 <Icon name="arrowRight" size={14} />
               </Link>

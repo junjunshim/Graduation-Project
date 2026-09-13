@@ -35,7 +35,7 @@ export function DashboardBoard({ workItems, users }: DashboardBoardProps) {
         <div>
           <h3 className={styles.sectionTitle}>업무 현황</h3>
         </div>
-        <Link to="/org/manage" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
+        <Link to="/workspace?view=tasks" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
           전체 보기
           <Icon name="chevronRight" size={15} />
         </Link>

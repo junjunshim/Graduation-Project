@@ -21,7 +21,6 @@ import styles from './AppShell.module.css'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'grad-client-sidebar-collapsed'
 const SECTION_HEADING_ROUTES = new Set([
-  '/work-items',
   '/work-items/new',
   '/calendar',
   '/documents',
@@ -79,7 +78,6 @@ export function AppShell() {
   const isWorkspaceRoute = location.pathname === '/workspace'
   const isWorkspaceTimelineRoute =
     isWorkspaceRoute && searchParams.get('view') === 'timeline'
-  const isWorkItemsRoute = location.pathname === '/work-items'
   const isWorkItemEditRoute = /^\/work-items\/[^/]+\/edit$/.test(location.pathname)
   const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname) || isWorkItemEditRoute
   const workItemDetailMatch = location.pathname.match(/^\/work-items\/([^/]+)$/)
@@ -189,7 +187,6 @@ export function AppShell() {
           className={[
             styles.workspaceBody,
             isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.workspaceBodyTimeline : '',
-            isWorkItemsRoute ? styles.workspaceBodyWorkItems : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -204,7 +201,6 @@ export function AppShell() {
             className={[
               styles.main,
               isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.mainTimeline : '',
-              isWorkItemsRoute ? styles.mainWorkItems : '',
             ]
               .filter(Boolean)
               .join(' ')}

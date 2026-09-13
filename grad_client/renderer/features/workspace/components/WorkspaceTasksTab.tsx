@@ -128,13 +128,13 @@ function TaskTreeNodeCard({
   const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
 
   return (
-    <div className={styles.treeNodeContainer} style={{ '--tree-depth': depth } as React.CSSProperties}>
+    <div className={styles.treeNodeContainer}>
       <div
-        className={[styles.treeCard, isTrashMode ? styles.trashCardDeleted : ''].join(' ')}
+        className={[styles.treeRow, isTrashMode ? styles.trashRowDeleted : ''].join(' ')}
         data-work-item-id={item.workItemId}
       >
-        <div className={styles.treeCardMain}>
-          <div className={styles.treeCardLeft}>
+        <div className={styles.treeRowMain}>
+          <div className={styles.treeRowLeft}>
             {hasChildren ? (
               <button
                 type="button"
@@ -142,20 +142,20 @@ function TaskTreeNodeCard({
                 onClick={() => onToggleCollapse(item.workItemId)}
                 aria-label={isCollapsed ? '하위 업무 펼치기' : '하위 업무 접기'}
               >
-                <Icon name={isCollapsed ? 'chevronRight' : 'chevronDown'} size={14} />
+                <Icon name={isCollapsed ? 'chevronRight' : 'chevronDown'} size={13} />
               </button>
             ) : (
               <span className={styles.treeLeafDot} />
             )}
 
-            <div className={styles.treeCardTitleGroup}>
-              <div className={styles.treeCardTitle} style={{ cursor: isTrashMode ? 'default' : 'pointer' }}>
+            <div className={styles.treeTitleGroup}>
+              <div className={styles.treeTitle}>
                 {isTrashMode ? (
                   <span className={styles.trashDeletedBadge}>삭제됨</span>
                 ) : null}
                 <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
                 {isTrashMode ? (
-                  <span className={styles.taskTitleText} style={{ textDecoration: 'line-through', color: '#64748b' }}>
+                  <span className={styles.taskTitleText} style={{ textDecoration: 'line-through' }}>
                     {item.title}
                   </span>
                 ) : (
@@ -165,12 +165,12 @@ function TaskTreeNodeCard({
                 )}
               </div>
               {item.description ? (
-                <p className={styles.treeCardDescription}>{item.description}</p>
+                <p className={styles.treeDescription}>{item.description}</p>
               ) : null}
             </div>
           </div>
 
-          <div className={styles.treeCardMetaGroup}>
+          <div className={styles.treeMetaGroup}>
             {tag ? (
               <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
                 {tag.label}
@@ -188,13 +188,18 @@ function TaskTreeNodeCard({
 
             {dueDate ? (
               <span className={styles.treeDueDate}>
-                <Icon name="calendar" size={13} />
-                {dueDate}
-                {item.status !== 'done' && dueScheduleInfo.scheduleType !== 'none' ? (
-                  <span className={styles.dueBadge} data-tone={dueScheduleInfo.tone}>
-                    {dueScheduleInfo.label}
+                {item.status !== 'done' &&
+                (dueScheduleInfo.scheduleType === 'dueSoon' || dueScheduleInfo.scheduleType === 'overdue') ? (
+                  <span
+                    className={styles.dueUrgentMark}
+                    data-tone={dueScheduleInfo.tone}
+                    title={dueScheduleInfo.label}
+                  >
+                    !
                   </span>
                 ) : null}
+                <Icon name="calendar" size={13} />
+                {dueDate}
               </span>
             ) : null}
 
@@ -205,7 +210,7 @@ function TaskTreeNodeCard({
 
             {hasChildren ? (
               <span className={styles.treeChildBadge}>
-                하위 {children.length}건
+                하위 {children.length}
               </span>
             ) : null}
 
@@ -1101,22 +1106,20 @@ export function WorkspaceTasksTab({
           <div className={styles.tableCard}>
             <div className={styles.tableScroller} role="table" aria-label={tableLabel}>
               <div className={styles.tableHeader} role="row">
-                <span role="columnheader" className={styles.checkboxCell}>
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={toggleAllVisible}
-                    aria-label="현재 페이지 업무 전체 선택"
-                  />
-                </span>
-                <span role="columnheader" className={styles.titleHeader}>업무명</span>
-                <span role="columnheader" className={styles.ownerHeader}>담당자</span>
-                <span role="columnheader" className={styles.statusCell}>상태</span>
-                <span role="columnheader" className={styles.priorityHeader}>우선순위</span>
-                <span role="columnheader" className={styles.dueDateHeader}>마감일</span>
-                <span role="columnheader" className={styles.tagCell}>카테고리</span>
-                <span role="columnheader" className={styles.commentCell} aria-label="댓글" />
-                <span role="columnheader" className={styles.actionCell} aria-label="작업" />
+                <div className={styles.tableHeaderLeft}>
+                  <span role="columnheader" className={styles.checkboxCell}>
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleAllVisible}
+                      aria-label="현재 페이지 업무 전체 선택"
+                    />
+                  </span>
+                  <span role="columnheader" className={styles.titleHeader}>업무명 / 담당자</span>
+                </div>
+                <div className={styles.tableHeaderRight}>
+                  <span>상태 · 우선순위 / 마감일</span>
+                </div>
               </div>
 
               <div
@@ -1136,7 +1139,7 @@ export function WorkspaceTasksTab({
                       <div
                         key={item.workItemId}
                         data-work-item-id={item.workItemId}
-                        className={[styles.taskRow, isSelected ? styles.taskRowSelected : ''].join(' ')}
+                        className={[styles.taskRow, isSelected ? styles.taskRowSelected : '', showDeletedTasks ? styles.trashRowDeleted : ''].filter(Boolean).join(' ')}
                         role="row"
                       >
                         <span role="cell" className={styles.checkboxCell}>
@@ -1148,80 +1151,93 @@ export function WorkspaceTasksTab({
                           />
                         </span>
 
-                        <span role="cell" className={styles.titleCell}>
-                          {showDeletedTasks ? (
-                            <div className={styles.taskTitle} style={{ cursor: 'default' }}>
-                              <span className={styles.trashDeletedBadge}>삭제됨</span>
-                              <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
-                              <span className={styles.taskTitleText} style={{ textDecoration: 'line-through', color: '#64748b' }}>
-                                {item.title}
+                        <div className={styles.rowMainContent}>
+                          {/* 좌측 영역: 1층 [업무코드][카테고리][업무명] / 2층 [담당자] + [댓글 수] */}
+                          <div className={styles.rowLeftBlock}>
+                            <div className={styles.rowTopLine}>
+                              {showDeletedTasks ? (
+                                <div className={styles.taskTitle} style={{ cursor: 'default' }}>
+                                  <span className={styles.trashDeletedBadge}>삭제됨</span>
+                                  <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+                                  {tag ? (
+                                    <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
+                                      {tag.label}
+                                    </span>
+                                  ) : null}
+                                  <span className={styles.taskTitleText} style={{ textDecoration: 'line-through', opacity: 0.75 }}>
+                                    {item.title}
+                                  </span>
+                                </div>
+                              ) : (
+                                <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
+                                  <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+                                  {tag ? (
+                                    <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
+                                      {tag.label}
+                                    </span>
+                                  ) : null}
+                                  <span className={styles.taskTitleText}>{item.title}</span>
+                                </Link>
+                              )}
+                            </div>
+
+                            <div className={styles.rowBottomLine}>
+                              <span className={styles.metaOwner}>
+                                <UserAvatar name={ownerName} userId={item.ownerUserId} size="small" />
+                                <span className={styles.ownerName}>{ownerName}</span>
+                              </span>
+
+                              <span
+                                className={[
+                                  styles.commentPill,
+                                  !item.commentCount ? styles.commentPillEmpty : '',
+                                ].filter(Boolean).join(' ')}
+                                title={item.commentCount ? `댓글 ${item.commentCount}개` : '댓글 없음'}
+                              >
+                                <Icon name="messageCircle" size={12} />
+                                <span>{item.commentCount ?? 0}</span>
                               </span>
                             </div>
-                          ) : (
-                            <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
-                              <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
-                              <span className={styles.taskTitleText}>{item.title}</span>
-                            </Link>
-                          )}
-                        </span>
+                          </div>
 
-                        <span role="cell" className={styles.ownerCell}>
-                          <UserAvatar name={ownerName} userId={item.ownerUserId} size="small" />
-                          <span className={styles.ownerName}>{ownerName}</span>
-                        </span>
+                          {/* 우측 영역: 1층 [상태 뱃지][우선순위 뱃지] / 2층 [마감일] */}
+                          <div className={styles.rowRightBlock}>
+                            <div className={styles.rowTopLine}>
+                              <span className={styles.statusBadge} data-tone={statusTone}>
+                                {getWorkItemStatusLabel(item.status)}
+                              </span>
 
-                        <span role="cell" className={styles.statusCell}>
-                          <span className={styles.statusBadge} data-tone={statusTone}>
-                            {getWorkItemStatusLabel(item.status)}
-                          </span>
-                        </span>
+                              <span className={styles.priority} data-priority={priorityMeta.tone}>
+                                <strong>{priorityMeta.symbol}</strong>
+                                {priorityMeta.label}
+                              </span>
+                            </div>
 
-                        <span role="cell" className={styles.priorityCell}>
-                          <span className={styles.priority} data-priority={priorityMeta.tone}>
-                            <strong>{priorityMeta.symbol}</strong>
-                            {priorityMeta.label}
-                          </span>
-                        </span>
-
-                        <span role="cell" className={styles.dueDateCell}>
-                          {item.dueDate ? (
-                            <>
-                              <span className={styles.dueDate}>{formatWorkspaceShortDate(item.dueDate)}</span>
-                              {item.status !== 'done' && dueScheduleInfo.scheduleType !== 'none' ? (
-                                <span className={styles.dueBadge} data-tone={dueScheduleInfo.tone}>
-                                  {dueScheduleInfo.label}
+                            <div className={styles.rowBottomLine}>
+                              {item.dueDate ? (
+                                <span className={styles.metaDueDate}>
+                                  {item.status !== 'done' &&
+                                  (dueScheduleInfo.scheduleType === 'dueSoon' || dueScheduleInfo.scheduleType === 'overdue') ? (
+                                    <span
+                                      className={styles.dueUrgentMark}
+                                      data-tone={dueScheduleInfo.tone}
+                                      title={dueScheduleInfo.label}
+                                    >
+                                      !
+                                    </span>
+                                  ) : null}
+                                  <Icon name="calendar" size={12} />
+                                  <span>{formatWorkspaceShortDate(item.dueDate)}</span>
                                 </span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className={styles.emptyDueDate}>-</span>
-                          )}
-                        </span>
+                              ) : (
+                                <span className={styles.emptyDueDate}>-</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                        <span role="cell" className={styles.tagCell}>
-                          {tag ? (
-                            <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
-                              {tag.label}
-                            </span>
-                          ) : (
-                            <span className={styles.emptyTag}>-</span>
-                          )}
-                        </span>
-
-                        <span role="cell" className={styles.commentCell}>
-                          <button
-                            type="button"
-                            className={styles.commentButton}
-                            disabled={!item.commentCount}
-                            title={item.commentCount ? `댓글 ${item.commentCount}개` : '댓글 없음'}
-                          >
-                            <Icon name="messageCircle" size={14} />
-                            {item.commentCount ? <span>{item.commentCount}</span> : null}
-                          </button>
-                        </span>
-
-                        <span role="cell" className={styles.actionCell}>
-                          {showDeletedTasks ? (
+                        {showDeletedTasks && (
+                          <span role="cell" className={styles.actionCell}>
                             <button
                               type="button"
                               className={styles.trashRestoreButton}
@@ -1231,16 +1247,8 @@ export function WorkspaceTasksTab({
                               <Icon name="restore" size={12} />
                               <span>복구</span>
                             </button>
-                          ) : (
-                            <Link
-                              to={`/work-items?view=edit&id=${item.workItemId}`}
-                              className={styles.iconButton}
-                              title="업무 수정"
-                            >
-                              <span className={styles.moreDots} aria-hidden="true" />
-                            </Link>
-                          )}
-                        </span>
+                          </span>
+                        )}
                       </div>
                     )
                   })

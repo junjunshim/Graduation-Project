@@ -5,11 +5,15 @@ const THEME_STORAGE_KEY = 'grad-client-theme-mode'
 
 function readInitialThemeMode(): ThemeMode {
   if (typeof window === 'undefined') {
-    return 'light'
+    return 'beige'
   }
 
   const storedMode = window.localStorage.getItem(THEME_STORAGE_KEY)
-  return storedMode === 'dark' || storedMode === 'light' ? storedMode : 'light'
+  if (storedMode === 'white' || storedMode === 'beige' || storedMode === 'dark' || storedMode === 'navy') {
+    return storedMode
+  }
+  // 이전 레거시 'light'는 현재의 기본인 'beige'로 매핑
+  return 'beige'
 }
 
 function applyThemeMode(themeMode: ThemeMode) {
@@ -18,7 +22,7 @@ function applyThemeMode(themeMode: ThemeMode) {
   }
 
   document.documentElement.dataset.theme = themeMode
-  document.documentElement.style.colorScheme = themeMode
+  document.documentElement.style.colorScheme = themeMode === 'dark' || themeMode === 'navy' ? 'dark' : 'light'
   document.body.dataset.theme = themeMode
   document.getElementById('root')?.setAttribute('data-theme', themeMode)
 }
@@ -38,7 +42,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     () => ({
       themeMode,
       setThemeMode,
-      toggleTheme: () => setThemeMode((current) => (current === 'light' ? 'dark' : 'light')),
+      toggleTheme: () =>
+        setThemeMode((current) => {
+          if (current === 'white') return 'beige'
+          if (current === 'beige') return 'navy'
+          if (current === 'navy') return 'dark'
+          return 'white'
+        }),
     }),
     [themeMode],
   )

@@ -35,21 +35,21 @@
 
 .titleBarSlot {
   grid-column: 1 / -1;
-  background: var(--surface-shell, #F7F6F2);
+  background: var(--surface-shell);
 }
 
 .sidebar {
   --sidebar-padding: 0.7rem;
-  --surface-sidebar: var(--surface-sidebar, #F7F6F2);
+  --surface-sidebar: var(--surface-sidebar);
   --surface-panel: var(--axis-surface-panel);
   --surface-panel-subtle: var(--axis-surface-muted);
-  --surface-hover: #EFECE4;
+  --surface-hover: var(--axis-surface-panel-hover, #EFECE4);
   --text-primary: var(--axis-text-primary);
   --text-secondary: var(--axis-text-secondary);
   --text-muted: var(--axis-text-muted);
   --line-default: var(--axis-line-default);
   --line-strong: var(--axis-line-strong);
-  --line-selected: #D0C9BA;
+  --line-selected: var(--axis-brand-border, #D0C9BA);
   --radius-sm: var(--axis-radius-action);
   --radius-xs: var(--axis-radius-action);
   --shadow-hover: var(--axis-shadow-popover);
@@ -58,7 +58,7 @@
   min-width: 0;
   min-height: 100vh;
   border-right: 1px solid var(--line-default);
-  background: var(--surface-sidebar, #F7F6F2) !important;
+  background: var(--surface-sidebar);
   color: var(--text-secondary);
   overflow: visible;
 }
@@ -169,9 +169,9 @@
 
 .navItemActive,
 .navItemActive:hover {
-  border-color: #D7D1C1;
-  background: #E7E3DA;
-  color: #1C1B18;
+  border-color: var(--line-selected, var(--axis-line-default));
+  background: var(--surface-selected, var(--axis-surface-selected));
+  color: var(--text-primary, var(--axis-text-primary));
   font-weight: 700;
 }
 
@@ -443,6 +443,7 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  height: 100%;
   min-width: 0;
   min-height: 0;
 }
@@ -589,6 +590,7 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
+  height: 100%;
   min-width: 0;
   min-height: 0;
   background: var(--axis-surface-canvas);

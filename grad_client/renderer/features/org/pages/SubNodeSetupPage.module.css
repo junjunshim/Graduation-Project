@@ -41,7 +41,7 @@
 .siblingCount {
   font-size: 0.75rem;
   font-weight: 750;
-  color: var(--axis-brand-primary, #625cf2);
+  color: var(--axis-brand-primary, #7A5C43);
 }
 
 .siblingList {
@@ -59,22 +59,22 @@
   gap: 0.45rem;
   padding: 0.45rem 0.65rem;
   border-radius: var(--axis-radius-surface, 6px);
-  background: var(--axis-surface-panel-muted, #f8fafc);
-  border: 1px solid var(--axis-line-default, #e2e8f0);
+  background: var(--axis-surface-selected, #F2EFE9);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
 }
 
 .siblingIcon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--axis-text-muted, #657089);
+  color: var(--axis-text-muted, #878278);
 }
 
 .siblingName {
   flex: 1;
   font-size: 0.82rem;
   font-weight: 650;
-  color: var(--axis-text-primary, #10172d);
+  color: var(--axis-text-primary, #1C1B18);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -85,17 +85,18 @@
   font-weight: 700;
   padding: 0.1rem 0.35rem;
   border-radius: var(--axis-radius-xs, 4px);
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--axis-text-muted, #657089);
+  background: var(--axis-status-neutral-soft, #ECE9E2);
+  color: var(--axis-status-neutral, #6B665E);
+  border: 1px solid var(--axis-status-neutral-border, #DCD7CE);
 }
 
 .emptySibling {
   padding: 0.75rem;
   text-align: center;
-  background: var(--axis-surface-panel-muted, #f8fafc);
-  border: 1px dashed var(--axis-line-default, #e2e8f0);
+  background: var(--axis-surface-muted, #EBE7DE);
+  border: 1px dashed var(--axis-line-strong, #D5CFC2);
   border-radius: var(--axis-radius-surface, 6px);
-  color: var(--axis-text-muted, #657089);
+  color: var(--axis-text-muted, #878278);
 }
 
 .parentBox {
@@ -120,8 +121,8 @@
   width: 2rem;
   height: 2rem;
   border-radius: var(--axis-radius-surface, 8px);
-  background: var(--axis-brand-primary, #625cf2);
-  color: #ffffff;
+  background: var(--axis-brand-primary, #7A5C43);
+  color: var(--axis-text-on-brand, #ffffff);
   flex: 0 0 2rem;
 }
 
@@ -162,9 +163,9 @@
   align-items: center;
   padding: 0.22rem 0.6rem;
   border-radius: var(--axis-radius-pill, 999px);
-  background: var(--axis-status-success-soft, #EDF3EE);
-  color: var(--axis-status-success, #3D684D);
-  border: 1px solid var(--axis-status-success-border, #CFE0D5);
+  background: var(--axis-badge-brand-bg, #F1ECE6);
+  color: var(--axis-badge-brand-text, #7A5C43);
+  border: 1px solid var(--axis-badge-brand-border, #E2DDD2);
   font-size: 0.74rem;
   font-weight: 800;
 }
@@ -249,42 +250,6 @@
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.02em;
-}
-
-.ownerSourceBadge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--axis-radius-pill, 999px);
-  font-size: 0.72rem;
-  font-weight: 700;
-  background: var(--axis-status-neutral-soft, #ECE9E2);
-  color: var(--axis-status-neutral, #6B665E);
-  border: 1px solid var(--axis-status-neutral-border, #DCD7CE);
-}
-
-.ownerSourceDirect {
-  background: var(--axis-status-info-soft, #ECEFF4);
-  color: var(--axis-status-info, #455A75);
-  border-color: var(--axis-status-info-border, #D1D9E4);
-}
-
-.ownerSourceInherited {
-  background: var(--axis-status-neutral-soft, #ECE9E2);
-  color: var(--axis-status-neutral, #6B665E);
-  border-color: var(--axis-status-neutral-border, #DCD7CE);
-}
-
-.ownerMeBadge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.4rem;
-  border-radius: var(--axis-radius-xs, 4px);
-  background: var(--axis-status-warning-soft, #FBF3E3);
-  color: var(--axis-status-warning, #93631A);
-  border: 1px solid var(--axis-status-warning-border, #EEDBB7);
-  font-size: 0.7rem;
-  font-weight: 800;
 }
 
 /* 커스텀 드롭다운 메뉴 레이어 */
@@ -375,7 +340,6 @@
 .ownerSelectedCheck {
   color: var(--axis-brand-primary, #625cf2);
   flex-shrink: 0;
-  margin-left: 0.3rem;
 }
 
 .selectInput {

@@ -5,8 +5,6 @@ import { ShellPlaceholderPage } from './layouts/ShellPlaceholderPage'
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage'
 import { WorkspacePage } from '../features/workspace/pages/WorkspacePage'
 import { WorkspaceEntryPage } from '../features/workspace/pages/WorkspaceEntryPage'
-import { OrgManagePage } from '../features/org/pages/OrgManagePage'
-import { WorkItemsPage } from '../features/work-item/pages/WorkItemsPage'
 import { WorkItemDetailPage } from '../features/work-item/pages/WorkItemDetailPage'
 import { LoginPage } from '../features/auth/pages/LoginPage'
 import { SignupPage } from '../features/auth/pages/SignupPage'
@@ -124,11 +122,11 @@ const router = createHashRouter([
           },
           {
             path: '/org/manage',
-            element: <OrgManagePage />,
+            element: <Navigate to="/workspace/select" replace />,
           },
           {
             path: '/work-items',
-            element: <WorkItemsPage />,
+            element: <Navigate to="/workspace?view=tasks" replace />,
           },
           {
             path: '/work-items/new',

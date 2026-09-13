@@ -72,6 +72,7 @@
 }
 
 :root,
+[data-theme='beige'],
 [data-theme='light'] {
   --axis-surface-canvas: #F4F2EC;
   --axis-surface-panel: #F7F6F2;
@@ -119,6 +120,40 @@
   --axis-badge-brand-bg: #F1ECE6;
   --axis-badge-brand-border: #E2DDD2;
 
+  /* 32개 톤온톤 뮤티드 어스 해시 팔레트 (Warm Neutral Cohesive Theme) */
+  --axis-palette-0-text: #5A6B5C; --axis-palette-0-bg: #EFF3F0; --axis-palette-0-border: #D4DFD6;
+  --axis-palette-1-text: #705844; --axis-palette-1-bg: #F4EFEA; --axis-palette-1-border: #DFD5CA;
+  --axis-palette-2-text: #4C6475; --axis-palette-2-bg: #EDF2F5; --axis-palette-2-border: #D1DDE4;
+  --axis-palette-3-text: #785A52; --axis-palette-3-bg: #F5EFEB; --axis-palette-3-border: #E3D6CF;
+  --axis-palette-4-text: #826638; --axis-palette-4-bg: #F7F3E8; --axis-palette-4-border: #E6DDC8;
+  --axis-palette-5-text: #486968; --axis-palette-5-bg: #ECF3F2; --axis-palette-5-border: #CFDFDE;
+  --axis-palette-6-text: #6B5C75; --axis-palette-6-bg: #F2EEF5; --axis-palette-6-border: #DDD5E3;
+  --axis-palette-7-text: #8C5345; --axis-palette-7-bg: #F8EEEB; --axis-palette-7-border: #EACFC8;
+  --axis-palette-8-text: #52637A; --axis-palette-8-bg: #EEF2F7; --axis-palette-8-border: #D2DCE8;
+  --axis-palette-9-text: #696559; --axis-palette-9-bg: #F1EFE9; --axis-palette-9-border: #DEDACF;
+  --axis-palette-10-text: #416B58; --axis-palette-10-bg: #ECF4F0; --axis-palette-10-border: #CFE2D7;
+  --axis-palette-11-text: #755250; --axis-palette-11-bg: #F6EEEE; --axis-palette-11-border: #E4D3D3;
+  --axis-palette-12-text: #4B6370; --axis-palette-12-bg: #EEF3F5; --axis-palette-12-border: #D1DDE2;
+  --axis-palette-13-text: #786443; --axis-palette-13-bg: #F6F1E8; --axis-palette-13-border: #E4DAC9;
+  --axis-palette-14-text: #596173; --axis-palette-14-bg: #F0F2F6; --axis-palette-14-border: #D5DAE4;
+  --axis-palette-15-text: #6B5542; --axis-palette-15-bg: #F4EEE7; --axis-palette-15-border: #E0D3C5;
+  --axis-palette-16-text: #4A6E6A; --axis-palette-16-bg: #ECF4F3; --axis-palette-16-border: #CFE2E0;
+  --axis-palette-17-text: #7A5B64; --axis-palette-17-bg: #F5EFF1; --axis-palette-17-border: #E3D5DA;
+  --axis-palette-18-text: #606850; --axis-palette-18-bg: #F1F3EC; --axis-palette-18-border: #D8DFCE;
+  --axis-palette-19-text: #555E6B; --axis-palette-19-bg: #EFF1F5; --axis-palette-19-border: #D6DAE2;
+  --axis-palette-20-text: #855C3E; --axis-palette-20-bg: #F7EFE8; --axis-palette-20-border: #E8D7C8;
+  --axis-palette-21-text: #4E6877; --axis-palette-21-bg: #EDF3F7; --axis-palette-21-border: #D0DEE7;
+  --axis-palette-22-text: #6E5C4E; --axis-palette-22-bg: #F3EFEA; --axis-palette-22-border: #DFD5CB;
+  --axis-palette-23-text: #546B60; --axis-palette-23-bg: #EDF4F0; --axis-palette-23-border: #D0DFD7;
+  --axis-palette-24-text: #73596E; --axis-palette-24-bg: #F4EEF3; --axis-palette-24-border: #DFD4DE;
+  --axis-palette-25-text: #7E6340; --axis-palette-25-bg: #F6F1E7; --axis-palette-25-border: #E5D9C6;
+  --axis-palette-26-text: #466763; --axis-palette-26-bg: #EBF3F1; --axis-palette-26-border: #CDE0DD;
+  --axis-palette-27-text: #66635B; --axis-palette-27-bg: #F0EFEA; --axis-palette-27-border: #DDD9CF;
+  --axis-palette-28-text: #82544A; --axis-palette-28-bg: #F7EEEB; --axis-palette-28-border: #E7D0CA;
+  --axis-palette-29-text: #536473; --axis-palette-29-bg: #EEF2F6; --axis-palette-29-border: #D3DDE6;
+  --axis-palette-30-text: #5D6B50; --axis-palette-30-bg: #F0F4EC; --axis-palette-30-border: #D7E1D0;
+  --axis-palette-31-text: #705B48; --axis-palette-31-bg: #F4EEE9; --axis-palette-31-border: #DFD4C9;
+
   --axis-surface-panel-hover: #EFECE4;
   --axis-surface-selected: #F2EFE9;
 
@@ -136,7 +171,7 @@
   --surface-panel-muted: #EBE7DE;
   --surface-panel-subtle: #F0EDE6;
   --surface-hover: #EBE7DE;
-  --surface-selected: #D7D1C1;
+  --surface-selected: #E7E3DA;
   --surface-selected-strong: #C4BDA9;
   --surface-input: #F7F6F2;
   --surface-input-disabled: #F0EDE6;
@@ -148,7 +183,7 @@
 
   --line-default: #D7D1C1;
   --line-strong: #C4BDA9;
-  --line-selected: #b9c8ef;
+  --line-selected: #D7D1C1;
 
   --accent-blue-soft: #edf4ff;
   --accent-blue: #2f5fb8;
@@ -160,6 +195,131 @@
   --accent-green: #217346;
   --accent-red-soft: #fff1ef;
   --accent-red: #b42318;
+}
+
+[data-theme='white'] {
+  --axis-surface-canvas: #F8FAFC;
+  --axis-surface-panel: #FFFFFF;
+  --axis-surface-muted: #F1F5F9;
+
+  --axis-text-primary: #0F172A;
+  --axis-text-secondary: #475569;
+  --axis-text-muted: #64748B;
+  --axis-dialog-text-muted: #64748B;
+
+  --axis-line-default: #E2E8F0;
+  --axis-line-strong: #CBD5E1;
+  --axis-dialog-divider: #E2E8F0;
+
+  /* 브랜드 포인트: Deep Teal (#0D766E) */
+  --axis-brand-primary: #0D766E;
+  --axis-brand-primary-hover: #0F5B55;
+  --axis-brand-primary-soft: #E6F4F2;
+  --axis-brand-border: #99D2CD;
+  --axis-brand-badge-surface: #F0FAF8;
+
+  --axis-text-selected: #0D766E;
+  --axis-danger: #DC2626;
+  --axis-danger-soft: rgba(220, 38, 38, 0.1);
+  --axis-status-info: #0284C7;
+  --axis-status-info-soft: #E0F2FE;
+  --axis-status-info-border: #BAE6FD;
+
+  --axis-status-success: #16A34A;
+  --axis-status-success-soft: #DCFCE7;
+  --axis-status-success-border: #BBF7D0;
+
+  --axis-status-warning: #D97706;
+  --axis-status-warning-soft: #FEF3C7;
+  --axis-status-warning-border: #FDE68A;
+
+  --axis-status-danger: #DC2626;
+  --axis-status-danger-soft: #FEE2E2;
+  --axis-status-danger-border: #FECACA;
+
+  --axis-status-neutral: #64748B;
+  --axis-status-neutral-soft: #F1F5F9;
+  --axis-status-neutral-border: #E2E8F0;
+
+  --axis-badge-brand-text: #0D766E;
+  --axis-badge-brand-bg: #E6F4F2;
+  --axis-badge-brand-border: #BCE3E0;
+
+  /* 32개 톤온톤 뮤티드 팔레트 (White Clean Theme) */
+  --axis-palette-0-text: #0F766E; --axis-palette-0-bg: #F0FDFA; --axis-palette-0-border: #CCFBF1;
+  --axis-palette-1-text: #0369A1; --axis-palette-1-bg: #F0F9FF; --axis-palette-1-border: #E0F2FE;
+  --axis-palette-2-text: #4338CA; --axis-palette-2-bg: #EEF2FF; --axis-palette-2-border: #E0E7FF;
+  --axis-palette-3-text: #6D28D9; --axis-palette-3-bg: #F5F3FF; --axis-palette-3-border: #EDE9FE;
+  --axis-palette-4-text: #A21CAF; --axis-palette-4-bg: #FDF4FF; --axis-palette-4-border: #FAE8FF;
+  --axis-palette-5-text: #BE185D; --axis-palette-5-bg: #FDF2F8; --axis-palette-5-border: #FCE7F3;
+  --axis-palette-6-text: #C2410C; --axis-palette-6-bg: #FFF7ED; --axis-palette-6-border: #FFEDD5;
+  --axis-palette-7-text: #B45309; --axis-palette-7-bg: #FFFBEB; --axis-palette-7-border: #FEF3C7;
+  --axis-palette-8-text: #4D7C0F; --axis-palette-8-bg: #F7FEE7; --axis-palette-8-border: #ECFCCB;
+  --axis-palette-9-text: #15803D; --axis-palette-9-bg: #F0FDF4; --axis-palette-9-border: #DCFCE7;
+  --axis-palette-10-text: #047857; --axis-palette-10-bg: #ECFDF5; --axis-palette-10-border: #D1FAE5;
+  --axis-palette-11-text: #0E7490; --axis-palette-11-bg: #ECFEFF; --axis-palette-11-border: #CFFAFE;
+  --axis-palette-12-text: #1D4ED8; --axis-palette-12-bg: #EFF6FF; --axis-palette-12-border: #DBEAFE;
+  --axis-palette-13-text: #7C3AED; --axis-palette-13-bg: #F5F3FF; --axis-palette-13-border: #EDE9FE;
+  --axis-palette-14-text: #9333EA; --axis-palette-14-bg: #FAF5FF; --axis-palette-14-border: #F3E8FF;
+  --axis-palette-15-text: #C026D3; --axis-palette-15-bg: #FDF4FF; --axis-palette-15-border: #FAE8FF;
+  --axis-palette-16-text: #DB2777; --axis-palette-16-bg: #FDF2F8; --axis-palette-16-border: #FCE7F3;
+  --axis-palette-17-text: #E11D48; --axis-palette-17-bg: #FFF1F2; --axis-palette-17-border: #FFE4E6;
+  --axis-palette-18-text: #EA580C; --axis-palette-18-bg: #FFF7ED; --axis-palette-18-border: #FFEDD5;
+  --axis-palette-19-text: #D97706; --axis-palette-19-bg: #FFFBEB; --axis-palette-19-border: #FEF3C7;
+  --axis-palette-20-text: #65A30D; --axis-palette-20-bg: #F7FEE7; --axis-palette-20-border: #ECFCCB;
+  --axis-palette-21-text: #16A34A; --axis-palette-21-bg: #F0FDF4; --axis-palette-21-border: #DCFCE7;
+  --axis-palette-22-text: #059669; --axis-palette-22-bg: #ECFDF5; --axis-palette-22-border: #D1FAE5;
+  --axis-palette-23-text: #0891B2; --axis-palette-23-bg: #ECFEFF; --axis-palette-23-border: #CFFAFE;
+  --axis-palette-24-text: #2563EB; --axis-palette-24-bg: #EFF6FF; --axis-palette-24-border: #DBEAFE;
+  --axis-palette-25-text: #4F46E5; --axis-palette-25-bg: #EEF2FF; --axis-palette-25-border: #E0E7FF;
+  --axis-palette-26-text: #7C2D12; --axis-palette-26-bg: #FFF7ED; --axis-palette-26-border: #FED7AA;
+  --axis-palette-27-text: #334155; --axis-palette-27-bg: #F8FAFC; --axis-palette-27-border: #E2E8F0;
+  --axis-palette-28-text: #1E293B; --axis-palette-28-bg: #F1F5F9; --axis-palette-28-border: #CBD5E1;
+  --axis-palette-29-text: #0F766E; --axis-palette-29-bg: #F0FDFA; --axis-palette-29-border: #99F6E4;
+  --axis-palette-30-text: #15803D; --axis-palette-30-bg: #F0FDF4; --axis-palette-30-border: #BBF7D0;
+  --axis-palette-31-text: #4338CA; --axis-palette-31-bg: #EEF2FF; --axis-palette-31-border: #C7D2FE;
+
+  --axis-surface-panel-hover: #F8FAFC;
+  --axis-surface-selected: #F0FAF8;
+
+  --axis-glyph-background: #E6F4F2;
+  --axis-glyph-color: #0D766E;
+  --axis-glyph-border: #BCE3E0;
+
+  --axis-focus-outline: #0D766E;
+
+  --surface-app: #F8FAFC;
+  --surface-shell: #FFFFFF;
+  --surface-sidebar: #FFFFFF;
+  --surface-page: #F8FAFC;
+  --surface-panel: #FFFFFF;
+  --surface-panel-muted: #F1F5F9;
+  --surface-panel-subtle: #F8FAFC;
+  --surface-hover: #F1F5F9;
+  --surface-selected: #E6F4F2;
+  --surface-selected-strong: #CCFBF1;
+  --surface-input: #FFFFFF;
+  --surface-input-disabled: #F1F5F9;
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #64748B;
+  --text-inverse: #FFFFFF;
+
+  --line-default: #E2E8F0;
+  --line-strong: #CBD5E1;
+  --line-selected: #99D2CD;
+
+  --accent-blue-soft: #eff6ff;
+  --accent-blue: #2563eb;
+  --accent-purple-soft: #f5f3ff;
+  --accent-purple: #7c3aed;
+  --accent-amber-soft: #fffbeb;
+  --accent-amber: #d97706;
+  --accent-green-soft: #f0fdf4;
+  --accent-green: #16a34a;
+  --accent-red-soft: #fef2f2;
+  --accent-red: #dc2626;
 }
 
 [data-theme='dark'] {
@@ -211,6 +371,40 @@
   --axis-badge-brand-bg: rgba(145, 140, 255, 0.15);
   --axis-badge-brand-border: rgba(145, 140, 255, 0.3);
 
+  /* 32개 톤온톤 뮤티드 해시 팔레트 (Dark Theme Cohesive) */
+  --axis-palette-0-text: #a8d5b5; --axis-palette-0-bg: rgba(168, 213, 181, 0.14); --axis-palette-0-border: rgba(168, 213, 181, 0.28);
+  --axis-palette-1-text: #d8baa1; --axis-palette-1-bg: rgba(216, 186, 161, 0.14); --axis-palette-1-border: rgba(216, 186, 161, 0.28);
+  --axis-palette-2-text: #9ec2d5; --axis-palette-2-bg: rgba(158, 194, 213, 0.14); --axis-palette-2-border: rgba(158, 194, 213, 0.28);
+  --axis-palette-3-text: #dcb3aa; --axis-palette-3-bg: rgba(220, 179, 170, 0.14); --axis-palette-3-border: rgba(220, 179, 170, 0.28);
+  --axis-palette-4-text: #e0c890; --axis-palette-4-bg: rgba(224, 200, 144, 0.14); --axis-palette-4-border: rgba(224, 200, 144, 0.28);
+  --axis-palette-5-text: #96cbc8; --axis-palette-5-bg: rgba(150, 203, 200, 0.14); --axis-palette-5-border: rgba(150, 203, 200, 0.28);
+  --axis-palette-6-text: #c9b4db; --axis-palette-6-bg: rgba(201, 180, 219, 0.14); --axis-palette-6-border: rgba(201, 180, 219, 0.28);
+  --axis-palette-7-text: #e5a798; --axis-palette-7-bg: rgba(229, 167, 152, 0.14); --axis-palette-7-border: rgba(229, 167, 152, 0.28);
+  --axis-palette-8-text: #a8bfdc; --axis-palette-8-bg: rgba(168, 191, 220, 0.14); --axis-palette-8-border: rgba(168, 191, 220, 0.28);
+  --axis-palette-9-text: #cac4b5; --axis-palette-9-bg: rgba(202, 196, 181, 0.14); --axis-palette-9-border: rgba(202, 196, 181, 0.28);
+  --axis-palette-10-text: #96d1b4; --axis-palette-10-bg: rgba(150, 209, 180, 0.14); --axis-palette-10-border: rgba(150, 209, 180, 0.28);
+  --axis-palette-11-text: #dba8a6; --axis-palette-11-bg: rgba(219, 168, 166, 0.14); --axis-palette-11-border: rgba(219, 168, 166, 0.28);
+  --axis-palette-12-text: #a2c2cf; --axis-palette-12-bg: rgba(162, 194, 207, 0.14); --axis-palette-12-border: rgba(162, 194, 207, 0.28);
+  --axis-palette-13-text: #dcc296; --axis-palette-13-bg: rgba(220, 194, 150, 0.14); --axis-palette-13-border: rgba(220, 194, 150, 0.28);
+  --axis-palette-14-text: #b0bad0; --axis-palette-14-bg: rgba(176, 186, 208, 0.14); --axis-palette-14-border: rgba(176, 186, 208, 0.28);
+  --axis-palette-15-text: #d4b59b; --axis-palette-15-bg: rgba(212, 181, 155, 0.14); --axis-palette-15-border: rgba(212, 181, 155, 0.28);
+  --axis-palette-16-text: #99d2cd; --axis-palette-16-bg: rgba(153, 210, 205, 0.14); --axis-palette-16-border: rgba(153, 210, 205, 0.28);
+  --axis-palette-17-text: #dcb1be; --axis-palette-17-bg: rgba(220, 177, 190, 0.14); --axis-palette-17-border: rgba(220, 177, 190, 0.28);
+  --axis-palette-18-text: #c0cb9c; --axis-palette-18-bg: rgba(192, 203, 156, 0.14); --axis-palette-18-border: rgba(192, 203, 156, 0.28);
+  --axis-palette-19-text: #abb3c4; --axis-palette-19-bg: rgba(171, 179, 196, 0.14); --axis-palette-19-border: rgba(171, 179, 196, 0.28);
+  --axis-palette-20-text: #e2b38e; --axis-palette-20-bg: rgba(226, 179, 142, 0.14); --axis-palette-20-border: rgba(226, 179, 142, 0.28);
+  --axis-palette-21-text: #9ec5dc; --axis-palette-21-bg: rgba(158, 197, 220, 0.14); --axis-palette-21-border: rgba(158, 197, 220, 0.28);
+  --axis-palette-22-text: #d5b9a4; --axis-palette-22-bg: rgba(213, 185, 164, 0.14); --axis-palette-22-border: rgba(213, 185, 164, 0.28);
+  --axis-palette-23-text: #a4d3bc; --axis-palette-23-bg: rgba(164, 211, 188, 0.14); --axis-palette-23-border: rgba(164, 211, 188, 0.28);
+  --axis-palette-24-text: #d5b1d0; --axis-palette-24-bg: rgba(213, 177, 208, 0.14); --axis-palette-24-border: rgba(213, 177, 208, 0.28);
+  --axis-palette-25-text: #dec093; --axis-palette-25-bg: rgba(222, 192, 147, 0.14); --axis-palette-25-border: rgba(222, 192, 147, 0.28);
+  --axis-palette-26-text: #96c8c1; --axis-palette-26-bg: rgba(150, 200, 193, 0.14); --axis-palette-26-border: rgba(150, 200, 193, 0.28);
+  --axis-palette-27-text: #cac4b6; --axis-palette-27-bg: rgba(202, 196, 182, 0.14); --axis-palette-27-border: rgba(202, 196, 182, 0.28);
+  --axis-palette-28-text: #dbaaa0; --axis-palette-28-bg: rgba(219, 170, 160, 0.14); --axis-palette-28-border: rgba(219, 170, 160, 0.28);
+  --axis-palette-29-text: #a8c1d5; --axis-palette-29-bg: rgba(168, 193, 213, 0.14); --axis-palette-29-border: rgba(168, 193, 213, 0.28);
+  --axis-palette-30-text: #b6cda2; --axis-palette-30-bg: rgba(182, 205, 162, 0.14); --axis-palette-30-border: rgba(182, 205, 162, 0.28);
+  --axis-palette-31-text: #d6b89f; --axis-palette-31-bg: rgba(214, 184, 159, 0.14); --axis-palette-31-border: rgba(214, 184, 159, 0.28);
+
   --axis-surface-panel-hover: #292a33;
   --axis-surface-selected: #323542;
 
@@ -252,4 +446,131 @@
   --accent-green: #8fe0ad;
   --accent-red-soft: rgba(180, 35, 24, 0.2);
   --accent-red: #ff9b90;
+}
+
+[data-theme='navy'] {
+  --axis-surface-canvas: #0B1120;
+  --axis-surface-panel: #111D32;
+  --axis-surface-muted: #1A2942;
+
+  --axis-text-primary: #F1F5F9;
+  --axis-text-secondary: #94A3B8;
+  --axis-text-muted: #64748B;
+  --axis-dialog-text-muted: #64748B;
+
+  --axis-line-default: #1E2E4A;
+  --axis-line-strong: #2A3F63;
+  --axis-dialog-divider: #1E2E4A;
+
+  /* 브랜드 포인트: Electric Sky Blue (#38BDF8) */
+  --axis-brand-primary: #38BDF8;
+  --axis-brand-primary-hover: #0EA5E9;
+  --axis-brand-primary-soft: rgba(56, 189, 248, 0.16);
+  --axis-brand-border: rgba(56, 189, 248, 0.42);
+  --axis-brand-badge-surface: rgba(56, 189, 248, 0.12);
+
+  --axis-text-on-brand: #0B1120;
+  --axis-text-icon-strong: #94A3B8;
+  --axis-text-selected: #38BDF8;
+  --axis-danger: #FB7185;
+  --axis-danger-soft: rgba(251, 113, 133, 0.18);
+  --axis-status-info: #38BDF8;
+  --axis-status-info-soft: rgba(56, 189, 248, 0.16);
+  --axis-status-info-border: rgba(56, 189, 248, 0.35);
+
+  --axis-status-success: #34D399;
+  --axis-status-success-soft: rgba(52, 211, 153, 0.18);
+  --axis-status-success-border: rgba(52, 211, 153, 0.35);
+
+  --axis-status-warning: #FBBF24;
+  --axis-status-warning-soft: rgba(251, 191, 36, 0.18);
+  --axis-status-warning-border: rgba(251, 191, 36, 0.35);
+
+  --axis-status-danger: #FB7185;
+  --axis-status-danger-soft: rgba(251, 113, 133, 0.18);
+  --axis-status-danger-border: rgba(251, 113, 133, 0.35);
+
+  --axis-status-neutral: #8493A8;
+  --axis-status-neutral-soft: rgba(132, 147, 168, 0.15);
+  --axis-status-neutral-border: rgba(132, 147, 168, 0.28);
+
+  --axis-badge-brand-text: #38BDF8;
+  --axis-badge-brand-bg: rgba(56, 189, 248, 0.14);
+  --axis-badge-brand-border: rgba(56, 189, 248, 0.3);
+
+  /* 32개 톤온톤 뮤티드 팔레트 (Midnight Navy) */
+  --axis-palette-0-text: #6EE7B7; --axis-palette-0-bg: rgba(110, 231, 183, 0.14); --axis-palette-0-border: rgba(110, 231, 183, 0.28);
+  --axis-palette-1-text: #93C5FD; --axis-palette-1-bg: rgba(147, 197, 253, 0.14); --axis-palette-1-border: rgba(147, 197, 253, 0.28);
+  --axis-palette-2-text: #A5B4FC; --axis-palette-2-bg: rgba(165, 180, 252, 0.14); --axis-palette-2-border: rgba(165, 180, 252, 0.28);
+  --axis-palette-3-text: #C4B5FD; --axis-palette-3-bg: rgba(196, 181, 253, 0.14); --axis-palette-3-border: rgba(196, 181, 253, 0.28);
+  --axis-palette-4-text: #F0ABFC; --axis-palette-4-bg: rgba(240, 171, 252, 0.14); --axis-palette-4-border: rgba(240, 171, 252, 0.28);
+  --axis-palette-5-text: #F472B6; --axis-palette-5-bg: rgba(244, 114, 182, 0.14); --axis-palette-5-border: rgba(244, 114, 182, 0.28);
+  --axis-palette-6-text: #FB923C; --axis-palette-6-bg: rgba(251, 146, 60, 0.14); --axis-palette-6-border: rgba(251, 146, 60, 0.28);
+  --axis-palette-7-text: #FCD34D; --axis-palette-7-bg: rgba(252, 211, 77, 0.14); --axis-palette-7-border: rgba(252, 211, 77, 0.28);
+  --axis-palette-8-text: #A3E635; --axis-palette-8-bg: rgba(163, 230, 53, 0.14); --axis-palette-8-border: rgba(163, 230, 53, 0.28);
+  --axis-palette-9-text: #4ADE80; --axis-palette-9-bg: rgba(74, 222, 128, 0.14); --axis-palette-9-border: rgba(74, 222, 128, 0.28);
+  --axis-palette-10-text: #2DD4BF; --axis-palette-10-bg: rgba(45, 212, 191, 0.14); --axis-palette-10-border: rgba(45, 212, 191, 0.28);
+  --axis-palette-11-text: #22D3EE; --axis-palette-11-bg: rgba(34, 211, 238, 0.14); --axis-palette-11-border: rgba(34, 211, 238, 0.28);
+  --axis-palette-12-text: #60A5FA; --axis-palette-12-bg: rgba(96, 165, 250, 0.14); --axis-palette-12-border: rgba(96, 165, 250, 0.28);
+  --axis-palette-13-text: #818CF8; --axis-palette-13-bg: rgba(129, 140, 248, 0.14); --axis-palette-13-border: rgba(129, 140, 248, 0.28);
+  --axis-palette-14-text: #A78BFA; --axis-palette-14-bg: rgba(167, 139, 250, 0.14); --axis-palette-14-border: rgba(167, 139, 250, 0.28);
+  --axis-palette-15-text: #E879F9; --axis-palette-15-bg: rgba(232, 121, 249, 0.14); --axis-palette-15-border: rgba(232, 121, 249, 0.28);
+  --axis-palette-16-text: #FB7185; --axis-palette-16-bg: rgba(251, 113, 133, 0.14); --axis-palette-16-border: rgba(251, 113, 133, 0.28);
+  --axis-palette-17-text: #F87171; --axis-palette-17-bg: rgba(248, 113, 113, 0.14); --axis-palette-17-border: rgba(248, 113, 113, 0.28);
+  --axis-palette-18-text: #FCA5A5; --axis-palette-18-bg: rgba(252, 165, 165, 0.14); --axis-palette-18-border: rgba(252, 165, 165, 0.28);
+  --axis-palette-19-text: #FED7AA; --axis-palette-19-bg: rgba(254, 215, 170, 0.14); --axis-palette-19-border: rgba(254, 215, 170, 0.28);
+  --axis-palette-20-text: #FDE68A; --axis-palette-20-bg: rgba(253, 230, 138, 0.14); --axis-palette-20-border: rgba(253, 230, 138, 0.28);
+  --axis-palette-21-text: #D9F99D; --axis-palette-21-bg: rgba(217, 249, 157, 0.14); --axis-palette-21-border: rgba(217, 249, 157, 0.28);
+  --axis-palette-22-text: #BBF7D0; --axis-palette-22-bg: rgba(187, 247, 208, 0.14); --axis-palette-22-border: rgba(187, 247, 208, 0.28);
+  --axis-palette-23-text: #99F6E4; --axis-palette-23-bg: rgba(153, 246, 228, 0.14); --axis-palette-23-border: rgba(153, 246, 228, 0.28);
+  --axis-palette-24-text: #A5F3FC; --axis-palette-24-bg: rgba(165, 243, 252, 0.14); --axis-palette-24-border: rgba(165, 243, 252, 0.28);
+  --axis-palette-25-text: #BAE6FD; --axis-palette-25-bg: rgba(186, 230, 253, 0.14); --axis-palette-25-border: rgba(186, 230, 253, 0.28);
+  --axis-palette-26-text: #BFDBFE; --axis-palette-26-bg: rgba(191, 219, 254, 0.14); --axis-palette-26-border: rgba(191, 219, 254, 0.28);
+  --axis-palette-27-text: #C7D2FE; --axis-palette-27-bg: rgba(199, 210, 254, 0.14); --axis-palette-27-border: rgba(199, 210, 254, 0.28);
+  --axis-palette-28-text: #CBD5E1; --axis-palette-28-bg: rgba(203, 213, 225, 0.14); --axis-palette-28-border: rgba(203, 213, 225, 0.28);
+  --axis-palette-29-text: #94A3B8; --axis-palette-29-bg: rgba(148, 163, 184, 0.14); --axis-palette-29-border: rgba(148, 163, 184, 0.28);
+  --axis-palette-30-text: #38BDF8; --axis-palette-30-bg: rgba(56, 189, 248, 0.14); --axis-palette-30-border: rgba(56, 189, 248, 0.28);
+  --axis-palette-31-text: #818CF8; --axis-palette-31-bg: rgba(129, 140, 248, 0.14); --axis-palette-31-border: rgba(129, 140, 248, 0.28);
+
+  --axis-surface-panel-hover: #18263E;
+  --axis-surface-selected: #1E3354;
+
+  --axis-glyph-background: #14223A;
+  --axis-glyph-color: #38BDF8;
+  --axis-glyph-border: #243859;
+
+  --axis-focus-outline: #38BDF8;
+
+  --surface-app: #0B1120;
+  --surface-shell: #0B1120;
+  --surface-sidebar: #111D32;
+  --surface-page: #0B1120;
+  --surface-panel: #111D32;
+  --surface-panel-muted: #16243C;
+  --surface-panel-subtle: #142138;
+  --surface-hover: #1A2942;
+  --surface-selected: #1E3354;
+  --surface-selected-strong: #274572;
+  --surface-input: #142138;
+  --surface-input-disabled: #16243C;
+
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-inverse: #0B1120;
+
+  --line-default: #1E2E4A;
+  --line-strong: #2A3F63;
+  --line-selected: #38BDF8;
+
+  --accent-blue-soft: rgba(56, 189, 248, 0.16);
+  --accent-blue: #38BDF8;
+  --accent-purple-soft: rgba(168, 85, 247, 0.18);
+  --accent-purple: #C084FC;
+  --accent-amber-soft: rgba(251, 191, 36, 0.18);
+  --accent-amber: #FBBF24;
+  --accent-green-soft: rgba(52, 211, 153, 0.18);
+  --accent-green: #34D399;
+  --accent-red-soft: rgba(251, 113, 133, 0.18);
+  --accent-red: #FB7185;
 }

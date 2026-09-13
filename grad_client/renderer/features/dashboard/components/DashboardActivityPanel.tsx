@@ -26,7 +26,7 @@ export function DashboardActivityPanel({
         <div>
           <h3 className={styles.sectionTitle}>최근 활동</h3>
         </div>
-        <Link to="/org/manage" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
+        <Link to="/workspace" className={[styles.inlineLink, styles.boardViewLink].join(' ')}>
           전체 보기
           <Icon name="chevronRight" size={15} />
         </Link>
@@ -41,7 +41,7 @@ export function DashboardActivityPanel({
                 ? `/work-items/${activity.entityId}`
                 : activity.entityType.toUpperCase() === 'COMMENT' && matchedWorkItemId
                   ? `/work-items/${matchedWorkItemId}`
-                  : '/org/manage'
+                  : '/workspace'
 
             const actorName = activity.actorName || (activity.actorUserId && usersById.get(activity.actorUserId)?.name) || activity.actorUserId
 

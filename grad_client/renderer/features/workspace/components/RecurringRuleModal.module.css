@@ -22,7 +22,7 @@
   background: var(--axis-surface-panel, #ffffff);
   border: 1px solid var(--axis-line-default, #e2e8f0);
   border-radius: var(--axis-radius-card, 14px);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--axis-shadow-dialog);
   overflow: hidden;
   animation: fadeInModal 0.2s ease-out;
 }
@@ -59,7 +59,7 @@
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: var(--axis-brand-subtle, rgba(99, 102, 241, 0.12));
+  background: var(--axis-brand-primary-soft);
   color: var(--axis-brand-primary, #6366f1);
 }
 
@@ -85,7 +85,7 @@
 }
 
 .closeButton:hover {
-  background: var(--axis-surface-hover, #f1f5f9);
+  background: var(--axis-surface-panel-hover, #f1f5f9);
   color: var(--axis-text-primary, #0f172a);
 }
 
@@ -114,7 +114,7 @@
 }
 
 .required {
-  color: #ef4444;
+  color: var(--axis-danger);
 }
 
 .input,
@@ -124,7 +124,7 @@
   padding: 0.6rem 0.85rem;
   border: 1px solid var(--axis-line-default, #cbd5e1);
   border-radius: var(--axis-radius-control, 8px);
-  background: var(--axis-surface-base, #ffffff);
+  background: var(--axis-surface-panel, #ffffff);
   color: var(--axis-text-primary, #0f172a);
   font-size: 0.9rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -136,7 +136,7 @@
 .textarea:focus {
   outline: none;
   border-color: var(--axis-brand-primary, #6366f1);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 0 3px var(--axis-brand-primary-soft);
 }
 
 .textarea {
@@ -168,7 +168,7 @@
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--axis-line-default, #cbd5e1);
   border-radius: 6px;
-  background: var(--axis-surface-base, #ffffff);
+  background: var(--axis-surface-panel, #ffffff);
   color: var(--axis-text-muted, #475569);
   font-size: 0.82rem;
   font-weight: 500;
@@ -178,11 +178,11 @@
 }
 
 .segmentBtn:hover {
-  background: var(--axis-surface-hover, #f8fafc);
+  background: var(--axis-surface-panel-hover, #f8fafc);
 }
 
 .segmentBtnActive {
-  background: var(--axis-brand-subtle, rgba(99, 102, 241, 0.12));
+  background: var(--axis-brand-primary-soft);
   border-color: var(--axis-brand-primary, #6366f1);
   color: var(--axis-brand-primary, #6366f1);
   font-weight: 600;
@@ -199,7 +199,7 @@
   height: 36px;
   border-radius: 50%;
   border: 1px solid var(--axis-line-default, #cbd5e1);
-  background: var(--axis-surface-base, #ffffff);
+  background: var(--axis-surface-panel, #ffffff);
   color: var(--axis-text-muted, #475569);
   font-size: 0.82rem;
   font-weight: 600;
@@ -217,11 +217,11 @@
 .dayBtnSelected {
   background: var(--axis-brand-primary, #6366f1);
   border-color: var(--axis-brand-primary, #6366f1);
-  color: #ffffff;
+  color: var(--axis-text-on-brand);
 }
 
 .holidayCard {
-  background: var(--axis-surface-subtle, #f8fafc);
+  background: var(--axis-surface-muted, #f8fafc);
   border: 1px solid var(--axis-line-default, #e2e8f0);
   border-radius: 10px;
   padding: 0.9rem 1rem;
@@ -292,8 +292,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.45rem 0.75rem;
-  background: var(--axis-surface-subtle, #f8fafc);
-  border: 1px solid var(--axis-line-subtle, #e2e8f0);
+  background: var(--axis-surface-muted, #f8fafc);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
   border-radius: 6px;
   font-size: 0.83rem;
 }
@@ -308,13 +308,13 @@
 .removeItemBtn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--axis-text-muted);
   cursor: pointer;
   padding: 2px 4px;
 }
 
 .removeItemBtn:hover {
-  color: #ef4444;
+  color: var(--axis-danger);
 }
 
 .dropzone {
@@ -322,7 +322,7 @@
   border-radius: 8px;
   padding: 1.25rem;
   text-align: center;
-  background: var(--axis-surface-subtle, #f8fafc);
+  background: var(--axis-surface-muted, #f8fafc);
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -334,7 +334,7 @@
 .dropzone:hover,
 .dropzoneActive {
   border-color: var(--axis-brand-primary, #6366f1);
-  background: var(--axis-brand-subtle, rgba(99, 102, 241, 0.05));
+  background: var(--axis-brand-primary-soft);
 }
 
 .dropzoneText {
@@ -358,7 +358,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.4rem 0.75rem;
-  background: var(--axis-surface-base, #ffffff);
+  background: var(--axis-surface-panel, #ffffff);
   border: 1px solid var(--axis-line-default, #e2e8f0);
   border-radius: 6px;
   font-size: 0.8rem;
@@ -380,14 +380,14 @@
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--axis-line-default, #e2e8f0);
-  background: var(--axis-surface-subtle, #f8fafc);
+  background: var(--axis-surface-muted, #f8fafc);
 }
 
 .cancelBtn {
   padding: 0.55rem 1rem;
   border: 1px solid var(--axis-line-default, #cbd5e1);
   border-radius: var(--axis-radius-action, 8px);
-  background: var(--axis-surface-base, #ffffff);
+  background: var(--axis-surface-panel, #ffffff);
   color: var(--axis-text-secondary, #475569);
   font-size: 0.85rem;
   font-weight: 500;
@@ -395,7 +395,7 @@
 }
 
 .cancelBtn:hover {
-  background: var(--axis-surface-hover, #f1f5f9);
+  background: var(--axis-surface-panel-hover, #f1f5f9);
 }
 
 .submitBtn {
@@ -403,7 +403,7 @@
   border: none;
   border-radius: var(--axis-radius-action, 8px);
   background: var(--axis-brand-primary, #6366f1);
-  color: #ffffff;
+  color: var(--axis-text-on-brand);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;

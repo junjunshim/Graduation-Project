@@ -3,6 +3,7 @@ import type { ActivityRecord } from '../../workspace/model/types'
 const ENTITY_TYPE_LABELS: Record<string, string> = {
   NODE: '조직 노드',
   WORK_ITEM: '업무',
+  RECURRING_RULE: '일정',
   ROLE: '역할',
   AUTHORITY: '권한',
   COMMENT: '댓글',
@@ -57,6 +58,14 @@ export function formatActivityMessage(
   const isCommentEntity = activity.entityType.toUpperCase() === 'COMMENT'
   const isFileEntity = activity.entityType.toUpperCase() === 'FILE'
   const roleName = activity.newValue || activity.fieldName || ''
+
+  if (activity.entityType.toUpperCase() === 'RECURRING_RULE') {
+    const actions: Record<string, string> = {
+      inserted: '생성', created: '생성', updated: '수정', deleted: '삭제', restored: '복구',
+    }
+    const action = actions[activity.actionType.toLowerCase()]
+    if (action) return `${actor}님이 ${target} 일정을 ${action}했습니다.`
+  }
 
   if (isRoleEntity) {
     switch (activity.actionType.toLowerCase()) {

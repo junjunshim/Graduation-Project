@@ -73,17 +73,20 @@
   top: 0;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   padding: var(--sidebar-padding);
   overflow: visible;
 }
 
 .shellWithCustomChrome .sidebarInner {
   top: var(--window-titlebar-height);
-  min-height: calc(100vh - var(--window-titlebar-height));
+  height: calc(100dvh - var(--window-titlebar-height));
+  min-height: 0;
 }
 
 .sidebarTop {
+  flex-shrink: 0;
   display: grid;
   gap: 0.75rem;
 }
@@ -195,15 +198,16 @@
 
 .workspaceList {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   flex-direction: column;
-  min-height: 15.5rem;
+  min-height: 0;
   margin: 0 calc(var(--sidebar-padding) * -1);
   border-top: 1px solid var(--line-default);
   border-bottom: 1px solid var(--line-default);
 }
 
 .workspaceListHeader {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -251,6 +255,15 @@
   align-content: start;
   gap: 0.25rem;
   padding: 0 0.75rem 1rem;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.recentWorkItems:focus-visible {
+  outline: 2px solid var(--axis-brand-primary);
+  outline-offset: -2px;
 }
 
 .recentWorkItem {
@@ -300,6 +313,7 @@
 }
 
 .sidebarBottom {
+  flex-shrink: 0;
   display: grid;
   gap: 0.2rem;
   margin: 0 calc(var(--sidebar-padding) * -1);
@@ -697,6 +711,7 @@
   .sidebarInner,
   .shellWithCustomChrome .sidebarInner {
     position: static;
+    height: auto;
     min-height: auto;
     padding: 1rem;
   }
@@ -714,6 +729,7 @@
   .workspaceList {
     flex: 0 0 auto;
     min-height: 160px;
+    max-height: 20rem;
   }
 
   .sidebarBottom {
@@ -751,4 +767,57 @@
   .placeholderPage {
     padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
   }
+}
+
+/* Keep panel tabs within the viewport while each long list scrolls independently. */
+.shell.shellWorkspacePanels {
+  height: 100dvh;
+  min-height: 0;
+  max-height: 100dvh;
+  overflow: hidden;
+  grid-template-columns: clamp(180px, 14vw, 224px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.shellWorkspacePanels.shellWithCustomChrome {
+  grid-template-rows: var(--window-titlebar-height) minmax(0, 1fr);
+}
+
+.shellWorkspacePanels.shellCollapsed {
+  grid-template-columns: 3.75rem minmax(0, 1fr);
+}
+
+.shellWorkspacePanels .workspace {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shellWorkspacePanels .workspaceBodyTimeline {
+  height: 100%;
+  min-height: 0;
+}
+
+.shellWorkspacePanels .sidebar {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.shellWorkspacePanels .sidebarInner {
+  position: relative;
+  top: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.shellWorkspacePanels .workspaceList {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+}
+
+.shellWorkspacePanels .navigation {
+  grid-template-columns: 1fr;
 }

@@ -168,14 +168,14 @@
   gap: 0.5rem;
   padding: 0.85rem 1.25rem;
   border-top: 1px solid var(--axis-line-default, #e2e8f0);
-  background: var(--axis-surface-panel-subtle, #f8fafc);
+  background: var(--axis-surface-muted);
 }
 
 .cancelBtn {
   padding: 0.45rem 0.9rem;
   border-radius: 6px;
   border: 1px solid var(--axis-line-default, #cbd5e1);
-  background: #ffffff;
+  background: var(--axis-surface-panel);
   color: var(--axis-text-secondary, #475569);
   font-size: 0.85rem;
   font-weight: 500;
@@ -183,15 +183,15 @@
 }
 
 .cancelBtn:hover {
-  background: #f1f5f9;
+  background: var(--axis-surface-panel-hover);
 }
 
 .deleteBtn {
   padding: 0.45rem 0.9rem;
   border-radius: 6px;
   border: none;
-  background: #ef4444;
-  color: #ffffff;
+  background: var(--axis-danger);
+  color: var(--axis-text-on-brand);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -201,7 +201,7 @@
 }
 
 .deleteBtn:hover:not(:disabled) {
-  background: #dc2626;
+  background: color-mix(in srgb, var(--axis-danger) 90%, var(--axis-text-primary));
 }
 
 .deleteBtn:disabled {
@@ -256,4 +256,3 @@
   font-size: 0.74rem;
   color: var(--axis-text-muted, #64748b);
 }
-

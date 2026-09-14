@@ -22,7 +22,7 @@
   background: var(--axis-surface-panel, #ffffff);
   border: 1px solid var(--axis-line-default, #e2e8f0);
   border-radius: var(--axis-radius-card, 14px);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--axis-shadow-dialog);
   overflow: hidden;
   animation: fadeInModal 0.2s ease-out;
 }
@@ -73,7 +73,7 @@
 }
 
 .closeButton:hover {
-  background: var(--axis-surface-hover, #f1f5f9);
+  background: var(--axis-surface-panel-hover, #f1f5f9);
   color: var(--axis-text-primary, #0f172a);
 }
 
@@ -104,7 +104,7 @@
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 4px;
-  background: var(--axis-brand-subtle, rgba(99, 102, 241, 0.1));
+  background: var(--axis-brand-primary-soft);
   color: var(--axis-brand-primary, #6366f1);
 }
 
@@ -119,10 +119,10 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
-  background: var(--axis-surface-subtle, #f8fafc);
+  background: var(--axis-surface-muted, #f8fafc);
   padding: 1rem;
   border-radius: 8px;
-  border: 1px solid var(--axis-line-subtle, #e2e8f0);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
 }
 
 .metaItem {
@@ -168,7 +168,7 @@
   font-size: 0.82rem;
   color: var(--axis-text-secondary, #334155);
   padding: 0.4rem 0.6rem;
-  background: var(--axis-surface-subtle, #f8fafc);
+  background: var(--axis-surface-muted, #f8fafc);
   border-radius: 6px;
 }
 
@@ -178,7 +178,7 @@
   justify-content: space-between;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--axis-line-default, #e2e8f0);
-  background: var(--axis-surface-subtle, #f8fafc);
+  background: var(--axis-surface-muted, #f8fafc);
 }
 
 .leftActions {
@@ -193,24 +193,24 @@
 
 .deleteBtn {
   padding: 0.5rem 0.85rem;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid var(--axis-status-danger-border);
   border-radius: var(--axis-radius-action, 8px);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  background: var(--axis-danger-soft);
+  color: var(--axis-danger);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .deleteBtn:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: color-mix(in srgb, var(--axis-danger) 20%, var(--axis-surface-panel));
 }
 
 .editBtn {
   padding: 0.5rem 0.85rem;
   border: 1px solid var(--axis-line-default, #cbd5e1);
   border-radius: var(--axis-radius-action, 8px);
-  background: var(--axis-surface-base, #ffffff);
+  background: var(--axis-surface-panel, #ffffff);
   color: var(--axis-text-secondary, #475569);
   font-size: 0.82rem;
   font-weight: 500;
@@ -218,7 +218,7 @@
 }
 
 .editBtn:hover {
-  background: var(--axis-surface-hover, #f1f5f9);
+  background: var(--axis-surface-panel-hover, #f1f5f9);
 }
 
 .fileItem {
@@ -229,8 +229,8 @@
   font-size: 0.82rem;
   color: var(--axis-text-secondary, #334155);
   padding: 0.5rem 0.75rem;
-  background: var(--axis-surface-subtle, #f8fafc);
-  border: 1px solid var(--axis-line-subtle, #e2e8f0);
+  background: var(--axis-surface-muted, #f8fafc);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
   border-radius: 6px;
 }
 
@@ -247,7 +247,7 @@
   padding: 0.5rem 1rem;
   border: 1px solid var(--axis-line-default, #cbd5e1);
   border-radius: var(--axis-radius-action, 8px);
-  background: var(--axis-surface-base, #ffffff);
+  background: var(--axis-surface-panel, #ffffff);
   color: var(--axis-text-primary, #1e293b);
   font-size: 0.82rem;
   font-weight: 500;
@@ -255,5 +255,5 @@
 }
 
 .closeFooterBtn:hover {
-  background: var(--axis-surface-hover, #f1f5f9);
+  background: var(--axis-surface-panel-hover, #f1f5f9);
 }

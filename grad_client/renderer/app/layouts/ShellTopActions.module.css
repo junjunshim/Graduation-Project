@@ -241,7 +241,8 @@
 }
 
 .shellSearchBox {
-  width: min(100%, 14rem);
+  width: clamp(14rem, 24vw, 22rem);
+  max-width: 100%;
 }
 
 .shellActionButtons {

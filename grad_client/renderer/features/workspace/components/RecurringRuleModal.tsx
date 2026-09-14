@@ -295,7 +295,7 @@ export function RecurringRuleModal({
 
         <form onSubmit={handleSubmit} className={styles.content}>
           {errorMessage && (
-            <div style={{ color: '#ef4444', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.1)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
+            <div style={{ color: 'var(--axis-status-danger)', fontSize: '0.85rem', background: 'var(--axis-status-danger-soft)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
               {errorMessage}
             </div>
           )}
@@ -390,7 +390,7 @@ export function RecurringRuleModal({
                   value={intervalValue}
                   onChange={(e) => setIntervalValue(Math.max(1, Number(e.target.value)))}
                 />
-                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--axis-text-secondary)' }}>
                   {frequency === 'DAILY' && '일마다'}
                   {frequency === 'WEEKLY' && '주마다'}
                   {frequency === 'MONTHLY' && '개월마다'}
@@ -433,7 +433,7 @@ export function RecurringRuleModal({
                     value={byMonthDay}
                     onChange={(e) => setByMonthDay(Math.min(31, Math.max(1, Number(e.target.value))))}
                   />
-                  <span style={{ fontSize: '0.85rem', color: '#64748b' }}>일</span>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--axis-text-secondary)' }}>일</span>
                 </div>
               </div>
             )}
@@ -544,7 +544,7 @@ export function RecurringRuleModal({
           <div className={styles.checklistSection}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>체크리스트 템플릿</span>
-              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>업무 인스턴스화 시 자동 이식됩니다.</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--axis-text-secondary)' }}>업무 인스턴스화 시 자동 이식됩니다.</span>
             </div>
             <div className={styles.checklistInputRow}>
               <input
@@ -590,7 +590,7 @@ export function RecurringRuleModal({
           <div className={styles.fileSection}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionTitle}>공통 템플릿 및 양식 첨부</span>
-              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>매뉴얼, 보고서 양식 등을 등록합니다.</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--axis-text-secondary)' }}>매뉴얼, 보고서 양식 등을 등록합니다.</span>
             </div>
             <div
               className={[styles.dropzone, isDragging ? styles.dropzoneActive : ''].join(' ')}
@@ -617,7 +617,7 @@ export function RecurringRuleModal({
             {/* 기존 등록된 서버 파일 목록 */}
             {existingFiles && existingFiles.length > 0 && (
               <div style={{ marginTop: '0.5rem' }}>
-                <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--axis-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
                   기존 등록된 파일 ({existingFiles.length}개)
                 </span>
                 <div className={styles.fileList}>
@@ -626,7 +626,7 @@ export function RecurringRuleModal({
                       <span className={styles.fileItemLeft}>
                         <Icon name="page" size={14} />
                         <span>{file.originalFileName}</span>
-                        <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                        <span style={{ color: 'var(--axis-text-muted)', fontSize: '0.72rem' }}>
                           ({(file.fileSize / 1024).toFixed(1)} KB)
                         </span>
                       </span>
@@ -657,7 +657,7 @@ export function RecurringRuleModal({
             {/* 새로 추가할 파일 목록 */}
             {attachedFiles.length > 0 && (
               <div style={{ marginTop: '0.5rem' }}>
-                <span style={{ fontSize: '0.78rem', color: '#6366f1', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+                <span style={{ fontSize: '0.78rem', color: 'var(--axis-brand-primary)', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
                   새로 추가할 파일 ({attachedFiles.length}개)
                 </span>
                 <div className={styles.fileList}>
@@ -666,7 +666,7 @@ export function RecurringRuleModal({
                       <span className={styles.fileItemLeft}>
                         <Icon name="page" size={14} />
                         <span>{file.name}</span>
-                        <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                        <span style={{ color: 'var(--axis-text-muted)', fontSize: '0.72rem' }}>
                           ({(file.size / 1024).toFixed(1)} KB)
                         </span>
                       </span>

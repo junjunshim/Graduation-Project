@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getCategoryBadgeStyle } from '../model/labels'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
-import { fetchRecurringRules, restoreRecurringRule } from '../data/recurringRuleService'
+import { fetchRecurringRules, fetchRecurringRuleDetail, restoreRecurringRule } from '../data/recurringRuleService'
 import { RecurringRuleModal } from './RecurringRuleModal'
 import { RecurringRuleDetailModal } from './RecurringRuleDetailModal'
 import { ConfirmRestoreModal } from './ConfirmRestoreModal'
@@ -10,6 +11,7 @@ import { showToast } from '../../notification/data/toastEvents'
 import { subscribeToRecurringCache } from '../data/workspaceCacheEvents'
 import type { OrganizationNodeRecord, UserRecord } from '../model/types'
 import styles from './WorkspaceSchedulesTab.module.css'
+import { ScheduleCardRow } from './ScheduleCardRow'
 
 type WorkspaceSchedulesTabProps = {
   activeNodeId?: number
@@ -75,7 +77,7 @@ function formatCycleText(rule: RecurringRuleRecord): string {
 /**
  * 오늘을 기준으로 다음 발생 일시(Next Occurrence) 및 D-Day 계산
  */
-function getNextOccurrenceInfo(rule: RecurringRuleRecord): {
+export function getNextOccurrenceInfo(rule: RecurringRuleRecord): {
   nextDate: Date | null
   dDay: number | null
   dateString: string
@@ -245,6 +247,31 @@ export function WorkspaceSchedulesTab({
   const [selectedRecurringRule, setSelectedRecurringRule] = useState<RecurringRuleRecord | null>(null)
   const [editingRecurringRule, setEditingRecurringRule] = useState<RecurringRuleRecord | null>(null)
   const [restoreConfirmTarget, setRestoreConfirmTarget] = useState<RecurringRuleRecord | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedRuleId = searchParams.get('ruleId')
+
+  useEffect(() => {
+    if (!requestedRuleId) return
+    let cancelled = false
+    const openRequestedRule = async () => {
+      const id = Number(requestedRuleId)
+      const rule = Number.isSafeInteger(id) && id > 0 ? await fetchRecurringRuleDetail(id) : null
+      if (cancelled) return
+      if (rule && rule.ownerNodeId === activeNodeId) {
+        if (rule.isDeleted) setRestoreConfirmTarget(rule)
+        else setSelectedRecurringRule(rule)
+      } else {
+        showToast({ title: '일정을 열 수 없습니다', content: '일정이 없거나 조회 권한이 없습니다.', created_at: new Date().toISOString() })
+      }
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current)
+        next.delete('ruleId')
+        return next
+      }, { replace: true })
+    }
+    void openRequestedRule()
+    return () => { cancelled = true }
+  }, [requestedRuleId, activeNodeId, setSearchParams])
 
   const reloadRules = () => {
     if (activeNodeId) {
@@ -376,11 +403,9 @@ export function WorkspaceSchedulesTab({
         className={[
           styles.recurringCard,
           rule.isDeleted ? styles.recurringCardDeleted : '',
-          isToday ? styles.recurringCardToday : '',
-          isSoon ? styles.recurringCardSoon : '',
         ].join(' ')}
       >
-        {/* 1. 좌측: 활성 상태면 D-Day & 주기 태그, 삭제 상태면 '삭제됨' 뱃지 */}
+        {/* 상단: D-Day 또는 삭제 상태와 반복 주기 */}
         <div className={styles.cardLeftCol}>
           {rule.isDeleted ? (
             <span className={styles.deletedBadge}>
@@ -413,9 +438,14 @@ export function WorkspaceSchedulesTab({
               </span>
             </>
           )}
+          {rule.isDeleted && (
+            <span className={styles.cycleDisplay} title="반복 설정">
+              {formatCycleText(rule)}
+            </span>
+          )}
         </div>
 
-        {/* 2. 중앙: 유형 뱃지, 일정 제목, 한 줄 설명 */}
+        {/* 본문: 카테고리, 일정명, 설명 */}
         <div className={styles.cardCenterCol}>
           <div className={styles.titleRow}>
             <span
@@ -434,11 +464,6 @@ export function WorkspaceSchedulesTab({
               {rule.title}
             </span>
 
-            {rule.isDeleted && (
-              <span className={styles.cycleDisplay} title="반복 설정">
-                {formatCycleText(rule)}
-              </span>
-            )}
           </div>
 
           {rule.description ? (
@@ -446,11 +471,11 @@ export function WorkspaceSchedulesTab({
               {rule.description}
             </p>
           ) : (
-            <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>설명 없음</span>
+            <span style={{ fontSize: '0.74rem', color: 'var(--axis-text-muted)' }}>설명 없음</span>
           )}
         </div>
 
-        {/* 3. 우측: 다음 일정(활성 시) 또는 삭제 안내, 메타(체크리스트, 서식파일, 공휴일), 상세보기/복구 버튼 */}
+        {/* 하단: 다음 실행일, 관련 정보와 상세보기/복구 */}
         <div className={styles.cardRightCol}>
           {!rule.isDeleted && (
             <div className={styles.nextRunBlock}>
@@ -471,7 +496,7 @@ export function WorkspaceSchedulesTab({
             <span
               style={{
                 fontSize: '0.7rem',
-                color: rule.excludeHolidays ? '#4f46e5' : '#94a3b8',
+                color: rule.excludeHolidays ? 'var(--axis-brand-primary)' : 'var(--axis-text-muted)',
                 fontWeight: 600,
               }}
               title="공휴일 처리 여부"
@@ -576,13 +601,13 @@ export function WorkspaceSchedulesTab({
           </span>
         </div>
       ) : (
-        <div className={styles.sectionsContainer}>
+        <div className={styles.sectionsContainer} role="region" aria-label="정기 일정 카드 목록" tabIndex={0}>
           {SECTION_CONFIG.map(({ key, title, icon }) => {
             const sectionRules = rulesByFrequency[key]
             if (sectionRules.length === 0) return null
 
             return (
-              <div key={key} className={styles.frequencySection}>
+              <div key={key} className={styles.frequencySection} data-frequency={key}>
                 <div className={styles.sectionHeader}>
                   <div className={styles.sectionTitleBadge}>
                     <Icon name={icon as any} size={15} />
@@ -592,9 +617,9 @@ export function WorkspaceSchedulesTab({
                   <div className={styles.sectionDivider} />
                 </div>
 
-                <div className={styles.recurringCardGrid}>
+                <ScheduleCardRow title={title}>
                   {sectionRules.map(renderCard)}
-                </div>
+                </ScheduleCardRow>
               </div>
             )
           })}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
@@ -21,6 +21,7 @@ import { getOrgSnapshot } from '../data/orgService'
 import { restoreWorkItem } from '../data/workItemService'
 import { getCascadeWorkItemSummary } from '../data/cascadeWorkItemHelper'
 import { ConfirmRestoreModal } from './ConfirmRestoreModal'
+import { TaskFilterDropdown } from './TaskFilterDropdown'
 import styles from './WorkspaceTasksTab.module.css'
 import { useWorkItemContextMenu } from './useWorkItemContextMenu'
 
@@ -29,6 +30,7 @@ type WorkspaceTasksTabProps = {
   deletedWorkItems?: WorkItemRecord[]
   allWorkItems?: WorkItemRecord[]
   members: Array<Pick<UserRecord, 'userId' | 'name'> & Partial<Pick<UserRecord, 'email'>>>
+  filterMembers?: WorkspaceTasksTabProps['members']
   workspaces?: Array<Pick<OrganizationNodeRecord, 'id' | 'name' | 'nodeType' | 'path'>>
   tableLabel?: string
   createHref?: string
@@ -100,6 +102,107 @@ function buildTaskTrees(items: WorkItemRecord[]): TaskTreeNode[] {
   return rootNodes
 }
 
+function TaskCardContent({ item, members, isTrashMode = false, childCount = 0 }: {
+  item: WorkItemRecord
+  members: WorkspaceTasksTabProps['members']
+  isTrashMode?: boolean
+  childCount?: number
+}) {
+  const statusTone = getWorkItemStatusTone(item.status)
+  const priorityMeta = getWorkItemPriorityMeta(item.priority)
+  const tag = getWorkItemTag(item)
+  const ownerName = getMemberName(item.ownerUserId, members)
+  const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
+
+  return (
+    <div className={styles.rowMainContent}>
+      {/* 좌측 영역: 1층 [업무코드][카테고리][업무명] / 2층 [담당자] + [댓글 수] */}
+      <div className={styles.rowLeftBlock}>
+        <div className={styles.rowTopLine}>
+          {isTrashMode ? (
+            <div className={styles.taskTitle} style={{ cursor: 'default' }}>
+              <span className={styles.trashDeletedBadge}>삭제됨</span>
+              <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+              {tag ? (
+                <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
+                  {tag.label}
+                </span>
+              ) : null}
+              <span className={styles.taskTitleText} style={{ textDecoration: 'line-through', opacity: 0.75 }}>
+                {item.title}
+              </span>
+            </div>
+          ) : (
+            <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
+              <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
+              {tag ? (
+                <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
+                  {tag.label}
+                </span>
+              ) : null}
+              <span className={styles.taskTitleText}>{item.title}</span>
+            </Link>
+          )}
+          {childCount > 0 ? <span className={styles.treeChildBadge}>하위 {childCount}</span> : null}
+        </div>
+
+        <div className={styles.rowBottomLine}>
+          <span className={styles.metaOwner}>
+            <UserAvatar name={ownerName} userId={item.ownerUserId} size="medium" />
+            <span className={styles.ownerName}>{ownerName}</span>
+          </span>
+
+          <span
+            className={[
+              styles.commentPill,
+              !item.commentCount ? styles.commentPillEmpty : '',
+            ].filter(Boolean).join(' ')}
+            title={item.commentCount ? `댓글 ${item.commentCount}개` : '댓글 없음'}
+          >
+            <Icon name="messageCircle" size={12} />
+            <span>{item.commentCount ?? 0}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* 우측 영역: 1층 [상태 뱃지][우선순위 뱃지] / 2층 [마감일] */}
+      <div className={styles.rowRightBlock}>
+        <div className={styles.rowTopLine}>
+          <span className={styles.statusBadge} data-tone={statusTone}>
+            {getWorkItemStatusLabel(item.status)}
+          </span>
+
+          <span className={styles.priority} data-priority={priorityMeta.tone}>
+            <strong>{priorityMeta.symbol}</strong>
+            {priorityMeta.label}
+          </span>
+        </div>
+
+        <div className={styles.rowBottomLine}>
+          {item.dueDate ? (
+            <span className={styles.metaDueDate}>
+              {item.status !== 'done' &&
+              (dueScheduleInfo.scheduleType === 'dueSoon' || dueScheduleInfo.scheduleType === 'overdue') ? (
+                <span
+                  className={styles.dueUrgentMark}
+                  data-tone={dueScheduleInfo.tone}
+                  title={dueScheduleInfo.label}
+                >
+                  !
+                </span>
+              ) : null}
+              <Icon name="calendar" size={12} />
+              <span>{formatWorkspaceShortDate(item.dueDate)}</span>
+            </span>
+          ) : (
+            <span className={styles.emptyDueDate}>-</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TaskTreeNodeCard({
   node,
   depth = 0,
@@ -120,112 +223,40 @@ function TaskTreeNodeCard({
   const { item, children } = node
   const hasChildren = children.length > 0
   const isCollapsed = collapsedMap.get(item.workItemId) ?? false
-  const statusTone = getWorkItemStatusTone(item.status)
-  const priorityMeta = getWorkItemPriorityMeta(item.priority)
-  const tag = getWorkItemTag(item)
-  const ownerName = getMemberName(item.ownerUserId, members)
-  const dueDate = item.dueDate ? formatWorkspaceShortDate(item.dueDate) : null
-  const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
 
   return (
     <div className={styles.treeNodeContainer}>
       <div
         className={[styles.treeRow, isTrashMode ? styles.trashRowDeleted : ''].join(' ')}
         data-work-item-id={item.workItemId}
+        style={{ '--tree-depth': depth } as CSSProperties}
       >
         <div className={styles.treeRowMain}>
-          <div className={styles.treeRowLeft}>
-            {hasChildren ? (
-              <button
-                type="button"
-                className={styles.treeExpandButton}
-                onClick={() => onToggleCollapse(item.workItemId)}
-                aria-label={isCollapsed ? '하위 업무 펼치기' : '하위 업무 접기'}
-              >
-                <Icon name={isCollapsed ? 'chevronRight' : 'chevronDown'} size={13} />
-              </button>
-            ) : (
-              <span className={styles.treeLeafDot} />
-            )}
-
-            <div className={styles.treeTitleGroup}>
-              <div className={styles.treeTitle}>
-                {isTrashMode ? (
-                  <span className={styles.trashDeletedBadge}>삭제됨</span>
-                ) : null}
-                <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
-                {isTrashMode ? (
-                  <span className={styles.taskTitleText} style={{ textDecoration: 'line-through' }}>
-                    {item.title}
-                  </span>
-                ) : (
-                  <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitleText}>
-                    {item.title}
-                  </Link>
-                )}
-              </div>
-              {item.description ? (
-                <p className={styles.treeDescription}>{item.description}</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className={styles.treeMetaGroup}>
-            {tag ? (
-              <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
-                {tag.label}
-              </span>
-            ) : null}
-
-            <span className={styles.statusBadge} data-tone={statusTone}>
-              {getWorkItemStatusLabel(item.status)}
-            </span>
-
-            <span className={styles.priority} data-priority={priorityMeta.tone}>
-              <strong>{priorityMeta.symbol}</strong>
-              {priorityMeta.label}
-            </span>
-
-            {dueDate ? (
-              <span className={styles.treeDueDate}>
-                {item.status !== 'done' &&
-                (dueScheduleInfo.scheduleType === 'dueSoon' || dueScheduleInfo.scheduleType === 'overdue') ? (
-                  <span
-                    className={styles.dueUrgentMark}
-                    data-tone={dueScheduleInfo.tone}
-                    title={dueScheduleInfo.label}
-                  >
-                    !
-                  </span>
-                ) : null}
-                <Icon name="calendar" size={13} />
-                {dueDate}
-              </span>
-            ) : null}
-
-            <div className={styles.treeOwner}>
-              <UserAvatar name={ownerName} userId={item.ownerUserId} size="small" />
-              <span>{ownerName}</span>
-            </div>
-
-            {hasChildren ? (
-              <span className={styles.treeChildBadge}>
-                하위 {children.length}
-              </span>
-            ) : null}
-
-            {isTrashMode && onRestore ? (
-              <button
-                type="button"
-                className={styles.trashRestoreButton}
-                onClick={() => onRestore(item)}
-                title="업무 복구하기"
-              >
-                <Icon name="restore" size={12} />
-                <span>복구</span>
-              </button>
-            ) : null}
-          </div>
+          {hasChildren ? (
+            <button
+              type="button"
+              className={styles.treeExpandButton}
+              onClick={() => onToggleCollapse(item.workItemId)}
+              aria-expanded={!isCollapsed}
+              aria-label={isCollapsed ? '하위 업무 펼치기' : '하위 업무 접기'}
+            >
+              <Icon name={isCollapsed ? 'chevronRight' : 'chevronDown'} size={13} />
+            </button>
+          ) : (
+            <span className={styles.treeLeafDot} />
+          )}
+          <TaskCardContent item={item} members={members} isTrashMode={isTrashMode} childCount={children.length} />
+          {isTrashMode && onRestore ? (
+            <button
+              type="button"
+              className={styles.trashRestoreButton}
+              onClick={() => onRestore(item)}
+              title="업무 복구하기"
+            >
+              <Icon name="restore" size={12} />
+              <span>복구</span>
+            </button>
+          ) : null}
         </div>
 
         {typeof item.progress === 'number' && item.progress > 0 ? (
@@ -325,7 +356,7 @@ function TaskTreeView({
         </div>
       </div>
 
-      <div className={styles.treeViewContent}>
+      <div className={styles.treeViewContent} role="region" aria-label="업무 트리 목록" tabIndex={0}>
         {trees.map((rootNode) => (
           <TaskTreeNodeCard
             key={rootNode.item.workItemId}
@@ -347,6 +378,7 @@ export function WorkspaceTasksTab({
   deletedWorkItems = [],
   allWorkItems = [],
   members,
+  filterMembers = members,
   workspaces = [],
   tableLabel = '워크스페이스 업무 목록',
   createHref = '/work-items?view=create',
@@ -399,7 +431,6 @@ export function WorkspaceTasksTab({
   const [rangeStart, setRangeStart] = useState('')
   const [rangeEnd, setRangeEnd] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
-  const [isFilterOpen, setIsFilterOpen] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
   const [openDropdown, setOpenDropdown] = useState<'workspace' | 'tag' | 'status' | 'schedule' | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -421,16 +452,13 @@ export function WorkspaceTasksTab({
   }, [openDropdown])
 
   const ownerOptions = useMemo(() => {
-    const visibleOwnerIds = new Set(workItems.map((item) => item.ownerUserId))
-
     return Array.from(
       new Map(
-        members
-          .filter((member) => visibleOwnerIds.has(member.userId))
+        filterMembers
           .map((member) => [member.userId, member]),
       ).values(),
-    )
-  }, [members, workItems])
+    ).sort((left, right) => left.name.localeCompare(right.name, 'ko'))
+  }, [filterMembers])
 
   const tagOptions = useMemo(() => {
     const map = new Map<string, { id: string; label: string }>()
@@ -494,6 +522,8 @@ export function WorkspaceTasksTab({
   }, [showDeletedTasks, deletedWorkItems.length])
 
   const filteredWorkItems = useMemo(() => {
+    if (showDeletedTasks && filterLayout === 'sidebar') return effectiveWorkItems
+
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
 
     return effectiveWorkItems.filter((item) => {
@@ -508,7 +538,9 @@ export function WorkspaceTasksTab({
         normalizedQuery.length === 0 ||
         item.title.toLocaleLowerCase('ko-KR').includes(normalizedQuery) ||
         (filterLayout === 'sidebar' && ownerName.toLocaleLowerCase('ko-KR').includes(normalizedQuery))
-      const matchesOwner = ownerFilter === 'all' || item.ownerUserId === ownerFilter
+      const selectedOwner = ownerOptions.find((member) => member.userId === ownerFilter)
+      const matchesOwner = ownerFilter === 'all' || item.ownerUserId === ownerFilter ||
+        Boolean(selectedOwner?.email && item.ownerUserId === selectedOwner.email)
 
       // 휴지통 모드일 때는 일반 상태/일정 필터를 무시하고 오직 삭제된 업무 전체를 대상 처리
       if (showDeletedTasks) {
@@ -556,6 +588,7 @@ export function WorkspaceTasksTab({
     filterLayout,
     members,
     ownerFilter,
+    ownerOptions,
     priorityFilter,
     rangeEnd,
     rangeStart,
@@ -566,7 +599,6 @@ export function WorkspaceTasksTab({
     tagFilter,
     workspaceFilter,
     workspaceOptions,
-    workspaces,
     effectiveWorkItems,
     showDeletedTasks,
   ])
@@ -655,24 +687,10 @@ export function WorkspaceTasksTab({
       aria-label={showHeading ? undefined : tableLabel}
     >
       {!showDeletedTasks && workItemContextMenu}
-      {showHeading ? (
+      {showHeading ? <h2 id="workspace-tasks-title" className={styles.visuallyHidden}>{tableLabel}</h2> : null}
+      {showHeading && filterLayout === 'toolbar' ? (
         <header className={styles.pageHeader}>
-          <div className={styles.pageHeaderTitleGroup}>
-            <h2 id="workspace-tasks-title">
-              {showDeletedTasks
-                ? '휴지통 (삭제된 업무)'
-                : viewMode === 'list'
-                  ? '업무 목록'
-                  : '업무 트리'}
-            </h2>
-            <p>
-              {showDeletedTasks
-                ? '삭제된 업무와 하위 과제를 확인하고 원래 상태로 복구합니다.'
-                : viewMode === 'list'
-                  ? '워크스페이스에 등록된 모든 업무를 표 형태로 조회하고 관리합니다.'
-                  : '루트 업무부터 하위 세부 과제까지 계층 구조로 한눈에 파악합니다.'}
-            </p>
-          </div>
+
 
           <div className={styles.headerActions}>
             <div className={styles.viewSegmentGroup} role="group" aria-label="업무 보기 방식">
@@ -730,11 +748,7 @@ export function WorkspaceTasksTab({
               <span>휴지통{deletedWorkItems.length > 0 ? ` (${deletedWorkItems.length})` : ''}</span>
             </button>
 
-            {!showDeletedTasks && filterLayout === 'sidebar' && !isFilterOpen ? (
-              <button type="button" className={styles.secondaryButton} onClick={() => setIsFilterOpen(true)}>
-                필터 열기
-              </button>
-            ) : null}
+
           </div>
         </header>
       ) : null}
@@ -1070,7 +1084,7 @@ export function WorkspaceTasksTab({
         </div>
       ) : null}
 
-      {showDeletedTasks ? (
+      {showDeletedTasks && filterLayout === 'toolbar' ? (
         <div className={styles.trashNoticeBanner} role="status">
           <div className={styles.trashNoticeLeft}>
             <Icon name="alertTriangle" size={16} />
@@ -1091,7 +1105,7 @@ export function WorkspaceTasksTab({
       <div
         className={[
           styles.contentGrid,
-          showDeletedTasks || filterLayout === 'toolbar' || !isFilterOpen ? styles.contentGridFull : '',
+          filterLayout === 'toolbar' ? styles.contentGridFull : '',
         ].filter(Boolean).join(' ')}
       >
         {viewMode === 'tree' ? (
@@ -1129,11 +1143,6 @@ export function WorkspaceTasksTab({
                 {pagedWorkItems.length > 0 ? (
                   pagedWorkItems.map((item) => {
                     const isSelected = selectedIds.has(item.workItemId)
-                    const ownerName = getMemberName(item.ownerUserId, members)
-                    const statusTone = getWorkItemStatusTone(item.status)
-                    const priorityMeta = getWorkItemPriorityMeta(item.priority)
-                    const tag = getWorkItemTag(item)
-                    const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
 
                     return (
                       <div
@@ -1151,90 +1160,7 @@ export function WorkspaceTasksTab({
                           />
                         </span>
 
-                        <div className={styles.rowMainContent}>
-                          {/* 좌측 영역: 1층 [업무코드][카테고리][업무명] / 2층 [담당자] + [댓글 수] */}
-                          <div className={styles.rowLeftBlock}>
-                            <div className={styles.rowTopLine}>
-                              {showDeletedTasks ? (
-                                <div className={styles.taskTitle} style={{ cursor: 'default' }}>
-                                  <span className={styles.trashDeletedBadge}>삭제됨</span>
-                                  <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
-                                  {tag ? (
-                                    <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
-                                      {tag.label}
-                                    </span>
-                                  ) : null}
-                                  <span className={styles.taskTitleText} style={{ textDecoration: 'line-through', opacity: 0.75 }}>
-                                    {item.title}
-                                  </span>
-                                </div>
-                              ) : (
-                                <Link to={`/work-items/${item.workItemId}`} className={styles.taskTitle}>
-                                  <span className={styles.taskCodeBadge}>{getWorkItemDisplayCode(item)}</span>
-                                  {tag ? (
-                                    <span className={styles.tagBadge} data-tone={tag.tone} style={tag.style}>
-                                      {tag.label}
-                                    </span>
-                                  ) : null}
-                                  <span className={styles.taskTitleText}>{item.title}</span>
-                                </Link>
-                              )}
-                            </div>
-
-                            <div className={styles.rowBottomLine}>
-                              <span className={styles.metaOwner}>
-                                <UserAvatar name={ownerName} userId={item.ownerUserId} size="small" />
-                                <span className={styles.ownerName}>{ownerName}</span>
-                              </span>
-
-                              <span
-                                className={[
-                                  styles.commentPill,
-                                  !item.commentCount ? styles.commentPillEmpty : '',
-                                ].filter(Boolean).join(' ')}
-                                title={item.commentCount ? `댓글 ${item.commentCount}개` : '댓글 없음'}
-                              >
-                                <Icon name="messageCircle" size={12} />
-                                <span>{item.commentCount ?? 0}</span>
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* 우측 영역: 1층 [상태 뱃지][우선순위 뱃지] / 2층 [마감일] */}
-                          <div className={styles.rowRightBlock}>
-                            <div className={styles.rowTopLine}>
-                              <span className={styles.statusBadge} data-tone={statusTone}>
-                                {getWorkItemStatusLabel(item.status)}
-                              </span>
-
-                              <span className={styles.priority} data-priority={priorityMeta.tone}>
-                                <strong>{priorityMeta.symbol}</strong>
-                                {priorityMeta.label}
-                              </span>
-                            </div>
-
-                            <div className={styles.rowBottomLine}>
-                              {item.dueDate ? (
-                                <span className={styles.metaDueDate}>
-                                  {item.status !== 'done' &&
-                                  (dueScheduleInfo.scheduleType === 'dueSoon' || dueScheduleInfo.scheduleType === 'overdue') ? (
-                                    <span
-                                      className={styles.dueUrgentMark}
-                                      data-tone={dueScheduleInfo.tone}
-                                      title={dueScheduleInfo.label}
-                                    >
-                                      !
-                                    </span>
-                                  ) : null}
-                                  <Icon name="calendar" size={12} />
-                                  <span>{formatWorkspaceShortDate(item.dueDate)}</span>
-                                </span>
-                              ) : (
-                                <span className={styles.emptyDueDate}>-</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                        <TaskCardContent item={item} members={members} isTrashMode={showDeletedTasks} />
 
                         {showDeletedTasks && (
                           <span role="cell" className={styles.actionCell}>
@@ -1261,10 +1187,12 @@ export function WorkspaceTasksTab({
             </div>
 
             <footer className={styles.tableFooter}>
-              <Link to={createHref} className={styles.addTaskLink}>
-                <Icon name="plus" size={15} />
-                새 업무 추가
-              </Link>
+              {!showDeletedTasks && (
+                <Link to={createHref} className={styles.addTaskLink}>
+                  <Icon name="plus" size={15} />
+                  새 업무 추가
+                </Link>
+              )}
 
               {pageCount > 1 ? (
                 <nav className={styles.pagination} aria-label="페이지 이동">
@@ -1308,20 +1236,31 @@ export function WorkspaceTasksTab({
           </div>
         )}
 
-        {!showDeletedTasks && filterLayout === 'sidebar' && isFilterOpen ? (
-          <aside className={styles.filterPanel} aria-label="업무 필터">
-            <div className={styles.filterHeader}>
-              <strong>필터</strong>
-              <button
-                type="button"
-                className={styles.iconButton}
-                onClick={() => setIsFilterOpen(false)}
-                aria-label="필터 닫기"
-              >
-                <Icon name="close" size={14} />
-              </button>
+        {filterLayout === 'sidebar' ? (
+          <aside className={styles.filterPanel} aria-label={showDeletedTasks ? '휴지통 안내' : '업무 필터'}>
+            <div className={styles.filterHeaderTabs} role="group" aria-label="업무 보기 방식">
+              {(['list', 'tree'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={[styles.filterTabButton, viewMode === mode ? styles.filterTabButtonActive : ''].join(' ')}
+                  aria-pressed={viewMode === mode}
+                  onClick={() => setViewMode(mode)}
+                >
+                  <Icon name={mode === 'list' ? 'list' : 'orgChart'} size={14} />
+                  <span>{mode === 'list' ? '업무 목록' : '업무 트리'}</span>
+                </button>
+              ))}
             </div>
 
+            {showDeletedTasks ? (
+              <div className={styles.trashGuideBody}>
+                <strong>삭제된 업무 {deletedWorkItems.length}개</strong>
+                <p>삭제된 업무를 확인하고 복구할 수 있습니다.</p>
+                <p>업무의 복구 버튼을 누르면 관련 하위 업무와 첨부파일의 복구 여부를 선택할 수 있습니다.</p>
+                <p>삭제된 업무는 15일간 보관 후 영구 삭제됩니다.</p>
+              </div>
+            ) : (
             <div className={styles.filterBody}>
               <label className={styles.filterGroup}>
                 <span>검색</span>
@@ -1339,26 +1278,22 @@ export function WorkspaceTasksTab({
                 </span>
               </label>
 
-              <label className={styles.filterGroup}>
-                <span>담당자</span>
-                <span className={styles.selectField}>
-                  <select
-                    value={ownerFilter}
-                    onChange={(event) => {
-                      setOwnerFilter(event.target.value)
-                      setCurrentPage(1)
-                    }}
-                  >
-                    <option value="all">전체</option>
-                    {ownerOptions.map((member) => (
-                      <option key={member.userId} value={member.userId}>
-                        {member.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Icon name="chevronDown" size={13} />
-                </span>
-              </label>
+              <TaskFilterDropdown
+                label="담당자"
+                value={ownerFilter}
+                options={[
+                  { value: 'all', label: '전체' },
+                  ...ownerOptions.map((member) => ({
+                    value: member.userId,
+                    label: member.name,
+                    icon: <UserAvatar name={member.name} userId={member.userId} size="small" />,
+                  })),
+                ]}
+                onChange={(value) => {
+                  setOwnerFilter(value)
+                  setCurrentPage(1)
+                }}
+              />
 
               <fieldset className={styles.statusFilters}>
                 <legend>상태</legend>
@@ -1377,72 +1312,75 @@ export function WorkspaceTasksTab({
                 ))}
               </fieldset>
 
-              <label className={styles.filterGroup}>
-                <span>일정/마감</span>
-                <span className={styles.selectField}>
-                  <select
-                    value={scheduleFilter}
-                    onChange={(event) => {
-                      setScheduleFilter(event.target.value as DueScheduleFilter)
-                      setCurrentPage(1)
-                    }}
-                  >
-                    <option value="all">전체</option>
-                    <option value="dueSoon">마감 임박 (7일 이내)</option>
-                    <option value="plenty">여유 있음</option>
-                    <option value="overdue">기한 지남</option>
-                    <option value="none">마감일 미정</option>
-                  </select>
-                  <Icon name="chevronDown" size={13} />
-                </span>
-              </label>
+              <TaskFilterDropdown
+                label="일정/마감"
+                value={scheduleFilter}
+                options={[
+                  { value: 'all', label: '전체' },
+                  { value: 'dueSoon', label: '마감 임박 (7일 이내)' },
+                  { value: 'plenty', label: '여유 있음' },
+                  { value: 'overdue', label: '기한 지남' },
+                  { value: 'none', label: '마감일 미정' },
+                ]}
+                onChange={(value) => {
+                  setScheduleFilter(value as DueScheduleFilter)
+                  setCurrentPage(1)
+                }}
+              />
 
-              <label className={styles.filterGroup}>
-                <span>우선순위</span>
-                <span className={styles.selectField}>
-                  <select
-                    value={priorityFilter}
-                    onChange={(event) => {
-                      setPriorityFilter(event.target.value as PriorityFilter)
-                      setCurrentPage(1)
-                    }}
-                  >
-                    <option value="all">전체</option>
-                    <option value="highest">매우 높음 (↑↑)</option>
-                    <option value="high">높음 (↑)</option>
-                    <option value="medium">보통 (−)</option>
-                    <option value="low">낮음 (↓)</option>
-                    <option value="lowest">매우 낮음 (↓↓)</option>
-                  </select>
-                  <Icon name="chevronDown" size={13} />
-                </span>
-              </label>
+              <TaskFilterDropdown
+                label="우선순위"
+                value={priorityFilter}
+                options={[
+                  { value: 'all', label: '전체' },
+                  { value: 'highest', label: '매우 높음 (↑↑)' },
+                  { value: 'high', label: '높음 (↑)' },
+                  { value: 'medium', label: '보통 (−)' },
+                  { value: 'low', label: '낮음 (↓)' },
+                  { value: 'lowest', label: '매우 낮음 (↓↓)' },
+                ]}
+                onChange={(value) => {
+                  setPriorityFilter(value as PriorityFilter)
+                  setCurrentPage(1)
+                }}
+              />
 
-              <label className={styles.filterGroup}>
-                <span>카테고리</span>
-                <span className={styles.selectField}>
-                  <select
-                    value={tagFilter}
-                    onChange={(event) => {
-                      setTagFilter(event.target.value as TagFilter)
-                      setCurrentPage(1)
-                    }}
-                  >
-                    <option value="all">전체</option>
-                    {tagOptions.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.label}
-                      </option>
-                    ))}
-                  </select>
-                  <Icon name="chevronDown" size={13} />
-                </span>
-              </label>
+              <TaskFilterDropdown
+                label="카테고리"
+                value={tagFilter}
+                options={[
+                  { value: 'all', label: '전체' },
+                  ...tagOptions.map((tag) => ({ value: tag.id, label: tag.label })),
+                ]}
+                onChange={(value) => {
+                  setTagFilter(value as TagFilter)
+                  setCurrentPage(1)
+                }}
+              />
             </div>
 
-            <button type="button" className={styles.resetButton} onClick={resetFilters}>
-              필터 초기화
-            </button>
+            )}
+            <div className={styles.filterFooter}>
+              <button
+                type="button"
+                className={[styles.filterTrashToggleBtn, showDeletedTasks ? styles.filterTrashToggleBtnActive : ''].join(' ')}
+                disabled={showDeletedTasks || deletedWorkItems.length === 0}
+                onClick={() => {
+                  setShowDeletedTasks(true)
+                  setViewMode('tree')
+                }}
+              >
+                <Icon name="trash" size={14} />
+                <span>휴지통{deletedWorkItems.length > 0 ? ` (${deletedWorkItems.length})` : ''}</span>
+              </button>
+              <button
+                type="button"
+                className={styles.resetButton}
+                onClick={showDeletedTasks ? () => setShowDeletedTasks(false) : resetFilters}
+              >
+                {showDeletedTasks ? '기본으로 돌아가기' : '필터 초기화'}
+              </button>
+            </div>
           </aside>
         ) : null}
       </div>

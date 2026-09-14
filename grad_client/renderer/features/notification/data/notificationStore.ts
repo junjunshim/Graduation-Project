@@ -3,6 +3,10 @@ import {
   subscribeToLiveNotifications,
   type LiveNotificationPayload,
 } from '../../workspace/data/workspaceCacheEvents'
+import { useResolvedActivities } from '../../dashboard/model/useResolvedActivities'
+import { getActivityLink } from '../../dashboard/model/activityLink'
+import { readWorkspaceDb } from '../../workspace/data/localStore'
+import type { WorkItemRecord } from '../../workspace/model/types'
 
 export type NotificationItem = LiveNotificationPayload & {
   id: string
@@ -103,8 +107,31 @@ export function useNotificationStore(userId?: string) {
 
   const unreadCount = notifications.filter((item) => !item.is_read).length
 
+  let workItems: WorkItemRecord[] = []
+  try { workItems = readWorkspaceDb().workItems } catch { /* The cache may not be initialized yet. */ }
+  const resolvedActivities = useResolvedActivities(notifications.map((item, index) => ({
+    id: item.notification_id ?? index,
+    nodeId: item.node_id ?? 0,
+    actorUserId: item.actor_user_id ?? '',
+    actorName: item.actor_name ?? '',
+    entityType: item.can_view_detail === false ? '' : item.entity_type ?? '',
+    entityId: item.entity_id ?? '',
+    targetName: item.target_name ?? '',
+    actionType: item.action ?? '',
+    createdAt: item.created_at,
+  })), workItems)
+  const resolvedNotifications = notifications.map((item, index) => {
+    const activity = resolvedActivities[index]
+    return activity.entityType === 'RECURRING_RULE' ? {
+      ...item,
+      entity_type: activity.entityType,
+      title: '일정 알림',
+      link_url: getActivityLink(activity) ?? item.link_url,
+    } : item
+  })
+
   return {
-    notifications,
+    notifications: resolvedNotifications,
     unreadCount,
     markAsRead,
     markAllAsRead,

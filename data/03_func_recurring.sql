@@ -121,7 +121,7 @@ BEGIN
     END IF;
 
     -- 6. 활동 로그 기록
-    PERFORM log_activity(p_owner_node_id, p_requester_email, 'WORK_ITEM', v_new_rule_id::VARCHAR, p_title, 'inserted');
+    PERFORM log_activity(p_owner_node_id, p_requester_email, 'RECURRING_RULE', v_new_rule_id::VARCHAR, p_title, 'inserted');
 
     -- 7. 생성된 단일 규칙 통합 반환
     RETURN QUERY
@@ -534,7 +534,7 @@ BEGIN
     END IF;
 
     -- 7. 활동 로그 기록
-    PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_rule_id::VARCHAR, COALESCE(p_title, v_old_title), 'updated');
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, COALESCE(p_title, v_old_title), 'updated');
 
     -- 8. 갱신된 단일 규칙 통합 반환
     RETURN QUERY
@@ -600,7 +600,7 @@ BEGIN
     SET is_deleted = TRUE
     WHERE rule_id = p_rule_id AND is_deleted = FALSE;
 
-    PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_rule_id::VARCHAR, v_title, 'deleted');
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_title, 'deleted');
 
     RETURN QUERY
     SELECT jsonb_build_object(
@@ -678,7 +678,7 @@ BEGIN
         WHERE rule_id = p_rule_id AND is_deleted = TRUE;
     END IF;
 
-    PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_rule_id::VARCHAR, v_title, 'restored');
+    PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_title, 'restored');
 
     RETURN QUERY
     SELECT * FROM get_recurring_rule_detail(p_requester_email, p_rule_id);

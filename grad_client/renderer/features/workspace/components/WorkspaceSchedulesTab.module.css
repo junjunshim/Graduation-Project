@@ -1,21 +1,28 @@
 .panel {
+  container-type: inline-size;
+  height: 100%;
+  min-height: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  background: var(--axis-surface-panel, #ffffff);
-  border: 1px solid var(--axis-line-subtle, #edf0f5);
+  background: var(--axis-surface-panel);
+  border: 1px solid var(--axis-line-default);
   border-radius: var(--axis-radius-surface, 12px);
   padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--axis-shadow-field);
 }
 
 .pageHeader {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 1.25rem;
-  border-bottom: 1px solid var(--axis-line-subtle, #edf0f5);
+  border-bottom: 1px solid var(--axis-line-default);
   flex-wrap: wrap;
 }
 
@@ -30,13 +37,13 @@
   font-size: 1.25rem;
   font-weight: 750;
   letter-spacing: -0.02em;
-  color: var(--axis-text-primary, #0f172a);
+  color: var(--axis-text-primary);
 }
 
 .pageHeaderTitleGroup p {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--axis-text-secondary, #64748b);
+  color: var(--axis-text-secondary);
 }
 
 .headerActions {
@@ -51,10 +58,10 @@
   gap: 6px;
   height: 34px;
   padding: 0 11px;
-  border: 1px solid var(--axis-line-default, #e2e8f0);
+  border: 1px solid var(--axis-line-default);
   border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-surface-panel, #ffffff);
-  color: var(--axis-text-secondary, #475569);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-secondary);
   font: inherit;
   font-size: 0.78rem;
   font-weight: 700;
@@ -64,8 +71,8 @@
 }
 
 .trashToggleBtn:hover {
-  background: var(--axis-surface-hover, #f1f5f9);
-  color: var(--axis-text-primary, #0f172a);
+  background: var(--axis-surface-panel-hover);
+  color: var(--axis-text-primary);
 }
 
 .trashToggleBtn:disabled {
@@ -75,14 +82,14 @@
 }
 
 .trashToggleBtnActive {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.35);
-  color: #ef4444;
+  background: var(--axis-status-danger-soft);
+  border-color: var(--axis-status-danger-border);
+  color: var(--axis-status-danger);
 }
 
 .trashToggleBtnActive:hover {
-  background: rgba(239, 68, 68, 0.16);
-  color: #dc2626;
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
 }
 
 .restoreButton {
@@ -91,9 +98,9 @@
   gap: 0.4rem;
   padding: 0.45rem 0.85rem;
   border-radius: var(--axis-radius-sm, 6px);
-  background: rgba(37, 99, 235, 0.08);
-  border: 1px solid rgba(37, 99, 235, 0.3);
-  color: #2563eb;
+  background: var(--axis-status-info-soft);
+  border: 1px solid var(--axis-status-info-border);
+  color: var(--axis-status-info);
   font-size: 0.82rem;
   font-weight: 700;
   cursor: pointer;
@@ -101,15 +108,13 @@
 }
 
 .restoreButton:hover {
-  background: rgba(37, 99, 235, 0.16);
-  border-color: #2563eb;
-  color: #1d4ed8;
+  background: var(--axis-status-info-soft);
+  border-color: var(--axis-status-info);
+  color: var(--axis-status-info);
 }
 
-.recurringCardDeleted {
-  border-color: rgba(239, 68, 68, 0.25);
-  background: rgba(239, 68, 68, 0.015);
-  opacity: 0.92;
+.recurringCard.recurringCardDeleted {
+  border-color: var(--axis-status-danger-border);
 }
 
 .deletedBadge {
@@ -119,9 +124,9 @@
   gap: 4px;
   padding: 3px 8px;
   border-radius: 4px;
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.28);
-  color: #dc2626;
+  background: var(--axis-status-danger-soft);
+  border: 1px solid var(--axis-status-danger-border);
+  color: var(--axis-status-danger);
   font-size: 0.72rem;
   font-weight: 800;
   white-space: nowrap;
@@ -133,8 +138,8 @@
   gap: 0.4rem;
   padding: 0.5rem 1rem;
   border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-brand-primary, #6366f1);
-  color: #ffffff;
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
   border: none;
   font-size: 0.85rem;
   font-weight: 650;
@@ -143,7 +148,7 @@
 }
 
 .primaryButton:hover {
-  background: var(--axis-brand-hover, #4f46e5);
+  background: var(--axis-brand-primary-hover);
 }
 
 .primaryButton:active {
@@ -156,9 +161,9 @@
   gap: 0.4rem;
   padding: 0.5rem 0.85rem;
   border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-surface-muted, #f8fafc);
-  border: 1px solid var(--axis-line-default, #e2e8f0);
-  color: var(--axis-text-secondary, #475569);
+  background: var(--axis-surface-muted);
+  border: 1px solid var(--axis-line-default);
+  color: var(--axis-text-secondary);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -166,21 +171,49 @@
 }
 
 .secondaryButton:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: var(--axis-text-primary, #0f172a);
+  background: var(--axis-surface-muted);
+  border-color: var(--axis-line-strong);
+  color: var(--axis-text-primary);
 }
 
 .sectionsContainer {
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: auto;
+  padding: 2px;
+  scrollbar-width: none !important;
+}
+
+.sectionsContainer::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
 }
 
 .frequencySection {
+  --schedule-tone: 2%;
+  min-width: 0;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+}
+
+.frequencySection[data-frequency='WEEKLY'] {
+  --schedule-tone: 4%;
+}
+
+.frequencySection[data-frequency='MONTHLY'] {
+  --schedule-tone: 6%;
+}
+
+.frequencySection[data-frequency='YEARLY'] {
+  --schedule-tone: 8%;
 }
 
 .sectionHeader {
@@ -195,8 +228,8 @@
   gap: 0.4rem;
   padding: 0.3rem 0.75rem;
   border-radius: 6px;
-  background: var(--axis-surface-muted, #f1f5f9);
-  color: var(--axis-text-primary, #1e293b);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-primary);
   font-size: 0.85rem;
   font-weight: 750;
   white-space: nowrap;
@@ -204,59 +237,77 @@
 
 .sectionCount {
   font-size: 0.76rem;
-  color: var(--axis-text-secondary, #64748b);
+  color: var(--axis-text-secondary);
   font-weight: 600;
 }
 
 .sectionDivider {
   flex: 1;
   height: 1px;
-  background: var(--axis-line-default, #e2e8f0);
+  background: var(--axis-line-default);
 }
 
 .recurringCardGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(100%, 21rem);
+  grid-template-rows: auto;
+  justify-content: start;
+  gap: 1rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  cursor: grab;
+  padding: 2px;
+  scrollbar-width: none !important;
+}
+
+.recurringCardGrid::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.cardRowDragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.recurringCardGrid:focus-visible {
+  outline: 2px solid var(--axis-brand-primary);
+  outline-offset: -2px;
 }
 
 .recurringCard {
-  background: var(--axis-surface-panel, #ffffff);
-  border: 1px solid var(--axis-line-default, #e2e8f0);
+  scroll-snap-align: start;
+  background: color-mix(in srgb, var(--axis-text-primary) var(--schedule-tone, 2%), var(--axis-surface-panel));
+  border: 1px solid var(--axis-line-default);
   border-radius: 8px;
-  padding: 0.75rem 1.1rem;
+  padding: 1rem;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.9rem;
   transition: all 0.15s ease;
   position: relative;
 }
 
 .recurringCard:hover {
-  border-color: #cbd5e1;
-  background: var(--axis-surface-hover, #f8fafc);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
-}
-
-.recurringCardToday {
-  border-color: rgba(239, 68, 68, 0.5) !important;
-  background: rgba(239, 68, 68, 0.02) !important;
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3) !important;
-}
-
-.recurringCardSoon {
-  border-color: rgba(245, 158, 11, 0.45) !important;
-  background: rgba(245, 158, 11, 0.02) !important;
+  border-color: var(--axis-line-strong);
+  box-shadow: var(--axis-shadow-row-hover);
 }
 
 /* 좌측: D-Day 뱃지 & 반복 주기 */
 .cardLeftCol {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
-  min-width: 140px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
   flex-shrink: 0;
 }
 
@@ -273,31 +324,31 @@
 }
 
 .dDayToday {
-  background: #ef4444;
-  color: #ffffff;
+  background: var(--axis-status-danger);
+  color: var(--axis-text-on-brand);
   animation: pulseToday 2s infinite ease-in-out;
 }
 
 .dDayTomorrow {
-  background: #f59e0b;
-  color: #ffffff;
+  background: var(--axis-status-warning);
+  color: var(--axis-text-on-brand);
 }
 
 .dDaySoon {
-  background: rgba(245, 158, 11, 0.15);
-  color: #d97706;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
+  border: 1px solid var(--axis-status-warning-border);
 }
 
 .dDayNormal {
-  background: var(--axis-surface-muted, #f1f5f9);
-  color: var(--axis-text-secondary, #475569);
-  border: 1px solid var(--axis-line-subtle, #e2e8f0);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
+  border: 1px solid var(--axis-line-default);
 }
 
 .dDayPast {
-  background: #f1f5f9;
-  color: #94a3b8;
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-muted);
 }
 
 @keyframes pulseToday {
@@ -309,35 +360,40 @@
 .cycleDisplay {
   font-size: 0.76rem;
   font-weight: 650;
-  color: var(--axis-brand-primary, #4f46e5);
-  background: rgba(79, 70, 229, 0.08);
+  color: var(--axis-brand-primary);
+  background: var(--axis-brand-badge-surface);
   padding: 2px 6px;
   border-radius: 4px;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* 중앙: 제목, 설명, 유형 태그 */
 .cardCenterCol {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.5rem;
   flex: 1;
   min-width: 0;
 }
 
 .titleRow {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
 
 .recurringCardTitle {
-  font-size: 0.92rem;
-  font-weight: 750;
-  color: var(--axis-text-primary, #0f172a);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--axis-text-primary);
   letter-spacing: -0.01em;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -345,38 +401,46 @@
 .recurringCardDescription {
   margin: 0;
   font-size: 0.78rem;
-  color: var(--axis-text-secondary, #64748b);
+  color: var(--axis-text-secondary);
   line-height: 1.4;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 /* 우측: 다음 일정, 메타 정보(체크리스트, 파일), 액션 버튼 */
 .cardRightCol {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 1.25rem;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--axis-line-default);
   flex-shrink: 0;
 }
 
 .nextRunBlock {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 2px;
-  min-width: 130px;
+  min-width: 0;
 }
 
 .nextRunLabel {
   font-size: 0.7rem;
-  color: var(--axis-text-muted, #94a3b8);
+  color: var(--axis-text-muted);
   font-weight: 600;
 }
 
 .nextRunValue {
   font-size: 0.82rem;
-  color: var(--axis-text-primary, #1e293b);
+  color: var(--axis-text-primary);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -386,8 +450,9 @@
   align-items: center;
   gap: 0.6rem;
   font-size: 0.74rem;
-  color: #64748b;
-  min-width: 140px;
+  color: var(--axis-text-secondary);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .metaItem {
@@ -400,6 +465,7 @@
 .cardActions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .emptyState {
@@ -410,15 +476,15 @@
   gap: 0.6rem;
   padding: 4rem 1.5rem;
   text-align: center;
-  color: var(--axis-text-muted, #64748b);
+  color: var(--axis-text-muted);
 }
 
 .emptyState strong {
   font-size: 1.05rem;
-  color: var(--axis-text-primary, #1e293b);
+  color: var(--axis-text-primary);
 }
 
 .emptyState span {
   font-size: 0.85rem;
-  color: var(--axis-text-secondary, #64748b);
+  color: var(--axis-text-secondary);
 }

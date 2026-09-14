@@ -2,8 +2,9 @@ import { selectWorkspaceRoot } from '../../workspace/data/workspaceDirectorySele
 import type { LiveNotificationPayload } from '../../workspace/data/workspaceCacheEvents'
 import { readWorkspaceDb } from '../../workspace/data/localStore'
 import { showToast } from '../data/toastEvents'
+import { fetchRecurringRules } from '../../workspace/data/recurringRuleService'
 
-export function navigateNotification(
+export async function navigateNotification(
   notification: Pick<
     LiveNotificationPayload,
     'node_id' | 'link_url' | 'entity_type' | 'entity_id' | 'action'
@@ -14,6 +15,23 @@ export function navigateNotification(
   const isDirectlyDeleted = notification.action === 'deleted'
   const entityType = notification.entity_type
   const entityId = notification.entity_id
+
+  if (entityType === 'WORK_ITEM' && entityId && /^[1-9]\d*$/.test(entityId) && notification.node_id != null) {
+    let isKnownWorkItem = false
+    try { isKnownWorkItem = readWorkspaceDb().workItems.some((item) => item.workItemId === entityId) } catch { /* Cache is optional. */ }
+    if (!isKnownWorkItem) {
+      const rules = await fetchRecurringRules(notification.node_id, true).catch(() => [])
+      if (rules.some((rule) => String(rule.ruleId) === entityId && rule.ownerNodeId === notification.node_id)) {
+        return navigateNotification({ ...notification, entity_type: 'RECURRING_RULE' }, navigate, userId)
+      }
+    }
+  }
+
+  if (entityType === 'RECURRING_RULE' && notification.node_id != null && entityId) {
+    selectWorkspaceRoot(String(notification.node_id), false, userId)
+    navigate(`/workspace?view=schedules&nodeId=${notification.node_id}&ruleId=${encodeURIComponent(entityId)}`)
+    return
+  }
 
   // 1. 로컬 캐시에서 해당 항목이 실제로 삭제되었는지(isDeleted === true 또는 캐시에서 이미 삭제됨) 확인
   let isAlreadyDeleted = isDirectlyDeleted

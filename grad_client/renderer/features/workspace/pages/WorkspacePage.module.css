@@ -44,12 +44,52 @@
   --timeline-track-gap: 0.75rem;
 }
 
+.page.fullHeightPage {
+  --surface-page: var(--axis-surface-canvas);
+  --surface-panel: var(--axis-surface-panel);
+  --surface-panel-muted: var(--axis-surface-muted);
+  --surface-panel-subtle: color-mix(in srgb, var(--axis-surface-muted) 62%, var(--axis-surface-panel));
+  --surface-hover: var(--axis-surface-muted);
+  --text-primary: var(--axis-text-primary);
+  --text-secondary: var(--axis-text-secondary);
+  --text-muted: var(--axis-text-muted);
+  --text-inverse: var(--axis-text-on-brand);
+  --line-default: var(--axis-line-default);
+  --line-strong: var(--axis-line-strong);
+  --accent-blue: var(--axis-status-info);
+  --accent-blue-soft: var(--axis-status-info-soft);
+  --accent-purple: var(--axis-brand-primary);
+  --accent-purple-soft: var(--axis-brand-primary-soft);
+  --accent-amber: var(--axis-status-warning);
+  --accent-amber-soft: var(--axis-status-warning-soft);
+  --accent-green: var(--axis-status-success);
+  --accent-green-soft: var(--axis-status-success-soft);
+  --accent-red: var(--axis-danger);
+  --accent-red-soft: var(--axis-danger-soft);
+  --workspace-ink: var(--axis-text-primary);
+  --workspace-line: var(--axis-line-default);
+  --workspace-soft-line: color-mix(in srgb, var(--axis-line-default) 58%, transparent);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  padding-bottom: 1.1rem;
+}
+
+.page.overviewPage,
+.page.tasksPage,
+.page.schedulesPage,
+.page.filesPage,
+.page.membersPage,
+.page.rolesPage {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .page.timelinePage {
   --surface-panel-muted: var(--surface-panel);
   --surface-panel-subtle: var(--surface-panel);
   --surface-hover: var(--surface-panel);
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100%;
   overflow: hidden;
 }
 
@@ -107,6 +147,13 @@
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+.memberStack > span {
+  width: auto;
+  height: auto;
+  border: 0;
+  background: transparent;
 }
 
 .memberStack > span + span,

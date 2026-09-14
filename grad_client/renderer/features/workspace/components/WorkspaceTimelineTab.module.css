@@ -2,7 +2,7 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
-  min-height: 0;
+  min-height: 100%;
   height: clamp(36rem, calc(100dvh - 9rem), 50rem);
   overflow: hidden;
   border: 1px solid var(--line-default);
@@ -541,7 +541,7 @@
   flex-direction: column;
   width: calc(var(--timeline-label-width) + var(--timeline-track-width));
   min-width: 100%;
-  min-height: calc(100% - var(--timeline-date-header-height));
+  min-height: 100%;
   background-image:
     linear-gradient(to right, var(--surface-panel) var(--timeline-label-width), transparent var(--timeline-label-width)),
     linear-gradient(to right, var(--line-default) 1px, transparent 1px);
@@ -610,7 +610,23 @@
 
 .treeGroup {
   border-bottom: 0;
-  padding-block: 0.5rem;
+  padding-block: 0;
+}
+
+.treeGroup::before,
+.treeGroup::after {
+  content: '';
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  display: block;
+  flex: 0 0 0.5rem;
+  width: var(--timeline-label-width);
+  height: 0.5rem;
+  box-sizing: border-box;
+  border-right: 1px solid var(--line-default);
+  background: var(--surface-panel);
+  pointer-events: none;
 }
 
 .treeGroup + .treeGroup {

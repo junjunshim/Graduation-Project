@@ -119,7 +119,7 @@ export async function fetchRecurringRuleDetail(ruleId: number): Promise<Recurrin
   } catch (error) {
     console.warn('[recurringRuleService] fetchRecurringRuleDetail fallback to local cache:', error)
   }
-  const all = getLocalRecurringRules()
+  const all = getLocalRecurringRules(undefined, true)
   return all.find((r) => r.ruleId === ruleId) ?? null
 }
 

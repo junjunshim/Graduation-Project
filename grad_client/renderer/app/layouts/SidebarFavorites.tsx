@@ -58,7 +58,7 @@ export function SidebarFavorites({ userId }: { userId: string }) {
           <Icon name="plus" size={14} /><span className={styles.srOnly}>즐겨찾기 추가</span>
         </button>
       </div>
-      <div className={styles.recentWorkItems}>
+      <div className={styles.recentWorkItems} role="region" aria-label="즐겨찾기 목록" tabIndex={0}>
         {favorites.map((option) => (
           <Link key={`${option.type}:${option.id}`} to={option.path} className={styles.recentWorkItem}
             title={`${option.type === 'workspace' ? '워크스페이스' : '업무'}: ${option.name}`}

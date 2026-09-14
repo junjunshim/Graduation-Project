@@ -155,13 +155,13 @@ function formatTickLabel(timestamp: number, stepDays: number) {
 function getTimelineEntries(workItems: WorkItemRecord[]) {
   return workItems
     .map((item): TimelineEntry | null => {
-      const parsedStart = parseWorkspaceDay(item.startDate) ?? parseWorkspaceDay(item.dueDate)
+      const parsedStart = parseWorkspaceDay(item.startDate)
+      const parsedEnd = parseWorkspaceDay(item.dueDate)
 
-      if (parsedStart === null) {
+      if (parsedStart === null || parsedEnd === null) {
         return null
       }
 
-      const parsedEnd = parseWorkspaceDay(item.dueDate) ?? parsedStart + 6 * MS_PER_DAY
       const start = Math.min(parsedStart, parsedEnd)
       const end = Math.max(parsedStart, parsedEnd)
 
@@ -248,10 +248,11 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
   const groups = useMemo<TimelineGroup[]>(() => {
     if (viewMode === 'tree') {
       const entryMap = new Map(entries.map((entry) => [entry.item.workItemId, entry]))
-      const itemMap = new Map(workItems.map((item) => [item.workItemId, item]))
+      const scheduledItems = entries.map((entry) => entry.item)
+      const itemMap = new Map(scheduledItems.map((item) => [item.workItemId, item]))
       const children = new Map<string, WorkItemRecord[]>()
       const roots: WorkItemRecord[] = []
-      const sortedItems = [...workItems].sort((left, right) =>
+      const sortedItems = [...scheduledItems].sort((left, right) =>
         left.workItemId.localeCompare(right.workItemId, 'en', { numeric: true }),
       )
       sortedItems.forEach((item) => {
@@ -271,7 +272,7 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
         const descendants = children.get(item.workItemId) ?? []
         if (!hidden) {
           treeEntries.push({
-            ...(entryMap.get(item.workItemId) ?? { item, start: today, endExclusive: today, unscheduled: true }),
+            ...entryMap.get(item.workItemId)!,
             depth,
             hasChildren: descendants.length > 0,
           })
@@ -338,7 +339,7 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
         tone: groupData.tone || TIMELINE_TONES[index % TIMELINE_TONES.length],
         style: getCategoryBadgeStyle(groupData.name),
       }))
-  }, [entries, viewMode, workItems, collapsedTaskIds, today])
+  }, [entries, viewMode, collapsedTaskIds])
 
   const range = useMemo(() => getTimelineRange(entries, today), [entries, today])
   const totalDays = Math.max(1, Math.ceil((range.end - range.start) / MS_PER_DAY))
@@ -959,11 +960,11 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
         버튼으로 업무 목록을 접거나 펼칠 수 있습니다.
       </p>
 
-      {(viewMode === 'tree' ? workItems.length === 0 : entries.length === 0) ? (
+      {entries.length === 0 ? (
         <div className={styles.emptyState}>
           <Icon name="calendar" size={22} />
           <strong>표시할 일정이 없습니다.</strong>
-          <span>시작일 또는 마감일이 있는 업무가 여기에 표시됩니다.</span>
+          <span>시작일과 마감일이 모두 있는 업무가 여기에 표시됩니다.</span>
         </div>
       ) : (
         <div

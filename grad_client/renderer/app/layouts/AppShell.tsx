@@ -78,6 +78,11 @@ export function AppShell() {
   const isWorkspaceRoute = location.pathname === '/workspace'
   const isWorkspaceTimelineRoute =
     isWorkspaceRoute && searchParams.get('view') === 'timeline'
+  const isWorkspacePanelRoute =
+    (isWorkspaceRoute &&
+      searchParams.get('view') !== 'timeline') ||
+    location.pathname === '/setup/top-node' ||
+    location.pathname === '/setup/sub-node'
   const isWorkItemEditRoute = /^\/work-items\/[^/]+\/edit$/.test(location.pathname)
   const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname) || isWorkItemEditRoute
   const workItemDetailMatch = location.pathname.match(/^\/work-items\/([^/]+)$/)
@@ -140,9 +145,10 @@ export function AppShell() {
   const isWorkspaceSelectHierarchyRoute = isWorkspaceSelectRoute && !isWorkspaceSelectListView
   const shellClassName = [
     styles.shell,
+    isWorkspacePanelRoute ? styles.shellWorkspacePanels : '',
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
     isSidebarCollapsed ? styles.shellCollapsed : '',
-    isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.shellTimeline : '',
+    isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.shellTimeline : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -186,7 +192,7 @@ export function AppShell() {
         <div
           className={[
             styles.workspaceBody,
-            isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.workspaceBodyTimeline : '',
+            isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.workspaceBodyTimeline : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -200,7 +206,7 @@ export function AppShell() {
           <main
             className={[
               styles.main,
-              isWorkspaceTimelineRoute || isWorkspaceSelectHierarchyRoute ? styles.mainTimeline : '',
+              isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.mainTimeline : '',
             ]
               .filter(Boolean)
               .join(' ')}

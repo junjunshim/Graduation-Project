@@ -118,7 +118,7 @@ export function RecurringRuleDetailModal({
 
         <div className={styles.content}>
           {errorMessage && (
-            <div style={{ color: '#ef4444', fontSize: '0.85rem', background: 'rgba(239, 68, 68, 0.1)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
+            <div style={{ color: 'var(--axis-status-danger)', fontSize: '0.85rem', background: 'var(--axis-status-danger-soft)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
               {errorMessage}
             </div>
           )}
@@ -187,7 +187,7 @@ export function RecurringRuleDetailModal({
                     <div className={styles.fileItemLeft}>
                       <Icon name="page" size={15} />
                       <span title={f.originalFileName}>{f.originalFileName}</span>
-                      <span style={{ color: '#94a3b8', fontSize: '0.72rem' }}>
+                      <span style={{ color: 'var(--axis-text-muted)', fontSize: '0.72rem' }}>
                         ({(f.fileSize / 1024).toFixed(1)} KB)
                       </span>
                     </div>

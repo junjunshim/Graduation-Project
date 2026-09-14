@@ -87,6 +87,46 @@ export function WorkspaceFilesTab({
   files = [],
   recurringRules: initialRecurringRules,
 }: WorkspaceFilesTabProps) {
+  const folderSidebarRef = useRef<HTMLElement>(null)
+  const folderListRef = useRef<HTMLDivElement>(null)
+  const filesContentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const content = filesContentRef.current
+    if (!content) return
+
+    function handleFilesWheel(event: WheelEvent) {
+      if (!content || event.ctrlKey || event.shiftKey || event.deltaY === 0) return
+      const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? content.clientHeight : 1
+      event.preventDefault()
+      event.stopPropagation()
+      content.scrollTop += event.deltaY * unit
+    }
+
+    content.addEventListener('wheel', handleFilesWheel, { passive: false })
+    return () => content.removeEventListener('wheel', handleFilesWheel)
+  }, [])
+
+  useEffect(() => {
+    const sidebar = folderSidebarRef.current
+    if (!sidebar) return
+
+    function handleFolderWheel(event: WheelEvent) {
+      const list = folderListRef.current
+      if (!list || event.ctrlKey || event.deltaY === 0) return
+
+      const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? list.clientHeight : 1
+      event.preventDefault()
+      event.stopPropagation()
+      list.scrollTop += event.deltaY * unit
+    }
+
+    sidebar.addEventListener('wheel', handleFolderWheel, { passive: false })
+    return () => sidebar.removeEventListener('wheel', handleFolderWheel)
+  }, [])
+
   const { openFileContextMenu, openUploadContextMenu, fileContextMenu } = useFileContextMenu()
   const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
 
@@ -417,7 +457,7 @@ export function WorkspaceFilesTab({
       {/* 메인 2열 탐색기 레이아웃 */}
       <div className={styles.explorerGrid}>
         {/* 좌측 폴더 트리 네비게이션 */}
-        <aside className={styles.folderSidebar} aria-label="폴더 목록">
+        <aside ref={folderSidebarRef} className={styles.folderSidebar} aria-label="폴더 목록">
           {/* 세그먼트 토글: 업무 폴더 / 일정 폴더 */}
           <div className={styles.sidebarModeToggle}>
             <button
@@ -452,7 +492,7 @@ export function WorkspaceFilesTab({
             </span>
           </div>
 
-          <div className={styles.folderList}>
+          <div ref={folderListRef} className={styles.folderList}>
             {folderMode === 'tasks' ? (
               filteredWorkFolders.length === 0 ? (
                 <div className={styles.emptyFolderList}>
@@ -577,6 +617,7 @@ export function WorkspaceFilesTab({
 
           {/* 파일 리스트 영역 */}
           <div
+            ref={filesContentRef}
             className={styles.filesContent}
             onContextMenu={(event) => {
               if (showDeletedFiles) return

@@ -1,10 +1,11 @@
 .panel {
+  --surface-muted: var(--axis-surface-muted);
   display: flex;
   flex-direction: column;
   min-width: 0;
   height: 100%;
   min-height: 100%;
-  padding: 2px 0 0;
+  padding: 0;
   color: var(--text-primary);
 }
 
@@ -41,6 +42,52 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-left: auto;
+}
+
+.filterHeaderTabs,
+.tableHeader,
+.treeViewToolbar {
+  box-sizing: border-box;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+}
+
+.filterHeaderTabs {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line-default);
+  background: var(--axis-surface-muted);
+}
+
+.filterTabButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--axis-text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filterTabButton:hover {
+  background: var(--surface-hover);
+}
+
+.filterTabButtonActive {
+  background: var(--axis-surface-panel);
+  color: var(--axis-brand-primary);
+  border-bottom-color: var(--axis-brand-primary);
 }
 
 .viewSegmentGroup {
@@ -48,14 +95,15 @@
   align-items: center;
   gap: 3px;
   padding: 3px;
-  border: 1px solid var(--axis-line-default, #dce2ed);
+  border: 1px solid var(--axis-line-default, var(--line-default));
   border-radius: var(--axis-radius-panel, 8px);
-  background: var(--axis-surface-panel-muted, #f1f3f9);
+  background: var(--axis-surface-muted, var(--surface-panel-muted));
 }
 
 .viewSegmentButton {
   min-height: 32px !important;
   padding: 0 11px !important;
+  border: 1px solid transparent !important;
   border-radius: 6px !important;
   font-size: 0.78rem !important;
   font-weight: 700 !important;
@@ -63,8 +111,27 @@
   transition: all 150ms ease !important;
 }
 
-.viewSegmentActive {
-  box-shadow: 0 1px 3px rgba(16, 23, 45, 0.08) !important;
+.viewSegmentButton:not(.viewSegmentActive) {
+  background: transparent !important;
+  color: var(--axis-text-secondary, var(--text-secondary)) !important;
+}
+
+.viewSegmentButton:not(.viewSegmentActive):hover {
+  background: var(--surface-panel-subtle, var(--axis-surface-panel-hover)) !important;
+  color: var(--axis-text-primary, var(--text-primary)) !important;
+}
+
+.viewSegmentActive,
+.viewSegmentActive:hover {
+  background: var(--axis-surface-panel, var(--surface-panel)) !important;
+  border-color: var(--axis-line-default, var(--line-default)) !important;
+  color: var(--axis-text-primary, var(--text-primary)) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+.viewSegmentActive svg,
+.viewSegmentActive:hover svg {
+  color: var(--axis-brand-primary) !important;
 }
 
 /* ==========================================================================
@@ -73,13 +140,14 @@
 .treeViewWrapper {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
-  min-height: 0;
-  height: var(--tasks-card-height, clamp(30rem, calc(100dvh - 14rem), 39rem));
+  min-height: 100%;
+  height: 100%;
   overflow: hidden;
-  border: 1px solid var(--line-default, #dce2ed);
+  border: 1px solid var(--axis-line-default, var(--line-default));
   border-radius: var(--radius-lg, 10px);
-  background: var(--surface-panel, #ffffff);
+  background: var(--axis-surface-panel, var(--surface-panel));
   box-shadow: 0 1px 3px rgba(16, 23, 45, 0.03);
 }
 
@@ -88,20 +156,18 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 48px;
-  padding: 0 18px;
-  border-bottom: 1px solid var(--line-default, #dce2ed);
-  background: var(--surface-muted, #f8f9fc);
-  flex: 0 0 auto;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--axis-line-default, var(--line-default));
+  background: var(--axis-surface-muted, var(--surface-muted));
 }
 
 .treeViewSummary {
-  color: var(--text-secondary, #535e77);
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.82rem;
 }
 
 .treeViewSummary strong {
-  color: var(--text-primary, #10172d);
+  color: var(--axis-text-primary, var(--text-primary));
   font-weight: 750;
 }
 
@@ -115,10 +181,10 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border: 1px solid var(--line-default, #dce2ed);
+  border: 1px solid var(--axis-line-default, var(--line-default));
   border-radius: var(--radius-xs, 4px);
-  background: var(--surface-panel, #ffffff);
-  color: var(--text-secondary, #535e77);
+  background: var(--axis-surface-panel, var(--surface-panel));
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.74rem;
   font-weight: 650;
   cursor: pointer;
@@ -129,58 +195,90 @@
 }
 
 .treeToolbarButton:hover {
-  border-color: var(--axis-brand-border, #c8c7ff);
-  background: var(--axis-brand-badge-surface, #f7f6ff);
-  color: var(--axis-brand-primary, #625cf2);
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-badge-surface);
+  color: var(--axis-brand-primary);
 }
 
 .treeViewContent {
+  --tree-indent-margin: 1.1rem;
+  --tree-indent-padding: 0.95rem;
+  --tree-connector-width: 1.5px;
+  --tree-indent: calc(var(--tree-indent-margin) + var(--tree-indent-padding) + var(--tree-connector-width));
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
+  padding: 12px 16px 24px;
   overflow-y: auto;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--axis-line-strong) var(--axis-surface-muted);
+}
+
+.treeViewContent::-webkit-scrollbar {
+  display: block !important;
+  width: 8px !important;
+}
+
+.treeViewContent::-webkit-scrollbar-thumb {
+  background: var(--axis-line-strong);
+  border: 2px solid var(--axis-surface-panel);
+  border-radius: 999px;
+}
+
+.treeViewContent:focus-visible {
+  outline: 2px solid var(--axis-brand-primary);
+  outline-offset: -2px;
 }
 
 .treeNodeContainer {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.treeCard {
   position: relative;
   display: flex;
   flex-direction: column;
-  margin-left: calc(var(--tree-depth, 0) * 1.75rem);
-  border: 1px solid var(--axis-line-default, #dce2ed);
-  border-radius: var(--axis-radius-surface, 8px);
-  background: var(--axis-surface-panel, #ffffff);
+  flex-shrink: 0;
+}
+
+.treeRow {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: transparent;
   transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
+    background 140ms ease,
+    border-color 140ms ease;
 }
 
-.treeCard:hover {
-  border-color: var(--axis-brand-primary, #625cf2);
-  box-shadow: 0 2px 6px rgba(98, 92, 242, 0.08);
+.treeRow::after {
+  content: '';
+  position: absolute;
+  left: calc(-1px - var(--tree-depth, 0) * var(--tree-indent));
+  right: -1px;
+  bottom: -1px;
+  height: 1px;
+  background: var(--axis-line-default);
+  pointer-events: none;
 }
 
-.treeCardMain {
+.treeRow:hover {
+  background: var(--surface-hover, var(--axis-surface-muted));
+}
+
+.treeRowMain {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 10px 14px;
-  min-height: 48px;
+  gap: 12px;
+  padding: 8px 16px;
+  min-height: 58px;
 }
 
-.treeCardLeft {
+.treeRowLeft {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -189,87 +287,87 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
-  flex: 0 0 1.6rem;
+  width: 1.45rem;
+  height: 1.45rem;
+  flex: 0 0 1.45rem;
   padding: 0;
-  border: 1px solid var(--axis-line-default, #dce2ed);
+  border: 1px solid transparent;
   border-radius: var(--axis-radius-xs, 4px);
-  background: var(--axis-surface-muted, #f8f9fc);
-  color: var(--axis-text-secondary, #535e77);
+  background: transparent;
+  color: var(--axis-text-secondary, var(--text-secondary));
   cursor: pointer;
   transition:
     background 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
+    color 140ms ease;
 }
 
 .treeExpandButton:hover {
-  border-color: var(--axis-brand-primary, #625cf2);
-  background: var(--axis-brand-badge-surface, #f7f6ff);
-  color: var(--axis-brand-primary, #625cf2);
+  background: var(--surface-panel-subtle, var(--axis-surface-panel-hover));
+  color: var(--axis-text-primary, var(--text-primary));
 }
 
 .treeLeafDot {
-  width: 7px;
-  height: 7px;
-  margin-left: 0.45rem;
-  margin-right: 0.45rem;
-  flex: 0 0 7px;
+  width: 5px;
+  height: 5px;
+  margin-left: 0.55rem;
+  margin-right: 0.55rem;
+  flex: 0 0 5px;
   border-radius: 50%;
-  background: var(--axis-line-strong, #c1cad8);
+  background: var(--axis-text-muted, #94a3b8);
+  opacity: 0.7;
 }
 
-.treeCardTitleGroup {
+.treeTitleGroup {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
+  overflow: hidden;
 }
 
-.treeCardTitle {
+.treeTitle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--axis-text-primary, #10172d);
-  font-size: 0.9rem;
-  font-weight: 750;
+  color: var(--axis-text-primary, var(--text-primary));
+  font-size: 0.88rem;
+  font-weight: 650;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.treeCardTitle:hover {
-  color: var(--axis-brand-primary, #625cf2);
+.treeTitle:hover {
+  color: var(--axis-brand-primary);
   text-decoration: underline;
 }
 
 .taskCodeBadge {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
-  background: var(--axis-surface-muted, #f1f5f9);
-  color: var(--axis-text-secondary, #475569);
-  font-size: 0.72rem;
+  background: var(--axis-surface-muted, var(--surface-muted));
+  color: var(--axis-text-secondary, var(--text-secondary));
+  font-size: 0.7rem;
   font-weight: 700;
-  border: 1px solid var(--axis-line-default, #e2e8f0);
+  border: 1px solid var(--axis-line-default, var(--line-default));
   line-height: 1.3;
   flex-shrink: 0;
 }
 
-.treeCardDescription {
+.treeDescription {
   margin: 0;
-  color: var(--axis-text-secondary, #535e77);
-  font-size: 0.76rem;
-  line-height: 1.35;
+  color: var(--axis-text-muted, var(--text-muted));
+  font-size: 0.74rem;
+  line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.treeCardMetaGroup {
+.treeMetaGroup {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -280,7 +378,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--axis-text-secondary, #535e77);
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.74rem;
   font-weight: 600;
   white-space: nowrap;
@@ -290,54 +388,57 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding-left: 4px;
-  border-left: 1px solid var(--axis-line-default, #dce2ed);
-  color: var(--axis-text-secondary, #535e77);
+  padding-left: 6px;
+  border-left: 1px solid var(--axis-line-default, var(--line-default));
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .treeChildBadge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 6px;
-  border-radius: var(--axis-radius-xs, 4px);
-  background: var(--axis-surface-muted, #f1f3f9);
-  color: var(--axis-text-secondary, #535e77);
-  font-size: 0.7rem;
-  font-weight: 750;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--axis-surface-muted, var(--surface-muted));
+  border: 1px solid var(--axis-line-default, var(--line-default));
+  color: var(--axis-text-secondary, var(--text-secondary));
+  font-size: 0.68rem;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
 .treeProgressTrack {
-  height: 3px;
+  height: 2px;
   width: 100%;
-  background: var(--axis-surface-muted, #f1f3f9);
-  border-bottom-left-radius: var(--axis-radius-surface, 8px);
-  border-bottom-right-radius: var(--axis-radius-surface, 8px);
+  background: var(--axis-surface-muted, var(--surface-muted));
   overflow: hidden;
 }
 
 .treeProgressBar {
   height: 100%;
-  background: var(--axis-brand-primary, #625cf2);
+  background: var(--axis-brand-primary);
   transition: width 240ms ease;
 }
 
 .treeProgressBar[data-status='done'] {
-  background: var(--axis-status-success, #0e9f6e);
+  background: var(--axis-status-success);
 }
 
 .treeProgressBar[data-status='in-progress'] {
-  background: var(--axis-status-warning, #f59e0b);
+  background: var(--axis-status-warning);
 }
 
 .treeChildrenGroup {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  margin-left: var(--tree-indent-margin);
+  padding-left: var(--tree-indent-padding);
+  border-left: var(--tree-connector-width) solid var(--axis-line-default, var(--line-default));
 }
 
 .treeEmptyState {
@@ -630,12 +731,13 @@
 
 .contentGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 194px;
+  grid-template-columns: minmax(0, 1fr) 220px;
   align-items: stretch;
   gap: 16px;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
-  height: 100%;
+  height: auto;
 }
 
 .contentGridFull {
@@ -655,7 +757,7 @@
 
 .tableCard {
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   align-self: stretch;
 }
 
@@ -668,39 +770,47 @@
 
 .tableHeader,
 .taskRow {
-  display: grid;
-  grid-template-columns:
-    36px
-    minmax(220px, 2.2fr)
-    minmax(140px, 1.3fr)
-    88px
-    88px
-    140px
-    80px
-    40px
-    36px;
-  column-gap: 12px;
+  display: flex;
   align-items: center;
-  min-width: 920px;
+  gap: 12px;
+  min-width: 680px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--line-default);
+  border-bottom: 1px solid var(--axis-line-default, var(--line-default));
 }
 
 .tableHeader {
-  min-height: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  background: var(--surface-muted, #f8f9fc);
-  color: var(--text-secondary);
+  justify-content: space-between;
+  background: var(--axis-surface-muted, var(--surface-muted));
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.75rem;
   font-weight: 700;
+  border-bottom: 1px solid var(--axis-line-strong, var(--line-strong));
+}
+
+.tableHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.tableHeaderRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--axis-text-muted, var(--text-muted));
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: right;
+  min-width: 150px;
 }
 
 .tableBody {
-  display: grid;
-  grid-template-rows: repeat(10, 1fr);
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .tableBodyEmpty {
@@ -708,28 +818,31 @@
   align-items: center;
   justify-content: center;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 180px;
 }
 
 .taskRow {
-  min-height: 0;
-  color: var(--text-secondary);
+  align-items: center;
+  min-height: 58px;
+  padding: 8px 16px;
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.78rem;
   transition: background 140ms ease;
 }
 
 .taskRow:nth-child(even) {
-  background: var(--surface-panel-subtle);
+  background: var(--axis-surface-panel, var(--surface-panel-subtle));
 }
 
 .taskRow:hover {
-  background: var(--surface-hover);
+  background: var(--surface-hover, var(--axis-surface-muted));
 }
 
 .checkboxCell {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 24px;
 }
 
 .checkboxCell input,
@@ -737,7 +850,7 @@
   width: 15px;
   height: 15px;
   margin: 0;
-  accent-color: var(--accent-blue);
+  accent-color: var(--axis-brand-primary, #625cf2);
   cursor: pointer;
 }
 
@@ -745,13 +858,102 @@
   background: var(--surface-selected) !important;
 }
 
-.titleCell {
+.rowMainContent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.rowLeftBlock {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  gap: 5px;
   min-width: 0;
-  padding-right: 8px;
+  flex: 1 1 auto;
+}
+
+.rowRightBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+
+.rowTopLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rowBottomLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 0.74rem;
+  color: var(--axis-text-secondary, var(--text-secondary));
+}
+
+.metaDueDate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--axis-text-secondary, var(--text-secondary));
+  font-size: 0.73rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dueUrgentMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--axis-status-warning, #f59e0b);
+  color: var(--axis-text-on-brand, #ffffff);
+  font-size: 0.65rem;
+  font-weight: 900;
+  line-height: 1;
+  margin-right: 2px;
+}
+
+.dueUrgentMark[data-tone='overdue'] {
+  background: var(--axis-danger, #dc2626);
+}
+
+.metaOwner {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--axis-text-secondary, var(--text-secondary));
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.metaOwnerLabel {
+  font-size: 0.71rem;
+  color: var(--axis-text-muted, var(--text-muted));
+  font-weight: 500;
+  margin-right: -1px;
+}
+
+.metaDot {
+  color: var(--axis-text-muted, #94a3b8);
+  font-weight: 700;
+  user-select: none;
+  font-size: 0.72rem;
+  opacity: 0.7;
 }
 
 .taskTitle {
@@ -759,7 +961,7 @@
   align-items: center;
   gap: 6px;
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--axis-text-primary, var(--text-primary));
   font-size: 0.86rem;
   font-weight: 650;
   text-decoration: none;
@@ -768,7 +970,7 @@
 }
 
 .taskTitle:hover {
-  color: var(--accent-blue);
+  color: var(--axis-brand-primary, #625cf2);
   text-decoration: underline;
 }
 
@@ -781,7 +983,7 @@
 .taskDescription {
   display: block;
   overflow: hidden;
-  color: var(--text-muted);
+  color: var(--axis-text-muted, var(--text-muted));
   font-size: 0.73rem;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -790,6 +992,7 @@
 
 .titleHeader {
   text-align: left;
+  white-space: nowrap;
 }
 
 .ownerHeader {
@@ -806,7 +1009,7 @@
 
 .ownerName {
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--axis-text-primary, var(--text-primary));
   font-size: 0.78rem;
   font-weight: 550;
   text-overflow: ellipsis;
@@ -824,13 +1027,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 52px;
-  padding: 3px 8px;
-  border-radius: var(--radius-xs, 4px);
+  width: 72px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--axis-radius-pill, 999px);
   font-size: 0.72rem;
   font-weight: 650;
-  line-height: 1.2;
+  line-height: 1;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .statusCell {
@@ -841,21 +1046,21 @@
 }
 
 .statusBadge[data-tone='done'] {
-  background: var(--accent-green-soft, #edf7ee);
-  color: var(--accent-green, #217346);
-  border: 1px solid rgba(33, 115, 70, 0.25);
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+  border: 1px solid var(--axis-status-success-border);
 }
 
 .statusBadge[data-tone='inProgress'] {
-  background: var(--accent-blue-soft, #edf4ff);
-  color: var(--accent-blue, #2f5fb8);
-  border: 1px solid rgba(47, 95, 184, 0.25);
+  background: var(--axis-status-info-soft);
+  color: var(--axis-status-info);
+  border: 1px solid var(--axis-status-info-border);
 }
 
 .statusBadge[data-tone='todo'] {
-  background: var(--accent-purple-soft, #f1edff);
-  color: var(--accent-purple, #6e56cf);
-  border: 1px solid rgba(110, 86, 207, 0.25);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
+  border: 1px solid var(--axis-line-default);
 }
 
 .priorityCell {
@@ -870,12 +1075,15 @@
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 3px 8px;
-  border-radius: var(--radius-xs, 4px);
+  width: 72px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--axis-radius-pill, 999px);
   font-size: 0.72rem;
   font-weight: 650;
-  line-height: 1.2;
+  line-height: 1;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .priority strong {
@@ -888,28 +1096,33 @@
 }
 
 .priority[data-priority='highest'] {
-  background: rgba(220, 38, 38, 0.12);
-  color: #dc2626;
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+  border: 1px solid var(--axis-status-danger-border);
 }
 
 .priority[data-priority='high'] {
-  background: rgba(245, 158, 11, 0.12);
-  color: #d97706;
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
+  border: 1px solid var(--axis-status-warning-border);
 }
 
 .priority[data-priority='medium'] {
-  background: var(--surface-panel-muted, #f1f3f9);
-  color: var(--text-secondary, #535e77);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
+  border: 1px solid var(--axis-line-default);
 }
 
 .priority[data-priority='low'] {
-  background: rgba(16, 185, 129, 0.12);
-  color: #059669;
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+  border: 1px solid var(--axis-status-success-border);
 }
 
 .priority[data-priority='lowest'] {
-  background: rgba(107, 114, 128, 0.12);
-  color: #6b7280;
+  background: var(--axis-status-neutral-soft);
+  color: var(--axis-status-neutral);
+  border: 1px solid var(--axis-status-neutral-border);
 }
 
 .dueDateCell {
@@ -922,7 +1135,7 @@
 }
 
 .dueDate {
-  color: var(--text-primary);
+  color: var(--axis-text-primary, var(--text-primary));
   font-size: 0.78rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -930,7 +1143,7 @@
 }
 
 .emptyDueDate {
-  color: var(--text-muted);
+  color: var(--axis-text-muted, var(--text-muted));
   font-weight: 700;
 }
 
@@ -938,7 +1151,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
-  border-radius: 999px;
+  border-radius: var(--axis-radius-pill, 999px);
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1.2;
@@ -947,27 +1160,27 @@
 }
 
 .dueBadge[data-tone='overdue'] {
-  background: #fee2e2;
-  color: #dc2626;
-  border: 1px solid #fca5a5;
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+  border: 1px solid var(--axis-status-danger-border);
 }
 
 .dueBadge[data-tone='soon'] {
-  background: #fef3c7;
-  color: #d97706;
-  border: 1px solid #fde68a;
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
+  border: 1px solid var(--axis-status-warning-border);
 }
 
 .dueBadge[data-tone='neutral'] {
-  background: var(--surface-panel-muted, #f1f3f9);
-  color: var(--text-secondary, #535e77);
-  border: 1px solid var(--line-default, #e2e8f0);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
+  border: 1px solid var(--axis-line-default);
 }
 
 .dueBadge[data-tone='done'] {
-  background: #d1fae5;
-  color: #059669;
-  border: 1px solid #a7f3d0;
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+  border: 1px solid var(--axis-status-success-border);
 }
 
 .tagCell {
@@ -982,37 +1195,42 @@
   align-items: center;
   justify-content: center;
   min-width: 44px;
-  padding: 3px 8px;
-  border-radius: var(--radius-xs, 4px);
+  padding: 2px 8px;
+  border-radius: var(--axis-radius-pill, 999px);
   font-size: 0.7rem;
-  font-weight: 750;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .tagBadge[data-tone='purple'] {
-  background: var(--accent-purple-soft);
-  color: var(--accent-purple);
+  background: var(--axis-surface-muted);
+  color: var(--axis-brand-primary);
+  border: 1px solid var(--axis-brand-border);
 }
 
 .tagBadge[data-tone='blue'],
 .tagBadge[data-tone='sky'] {
-  background: var(--accent-blue-soft);
-  color: var(--accent-blue);
+  background: var(--axis-status-info-soft);
+  color: var(--axis-status-info);
+  border: 1px solid var(--axis-status-info-border);
 }
 
 .tagBadge[data-tone='green'] {
-  background: var(--accent-green-soft);
-  color: var(--accent-green);
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+  border: 1px solid var(--axis-status-success-border);
 }
 
 .tagBadge[data-tone='orange'] {
-  background: var(--accent-amber-soft);
-  color: var(--accent-amber);
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
+  border: 1px solid var(--axis-status-warning-border);
 }
 
 .tagBadge[data-tone='gray'] {
-  background: var(--surface-panel-muted);
-  color: var(--text-secondary);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
+  border: 1px solid var(--axis-line-default);
 }
 
 .emptyTag {
@@ -1027,6 +1245,25 @@
   min-width: 0;
 }
 
+.commentPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--axis-radius-pill, 999px);
+  border: 1px solid var(--axis-line-default, var(--line-default));
+  background: var(--axis-surface-panel, transparent);
+  color: var(--axis-text-secondary, var(--text-secondary));
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.commentPillEmpty {
+  color: var(--axis-text-muted, var(--text-muted));
+  opacity: 0.7;
+}
+
 .commentButton {
   display: inline-flex;
   align-items: center;
@@ -1037,7 +1274,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--axis-text-secondary, var(--text-secondary));
 }
 
 .commentButton:disabled {
@@ -1047,7 +1284,9 @@
 
 .actionCell {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .iconButton {
@@ -1059,9 +1298,9 @@
   flex-shrink: 0;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--axis-radius-xs, 4px);
   background: transparent;
-  color: var(--text-primary);
+  color: var(--axis-text-primary, var(--text-primary));
   text-decoration: none;
   cursor: pointer;
   transition:
@@ -1071,9 +1310,9 @@
 }
 
 .iconButton:hover {
-  border-color: var(--line-strong);
-  background: var(--surface-hover);
-  color: var(--text-primary);
+  border-color: var(--axis-line-strong, var(--line-strong));
+  background: var(--surface-hover, var(--axis-surface-muted));
+  color: var(--axis-text-primary, var(--text-primary));
 }
 
 .iconButton:disabled {
@@ -1091,7 +1330,7 @@
 .addTaskLink:focus-visible,
 .searchField:focus-within,
 .selectField:focus-within {
-  outline: 2px solid var(--accent-blue);
+  outline: 2px solid var(--axis-brand-primary, #625cf2);
   outline-offset: 2px;
 }
 
@@ -1245,6 +1484,9 @@
 
 .filterBody {
   display: grid;
+  min-height: 0;
+  overflow-y: auto;
+  flex: 0 1 auto;
   gap: 18px;
   padding: 16px 14px 22px;
 }
@@ -1333,6 +1575,71 @@
   cursor: pointer;
 }
 
+.filterFooter {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 8px;
+  margin-top: auto;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line-default);
+}
+
+.filterTrashToggleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-panel, 8px);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.filterTrashToggleBtn:hover,
+.filterTrashToggleBtnActive {
+  background: var(--axis-status-danger-soft);
+  border-color: var(--axis-status-danger-border);
+  color: var(--axis-status-danger);
+}
+
+.filterTrashToggleBtn:disabled {
+  cursor: default;
+}
+
+.filterTrashToggleBtn:disabled:not(.filterTrashToggleBtnActive) {
+  opacity: 0.45;
+}
+
+.trashGuideBody {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 14px;
+  padding: 16px 14px 22px;
+  color: var(--axis-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.trashGuideBody strong {
+  color: var(--axis-text-primary);
+}
+
+.trashGuideBody p {
+  margin: 0;
+}
+
 .resetButton {
   min-height: 48px;
   margin-top: auto;
@@ -1355,22 +1662,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .contentGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .tableCard,
-  .filterPanel {
-    height: auto;
-  }
-
-  .tableCard {
-    min-height: 30rem;
-  }
-
-  .filterPanel {
-    min-height: 24rem;
-  }
 }
 
 @media (max-width: 720px) {
@@ -1408,10 +1699,10 @@
   gap: 6px;
   height: 32px;
   padding: 0 11px;
-  border: 1px solid var(--axis-line-default, #dce2ed);
+  border: 1px solid var(--axis-line-default, var(--line-default));
   border-radius: var(--axis-radius-panel, 8px);
-  background: var(--axis-surface-panel, #ffffff);
-  color: var(--axis-text-secondary, #535e77);
+  background: var(--axis-surface-panel, var(--surface-panel));
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
@@ -1419,9 +1710,9 @@
 }
 
 .trashToggleBtn:hover {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #dc2626;
+  background: var(--axis-danger-soft, rgba(239, 68, 68, 0.08));
+  border-color: var(--axis-danger, #dc2626);
+  color: var(--axis-danger, #dc2626);
 }
 
 .trashToggleBtn:disabled {
@@ -1431,9 +1722,9 @@
 }
 
 .trashToggleBtnActive {
-  background: #dc2626 !important;
-  border-color: #dc2626 !important;
-  color: #ffffff !important;
+  background: var(--axis-danger, #dc2626) !important;
+  border-color: var(--axis-danger, #dc2626) !important;
+  color: var(--axis-text-on-brand, #ffffff) !important;
   box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
 }
 
@@ -1442,13 +1733,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 8px 14px;
   margin-bottom: 12px;
-  background: rgba(239, 68, 68, 0.06);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  border-radius: var(--radius-lg, 10px);
-  color: #991b1b;
-  font-size: 0.82rem;
+  background: var(--axis-danger-soft, rgba(239, 68, 68, 0.08));
+  border: 1px solid var(--axis-danger-soft, rgba(239, 68, 68, 0.2));
+  border-radius: var(--axis-radius-panel, 8px);
+  color: var(--axis-danger, #dc2626);
+  font-size: 0.8rem;
 }
 
 .trashNoticeLeft {
@@ -1461,24 +1752,25 @@
 .trashNoticeCount {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 999px;
-  background: rgba(239, 68, 68, 0.15);
-  font-size: 0.74rem;
+  background: var(--axis-surface-panel);
+  border: 1px solid var(--axis-danger-soft, rgba(239, 68, 68, 0.3));
+  font-size: 0.72rem;
   font-weight: 750;
-  color: #b91c1c;
+  color: var(--axis-danger, #dc2626);
 }
 
 .trashRestoreButton {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border: 1px solid #2563eb;
-  border-radius: var(--radius-xs, 4px);
-  background: rgba(37, 99, 235, 0.08);
-  color: #2563eb;
-  font-size: 0.75rem;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--axis-brand-primary);
+  border-radius: var(--axis-radius-xs, 4px);
+  background: var(--axis-brand-badge-surface, transparent);
+  color: var(--axis-brand-primary);
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 140ms ease;
@@ -1486,25 +1778,28 @@
 }
 
 .trashRestoreButton:hover {
-  background: #2563eb;
-  color: #ffffff;
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand, #ffffff);
 }
 
-.trashCardDeleted {
-  border-color: rgba(239, 68, 68, 0.25) !important;
-  background: rgba(254, 242, 242, 0.4) !important;
+.trashRowDeleted {
+  opacity: 0.85;
+}
+
+.trashRowDeleted:hover {
+  background: var(--axis-danger-soft, rgba(239, 68, 68, 0.06));
 }
 
 .trashDeletedBadge {
   display: inline-flex;
   align-items: center;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #dc2626;
-  font-size: 0.7rem;
+  background: var(--axis-danger-soft, rgba(239, 68, 68, 0.12));
+  color: var(--axis-danger, #dc2626);
+  font-size: 0.68rem;
   font-weight: 750;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid var(--axis-danger-soft, rgba(239, 68, 68, 0.25));
   margin-right: 4px;
 }
 
@@ -1529,10 +1824,10 @@
   gap: 6px;
   height: 32px;
   padding: 0 11px;
-  border: 1px solid var(--axis-line-default, #dce2ed);
+  border: 1px solid var(--axis-line-default, var(--line-default));
   border-radius: var(--axis-radius-panel, 8px);
-  background: var(--axis-surface-panel, #ffffff);
-  color: var(--axis-text-secondary, #535e77);
+  background: var(--axis-surface-panel, var(--surface-panel));
+  color: var(--axis-text-secondary, var(--text-secondary));
   font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
@@ -1540,15 +1835,15 @@
 }
 
 .recurringToggleBtn:hover {
-  background: rgba(99, 102, 241, 0.08);
-  border-color: rgba(99, 102, 241, 0.4);
-  color: #6366f1;
+  background: var(--axis-brand-primary-soft, rgba(99, 102, 241, 0.08));
+  border-color: var(--axis-brand-border, rgba(99, 102, 241, 0.4));
+  color: var(--axis-brand-primary, #6366f1);
 }
 
 .recurringToggleBtnActive {
-  background: #6366f1 !important;
-  border-color: #6366f1 !important;
-  color: #ffffff !important;
+  background: var(--axis-brand-primary, #6366f1) !important;
+  border-color: var(--axis-brand-primary, #6366f1) !important;
+  color: var(--axis-text-on-brand, #ffffff) !important;
   box-shadow: 0 1px 3px rgba(99, 102, 241, 0.25);
 }
 

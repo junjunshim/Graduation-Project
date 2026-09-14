@@ -545,7 +545,7 @@ export function WorkspaceRolesTab({
             ) : null}
           </div>
 
-          <div className={styles.roleList}>
+          <div className={styles.roleList} role="region" aria-label="워크스페이스 역할 목록" tabIndex={0}>
             {/* 신규 역할 생성 진행 중 카드 */}
             {isCreatingRole ? (
               <div className={[styles.roleItem, styles.roleItemActive, styles.roleItemCreating].join(' ')}>
@@ -772,7 +772,7 @@ export function WorkspaceRolesTab({
           </header>
 
           {/* 도메인 카테고리별 2열 레이아웃 */}
-          <div className={styles.groupGrid}>
+          <div className={styles.groupGrid} role="region" aria-label="세부 권한 목록" tabIndex={0}>
             {/* 좌측 열 */}
             <div className={styles.gridColumn}>
               {leftGroups.map((group) => renderGroupCard(group))}

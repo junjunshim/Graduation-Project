@@ -3,9 +3,13 @@
   flex-direction: column;
   gap: 16px;
   width: 100%;
+  height: 100%;
+  min-height: 100%;
+  min-width: 0;
 }
 
 .toolbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -141,11 +145,11 @@
 
 /* 2열 탐색기 레이아웃 */
 .explorerGrid {
-  --files-card-height: clamp(32rem, calc(100dvh - 12rem), 44rem);
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   gap: 16px;
-  height: var(--files-card-height);
+  flex: 1 1 0;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -162,6 +166,7 @@
 }
 
 .sidebarModeToggle {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   padding: 0.5rem;
@@ -201,6 +206,7 @@
 }
 
 .sidebarHeader {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -224,9 +230,28 @@
   padding: 0.5rem;
   gap: 4px;
   overflow-y: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--axis-line-strong) var(--axis-surface-muted);
+}
+
+.folderList::-webkit-scrollbar,
+.filesContent::-webkit-scrollbar {
+  display: block !important;
+  width: 8px !important;
+}
+
+.folderList::-webkit-scrollbar-thumb,
+.filesContent::-webkit-scrollbar-thumb {
+  background: var(--axis-line-strong);
+  border-radius: 999px;
+  border: 2px solid var(--axis-surface-panel);
 }
 
 .folderItem {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -300,8 +325,8 @@
 
 /* 우측 파일 뷰포트 */
 .filesViewport {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -311,6 +336,7 @@
 }
 
 .folderDetailHeader {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -399,9 +425,14 @@
 }
 
 .filesContent {
+  flex: 1 1 0;
   padding: 1.25rem;
   overflow-y: auto;
   min-height: 0;
+  min-width: 0;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--axis-line-strong) var(--axis-surface-muted);
 }
 
 .emptyFilesState {

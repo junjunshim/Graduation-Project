@@ -177,6 +177,7 @@ static void processActivityNotification(const std::string &rawPayload)
     else if (actionType == "restored") actionKorean = "복구했습니다.";
 
     if (entityType == "WORK_ITEM") title = "업무 알림";
+    else if (entityType == "RECURRING_RULE") title = "일정 알림";
     else if (entityType == "NODE") title = "노드 알림";
     else if (entityType == "ROLE" || entityType == "AUTHORITY") title = "권한/역할 알림";
     else if (entityType == "FILE") title = "파일 알림";
@@ -186,7 +187,9 @@ static void processActivityNotification(const std::string &rawPayload)
     std::string workItemId = root.isMember("work_item_id") && !root["work_item_id"].isNull() ? root["work_item_id"].asString() : "";
 
     std::string linkUrl;
-    if ((entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !workItemId.empty()) {
+    if (entityType == "RECURRING_RULE") {
+        linkUrl = "/workspace?view=schedules&nodeId=" + std::to_string(nodeId) + "&ruleId=" + entityId;
+    } else if ((entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !workItemId.empty()) {
         linkUrl = "/work-items/" + workItemId;
     } else if (entityType == "ROLE" || entityType == "AUTHORITY") {
         linkUrl = "/workspace?nodeId=" + std::to_string(nodeId) + "&view=roles";
@@ -329,4 +332,3 @@ void NotificationWebSocketController::startNotificationListener(const std::strin
 
     listenerThread.detach();
 }
-

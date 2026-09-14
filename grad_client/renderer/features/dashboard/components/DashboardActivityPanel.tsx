@@ -4,6 +4,8 @@ import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { formatWorkspaceShortDate } from '../../workspace/model/formatters'
 import type { ActivityRecord, UserRecord, WorkItemRecord } from '../../workspace/model/types'
 import { formatActivityMessage } from '../model/activityFormatter'
+import { getActivityLink } from '../model/activityLink'
+import { useResolvedActivities } from '../model/useResolvedActivities'
 import { DashboardEmptyState } from './DashboardEmptyState'
 import styles from '../pages/DashboardPage.module.css'
 
@@ -16,7 +18,7 @@ export function DashboardActivityPanel({
   workItems?: WorkItemRecord[]
   users?: UserRecord[]
 }) {
-  const recentActivities = activities.slice(0, 5)
+  const recentActivities = useResolvedActivities(activities, workItems).slice(0, 5)
   const workItemsById = new Map(workItems.map((w) => [w.workItemId, w]))
   const usersById = new Map(users.map((u) => [u.userId, u]))
 
@@ -35,13 +37,7 @@ export function DashboardActivityPanel({
       <div className={styles.activityList}>
         {recentActivities.length > 0 ? (
           recentActivities.map((activity) => {
-            const matchedWorkItemId = activity.targetName ? activity.targetName.replace(/^Comment on\s*/i, '').trim() : ''
-            const linkTarget =
-              activity.entityType.toUpperCase() === 'WORK_ITEM'
-                ? `/work-items/${activity.entityId}`
-                : activity.entityType.toUpperCase() === 'COMMENT' && matchedWorkItemId
-                  ? `/work-items/${matchedWorkItemId}`
-                  : '/workspace'
+            const linkTarget = getActivityLink(activity) ?? '/workspace'
 
             const actorName = activity.actorName || (activity.actorUserId && usersById.get(activity.actorUserId)?.name) || activity.actorUserId
 
@@ -79,4 +75,3 @@ export function DashboardActivityPanel({
     </section>
   )
 }
-

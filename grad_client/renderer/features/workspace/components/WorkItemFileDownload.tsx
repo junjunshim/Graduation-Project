@@ -15,6 +15,12 @@ export function WorkItemFileDownload({ file, onComplete }: { file: WorkItemFileR
     setBusy(true)
     try {
       await downloadWorkItemFile(file.id, file.originalFileName)
+      showToast({
+        title: '파일 다운로드 완료',
+        content: `'${file.originalFileName}' 파일을 다운로드했습니다.`,
+        link_url: `/work-items/${encodeURIComponent(file.workItemId)}`,
+        created_at: new Date().toISOString(),
+      })
     } catch (error) {
       showToast({
         title: '파일 다운로드 실패',

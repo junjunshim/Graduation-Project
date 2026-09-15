@@ -14,6 +14,7 @@ import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { getCascadeWorkItemSummary } from '../../workspace/data/cascadeWorkItemHelper'
 import { addWorkItemComment, deleteWorkItem, fetchWorkItemDetail } from '../../workspace/data/workItemService'
 import { subscribeToWorkspaceCache } from '../../workspace/data/workspaceCacheEvents'
+import { isPreviewableFile } from '../../workspace/model/filePreview'
 import {
   formatWorkspaceDate,
   formatWorkspaceTimestamp,
@@ -185,6 +186,19 @@ export function WorkItemDetailPage() {
 
   // 파일 클릭 시 미리보기 열기
   const handleOpenFileViewer = async (file: WorkItemFileRecord) => {
+    // 미리보기 미지원 형식은 파일 내용 API를 호출하지 않고 안내만 표시한다.
+    if (!isPreviewableFile(file.originalFileName)) {
+      setViewerModal({
+        isOpen: true,
+        file,
+        content: '',
+        isLoading: false,
+        error: null,
+        fromCache: false,
+      })
+      return
+    }
+
     setViewerModal({
       isOpen: true,
       file,

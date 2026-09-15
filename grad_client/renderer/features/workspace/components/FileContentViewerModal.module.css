@@ -4,13 +4,13 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1000;
+  z-index: 10001;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  padding: 2rem;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  padding: 1.5rem;
 }
 
 .modal {
@@ -207,6 +207,43 @@
 
 .errorState {
   color: var(--accent-red, #ef4444);
+}
+
+/* 미리보기 미지원 형식 안내 */
+.unsupportedState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 10px;
+  padding: 2rem;
+  text-align: center;
+}
+
+.unsupportedIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 1px solid var(--line-default);
+  background: var(--surface-panel-subtle);
+  color: var(--text-muted);
+}
+
+.unsupportedTitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.unsupportedHint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 /* Raw 테이블 뷰 (GitHub 코드 뷰 형태) */

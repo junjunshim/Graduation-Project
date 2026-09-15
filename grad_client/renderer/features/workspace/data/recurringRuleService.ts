@@ -6,6 +6,7 @@ import type {
 } from '../model/recurringRuleTypes'
 import { apiRequest } from './server/apiClient'
 import { optionalRecurringNumber } from '../model/recurringRuleValues'
+import { waitForDownloadCompletion } from './downloadCompletion'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
 
@@ -360,6 +361,9 @@ export async function downloadRecurringRuleFile(fileId: number, fileName: string
     responseType: 'blob',
     timeoutMs: 120_000,
   })
+  // 다운로드 시작 전에 완료 추적을 등록해 실제 저장 완료 시점까지 기다린다.
+  const completion = waitForDownloadCompletion(fileName)
+
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -372,6 +376,8 @@ export async function downloadRecurringRuleFile(fileId: number, fileName: string
     anchor.remove()
     globalThis.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
+
+  await completion
 }
 
 /**

@@ -2,6 +2,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import type { BrowserWindow as BrowserWindowType } from 'electron'
 import { fileURLToPath } from 'node:url'
+import { watchDownloadCompletion } from './downloads'
 import {
   registerWindowControlHandlers,
   sendWindowMaximizeState,
@@ -80,4 +81,7 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  watchDownloadCompletion(() => win)
+  createWindow()
+})

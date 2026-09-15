@@ -22,10 +22,10 @@ const FREQUENCY_LABELS: Record<RecurringRuleRecord['frequency'], string> = {
   YEARLY: '연간',
 }
 
-function Panel({ title, icon, href, children }: { title: string; icon: IconName; href?: string; children: ReactNode }) {
+function Panel({ title, icon, href, children, bodyClassName = '' }: { title: string; icon: IconName; href?: string; children: ReactNode; bodyClassName?: string }) {
   return <section className={styles.panel}>
     <header className={styles.header}><h3><Icon name={icon} size={22} />{title}</h3>{href && <Link to={href}>전체 보기 <Icon name="chevronRight" size={15} /></Link>}</header>
-    <div className={styles.body} role="region" aria-label={title} tabIndex={0}>{children}</div>
+    <div className={`${styles.body} ${bodyClassName}`} role="region" aria-label={title} tabIndex={0}>{children}</div>
   </section>
 }
 
@@ -104,12 +104,15 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
           <span className={styles.statOverdue}><span className={styles.statLabel}><Icon name="alertTriangle" size={16} />기한 초과</span><b>{overdue}</b></span>
         </div>
       <div className={styles.hierarchy} tabIndex={0} role="region" aria-label="상하위 워크스페이스">
-        <span className={styles.workspaceIcon}><Icon name={getNodeVisualMetadata(node?.nodeType || 'COMPANY').iconName} size={30} /></span>
         <div className={styles.hierarchyContent}>
+        <section className={styles.hierarchyColumn} aria-label="상위 워크스페이스">
         <span className={styles.muted}>상위</span>
-        {parent ? <Link to={`/workspace?nodeId=${parent.id}`}><Icon name={getNodeVisualMetadata(parent.nodeType).iconName} size={18} />{parent.name}</Link> : <span>상위 워크스페이스 없음</span>}
+        {parent ? <Link className={styles.parentCard} to={`/workspace?nodeId=${parent.id}`}><Icon name={getNodeVisualMetadata(parent.nodeType).iconName} size={28} /><strong>{parent.name}</strong></Link> : <div className={styles.parentCard}><span className={styles.muted}>상위 워크스페이스 없음</span></div>}
+        </section>
+        <section className={styles.hierarchyColumn} aria-label="하위 워크스페이스">
         <span className={styles.muted}>하위 · {children.length}개</span>
-        <div className={styles.children}>{children.length ? children.map((child) => <Link key={child.id} to={`/workspace?nodeId=${child.id}`}><Icon name={getNodeVisualMetadata(child.nodeType).iconName} size={18} />{child.name}</Link>) : <span className={styles.muted}>하위 워크스페이스 없음</span>}</div>
+        <div className={styles.children} role="region" aria-label="하위 워크스페이스 목록" tabIndex={0}>{children.length ? children.map((child) => <Link key={child.id} to={`/workspace?nodeId=${child.id}`}><Icon name={getNodeVisualMetadata(child.nodeType).iconName} size={18} />{child.name}</Link>) : <span className={styles.muted}>하위 워크스페이스 없음</span>}</div>
+        </section>
         </div>
       </div>
       <dl className={styles.facts} tabIndex={0} aria-label="워크스페이스 참여 정보">
@@ -119,7 +122,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
       </dl>
       </div>
     </section>
-    <Panel title="일정" icon="calendar" href={href('schedules')}>
+    <Panel title="일정" icon="calendar" href={href('schedules')} bodyClassName={styles.scheduleBody}>
       <div className={styles.weekHeading}><strong>이번 주 <span>{Number(weekDays[0].key.slice(5, 7))}.{weekDays[0].day} – {Number(weekDays[6].key.slice(5, 7))}.{weekDays[6].day}</span></strong><span className={styles.muted}>반복 주기 기준</span></div>
       <div className={styles.weekStrip} role="group" aria-label="이번 주 일정 날짜 선택">
         {weekDays.map((day) => {
@@ -131,7 +134,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         })}
       </div>
       <div className={styles.selectedDayHeading}><strong>{Number(selectedDate.slice(5, 7))}월 {Number(selectedDate.slice(8))}일 {selectedDate === today && <span className={styles.badge}>오늘</span>}</strong>{!loading && !error && <span className={styles.muted}>{selectedSchedules.length}개 일정</span>}</div>
-      <div className={styles.scheduleCards} aria-live="polite">
+      <div className={styles.scheduleCards} role="region" aria-label="선택한 날짜의 일정 목록" tabIndex={0} aria-live="polite">
         {loading ? <p className={styles.muted}>일정을 불러오는 중입니다.</p> : error ? <p className={styles.muted}>일정을 불러오지 못했습니다. 일정 탭에서 다시 확인해 주세요.</p> : selectedSchedules.length ? selectedSchedules.map((rule) => <Link className={styles.scheduleCard} to={`${href('schedules')}&ruleId=${rule.ruleId}`} key={rule.ruleId}>
           <span className={styles.scheduleTime}><Icon name="clock" size={14} />{rule.startTime?.slice(0, 5) || '09:00'}</span>
           <span className={styles.itemContent}><strong>{rule.title}</strong><span className={styles.muted}>{FREQUENCY_LABELS[rule.frequency]} 일정</span></span>
@@ -139,7 +142,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         </Link>) : <div className={styles.compactEmpty}><Icon name="calendar" size={22} /><span>이 날짜에 예정된 일정이 없습니다.</span></div>}
       </div>
     </Panel>
-    <Panel title="업무" icon="checkSquare" href={href('tasks')}>
+    <Panel title="업무" icon="checkSquare" href={href('tasks')} bodyClassName={styles.taskBody}>
       <div className={styles.taskProgressHeading}><span>전체 업무 완료율</span><strong>{completionRate}<small>%</small></strong></div>
       <div className={styles.taskProgressBar} role="progressbar" aria-label="업무 완료율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completionRate}>
         <span className={styles.progressDone} style={{ width: `${tasks.length ? completedCount / tasks.length * 100 : 0}%` }} />
@@ -147,6 +150,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
       </div>
       <div className={styles.progressLegend}><span><i className={styles.progressDone} />완료 <b>{completedCount}</b></span><span><i className={styles.progressActive} />진행 중 <b>{inProgressCount}</b></span><span><i />예정 <b>{todoCount}</b></span></div>
       <div className={styles.priorityHeading}><strong>먼저 확인할 업무</strong><span className={styles.muted}>기한 초과 · 오늘부터 6일 이내 마감</span></div>
+      <div className={styles.taskList} role="region" aria-label="먼저 확인할 업무 목록" tabIndex={0}>
       {priorityTasks.length ? <div className={styles.priorityTasks}>{priorityTasks.map((item) => {
         const days = item.dueDate ? dayDifference(item.dueDate) : null
         return <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={[styles.priorityTask, days !== null && days < 0 ? styles.priorityOverdue : ''].join(' ')}>
@@ -156,6 +160,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
           <Icon name="chevronRight" size={16} className={styles.rowArrow} />
         </Link>
       })}</div> : <div className={styles.compactEmpty}><Icon name="checkCircle" size={22} /><span>{!tasks.length ? '등록된 업무가 없습니다.' : !pending.length ? '모든 업무가 완료되었습니다.' : '기한이 지났거나 7일 미만 남은 업무가 없습니다.'}</span></div>}
+      </div>
     </Panel>
     <Panel title="최근 활동" icon="lineChart">
       {activities.length ? activities.map((activity) => {

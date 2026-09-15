@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getNodeVisualMetadata } from '../../workspace/queries/workspaceDirectory'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../../workspace/model/labels'
@@ -53,6 +53,10 @@ export function WorkItemCreateForm({
   onFieldChange,
 }: WorkItemCreateFormProps) {
   const [isNodeDropdownOpen, setIsNodeDropdownOpen] = useState(false)
+  const [isParentDropdownOpen, setIsParentDropdownOpen] = useState(false)
+  const parentDropdownId = useId()
+  const parentDropdownRef = useRef<HTMLDivElement | null>(null)
+  const parentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
   const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false)
@@ -62,6 +66,9 @@ export function WorkItemCreateForm({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (parentDropdownRef.current && !parentDropdownRef.current.contains(event.target as Node)) {
+        setIsParentDropdownOpen(false)
+      }
       if (
         nodeDropdownRef.current &&
         !nodeDropdownRef.current.contains(event.target as Node)
@@ -84,6 +91,21 @@ export function WorkItemCreateForm({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (isParentDropdownOpen) {
+      parentDropdownRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus()
+    }
+  }, [isParentDropdownOpen])
+
+  const parentOptions = [
+    { value: '', label: '(최상위 업무 - 상위 업무 없음)' },
+    ...composer.availableParentItems.map((parent) => ({
+      value: parent.workItemId,
+      label: `${parent.hidden ? '🔒 [숨김] ' : ''}[${getWorkItemDisplayCode(parent)}] ${parent.title}`,
+    })),
+  ]
+  const selectedParent = parentOptions.find((option) => option.value === form.parentWorkItemId)
 
   const selectedNodeObj = composer.availableNodes.find(
     (n) => String(n.id) === form.ownerNodeId,
@@ -130,7 +152,7 @@ export function WorkItemCreateForm({
           </label>
 
           {/* 담당 조직 선택 및 상위 업무 선택 */}
-          <div className={styles.fieldGridTwo} style={{ position: 'relative', zIndex: isNodeDropdownOpen ? 30 : 20 }}>
+          <div className={styles.fieldGridTwo} style={{ position: 'relative', zIndex: (isNodeDropdownOpen || isParentDropdownOpen) ? 30 : 20 }}>
             <div className={styles.field}>
               <span className={styles.fieldLabel}>
                 담당 조직 (노드) <i className={styles.required}>*</i>
@@ -214,24 +236,84 @@ export function WorkItemCreateForm({
               </span>
             </div>
 
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>상위 업무 (Parent WorkItem)</span>
-              <select
-                className={styles.selectInput}
-                value={form.parentWorkItemId}
-                onChange={(event) => onFieldChange('parentWorkItemId', event.target.value)}
+            <div className={styles.field}>
+              <span id={`${parentDropdownId}-label`} className={styles.fieldLabel}>상위 업무 (Parent WorkItem)</span>
+              <div
+                ref={parentDropdownRef}
+                className={[
+                  styles.customDropdownContainer,
+                  isParentDropdownOpen ? styles.customDropdownContainerOpen : '',
+                ].join(' ')}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setIsParentDropdownOpen(false)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setIsParentDropdownOpen(false)
+                    parentTriggerRef.current?.focus()
+                  }
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    if (!isParentDropdownOpen) {
+                      setIsParentDropdownOpen(true)
+                      return
+                    }
+                    const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'))
+                    const index = options.findIndex((option) => option === document.activeElement)
+                    options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length]?.focus()
+                  }
+                }}
               >
-                <option value="">(최상위 업무 - 상위 업무 없음)</option>
-                {composer.availableParentItems.map((parent) => (
-                  <option key={parent.workItemId} value={parent.workItemId}>
-                    {parent.hidden ? '🔒 [숨김] ' : ''}[{getWorkItemDisplayCode(parent)}] {parent.title}
-                  </option>
-                ))}
-              </select>
+                <button
+                  ref={parentTriggerRef}
+                  type="button"
+                  className={[
+                    styles.workspaceDropdownTrigger,
+                    isParentDropdownOpen ? styles.workspaceDropdownTriggerOpen : '',
+                  ].join(' ')}
+                  onClick={() => setIsParentDropdownOpen((prev) => !prev)}
+                  aria-labelledby={`${parentDropdownId}-label ${parentDropdownId}-value`}
+                  aria-expanded={isParentDropdownOpen}
+                  aria-haspopup="listbox"
+                  aria-controls={isParentDropdownOpen ? parentDropdownId : undefined}
+                >
+                  <span className={styles.workspaceSelectedDisplay}>
+                    <span id={`${parentDropdownId}-value`} className={selectedParent?.value ? styles.workspaceSelectedText : styles.workspacePlaceholder}>
+                      {selectedParent?.label ?? parentOptions[0].label}
+                    </span>
+                  </span>
+                  <Icon name="chevronDown" size={14} className={isParentDropdownOpen ? styles.rotateChevron : undefined} />
+                </button>
+                {isParentDropdownOpen && (
+                  <div id={parentDropdownId} className={styles.workspaceDropdownMenu} role="listbox" aria-labelledby={`${parentDropdownId}-label`}>
+                    {parentOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={option.value === form.parentWorkItemId}
+                        className={[
+                          styles.workspaceDropdownItem,
+                          option.value === form.parentWorkItemId ? styles.workspaceDropdownItemSelected : '',
+                        ].join(' ')}
+                        title={option.label}
+                        onClick={() => {
+                          onFieldChange('parentWorkItemId', option.value)
+                          setIsParentDropdownOpen(false)
+                          parentTriggerRef.current?.focus()
+                        }}
+                      >
+                        <span className={styles.workspaceItemText}>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span className={styles.fieldHelpText}>
                 담당 노드 및 직속 부모 노드의 업무까지만 선택할 수 있습니다.
               </span>
-            </label>
+            </div>
           </div>
 
           {/* 담당자 배정 및 업무 카테고리 */}
@@ -722,4 +804,3 @@ export function WorkItemCreateForm({
     </form>
   )
 }
-

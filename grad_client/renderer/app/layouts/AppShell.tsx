@@ -143,12 +143,14 @@ export function AppShell() {
           }
         : { type: 'none' }
   const isWorkspaceSelectHierarchyRoute = isWorkspaceSelectRoute && !isWorkspaceSelectListView
+  const isWorkItemCreateRoute = location.pathname === '/work-items/new'
+  const hasInternalScroll = isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute || isWorkItemCreateRoute
   const shellClassName = [
     styles.shell,
-    isWorkspacePanelRoute ? styles.shellWorkspacePanels : '',
+    isWorkspacePanelRoute || isWorkItemCreateRoute ? styles.shellWorkspacePanels : '',
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
     isSidebarCollapsed ? styles.shellCollapsed : '',
-    isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.shellTimeline : '',
+    hasInternalScroll ? styles.shellTimeline : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -192,7 +194,7 @@ export function AppShell() {
         <div
           className={[
             styles.workspaceBody,
-            isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.workspaceBodyTimeline : '',
+            hasInternalScroll ? styles.workspaceBodyTimeline : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -206,7 +208,8 @@ export function AppShell() {
           <main
             className={[
               styles.main,
-              isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.mainTimeline : '',
+              hasInternalScroll ? styles.mainTimeline : '',
+              isWorkItemCreateRoute ? styles.mainScrollable : '',
             ]
               .filter(Boolean)
               .join(' ')}

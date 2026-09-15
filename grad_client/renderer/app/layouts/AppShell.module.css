@@ -616,6 +616,11 @@
   overflow: hidden;
 }
 
+.mainScrollable {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
 .mainWorkItems {
   height: 100%;
   min-height: 0;

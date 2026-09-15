@@ -73,8 +73,8 @@
 .hierarchy a:hover { color: var(--axis-brand-primary); border-color: var(--axis-brand-primary); }
 .hierarchy a svg { flex-shrink: 0; }
 .children { display: flex; flex-wrap: wrap; gap: 7px 6px; }
-.children a { padding: 6px 8px; font-size: .73rem; border: 1px solid var(--axis-line-default); border-radius: 7px; background: var(--axis-surface-panel); }
-.children a svg { width: 14px; height: 14px; }
+.hierarchy a { padding: 6px 8px; font-size: .73rem; border: 1px solid var(--axis-line-default); border-radius: 7px; background: var(--axis-surface-panel); }
+.hierarchy a svg { width: 14px; height: 14px; }
 .facts { display: grid; align-content: start; grid-template-columns: minmax(0, 1fr); gap: 5px; margin: 0; padding: 17px 16px; border: 1px solid var(--axis-line-default); border-radius: 11px; background: color-mix(in srgb, var(--axis-surface-muted) 45%, var(--axis-surface-panel)); font-size: .76rem; min-height: 0; overflow-y: auto; overflow-wrap: anywhere; }
 .facts dt { color: var(--axis-text-muted); }
 .facts dd { margin: 0 0 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .85rem; font-weight: 650; }
@@ -90,7 +90,7 @@ a.item:hover { color: var(--axis-brand-primary); }
 .itemContent { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; }
 .itemContent > strong { font-size: .87rem; line-height: 1.35; font-weight: 700; }
 .meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .73rem; color: var(--axis-text-secondary); }
-.badge, .statusBadge { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 6px; font-size: .73rem; line-height: 1.35; white-space: nowrap; color: var(--axis-text-secondary); background: var(--axis-surface-muted); }
+.badge, .statusBadge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 6px; font-size: .73rem; line-height: 1.35; white-space: nowrap; color: var(--axis-text-secondary); background: var(--axis-surface-muted); }
 .statusBadge { color: var(--axis-status-info); background: var(--axis-status-info-soft); }
 .due { color: var(--axis-status-warning); background: var(--axis-status-warning-soft); }
 .overdue { color: var(--axis-status-danger); background: var(--axis-status-danger-soft); }
@@ -114,14 +114,14 @@ a.item:hover { color: var(--axis-brand-primary); }
 }
 .weekHeading strong span { margin-left: 8px; color: var(--axis-text-secondary); font-weight: 500; }
 .weekStrip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 12px 0 18px; }
-.weekDay { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px 6px; border: 1px solid transparent; border-radius: 12px; background: var(--axis-surface-muted); color: var(--axis-text-secondary); font: inherit; cursor: pointer; }
+.weekDay { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 2px 8px; border: 1px solid transparent; border-radius: 12px; background: var(--axis-surface-muted); color: var(--axis-text-secondary); font: inherit; cursor: pointer; }
 .weekDay > span:first-child { font-size: .72rem; }
 .weekDay > b { font-size: 1.02rem; line-height: 1.2; }
 .weekDay[aria-current='date'] { border-color: var(--axis-brand-primary); }
 .weekDay[aria-pressed='true'] { background: var(--axis-brand-primary); border-color: var(--axis-brand-primary); color: var(--axis-text-on-brand); }
 .weekDay:hover:not([aria-pressed='true']) { background: var(--axis-brand-primary-soft); color: var(--axis-brand-primary); }
 .weekDay:focus-visible, .scheduleCard:focus-visible, .priorityTask:focus-visible { outline: 2px solid var(--axis-brand-primary); outline-offset: 2px; }
-.dayCount { display: grid; place-items: center; height: 16px; min-width: 16px; font-size: .65rem; font-weight: 700; }
+.dayCount { position: absolute; top: 4px; left: 6px; font-size: .6rem; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
 .selectedDayHeading strong { display: inline-flex; align-items: center; gap: 7px; }
 .scheduleCards { display: flex; flex-direction: column; gap: 9px; margin-top: 11px; }
 .scheduleCard { display: flex; align-items: center; gap: 12px; padding: 13px 12px; border: 1px solid var(--axis-line-default); border-left: 3px solid var(--axis-brand-primary); border-radius: 10px; color: var(--axis-text-primary); text-decoration: none; background: var(--axis-surface-muted); }

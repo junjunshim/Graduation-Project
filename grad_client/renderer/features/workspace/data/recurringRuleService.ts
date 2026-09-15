@@ -5,6 +5,7 @@ import type {
   UpdateRecurringRuleRequest,
 } from '../model/recurringRuleTypes'
 import { apiRequest } from './server/apiClient'
+import { optionalRecurringNumber } from '../model/recurringRuleValues'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
 
@@ -51,13 +52,13 @@ function snakeToCamelRule(item: any): RecurringRuleRecord {
     frequency: item.frequency ?? 'DAILY',
     intervalValue: Number(item.interval_value ?? item.intervalValue ?? 1),
     byDay: item.by_day ?? item.byDay ?? null,
-    byMonthDay: item.by_month_day !== undefined ? Number(item.by_month_day) : (item.byMonthDay ?? null),
-    bySetPos: item.by_set_pos !== undefined ? Number(item.by_set_pos) : (item.bySetPos ?? null),
+    byMonthDay: optionalRecurringNumber(item.by_month_day ?? item.byMonthDay),
+    bySetPos: optionalRecurringNumber(item.by_set_pos ?? item.bySetPos),
     startTime: item.start_time ?? item.startTime ?? null,
     durationMinutes: item.duration_minutes !== undefined ? Number(item.duration_minutes) : (item.durationMinutes ?? 60),
     repeatStartDate: item.repeat_start_date ?? item.repeatStartDate ?? '',
     repeatEndDate: item.repeat_end_date ?? item.repeatEndDate ?? null,
-    maxOccurrences: item.max_occurrences !== undefined ? Number(item.max_occurrences) : (item.maxOccurrences ?? null),
+    maxOccurrences: optionalRecurringNumber(item.max_occurrences ?? item.maxOccurrences),
     excludeHolidays: Boolean(item.exclude_holidays ?? item.excludeHolidays ?? true),
     holidayAction: item.holiday_action ?? item.holidayAction ?? 'SKIP',
     autoCreateTask: Boolean(item.auto_create_task ?? item.autoCreateTask ?? false),

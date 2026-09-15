@@ -20,6 +20,7 @@ import { getShellPageMeta } from './shellPageMeta'
 import styles from './AppShell.module.css'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'grad-client-sidebar-collapsed'
+const WORK_ITEM_EDIT_PATH_PATTERN = /^\/work-items\/[^/]+\/edit\/?$/
 const SECTION_HEADING_ROUTES = new Set([
   '/work-items/new',
   '/calendar',
@@ -83,7 +84,7 @@ export function AppShell() {
       searchParams.get('view') !== 'timeline') ||
     location.pathname === '/setup/top-node' ||
     location.pathname === '/setup/sub-node'
-  const isWorkItemEditRoute = /^\/work-items\/[^/]+\/edit$/.test(location.pathname)
+  const isWorkItemEditRoute = WORK_ITEM_EDIT_PATH_PATTERN.test(location.pathname)
   const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname) || isWorkItemEditRoute
   const workItemDetailMatch = location.pathname.match(/^\/work-items\/([^/]+)$/)
   const workItemDetail = workItemDetailMatch
@@ -144,10 +145,11 @@ export function AppShell() {
         : { type: 'none' }
   const isWorkspaceSelectHierarchyRoute = isWorkspaceSelectRoute && !isWorkspaceSelectListView
   const isWorkItemCreateRoute = location.pathname === '/work-items/new'
-  const hasInternalScroll = isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute || isWorkItemCreateRoute
+  const isWorkItemFormRoute = isWorkItemCreateRoute || isWorkItemEditRoute
+  const hasInternalScroll = isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute || isWorkItemFormRoute
   const shellClassName = [
     styles.shell,
-    isWorkspacePanelRoute || isWorkItemCreateRoute ? styles.shellWorkspacePanels : '',
+    isWorkspacePanelRoute || isWorkItemFormRoute ? styles.shellWorkspacePanels : '',
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
     isSidebarCollapsed ? styles.shellCollapsed : '',
     hasInternalScroll ? styles.shellTimeline : '',
@@ -209,7 +211,7 @@ export function AppShell() {
             className={[
               styles.main,
               hasInternalScroll ? styles.mainTimeline : '',
-              isWorkItemCreateRoute ? styles.mainScrollable : '',
+              isWorkItemFormRoute ? styles.mainScrollable : '',
             ]
               .filter(Boolean)
               .join(' ')}

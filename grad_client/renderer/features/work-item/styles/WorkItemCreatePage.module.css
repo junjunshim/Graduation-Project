@@ -241,7 +241,6 @@
 
 .textInput,
 .selectInput,
-.dateInput,
 .textareaInput {
   width: 100%;
   border: 1px solid var(--axis-line-default);
@@ -257,7 +256,6 @@
 
 .textInput:focus,
 .selectInput:focus,
-.dateInput:focus,
 .textareaInput:focus {
   outline: none;
   border-color: var(--axis-brand-primary);
@@ -268,6 +266,24 @@
   min-height: 7.5rem;
   resize: vertical;
   line-height: 1.6;
+}
+
+/* 필수 입력 검증 실패 상태 (네이티브 브라우저 검증 대체) */
+.textInputInvalid,
+.textInputInvalid:focus {
+  border-color: var(--axis-status-danger);
+  background: color-mix(in srgb, var(--axis-status-danger-soft) 55%, var(--axis-surface-panel));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--axis-status-danger) 15%, transparent);
+}
+
+.fieldError {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--axis-status-danger);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 /* 커스텀 조직/워크스페이스 드롭다운 (WorkspaceTasksTab 스타일 계승) */
@@ -1166,6 +1182,38 @@
 
 .tipsList li + li {
   margin-top: 0.4rem;
+}
+/* 12-1. 수정 페이지 사이드바: 변경 사항 요약 */
+.changeValue {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.86rem;
+  color: var(--axis-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.changeBefore {
+  color: var(--axis-text-muted);
+  text-decoration: line-through;
+}
+
+.changeArrow {
+  color: var(--axis-text-muted);
+  font-size: 0.78rem;
+}
+
+.changeAfter {
+  color: var(--axis-brand-primary);
+  font-weight: 700;
+}
+
+.changeEmpty {
+  margin: 0.85rem 0 0;
+  font-size: 0.8rem;
+  color: var(--axis-text-muted);
+  line-height: 1.5;
 }
 
 /* 13. 반응형 분기 */

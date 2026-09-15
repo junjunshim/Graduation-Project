@@ -26,6 +26,7 @@ export function WorkItemCreateSidebar({ composer, form }: WorkItemCreateSidebarP
   const requiredCount = checklist.filter((item) => item.required).length
   const completedRequiredCount = checklist.filter((item) => item.required && item.valid).length
   const completionRate = Math.round((completedRequiredCount / requiredCount) * 100)
+  const selectedAssignee = composer.assignableUsers.find((user) => user.userId === form.ownerUserId)
 
   return (
     <div className={styles.sidebarWrapper}>
@@ -76,8 +77,8 @@ export function WorkItemCreateSidebar({ composer, form }: WorkItemCreateSidebarP
             <span className={styles.metaValuePath}>{composer.pathLabel}</span>
           </div>
           <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>담당자 배속 풀</span>
-            <strong className={styles.metaValue}>{composer.assignableUsers.length}명 참여 가능</strong>
+            <span className={styles.metaLabel}>담당자</span>
+            <strong className={styles.metaValue}>{selectedAssignee?.name ?? '미지정'}</strong>
           </div>
         </div>
       </section>

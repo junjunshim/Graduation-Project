@@ -7,10 +7,12 @@ import type { WorkItemRecord } from '../../workspace/model/types'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
+import { WorkItemEditSidebar } from '../components/WorkItemEditSidebar'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
 import { getWorkItemDateRangeError } from '../model/workItemFormValidation'
 import { createWorkItemUpdatePayload } from '../model/workItemUpdatePayload'
-import styles from './WorkItemEditPage.module.css'
+import styles from '../styles/WorkItemCreatePage.module.css'
+import editStyles from './WorkItemEditPage.module.css'
 
 function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
   return {
@@ -50,15 +52,15 @@ export function WorkItemEditPage() {
 
   if (!detail) {
     return (
-      <section className={styles.page}>
-        <div className={styles.emptyState}>
-          <h2 className={styles.title}>수정할 업무를 찾을 수 없습니다.</h2>
-          <p className={styles.description}>
+      <div className={styles.page}>
+        <div className={editStyles.emptyState}>
+          <h2 className={editStyles.title}>수정할 업무를 찾을 수 없습니다.</h2>
+          <p className={editStyles.description}>
             요청한 업무가 없거나 현재 계정으로 접근할 수 없는 항목입니다.
           </p>
-          <Link to="/work-items" className={styles.primaryAction}>업무 목록으로 돌아가기</Link>
+          <Link to="/work-items" className={editStyles.primaryAction}>업무 목록으로 돌아가기</Link>
         </div>
-      </section>
+      </div>
     )
   }
 
@@ -130,18 +132,41 @@ export function WorkItemEditPage() {
   }
 
   return (
-    <section className={styles.page}>
-      <WorkItemCreateForm
-        composer={composer}
-        form={form}
-        submitting={submitting}
-        feedback={feedback}
-        onSubmit={handleSubmit}
-        onCancel={() => navigate(`/work-items/${item.workItemId}`)}
-        onFieldChange={setField}
-        submitLabel="저장"
-        submittingLabel="저장 중..."
-      />
-    </section>
+    <div className={styles.page}>
+      {/* 상단 브레드크럼 및 네비게이션 */}
+      <div className={styles.breadcrumbRow}>
+        <Link to={`/work-items/${item.workItemId}`} className={styles.backLink}>
+          <span>←</span> 업무 상세로
+        </Link>
+        <span className={styles.breadcrumbDivider}>/</span>
+        <span className={styles.currentBreadcrumb}>업무 수정</span>
+      </div>
+
+      {/* 메인 레이아웃 (좌: 폼 카드 그룹, 우: 실시간 요약 사이드바) */}
+      <div className={styles.layout}>
+        <main className={styles.mainContent}>
+          <WorkItemCreateForm
+            composer={composer}
+            form={form}
+            submitting={submitting}
+            feedback={feedback}
+            onSubmit={handleSubmit}
+            onCancel={() => navigate(`/work-items/${item.workItemId}`)}
+            onFieldChange={setField}
+            submitLabel="저장"
+            submittingLabel="저장 중..."
+          />
+        </main>
+
+        <aside className={styles.sidebar}>
+          <WorkItemEditSidebar
+            item={item}
+            initialForm={initialForm}
+            form={form}
+            composer={composer}
+          />
+        </aside>
+      </div>
+    </div>
   )
 }

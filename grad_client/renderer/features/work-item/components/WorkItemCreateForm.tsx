@@ -5,6 +5,7 @@ import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../../workspace/m
 import { getWorkItemDisplayCode } from '../../workspace/model/formatters'
 import { WORK_ITEM_STATUS_OPTIONS } from '../../workspace/model/options'
 import type { WorkItemComposerContext } from '../../workspace/model/types'
+import { WorkItemDatePicker } from './WorkItemDatePicker'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
 import styles from '../styles/WorkItemCreatePage.module.css'
 
@@ -63,6 +64,9 @@ export function WorkItemCreateForm({
   const nodeDropdownRef = useRef<HTMLDivElement | null>(null)
   const userDropdownRef = useRef<HTMLDivElement | null>(null)
   const categoryDropdownRef = useRef<HTMLDivElement | null>(null)
+  const [titleError, setTitleError] = useState<string | null>(null)
+  const titleInputRef = useRef<HTMLInputElement | null>(null)
+  const titleErrorId = useId()
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -124,8 +128,20 @@ export function WorkItemCreateForm({
     form.categoryId && !allCategoryOptions.includes(form.categoryId),
   )
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!form.title.trim()) {
+      event.preventDefault()
+      setTitleError('업무 제목을 입력해 주세요.')
+      titleInputRef.current?.focus()
+      return
+    }
+
+    setTitleError(null)
+    onSubmit(event)
+  }
+
   return (
-    <form className={styles.form} onSubmit={onSubmit}>
+    <form className={styles.form} onSubmit={handleFormSubmit} noValidate>
       {/* 1. 기본 정보 및 배정 카드 */}
       <section className={styles.cardSection}>
         <div className={styles.cardHeader}>
@@ -141,14 +157,29 @@ export function WorkItemCreateForm({
           <label className={styles.fieldFull}>
             <span className={styles.fieldLabel}>업무 제목 <i className={styles.required}>*</i></span>
             <input
+              ref={titleInputRef}
               type="text"
-              className={styles.textInput}
+              className={[styles.textInput, titleError ? styles.textInputInvalid : ''].filter(Boolean).join(' ')}
               value={form.title}
-              onChange={(event) => onFieldChange('title', event.target.value)}
+              onChange={(event) => {
+                onFieldChange('title', event.target.value)
+
+                if (titleError && event.target.value.trim()) {
+                  setTitleError(null)
+                }
+              }}
               placeholder="예: 2분기 프론트엔드 성능 최적화 및 접근성 개선"
+              aria-invalid={titleError ? true : undefined}
+              aria-describedby={titleError ? titleErrorId : undefined}
               required
               autoFocus
             />
+            {titleError ? (
+              <span className={styles.fieldError} id={titleErrorId} role="alert">
+                <Icon name="alertTriangle" size={13} />
+                {titleError}
+              </span>
+            ) : null}
           </label>
 
           {/* 담당 조직 선택 및 상위 업무 선택 */}
@@ -622,26 +653,25 @@ export function WorkItemCreateForm({
 
           {/* 일정 (시작일, 마감일) */}
           <div className={styles.fieldGridTwo}>
-            <label className={styles.field}>
+            <div className={styles.field}>
               <span className={styles.fieldLabel}>시작일 (Start Date)</span>
-              <input
-                type="date"
-                className={styles.dateInput}
+              <WorkItemDatePicker
+                label="시작일"
                 value={form.startDate}
-                onChange={(event) => onFieldChange('startDate', event.target.value)}
+                onChange={(nextValue) => onFieldChange('startDate', nextValue)}
+                maxDate={form.dueDate || undefined}
               />
-            </label>
+            </div>
 
-            <label className={styles.field}>
+            <div className={styles.field}>
               <span className={styles.fieldLabel}>마감일 (Due Date) {dueDateRequired ? <i className={styles.required}>*</i> : null}</span>
-              <input
-                type="date"
-                className={styles.dateInput}
+              <WorkItemDatePicker
+                label="마감일"
                 value={form.dueDate}
-                onChange={(event) => onFieldChange('dueDate', event.target.value)}
-                required={dueDateRequired}
+                onChange={(nextValue) => onFieldChange('dueDate', nextValue)}
+                minDate={form.startDate || undefined}
               />
-            </label>
+            </div>
           </div>
 
           {/* 가중치 및 진행률 */}
@@ -654,7 +684,20 @@ export function WorkItemCreateForm({
                 max="100"
                 className={styles.textInput}
                 value={form.weight}
-                onChange={(event) => onFieldChange('weight', event.target.value)}
+                onChange={(event) => {
+                  const raw = event.target.value
+
+                  if (raw === '') {
+                    onFieldChange('weight', '')
+                    return
+                  }
+
+                  const clampedWeight = Math.min(100, Math.max(1, Number(raw)))
+
+                  if (!Number.isNaN(clampedWeight)) {
+                    onFieldChange('weight', String(clampedWeight))
+                  }
+                }}
               />
               <span className={styles.fieldHelpText}>업무의 상대적 비중(기본: 1)</span>
             </label>

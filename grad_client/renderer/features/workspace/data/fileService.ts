@@ -3,6 +3,7 @@ import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
 import { isServerDataSource } from './workspaceMode'
 import { readWorkspaceDb, writeServerWorkspaceDb } from './localStore'
+import { waitForDownloadCompletion } from './downloadCompletion'
 
 export type CachedFileItem = {
   fileId: number
@@ -22,6 +23,9 @@ export async function downloadWorkItemFile(fileId: number, fileName: string): Pr
     responseType: 'blob',
     timeoutMs: 120_000,
   })
+  // 다운로드 시작 전에 완료 추적을 등록해 실제 저장 완료 시점까지 기다린다.
+  const completion = waitForDownloadCompletion(fileName)
+
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -34,6 +38,8 @@ export async function downloadWorkItemFile(fileId: number, fileName: string): Pr
     anchor.remove()
     globalThis.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
+
+  await completion
 }
 
 export async function uploadWorkItemFile(workItemId: string, file: File): Promise<void> {

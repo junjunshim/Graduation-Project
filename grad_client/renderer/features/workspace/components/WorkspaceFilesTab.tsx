@@ -7,6 +7,7 @@ import {
   fetchRecurringRules,
   fetchRecurringRuleFileContent,
 } from '../data/recurringRuleService'
+import { isPreviewableFile } from '../model/filePreview'
 import { formatWorkspaceDate, formatWorkspaceShortDate } from '../model/formatters'
 import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
@@ -337,6 +338,15 @@ export function WorkspaceFilesTab({
   // 파일 클릭 시 내용 뷰어 열기
   const handleOpenFile = async (file: UnifiedFileRecord) => {
     setViewerFile(file)
+
+    // 미리보기 미지원 형식은 파일 내용 API를 호출하지 않고 안내만 표시한다.
+    if (!isPreviewableFile(file.originalFileName)) {
+      setFileContentData(null)
+      setFileError(null)
+      setIsLoadingFile(false)
+      return
+    }
+
     setIsLoadingFile(true)
     setFileError(null)
 

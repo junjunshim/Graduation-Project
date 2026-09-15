@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import {
@@ -28,6 +29,7 @@ import {
 import { RoleSaveConfirmModal } from './RoleSaveConfirmModal'
 import { ToastAlertModal, type AlertType } from '../../../design-system/primitives/ToastAlertModal'
 import styles from './WorkspaceRolesTab.module.css'
+import menuStyles from './FileContextMenu.module.css'
 
 type WorkspaceRolesTabProps = {
   rootNode?: OrganizationNodeRecord | null
@@ -50,6 +52,36 @@ export function WorkspaceRolesTab({
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [isPresetOpen, setIsPresetOpen] = useState(false)
   const presetDropdownRef = useRef<HTMLDivElement>(null)
+  const [roleMenu, setRoleMenu] = useState<{ role: string; x: number; y: number } | null>(null)
+  const roleMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!roleMenu) return
+    const menu = roleMenuRef.current
+    if (menu) {
+      const bounds = menu.getBoundingClientRect()
+      menu.style.left = `${Math.max(8, Math.min(roleMenu.x, window.innerWidth - bounds.width - 8))}px`
+      menu.style.top = `${Math.max(8, Math.min(roleMenu.y, window.innerHeight - bounds.height - 8))}px`
+      menu.querySelector('button')?.focus()
+    }
+    const close = () => setRoleMenu(null)
+    const pointer = (event: PointerEvent) => {
+      if (!roleMenuRef.current?.contains(event.target as Node)) close()
+    }
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' || event.key === 'Tab') close()
+    }
+    window.addEventListener('pointerdown', pointer)
+    window.addEventListener('keydown', key)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('pointerdown', pointer)
+      window.removeEventListener('keydown', key)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [roleMenu])
 
   // 모던 알림/에러 모달 상태
   const [alertInfo, setAlertInfo] = useState<{ isOpen: boolean; message: string; title?: string; type?: AlertType }>({
@@ -150,6 +182,20 @@ export function WorkspaceRolesTab({
 
   const isSelectedAdmin = !isCreatingRole && definitionById.get(selectedRole)?.isTopRole === true
   const isEditable = canManageRoles && !isSelectedAdmin
+
+  const startCreatingRole = (authority = '000100110000001101010111') => {
+    if (!canManageRoles || isSaving) return
+    setIsCreatingRole(true)
+    setIsRenamingRole(false)
+    setEditRoleName('')
+    setNewRoleName('')
+    setNewRoleBitmask(authority)
+    setIsPresetOpen(false)
+    setIsConfirmModalOpen(false)
+    setSaveSuccess(false)
+    setHoveredBit(null)
+    setRoleMenu(null)
+  }
 
   // 자신이 소속된 역할(예: MANAGER)의 '역할 권한 정의/수정(ROLE_CHANGE)'을 끄려고 하는지 여부
   const isDisablingOwnRoleChange = useMemo(() => {
@@ -530,13 +576,8 @@ export function WorkspaceRolesTab({
               <button
                 type="button"
                 className={styles.addRoleBtn}
-                onClick={() => {
-                  setIsCreatingRole(true)
-                  setIsRenamingRole(false)
-                  setEditRoleName('')
-                  setNewRoleName('')
-                  setNewRoleBitmask('000100110000001101010111') // 기본 MEMBER 프리셋
-                }}
+                onClick={() => startCreatingRole()}
+                disabled={isSaving}
                 title="이 워크스페이스에 새로운 역할을 추가합니다."
               >
                 <Icon name="plus" size={13} />
@@ -577,6 +618,12 @@ export function WorkspaceRolesTab({
                   key={role}
                   type="button"
                   className={[styles.roleItem, isSelected ? styles.roleItemActive : ''].join(' ')}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (!canManageRoles || isSaving) return
+                    setRoleMenu({ role, x: event.clientX, y: event.clientY })
+                  }}
                   onClick={() => {
                     if (isCreatingRole) {
                       setIsCreatingRole(false)
@@ -610,6 +657,29 @@ export function WorkspaceRolesTab({
             })}
           </div>
         </aside>
+
+        {roleMenu && canManageRoles && definitionById.has(roleMenu.role) ? createPortal(
+          <div
+            ref={roleMenuRef}
+            className={menuStyles.menu}
+            style={{ left: roleMenu.x, top: roleMenu.y, maxWidth: 'calc(100vw - 16px)' }}
+            role="menu"
+            aria-label="역할 메뉴"
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button
+              type="button"
+              className={menuStyles.item}
+              role="menuitem"
+              disabled={isSaving}
+              onClick={() => startCreatingRole(savedBitmaskMap.get(roleMenu.role) ?? getDefaultAuthority(roleMenu.role))}
+            >
+              <Icon name="plus" size={15} />
+              <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{roleLabel(roleMenu.role)}의 권한으로 새로 만들기</span>
+            </button>
+          </div>,
+          document.body,
+        ) : null}
 
         {/* 우측: 상세 권한 매트릭스 */}
         <main className={styles.permissionMain} aria-label="세부 권한 설정">

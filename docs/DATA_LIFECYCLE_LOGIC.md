@@ -6,7 +6,7 @@
 
 ### ① 소프트 딜리트(`is_deleted`) 기반 가시성 제어
 - **모든 엔티티(`NODE`, `WORK_ITEM`, `FILE`)는 `is_deleted: boolean` 필드를 응답에 포함**합니다.
-- 서버 API(`context/init`, `get_node_detail`, `sync_context`, `get_work_item_detail` 등)는 `is_deleted = true`인 항목도 권한이 있다면 클라이언트에 그대로 전달합니다.
+- 서버 API(`context/init`, `get_node_detail`, `get_work_item_detail` 등)는 `is_deleted = true`인 항목도 권한이 있다면 클라이언트에 그대로 전달합니다.
 - **클라이언트 UI 렌더링**:
   - **일반 화면(조직도/업무 보드/상세 뷰)**: `is_deleted === false`인 정상 항목만 필터링하여 렌더링
   - **휴지통 / 삭제된 항목 관리 탭**: `is_deleted === true`인 항목만 별도로 모아서 렌더링
@@ -92,4 +92,3 @@ graph TD
 | **업무 복구** | `PATCH` | `/api/workItems/restore` | [`api/Patch/work_item_restore.md`](api/Patch/work_item_restore.md) |
 | **파일 복구** | `PATCH` | `/api/workItems/files/restore` | [`api/Patch/file_restore.md`](api/Patch/file_restore.md) |
 | **전체 초기 동기화** | `GET` | `/api/context/init` | [`api/Get/context_init.md`](api/Get/context_init.md) |
-| **증분 동기화** | `GET` | `/api/context/sync` | [`api/Get/sync_context.md`](api/Get/sync_context.md) |

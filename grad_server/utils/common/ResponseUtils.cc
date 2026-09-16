@@ -75,7 +75,6 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0102") != std::string::npos) return DbErrorCode::AuthorityCheckFailed;
     else if (errMsg.find("P0103") != std::string::npos) return DbErrorCode::InsufficientAuthority;
     else if (errMsg.find("P0201") != std::string::npos) return DbErrorCode::InitialContextError;
-    else if (errMsg.find("P0202") != std::string::npos) return DbErrorCode::SyncContextError;
     else if (errMsg.find("P0301") != std::string::npos) return DbErrorCode::CreateTopNodeError;
     else if (errMsg.find("P0302") != std::string::npos) return DbErrorCode::CreateSubNodeError;
     else if (errMsg.find("P0303") != std::string::npos) return DbErrorCode::UpdateNodeError;
@@ -178,11 +177,6 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["message"] = "사용자 전체 데이터 로드에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
-        }
-        case DbErrorCode::SyncContextError:{
-            ret["message"] = "사용자 변경 데이터 로드에 실패했습니다.";
-            ret["http_code"] = drogon::k500InternalServerError;
-            break;            
         }
         case DbErrorCode::CreateTopNodeError:{
             ret["message"] = "최상위 노드 생성에 실패했습니다.";

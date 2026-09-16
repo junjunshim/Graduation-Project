@@ -7,6 +7,7 @@ import type {
 import { apiRequest } from './server/apiClient'
 import { optionalRecurringNumber } from '../model/recurringRuleValues'
 import { waitForDownloadCompletion } from './downloadCompletion'
+import { isServerDataSource } from './workspaceMode'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
 
@@ -15,6 +16,14 @@ type ServerResponse<T> = {
   data?: T
   message?: string
   code?: string
+}
+
+/**
+ * 서버 요청이 실패했을 때 보여줄 메시지.
+ * 서버가 내려준 사유(예: '권한이 부족합니다.')를 우선 사용한다.
+ */
+function toMutationErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 function getLocalRecurringRules(nodeId?: number, includeDeleted: boolean = false): RecurringRuleRecord[] {
@@ -182,8 +191,13 @@ export async function createRecurringRule(
     }
     return { status: 'error', message: res.message || '정기 일정을 생성하지 못했습니다.' }
   } catch (error) {
+    // 서버 모드에서는 실패를 그대로 알린다. 로컬 캐시만 바뀌면 서버 데이터와 어긋난다.
+    if (isServerDataSource()) {
+      return { status: 'error', message: toMutationErrorMessage(error, '정기 일정을 생성하지 못했습니다.') }
+    }
+
     console.warn('[recurringRuleService] createRecurringRule error, using local fallback:', error)
-    // 로컬 폴백 (오프라인/테스트용)
+    // 로컬 폴백 (목 데이터 모드 전용)
     const newId = Date.now()
     const newRule: RecurringRuleRecord = {
       ruleId: newId,
@@ -289,6 +303,11 @@ export async function updateRecurringRule(
     }
     return { status: 'error', message: res.message || '정기 일정을 수정하지 못했습니다.' }
   } catch (error) {
+    // 서버 모드에서는 실패를 그대로 알린다. 로컬 캐시만 바뀌면 서버 데이터와 어긋난다.
+    if (isServerDataSource()) {
+      return { status: 'error', message: toMutationErrorMessage(error, '정기 일정을 수정하지 못했습니다.') }
+    }
+
     console.warn('[recurringRuleService] updateRecurringRule error, using local fallback:', error)
     const current = getLocalRecurringRules()
     const target = current.find((r) => r.ruleId === req.ruleId)
@@ -349,6 +368,11 @@ export async function deleteRecurringRule(ruleId: number): Promise<{ status: 'su
     }
     return { status: 'error', message: res.message || '삭제에 실패했습니다.' }
   } catch (error) {
+    // 서버 모드에서는 실패를 그대로 알린다. 로컬 캐시만 바뀌면 서버 데이터와 어긋난다.
+    if (isServerDataSource()) {
+      return { status: 'error', message: toMutationErrorMessage(error, '삭제에 실패했습니다.') }
+    }
+
     console.warn('[recurringRuleService] deleteRecurringRule local fallback:', error)
     const current = getLocalRecurringRules(undefined, true)
     saveLocalRecurringRules(
@@ -417,6 +441,10 @@ export async function uploadRecurringRuleFile(
     }
     return { status: 'error', message: res.message || '파일 업로드에 실패했습니다.' }
   } catch (error) {
+    if (isServerDataSource()) {
+      return { status: 'error', message: toMutationErrorMessage(error, '파일 업로드에 실패했습니다.') }
+    }
+
     console.warn('[recurringRuleService] uploadRecurringRuleFile fallback:', error)
     const mockFile: RecurringRuleFileRecord = {
       fileId: Date.now(),
@@ -448,6 +476,10 @@ export async function deleteRecurringRuleFile(
     }
     return { status: 'error', message: res.message || '파일 삭제에 실패했습니다.' }
   } catch (error) {
+    if (isServerDataSource()) {
+      return { status: 'error', message: toMutationErrorMessage(error, '파일 삭제에 실패했습니다.') }
+    }
+
     return { status: 'success' }
   }
 }
@@ -468,6 +500,10 @@ export async function restoreRecurringRule(
     }
     return { status: 'error', message: res.message || '정기 일정 복구에 실패했습니다.' }
   } catch (error) {
+    if (isServerDataSource()) {
+      return { status: 'error', message: toMutationErrorMessage(error, '정기 일정 복구에 실패했습니다.') }
+    }
+
     console.warn('[recurringRuleService] restoreRecurringRule error:', error)
     return { status: 'success' }
   }
@@ -488,6 +524,10 @@ export async function restoreRecurringRuleFile(
     }
     return { status: 'error', message: res.message || '정기 일정 파일 복구에 실패했습니다.' }
   } catch (error) {
+    if (isServerDataSource()) {
+      return { status: 'error', message: toMutationErrorMessage(error, '정기 일정 파일 복구에 실패했습니다.') }
+    }
+
     console.warn('[recurringRuleService] restoreRecurringRuleFile error:', error)
     return { status: 'success' }
   }

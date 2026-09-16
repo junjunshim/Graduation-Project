@@ -37,3 +37,12 @@
   background: var(--axis-line-default, #e2e8f0);
   margin: 4px 0;
 }
+
+/* 권한이 없어 비활성화된 메뉴 항목 (busy 상태의 cursor: wait 와 구분) */
+.item:disabled.permissionDenied,
+.deleteItem:disabled.permissionDenied,
+.restoreItem:disabled.permissionDenied {
+  cursor: not-allowed;
+  opacity: 0.5;
+  color: var(--axis-text-muted, #94a3b8);
+}

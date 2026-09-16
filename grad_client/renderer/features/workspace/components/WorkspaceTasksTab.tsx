@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
@@ -16,7 +16,9 @@ import { getWorkItemTag } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
 import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItemDue'
 import type { DueScheduleType } from '../model/workItemDue'
+import { canRestoreWorkItem } from '../model/workItemPermission'
 import { getNodeVisualMetadata } from '../queries/workspaceDirectory'
+import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
 import { restoreWorkItem } from '../data/workItemService'
 import { getCascadeWorkItemSummary } from '../data/cascadeWorkItemHelper'
@@ -211,6 +213,7 @@ function TaskTreeNodeCard({
   onToggleCollapse,
   isTrashMode = false,
   onRestore,
+  canRestoreItem,
 }: {
   node: TaskTreeNode
   depth?: number
@@ -219,10 +222,12 @@ function TaskTreeNodeCard({
   onToggleCollapse: (id: string) => void
   isTrashMode?: boolean
   onRestore?: (item: WorkItemRecord) => void
+  canRestoreItem?: (item: WorkItemRecord) => boolean
 }) {
   const { item, children } = node
   const hasChildren = children.length > 0
   const isCollapsed = collapsedMap.get(item.workItemId) ?? false
+  const restorable = canRestoreItem ? canRestoreItem(item) : true
 
   return (
     <div className={styles.treeNodeContainer}>
@@ -251,7 +256,8 @@ function TaskTreeNodeCard({
               type="button"
               className={styles.trashRestoreButton}
               onClick={() => onRestore(item)}
-              title="업무 복구하기"
+              disabled={!restorable}
+              title={restorable ? '업무 복구하기' : '업무를 복구할 권한이 없습니다.'}
             >
               <Icon name="restore" size={12} />
               <span>복구</span>
@@ -282,6 +288,7 @@ function TaskTreeNodeCard({
               onToggleCollapse={onToggleCollapse}
               isTrashMode={isTrashMode}
               onRestore={onRestore}
+              canRestoreItem={canRestoreItem}
             />
           ))}
         </div>
@@ -296,12 +303,14 @@ function TaskTreeView({
   totalCount,
   isTrashMode = false,
   onRestore,
+  canRestoreItem,
 }: {
   trees: TaskTreeNode[]
   members: Array<Pick<UserRecord, 'userId' | 'name'>>
   totalCount: number
   isTrashMode?: boolean
   onRestore?: (item: WorkItemRecord) => void
+  canRestoreItem?: (item: WorkItemRecord) => boolean
 }) {
   const [collapsedMap, setCollapsedMap] = useState<Map<string, boolean>>(() => new Map())
 
@@ -366,6 +375,7 @@ function TaskTreeView({
             onToggleCollapse={toggleCollapse}
             isTrashMode={isTrashMode}
             onRestore={onRestore}
+            canRestoreItem={canRestoreItem}
           />
         ))}
       </div>
@@ -388,6 +398,13 @@ export function WorkspaceTasksTab({
   initialSchedule,
 }: WorkspaceTasksTabProps) {
   const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
+
+  // 복구는 서버가 최종 판정하므로, 화면에서도 같은 기준으로 버튼을 막는다.
+  const canRestoreItem = useCallback((item: WorkItemRecord) => {
+    const snapshot = getOrgSnapshot()
+
+    return canRestoreWorkItem(item, getCurrentUser(snapshot)?.userId ?? null, snapshot)
+  }, [])
   const [viewMode, setViewMode] = useState<TaskViewMode>('list')
   const [showDeletedTasks, setShowDeletedTasks] = useState(false)
   const [restoreConfirmTarget, setRestoreConfirmTarget] = useState<{
@@ -659,6 +676,17 @@ export function WorkspaceTasksTab({
   const taskTrees = useMemo(() => buildTaskTrees(filteredWorkItems), [filteredWorkItems])
 
   function handleRestoreClick(item: WorkItemRecord) {
+    if (!canRestoreItem(item)) {
+      void import('../../notification/data/toastEvents').then(({ showToast }) => {
+        showToast({
+          title: '업무 복구 실패',
+          content: '업무를 복구할 권한이 없습니다.',
+          created_at: new Date().toISOString(),
+        })
+      })
+      return
+    }
+
     const snapshot = getOrgSnapshot()
     const summary = getCascadeWorkItemSummary(
       item.workItemId,
@@ -1115,6 +1143,7 @@ export function WorkspaceTasksTab({
             totalCount={filteredWorkItems.length}
             isTrashMode={showDeletedTasks}
             onRestore={handleRestoreClick}
+            canRestoreItem={canRestoreItem}
           />
         ) : (
           <div className={styles.tableCard}>
@@ -1168,7 +1197,8 @@ export function WorkspaceTasksTab({
                               type="button"
                               className={styles.trashRestoreButton}
                               onClick={() => handleRestoreClick(item)}
-                              title="업무 복구하기"
+                              disabled={!canRestoreItem(item)}
+                              title={canRestoreItem(item) ? '업무 복구하기' : '업무를 복구할 권한이 없습니다.'}
                             >
                               <Icon name="restore" size={12} />
                               <span>복구</span>
@@ -1397,6 +1427,19 @@ export function WorkspaceTasksTab({
           onClose={() => setRestoreConfirmTarget(null)}
           onConfirm={async (cascade: boolean) => {
             const target = restoreConfirmTarget
+            const { showToast } = await import('../../notification/data/toastEvents')
+
+            // 모달이 열린 뒤 권한이 바뀌었을 수 있으므로 제출 직전에 한 번 더 확인한다.
+            if (!canRestoreItem(target.item)) {
+              setRestoreConfirmTarget(null)
+              showToast({
+                title: '업무 복구 실패',
+                content: '업무를 복구할 권한이 없습니다.',
+                created_at: new Date().toISOString(),
+              })
+              return
+            }
+
             try {
               const { showToast } = await import('../../notification/data/toastEvents')
               const res = await restoreWorkItem(target.item.workItemId, { cascade })
@@ -1416,7 +1459,6 @@ export function WorkspaceTasksTab({
                 })
               }
             } catch (err) {
-              const { showToast } = await import('../../notification/data/toastEvents')
               showToast({
                 title: '업무 복구 실패',
                 content: err instanceof Error ? err.message : '업무를 복구하지 못했습니다.',

@@ -5,12 +5,23 @@ import { showToast } from '../../notification/data/toastEvents'
 import { downloadWorkItemFile } from '../data/fileService'
 import type { WorkItemFileRecord } from '../model/types'
 
-export function WorkItemFileDownload({ file, onComplete }: { file: WorkItemFileRecord; onComplete?: () => void }) {
+export function WorkItemFileDownload({
+  file,
+  onComplete,
+  disabled = false,
+  disabledReason,
+}: {
+  file: WorkItemFileRecord
+  onComplete?: () => void
+  /** 권한이 없으면 메뉴 항목을 비활성화한다 (기본: 허용) */
+  disabled?: boolean
+  disabledReason?: string
+}) {
   const busyRef = useRef(false)
   const [busy, setBusy] = useState(false)
 
   async function handleDownload() {
-    if (busyRef.current) return
+    if (busyRef.current || disabled) return
     busyRef.current = true
     setBusy(true)
     try {
@@ -38,9 +49,10 @@ export function WorkItemFileDownload({ file, onComplete }: { file: WorkItemFileR
   return (
     <button
       type="button"
-      className={styles.item}
+      className={[styles.item, disabled ? styles.permissionDenied : ''].join(' ')}
       role="menuitem"
-      disabled={busy}
+      disabled={busy || disabled}
+      title={disabled ? disabledReason : undefined}
       aria-label={`${file.originalFileName} 다운로드`}
       onClick={(event) => {
         event.stopPropagation()

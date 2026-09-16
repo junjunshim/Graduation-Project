@@ -313,8 +313,14 @@
   padding: 2px 4px;
 }
 
-.removeItemBtn:hover {
+.removeItemBtn:hover:not(:disabled) {
   color: var(--axis-danger);
+}
+
+/* 권한이 없어 비활성화된 파일 삭제 버튼 */
+.removeItemBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .dropzone {

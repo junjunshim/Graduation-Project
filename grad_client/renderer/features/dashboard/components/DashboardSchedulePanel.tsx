@@ -1,4 +1,5 @@
 import { Icon } from '../../../design-system/primitives/Icon'
+import { getCategoryBadgeStyle } from '../../workspace/model/labels'
 import { useTheme } from '../../../design-system/theme/ThemeContext'
 import { getScheduleIllustration } from '../model/dashboardAssets'
 import type { DashboardSchedule } from '../model/dashboardTypes'
@@ -24,6 +25,7 @@ export function DashboardSchedulePanel({ schedules, onOpenSchedule }: DashboardS
         ) : (
           schedules.map((schedule) => {
             const illustration = getScheduleIllustration(schedule.category, themeMode)
+            const badgeStyle = getCategoryBadgeStyle(schedule.category)
 
             return (
               <article className={styles.card} key={schedule.ruleId}>
@@ -38,8 +40,17 @@ export function DashboardSchedulePanel({ schedules, onOpenSchedule }: DashboardS
                 </div>
 
                 <div className={styles.content}>
-                  <span className={styles.badge}>{schedule.badgeLabel}</span>
+                  <span className={styles.badge} style={badgeStyle}>
+                    {schedule.categoryLabel}
+                  </span>
                   <h3 className={styles.cardTitle}>{schedule.title}</h3>
+
+                  {schedule.nodeTitle ? (
+                    <p className={styles.nodeMeta}>
+                      <Icon name="building" size={15} className={styles.nodeMetaIcon} />
+                      <span>{schedule.nodeTitle}</span>
+                    </p>
+                  ) : null}
 
                   <p className={styles.meta}>
                     <Icon name="calendar" size={15} className={styles.metaIcon} />

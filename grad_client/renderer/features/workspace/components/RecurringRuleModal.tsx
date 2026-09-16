@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { Button } from '../../../design-system/primitives/Button'
@@ -8,10 +8,16 @@ import type {
   HolidayAction,
   RecurringCategory,
   RecurringFrequency,
+  RecurringRuleFileRecord,
   RecurringRuleRecord,
   RecurringWeekDay,
 } from '../model/recurringRuleTypes'
+import { RECURRING_CATEGORY_OPTIONS } from '../model/labels'
 import { createRecurringRule, deleteRecurringRuleFile, updateRecurringRule } from '../data/recurringRuleService'
+import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../data/orgService'
+import { canChangeRecurringRuleFile } from '../model/filePermission'
+import { canCreateRecurringRule } from '../model/recurringRulePermission'
 import { showToast } from '../../notification/data/toastEvents'
 import type { UserRecord } from '../model/types'
 import styles from './RecurringRuleModal.module.css'
@@ -30,14 +36,6 @@ export type RecurringRuleModalProps = {
   onClose: () => void
   onSuccess: (rule: RecurringRuleRecord) => void
 }
-
-const CATEGORY_OPTIONS: Array<{ value: RecurringCategory; label: string }> = [
-  { value: 'ROUTINE', label: '정기 루틴' },
-  { value: 'REPORT', label: '정기 보고' },
-  { value: 'INSPECTION', label: '시스템 점검' },
-  { value: 'MEETING', label: '정기 회의' },
-  { value: 'EVENT', label: '조직 행사' },
-]
 
 const FREQUENCY_OPTIONS: Array<{ value: RecurringFrequency; label: string }> = [
   { value: 'DAILY', label: '매일' },
@@ -65,6 +63,27 @@ export function RecurringRuleModal({
   onSuccess,
 }: RecurringRuleModalProps) {
   const isEdit = Boolean(initialRule)
+
+  // 생성은 DB create_recurring_rule 과 동일하게 노드의 WI_PERSONAL_CHANGE 가 필요하다.
+  // (수정은 진입 자체가 수정 권한으로 막혀 있다)
+  const canCreateRule = useCallback(() => {
+    if (initialRule) return true
+    const snapshot = getOrgSnapshot()
+
+    return canCreateRecurringRule(ownerNodeId, getCurrentUser(snapshot)?.userId ?? null, snapshot)
+  }, [initialRule, ownerNodeId])
+
+  // 기존 파일 삭제는 업로더 본인이거나 노드의 FILE_CHANGE 권한이 있어야 한다.
+  // (DB delete_recurring_rule_file 과 동일 기준)
+  const canDeleteExistingFile = useCallback(
+    (file: RecurringRuleFileRecord) => {
+      if (!initialRule) return false
+      const snapshot = getOrgSnapshot()
+
+      return canChangeRecurringRuleFile(getCurrentUser(snapshot)?.userId ?? null, file, initialRule, snapshot)
+    },
+    [initialRule],
+  )
 
   // 기본 정보 상태
   const [title, setTitle] = useState('')
@@ -196,6 +215,12 @@ export function RecurringRuleModal({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
+
+    if (!canCreateRule()) {
+      setErrorMessage('정기 일정을 등록할 권한이 없습니다.')
+      return
+    }
+
     if (!title.trim()) {
       setErrorMessage('일정 제목을 입력해 주세요.')
       return
@@ -329,7 +354,7 @@ export function RecurringRuleModal({
                 value={category}
                 onChange={(e) => setCategory(e.target.value as RecurringCategory)}
               >
-                {CATEGORY_OPTIONS.map((opt) => (
+                {RECURRING_CATEGORY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}
                   </option>
@@ -636,18 +661,35 @@ export function RecurringRuleModal({
                       <button
                         type="button"
                         className={styles.removeItemBtn}
+                        disabled={!canDeleteExistingFile(file)}
+                        title={canDeleteExistingFile(file) ? '파일 삭제' : '파일 삭제 권한이 없습니다.'}
                         onClick={async () => {
                           if (!window.confirm(`'${file.originalFileName}' 파일을 삭제하시겠습니까?`)) return
-                          await deleteRecurringRuleFile(file.fileId)
-                          setExistingFiles((prev) => (prev || []).filter((f) => f.fileId !== file.fileId))
-                          showToast({
-                            title: '파일 삭제 완료',
-                            content: `'${file.originalFileName}' 파일이 삭제되었습니다.`,
-                            created_at: new Date().toISOString(),
-                          })
+                          try {
+                            const res = await deleteRecurringRuleFile(file.fileId)
+                            if (res.status === 'error') {
+                              showToast({
+                                title: '파일 삭제 실패',
+                                content: res.message || '파일을 삭제하지 못했습니다.',
+                                created_at: new Date().toISOString(),
+                              })
+                              return
+                            }
+                            setExistingFiles((prev) => (prev || []).filter((f) => f.fileId !== file.fileId))
+                            showToast({
+                              title: '파일 삭제 완료',
+                              content: `'${file.originalFileName}' 파일이 삭제되었습니다.`,
+                              created_at: new Date().toISOString(),
+                            })
+                          } catch (err) {
+                            showToast({
+                              title: '파일 삭제 실패',
+                              content: err instanceof Error ? err.message : '파일을 삭제하지 못했습니다.',
+                              created_at: new Date().toISOString(),
+                            })
+                          }
                         }}
                         aria-label="기존 파일 삭제"
-                        title="파일 삭제"
                       >
                         <Icon name="close" size={13} />
                       </button>

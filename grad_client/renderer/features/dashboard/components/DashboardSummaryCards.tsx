@@ -19,14 +19,14 @@ export function DashboardSummaryCards({ metrics }: DashboardSummaryCardsProps) {
           <p className={styles.label} data-tone="info">진행 중인 업무</p>
           <div className={styles.valueRow}>
             <strong className={styles.value}>{metrics.activeCount}건</strong>
-            <span className={styles.pill} data-tone="info">오늘 처리 {metrics.todayWorkCount}건</span>
+            <span className={styles.pill} data-tone="info">오늘 {metrics.todayWorkCount}건</span>
           </div>
         </div>
 
         <span className={styles.divider} aria-hidden="true" />
 
         <div className={styles.rate}>
-          <p className={styles.label}>이번 주 진행률</p>
+          <p className={styles.label}>이번 주 마감 업무 완료율</p>
           <strong className={styles.rateValue}>{metrics.weekProgress}%</strong>
           <div className={styles.rateRow}>
             <span
@@ -35,7 +35,7 @@ export function DashboardSummaryCards({ metrics }: DashboardSummaryCardsProps) {
               aria-valuenow={metrics.weekProgress}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-label="이번 주 진행률"
+              aria-label="이번 주 마감 업무 완료율"
             >
               <span className={styles.progressFill} style={{ width: `${metrics.weekProgress}%` }} />
             </span>
@@ -76,9 +76,18 @@ export function DashboardSummaryCards({ metrics }: DashboardSummaryCardsProps) {
           )}
         </div>
 
-        <Link className={`${styles.button} ${styles.dueButton}`} to="/work-items">
-          마감 업무 보기
-        </Link>
+        {metrics.nearestDue ? (
+          <Link
+            className={`${styles.button} ${styles.dueButton}`}
+            to={`/work-items/${metrics.nearestDue.workItemId}`}
+          >
+            마감 업무 보기
+          </Link>
+        ) : (
+          <button type="button" className={`${styles.button} ${styles.dueButton}`} disabled>
+            마감 업무 보기
+          </button>
+        )}
       </article>
     </div>
   )

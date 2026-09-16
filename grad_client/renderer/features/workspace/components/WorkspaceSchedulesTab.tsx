@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import { getCategoryBadgeStyle } from '../model/labels'
+import { getCategoryBadgeStyle, getRecurringCategoryLabel } from '../model/labels'
+import { canCreateRecurringRule, canManageRecurringRule } from '../model/recurringRulePermission'
+import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../data/orgService'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
 import { fetchRecurringRules, fetchRecurringRuleDetail, restoreRecurringRule } from '../data/recurringRuleService'
 import { formatCycleText, getNextOccurrenceInfo } from '../model/recurringSchedule'
@@ -29,14 +32,6 @@ const SECTION_CONFIG: Array<{ key: FrequencySectionKey; title: string; icon: str
   { key: 'YEARLY', title: '연간 정기 일정', icon: 'flag' },
 ]
 
-const CATEGORY_LABELS: Record<string, string> = {
-  ROUTINE: '정기 루틴',
-  REPORT: '정기 보고',
-  INSPECTION: '시스템 점검',
-  MEETING: '정기 회의',
-  EVENT: '조직 행사',
-}
-
 export function WorkspaceSchedulesTab({
   activeNodeId = 1,
   members = [],
@@ -51,6 +46,25 @@ export function WorkspaceSchedulesTab({
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedRuleId = searchParams.get('ruleId')
 
+  // 수정/삭제/복구는 서버가 최종 판정하므로, 화면에서도 같은 기준으로 버튼을 막는다.
+  const canManageRule = useCallback((rule: RecurringRuleRecord) => {
+    const snapshot = getOrgSnapshot()
+
+    return canManageRecurringRule(rule, getCurrentUser(snapshot)?.userId ?? null, snapshot)
+  }, [])
+
+  const canManageSelectedRule = useMemo(
+    () => (selectedRecurringRule ? canManageRule(selectedRecurringRule) : false),
+    [canManageRule, selectedRecurringRule],
+  )
+
+  // 일정 생성은 DB create_recurring_rule 과 동일하게 노드의 WI_PERSONAL_CHANGE 가 필요하다.
+  const canCreateRule = useMemo(() => {
+    const snapshot = getOrgSnapshot()
+
+    return canCreateRecurringRule(activeNodeId, getCurrentUser(snapshot)?.userId ?? null, snapshot)
+  }, [activeNodeId])
+
   useEffect(() => {
     if (!requestedRuleId) return
     let cancelled = false
@@ -59,8 +73,19 @@ export function WorkspaceSchedulesTab({
       const rule = Number.isSafeInteger(id) && id > 0 ? await fetchRecurringRuleDetail(id) : null
       if (cancelled) return
       if (rule && rule.ownerNodeId === activeNodeId) {
-        if (rule.isDeleted) setRestoreConfirmTarget(rule)
-        else setSelectedRecurringRule(rule)
+        if (rule.isDeleted) {
+          if (canManageRule(rule)) {
+            setRestoreConfirmTarget(rule)
+          } else {
+            showToast({
+              title: '복구 권한이 없습니다',
+              content: '이 일정을 복구할 권한이 없습니다.',
+              created_at: new Date().toISOString(),
+            })
+          }
+        } else {
+          setSelectedRecurringRule(rule)
+        }
       } else {
         showToast({ title: '일정을 열 수 없습니다', content: '일정이 없거나 조회 권한이 없습니다.', created_at: new Date().toISOString() })
       }
@@ -72,7 +97,7 @@ export function WorkspaceSchedulesTab({
     }
     void openRequestedRule()
     return () => { cancelled = true }
-  }, [requestedRuleId, activeNodeId, setSearchParams])
+  }, [requestedRuleId, activeNodeId, setSearchParams, canManageRule])
 
   const reloadRules = () => {
     if (activeNodeId) {
@@ -162,6 +187,18 @@ export function WorkspaceSchedulesTab({
   const handleRestoreConfirm = async (cascade: boolean) => {
     if (!restoreConfirmTarget) return
     const target = restoreConfirmTarget
+
+    // 모달이 열린 뒤 권한이 바뀌었을 수 있으므로 제출 직전에 한 번 더 확인한다.
+    if (!canManageRule(target)) {
+      setRestoreConfirmTarget(null)
+      showToast({
+        title: '정기 일정 복구 실패',
+        content: '정기 일정을 복구할 권한이 없습니다.',
+        created_at: new Date().toISOString(),
+      })
+      return
+    }
+
     try {
       const res = await restoreRecurringRule(target.ruleId, cascade)
       if (res.status === 'success') {
@@ -192,6 +229,7 @@ export function WorkspaceSchedulesTab({
   }
 
   const renderCard = (rule: (typeof enrichedAndSortedRules)[0]) => {
+    const canManage = canManageRule(rule)
     const categoryStyle = getCategoryBadgeStyle(rule.category)
     const { dDay, dateString } = rule.nextOccurrence
 
@@ -258,7 +296,7 @@ export function WorkspaceSchedulesTab({
                 ...categoryStyle,
               }}
             >
-              {CATEGORY_LABELS[rule.category] || rule.category}
+              {getRecurringCategoryLabel(rule.category)}
             </span>
 
             <span className={styles.recurringCardTitle} title={rule.title}>
@@ -311,6 +349,8 @@ export function WorkspaceSchedulesTab({
               <button
                 type="button"
                 className={styles.restoreButton}
+                disabled={!canManage}
+                title={canManage ? '휴지통에서 복구' : '복구 권한이 없습니다.'}
                 onClick={() => setRestoreConfirmTarget(rule)}
               >
                 <Icon name="restore" size={13} />
@@ -375,6 +415,8 @@ export function WorkspaceSchedulesTab({
             <button
               type="button"
               className={styles.primaryButton}
+              disabled={!canCreateRule}
+              title={canCreateRule ? '새 정기 일정 등록' : '정기 일정을 등록할 권한이 없습니다.'}
               onClick={() => setIsRecurringModalOpen(true)}
             >
               <Icon name="plus" size={14} />
@@ -475,6 +517,8 @@ export function WorkspaceSchedulesTab({
             )
             setSelectedRecurringRule(null)
           }}
+          canEdit={canManageSelectedRule}
+          canDelete={canManageSelectedRule}
         />
       )}
 

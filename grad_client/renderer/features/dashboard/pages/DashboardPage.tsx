@@ -1,14 +1,13 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import type { RecurringRuleRecord } from '../../workspace/model/recurringRuleTypes'
-import type { WorkItemRecord } from '../../workspace/model/types'
 import { DashboardSchedulePanel } from '../components/DashboardSchedulePanel'
 import { DashboardSummaryCards } from '../components/DashboardSummaryCards'
 import { DashboardWorkSchedulePanel } from '../components/DashboardWorkSchedulePanel'
 import { RecurringRuleDetailModal } from '../../workspace/components/RecurringRuleDetailModal'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { useDashboardContext } from '../data/useDashboardContext'
+import type { DashboardRecurringRule, DashboardWorkItem } from '../model/dashboardTypes'
 import {
   buildCalendarDays,
   buildCalendarWindow,
@@ -26,8 +25,8 @@ import {
 } from '../model/dashboardSummary'
 import styles from './DashboardPage.module.css'
 
-const EMPTY_WORK_ITEMS: WorkItemRecord[] = []
-const EMPTY_RECURRING_RULES: RecurringRuleRecord[] = []
+const EMPTY_WORK_ITEMS: DashboardWorkItem[] = []
+const EMPTY_RECURRING_RULES: DashboardRecurringRule[] = []
 
 const LOADING_MESSAGE = '대시보드를 불러오는 중입니다.'
 const FALLBACK_ERROR_MESSAGE = '대시보드 정보를 불러오지 못했습니다.'
@@ -93,6 +92,12 @@ export function DashboardPage() {
     () => recurringRules.find((rule) => rule.ruleId === openedScheduleRuleId) ?? null,
     [recurringRules, openedScheduleRuleId],
   )
+  // 일정 목록은 그 일정이 속한 워크스페이스의 일정 탭으로 보낸다.
+  const scheduleListHref = useMemo(() => {
+    const ownerNodeId = openedScheduleRule?.ownerNodeId
+
+    return ownerNodeId ? `/workspace?view=schedules&nodeId=${ownerNodeId}` : '/workspace?view=schedules'
+  }, [openedScheduleRule])
 
   if (status === 'loading') {
     return (
@@ -146,7 +151,7 @@ export function DashboardPage() {
           onClose={() => setOpenedScheduleRuleId(null)}
           onNavigateToList={() => {
             setOpenedScheduleRuleId(null)
-            navigate('/workspace?view=schedules')
+            navigate(scheduleListHref)
           }}
         />
       ) : null}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { WorkItemFileRecord, WorkItemRecord } from '../model/types'
 import type { RecurringRuleFileRecord, RecurringRuleRecord } from '../model/recurringRuleTypes'
@@ -7,8 +7,18 @@ import { WorkItemFileUpload } from './WorkItemFileUpload'
 import { WorkItemFileDownload } from './WorkItemFileDownload'
 import { WorkItemFileDelete } from './WorkItemFileDelete'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
-import { downloadRecurringRuleFile, deleteRecurringRuleFile, restoreRecurringRuleFile, uploadRecurringRuleFile } from '../data/recurringRuleService'
+import { downloadRecurringRuleFile, deleteRecurringRuleFile, readCachedRecurringRules, restoreRecurringRuleFile, uploadRecurringRuleFile } from '../data/recurringRuleService'
 import { showToast } from '../../notification/data/toastEvents'
+import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../data/orgService'
+import {
+  canChangeRecurringRuleFile,
+  canChangeWorkItemFile,
+  canDownloadRecurringRuleFile,
+  canDownloadWorkItemFile,
+  canUploadRecurringRuleFile,
+  canUploadWorkItemFile,
+} from '../model/filePermission'
 import styles from './FileContextMenu.module.css'
 
 export type UnifiedFileRecord =
@@ -32,11 +42,57 @@ export function useFileContextMenu() {
   } | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
     file: UnifiedFileRecord
+    canChange: boolean
     onDeleted?: () => Promise<void>
   } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const [isUploadingRecurring, setIsUploadingRecurring] = useState(false)
+
+  // 메뉴가 가리키는 대상에 대해 서버(DB 함수)와 동일한 기준으로 권한을 계산한다.
+  // 권한이 없으면 메뉴 항목을 비활성화해 실패할 요청을 미리 막는다.
+  const permissions = useMemo(() => {
+    const denied = { canDownload: false, canChange: false, canUpload: false }
+    if (!menu) return denied
+
+    const snapshot = getOrgSnapshot()
+    const userId = getCurrentUser(snapshot)?.userId ?? null
+    if (!userId) return denied
+
+    if (menu.file) {
+      const file = menu.file
+
+      if (file.fileType === 'recurring_rule') {
+        const rule = readCachedRecurringRules().find((candidate) => candidate.ruleId === file.ruleId) ?? null
+        if (!rule) return denied
+
+        return {
+          ...denied,
+          canDownload: canDownloadRecurringRuleFile(userId, rule, snapshot),
+          canChange: canChangeRecurringRuleFile(userId, file, rule, snapshot),
+        }
+      }
+
+      const item = snapshot.workItems.find((candidate) => candidate.workItemId === file.workItemId) ?? null
+      if (!item) return denied
+
+      return {
+        ...denied,
+        canDownload: canDownloadWorkItemFile(userId, item, snapshot),
+        canChange: canChangeWorkItemFile(userId, file, item, snapshot),
+      }
+    }
+
+    if (menu.item) {
+      return { ...denied, canUpload: canUploadWorkItemFile(userId, menu.item, snapshot) }
+    }
+
+    if (menu.recurringRule) {
+      return { ...denied, canUpload: canUploadRecurringRuleFile(userId, menu.recurringRule, snapshot) }
+    }
+
+    return denied
+  }, [menu])
 
   useEffect(() => {
     if (!menu) return
@@ -121,6 +177,16 @@ export function useFileContextMenu() {
 
   const handleRestore = async (file: UnifiedFileRecord, callback?: () => Promise<void>) => {
     setMenu(null)
+
+    if (!permissions.canChange) {
+      showToast({
+        title: '파일 복구 실패',
+        content: '파일을 복구할 권한이 없습니다.',
+        created_at: new Date().toISOString(),
+      })
+      return
+    }
+
     try {
       if (file.fileType === 'recurring_rule') {
         const fileId = file.fileId ?? file.id
@@ -152,6 +218,16 @@ export function useFileContextMenu() {
 
   const handleDownloadUnifiedFile = async (file: UnifiedFileRecord) => {
     setMenu(null)
+
+    if (!permissions.canDownload) {
+      showToast({
+        title: '파일 다운로드 실패',
+        content: '파일을 다운로드할 권한이 없습니다.',
+        created_at: new Date().toISOString(),
+      })
+      return
+    }
+
     try {
       if (file.fileType === 'recurring_rule') {
         const fileId = file.fileId ?? file.id
@@ -178,6 +254,15 @@ export function useFileContextMenu() {
     const uploadedFile = event.target.files?.[0]
     event.target.value = ''
     if (!uploadedFile || !menu?.recurringRule) return
+
+    if (!permissions.canUpload) {
+      showToast({
+        title: '파일 등록 실패',
+        content: '파일을 등록할 권한이 없습니다.',
+        created_at: new Date().toISOString(),
+      })
+      return
+    }
 
     setIsUploadingRecurring(true)
     const rule = menu.recurringRule
@@ -239,7 +324,9 @@ export function useFileContextMenu() {
                   <button
                     type="button"
                     role="menuitem"
-                    className={[styles.menuItem, styles.restoreItem].join(' ')}
+                    className={[styles.menuItem, styles.restoreItem, permissions.canChange ? '' : styles.permissionDenied].join(' ')}
+                    disabled={!permissions.canChange}
+                    title={permissions.canChange ? '파일 복구' : '파일을 복구할 권한이 없습니다.'}
                     onClick={() => {
                       if (menu.file) {
                         void handleRestore(menu.file, menu.onRestored)
@@ -253,8 +340,10 @@ export function useFileContextMenu() {
                   <>
                     <button
                       type="button"
-                      className={styles.item}
+                      className={[styles.item, permissions.canDownload ? '' : styles.permissionDenied].join(' ')}
                       role="menuitem"
+                      disabled={!permissions.canDownload}
+                      title={permissions.canDownload ? '다운로드' : '파일 다운로드 권한이 없습니다.'}
                       onClick={() => {
                         if (menu.file) void handleDownloadUnifiedFile(menu.file)
                       }}
@@ -265,12 +354,15 @@ export function useFileContextMenu() {
                     <div className={styles.separator} />
                     <button
                       type="button"
-                      className={styles.deleteItem}
+                      className={[styles.deleteItem, permissions.canChange ? '' : styles.permissionDenied].join(' ')}
                       role="menuitem"
+                      disabled={!permissions.canChange}
+                      title={permissions.canChange ? '삭제' : '파일을 변경할 권한이 없습니다.'}
                       onClick={() => {
                         if (menu.file) {
                           setDeleteConfirmTarget({
                             file: menu.file,
+                            canChange: permissions.canChange,
                             onDeleted: menu.onDeleted,
                           })
                         }
@@ -286,16 +378,21 @@ export function useFileContextMenu() {
                     <WorkItemFileDownload
                       key={`download-${menu.file.id}`}
                       file={menu.file as WorkItemFileRecord}
+                      disabled={!permissions.canDownload}
+                      disabledReason="파일 다운로드 권한이 없습니다."
                       onComplete={() => setMenu(null)}
                     />
                     <div className={styles.separator} />
                     <WorkItemFileDelete
                       key={`delete-${menu.file.id}`}
                       file={menu.file as WorkItemFileRecord}
+                      disabled={!permissions.canChange}
+                      disabledReason="파일을 변경할 권한이 없습니다."
                       onRequestConfirm={() => {
                         if (menu.file) {
                           setDeleteConfirmTarget({
                             file: menu.file,
+                            canChange: permissions.canChange,
                             onDeleted: menu.onDeleted,
                           })
                         }
@@ -311,14 +408,17 @@ export function useFileContextMenu() {
                   workItemId={menu.item.workItemId}
                   workItemTitle={menu.item.title}
                   onUploaded={menu.onUploaded}
+                  disabled={!permissions.canUpload}
+                  disabledReason="파일을 등록할 권한이 없습니다."
                 />
               ) : null}
               {menu.recurringRule ? (
                 <button
                   type="button"
                   role="menuitem"
-                  className={styles.item}
-                  disabled={isUploadingRecurring}
+                  className={[styles.item, permissions.canUpload ? '' : styles.permissionDenied].join(' ')}
+                  disabled={isUploadingRecurring || !permissions.canUpload}
+                  title={permissions.canUpload ? '양식 파일 등록' : '파일을 등록할 권한이 없습니다.'}
                   onClick={() => uploadInputRef.current?.click()}
                 >
                   <Icon name="plus" size={15} />
@@ -340,6 +440,18 @@ export function useFileContextMenu() {
           onClose={() => setDeleteConfirmTarget(null)}
           onConfirm={async () => {
             const target = deleteConfirmTarget
+
+            // 메뉴를 연 시점에 권한이 없었거나 그 사이 권한이 바뀐 경우를 막는다.
+            if (!target.canChange) {
+              showToast({
+                title: '파일 삭제 실패',
+                content: '파일을 삭제할 권한이 없습니다.',
+                created_at: new Date().toISOString(),
+              })
+              setDeleteConfirmTarget(null)
+              return
+            }
+
             try {
               if (target.file.fileType === 'recurring_rule') {
                 const fileId = target.file.fileId ?? target.file.id

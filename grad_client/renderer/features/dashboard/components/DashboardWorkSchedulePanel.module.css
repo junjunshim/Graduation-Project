@@ -272,6 +272,22 @@
   flex: 0 0 auto;
 }
 
+/* 업무가 어느 노드(워크스페이스)에서 일어나는지 표시 */
+.nodeChip {
+  flex: 0 0 auto;
+  max-width: 9rem;
+  overflow: hidden;
+  padding: 0.3rem 0.62rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .statusPill {
   flex: 0 0 auto;
   padding: 0.3rem 0.78rem;

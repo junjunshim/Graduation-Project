@@ -1,3 +1,4 @@
+import type { RecurringCategory } from './recurringRuleTypes'
 import type { NodeType, WorkItemStatus } from './types'
 
 export function getWorkItemStatusLabel(status: WorkItemStatus) {
@@ -72,6 +73,19 @@ export function getNodeTypeLabel(nodeType: NodeType) {
     default:
       return nodeType
   }
+}
+
+/** 정기 일정 카테고리 (선택 옵션·상세·뱃지에서 공통 사용) */
+export const RECURRING_CATEGORY_OPTIONS: ReadonlyArray<{ value: RecurringCategory; label: string }> = [
+  { value: 'ROUTINE', label: '정기 루틴' },
+  { value: 'REPORT', label: '정기 보고' },
+  { value: 'INSPECTION', label: '시스템 점검' },
+  { value: 'MEETING', label: '정기 회의' },
+  { value: 'EVENT', label: '조직 행사' },
+]
+
+export function getRecurringCategoryLabel(category: RecurringCategory | string | null | undefined) {
+  return RECURRING_CATEGORY_OPTIONS.find((option) => option.value === category)?.label ?? category ?? ''
 }
 
 // 32가지 톤온톤 뮤티드 역할/카테고리 뱃지 컬러 팔레트 (CSS 토큰 변수 매핑)

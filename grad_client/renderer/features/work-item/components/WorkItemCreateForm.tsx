@@ -5,7 +5,7 @@ import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../../workspace/m
 import { getWorkItemDisplayCode } from '../../workspace/model/formatters'
 import { WORK_ITEM_STATUS_OPTIONS } from '../../workspace/model/options'
 import type { WorkItemComposerContext } from '../../workspace/model/types'
-import { WorkItemDatePicker } from './WorkItemDatePicker'
+import { DatePicker } from '../../../design-system/primitives/DatePicker'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
 import styles from '../styles/WorkItemCreatePage.module.css'
 
@@ -655,7 +655,7 @@ export function WorkItemCreateForm({
           <div className={styles.fieldGridTwo}>
             <div className={styles.field}>
               <span className={styles.fieldLabel}>시작일 (Start Date)</span>
-              <WorkItemDatePicker
+              <DatePicker
                 label="시작일"
                 value={form.startDate}
                 onChange={(nextValue) => onFieldChange('startDate', nextValue)}
@@ -665,7 +665,7 @@ export function WorkItemCreateForm({
 
             <div className={styles.field}>
               <span className={styles.fieldLabel}>마감일 (Due Date) {dueDateRequired ? <i className={styles.required}>*</i> : null}</span>
-              <WorkItemDatePicker
+              <DatePicker
                 label="마감일"
                 value={form.dueDate}
                 onChange={(nextValue) => onFieldChange('dueDate', nextValue)}

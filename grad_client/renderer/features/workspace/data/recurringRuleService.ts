@@ -32,6 +32,11 @@ function getLocalRecurringRules(nodeId?: number, includeDeleted: boolean = false
   }
 }
 
+/** 서버 조회 없이 캐시된 정기 일정만 필요한 화면(대시보드 등)에서 사용 */
+export function readCachedRecurringRules(): RecurringRuleRecord[] {
+  return getLocalRecurringRules()
+}
+
 function saveLocalRecurringRules(rules: RecurringRuleRecord[]) {
   if (typeof window === 'undefined' || !window.localStorage) return
   try {

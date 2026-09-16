@@ -1,4 +1,4 @@
-/* 업무 생성/수정 폼 전용 날짜 선택 드롭다운 (WorkItemCreatePage 드롭다운 스타일 계승) */
+/* 디자인 시스템 날짜 선택 드롭다운 (업무/일정 생성·수정, 대시보드 공용) */
 .container {
   position: relative;
   width: 100%;
@@ -95,6 +95,17 @@
   border-radius: var(--axis-radius-sm, 8px);
   background: var(--axis-surface-panel);
   box-shadow: var(--axis-shadow-popover);
+}
+
+.panelEnd {
+  left: auto;
+  right: 0;
+}
+
+/* 아래 공간이 부족할 때 위로 띄우는 배치 */
+.panelTop {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .panelHeader {

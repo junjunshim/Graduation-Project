@@ -68,4 +68,6 @@
 | work_item 파일 삭제 | Delete | /api/workItems/files | 완료 | [link](api/Delete/file.md) |
 | work_item 파일 복구 | Patch | /api/workItems/files/restore | 완료 | [link](api/Patch/file_restore.md) |
 | 사용자 전체 정보 조회 | Get | /api/context/init | 완료 | [link](api/Get/context_init.md) |
+| 워크스페이스 스코프 조회 | Get | /api/context/scope | 완료 | [link](api/Get/context_scope.md) |
+| 대시보드 데이터 조회 | Get | /api/context/dashboard | 완료 | [link](api/Get/dashboard.md) |
 | 실시간 알림 WebSocket | WebSocket (Get) | /api/notification/ws | 완료 | [link](api/Get/websocket_notification.md) |

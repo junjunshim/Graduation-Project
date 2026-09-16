@@ -1,0 +1,250 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+  min-width: 0;
+  padding: 1.1rem 1.35rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-panel);
+}
+
+.progressCard {
+  background: var(--axis-status-info-soft);
+  border-color: var(--axis-status-info-border);
+}
+
+.dueCard {
+  background: var(--axis-status-warning-soft);
+  border-color: var(--axis-status-warning-border);
+}
+
+.iconBox {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel);
+}
+
+.iconBox[data-tone='info'] {
+  color: var(--axis-status-info);
+  border-color: var(--axis-status-info-border);
+}
+
+.iconBox[data-tone='warning'] {
+  color: var(--axis-status-warning);
+  border-color: var(--axis-status-warning-border);
+}
+
+.primary {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.label[data-tone='info'] {
+  color: var(--axis-status-info);
+}
+
+.label[data-tone='danger'] {
+  color: var(--axis-status-danger);
+}
+
+.valueRow {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.value,
+.dueValue,
+.rateValue {
+  color: var(--text-primary);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.dueValue {
+  color: var(--axis-status-danger);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--axis-radius-pill);
+  background: var(--surface-panel);
+  font-size: 0.79rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill[data-tone='info'] {
+  color: var(--axis-status-info);
+  border-color: var(--axis-status-info-border);
+}
+
+.pill[data-tone='warning'] {
+  color: var(--axis-status-warning);
+  border-color: var(--axis-status-warning-border);
+}
+
+.divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1px;
+  margin: 0.1rem 0.25rem;
+  background: var(--line-default);
+}
+
+.rate {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.rateRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.progressTrack {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  height: 0.5rem;
+  min-width: 4rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-surface-muted);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-status-info);
+}
+
+.rateCaption {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.nearest {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.nearestItem {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--axis-status-warning-border);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel);
+}
+
+.nearestIcon {
+  flex: 0 0 auto;
+  color: var(--axis-status-danger);
+}
+
+.nearestText {
+  display: grid;
+  min-width: 0;
+}
+
+.nearestTitle {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearestDate {
+  color: var(--axis-status-danger);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.nearestEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0.62rem 1.1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-action);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.dueButton {
+  color: var(--axis-status-danger);
+  border-color: var(--axis-status-danger-border);
+}
+
+.button:hover,
+.button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--axis-status-danger);
+}
+
+@media (max-width: 1180px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .card {
+    flex-wrap: wrap;
+  }
+
+  .divider {
+    display: none;
+  }
+}

@@ -117,7 +117,7 @@ function normalizeRoleName(value: unknown): RoleName {
   return 'MEMBER'
 }
 
-function normalizeWorkItemStatus(value: unknown): WorkItemStatus {
+export function normalizeWorkItemStatus(value: unknown): WorkItemStatus {
   const normalized = toStringValue(value).trim().toLowerCase().replace(/_/g, '-')
 
   if (normalized === 'in-progress' || normalized === 'doing') {

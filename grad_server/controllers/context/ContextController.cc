@@ -84,3 +84,33 @@ void ContextController::getWorkspaceDirectoryScope(const HttpRequestPtr &req, st
         user_email
     );
 }
+
+// 대시보드 화면 데이터 조회 API
+void ContextController::getDashboardContext(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    std::string user_email = req->attributes()->get<std::string>("user_email");
+    auto dbClient = drogon::app().getDbClient();
+
+    std::string sql = "SELECT * FROM get_dashboard_context($1)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result){
+            Json::Value ret = parseIntegratedDataResult(result);
+            ret["server_time"] = trantor::Date::now().toFormattedString(true);
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e){
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        user_email
+    );
+}

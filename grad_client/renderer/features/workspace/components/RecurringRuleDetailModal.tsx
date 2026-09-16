@@ -14,8 +14,11 @@ export type RecurringRuleDetailModalProps = {
   rule: RecurringRuleRecord | null
   members?: Array<Pick<UserRecord, 'userId' | 'name'> & { roleName?: string }>
   onClose: () => void
-  onEdit: (rule: RecurringRuleRecord) => void
-  onDeleted: (ruleId: number) => void
+  /** 수정/삭제 액션. 대시보드처럼 상세만 볼 때는 넘기지 않으며, 그때는 버튼이 숨겨진다. */
+  onEdit?: (rule: RecurringRuleRecord) => void
+  onDeleted?: (ruleId: number) => void
+  /** 수정/삭제 대신 노출하는 '일정 목록으로 이동' 액션 */
+  onNavigateToList?: () => void
 }
 
 const CATEGORY_NAMES: Record<string, string> = {
@@ -39,6 +42,7 @@ export function RecurringRuleDetailModal({
   onClose,
   onEdit,
   onDeleted,
+  onNavigateToList,
 }: RecurringRuleDetailModalProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
@@ -91,7 +95,7 @@ export function RecurringRuleDetailModal({
           content: `'${rule.title}' 일정이 성공적으로 삭제되어 휴지통으로 이동되었습니다.`,
           created_at: new Date().toISOString(),
         })
-        onDeleted(rule.ruleId)
+        onDeleted?.(rule.ruleId)
         onClose()
       } else {
         setErrorMessage(res.message || '삭제에 실패했습니다.')
@@ -200,24 +204,35 @@ export function RecurringRuleDetailModal({
 
         <footer className={styles.footer}>
           <div className={styles.leftActions}>
-            <button
-              type="button"
-              className={styles.deleteBtn}
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              삭제
-            </button>
-            <button
-              type="button"
-              className={styles.editBtn}
-              onClick={() => {
-                onEdit(rule)
-                onClose()
-              }}
-            >
-              수정
-            </button>
+            {onNavigateToList ? (
+              <button type="button" className={styles.editBtn} onClick={onNavigateToList}>
+                일정 목록으로 이동
+              </button>
+            ) : null}
+
+            {onDeleted ? (
+              <button
+                type="button"
+                className={styles.deleteBtn}
+                onClick={handleDelete}
+                disabled={isDeleting}
+              >
+                삭제
+              </button>
+            ) : null}
+
+            {onEdit ? (
+              <button
+                type="button"
+                className={styles.editBtn}
+                onClick={() => {
+                  onEdit(rule)
+                  onClose()
+                }}
+              >
+                수정
+              </button>
+            ) : null}
           </div>
 
           <div className={styles.rightActions}>

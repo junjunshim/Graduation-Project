@@ -146,7 +146,13 @@ export function AppShell() {
   const isWorkspaceSelectHierarchyRoute = isWorkspaceSelectRoute && !isWorkspaceSelectListView
   const isWorkItemCreateRoute = location.pathname === '/work-items/new'
   const isWorkItemFormRoute = isWorkItemCreateRoute || isWorkItemEditRoute
-  const hasInternalScroll = isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute || isWorkItemFormRoute
+  const isDashboardRoute = location.pathname === '/dashboard'
+  const hasInternalScroll =
+    isWorkspaceTimelineRoute ||
+    isWorkspacePanelRoute ||
+    isWorkspaceSelectHierarchyRoute ||
+    isWorkItemFormRoute ||
+    isDashboardRoute
   const shellClassName = [
     styles.shell,
     isWorkspacePanelRoute || isWorkItemFormRoute ? styles.shellWorkspacePanels : '',

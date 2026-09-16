@@ -1,14 +1,15 @@
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Icon } from '../../../design-system/primitives/Icon'
-import { formatWorkspaceDate } from '../../workspace/model/formatters'
-import { getWorkspaceTodayTimestamp, parseWorkspaceDay } from '../../workspace/model/workItemDue'
-import styles from '../styles/WorkItemDatePicker.module.css'
+import { Icon } from './Icon'
+import styles from './DatePicker.module.css'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const CALENDAR_CELL_COUNT = 42
+const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
+/** 패널을 위로 띄울지 판단할 때 쓰는 대략적인 높이(px) */
+const PANEL_ESTIMATED_HEIGHT = 330
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
-type WorkItemDatePickerProps = {
+type DatePickerProps = {
   label: string
   value: string
   onChange: (value: string) => void
@@ -16,6 +17,8 @@ type WorkItemDatePickerProps = {
   minDate?: string
   maxDate?: string
   disabled?: boolean
+  /** 드롭다운 패널 정렬. 기본은 트리거 왼쪽 기준. */
+  panelAlign?: 'start' | 'end'
 }
 
 type CalendarCell = {
@@ -85,7 +88,63 @@ function isTimestampDisabled(timestamp: number, minTimestamp: number | null, max
   return (minTimestamp !== null && timestamp < minTimestamp) || (maxTimestamp !== null && timestamp > maxTimestamp)
 }
 
-export function WorkItemDatePicker({
+/** 워크스페이스 기준(Asia/Seoul) 오늘 자정의 UTC 타임스탬프 */
+function getTodayTimestamp() {
+  const dateParts = new Intl.DateTimeFormat('en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: WORKSPACE_TIME_ZONE,
+    year: 'numeric',
+  }).formatToParts(new Date())
+  const year = Number(dateParts.find((part) => part.type === 'year')?.value)
+  const month = Number(dateParts.find((part) => part.type === 'month')?.value)
+  const day = Number(dateParts.find((part) => part.type === 'day')?.value)
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return Date.now()
+  }
+
+  return Date.UTC(year, month - 1, day)
+}
+
+/** 'YYYY-MM-DD' 문자열을 UTC 자정 타임스탬프로 바꾼다. 형식이 어긋나면 null. */
+function parseDayValue(value?: string) {
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/)
+
+  if (!match) {
+    return null
+  }
+
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  const day = Number(match[3])
+  const timestamp = Date.UTC(year, monthIndex, day)
+  const parsedDate = new Date(timestamp)
+
+  if (
+    parsedDate.getUTCFullYear() !== year ||
+    parsedDate.getUTCMonth() !== monthIndex ||
+    parsedDate.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return timestamp
+}
+
+/** 트리거에 보여주는 'YYYY.MM.DD' 라벨 */
+function formatPickerDate(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+
+  return match ? match[1] + '.' + match[2] + '.' + match[3] : value
+}
+
+/**
+ * 날짜 선택 드롭다운 (디자인 시스템 기본 요소).
+ * 업무 생성/수정, 일정 생성/수정, 대시보드 업무 일정에서 공통으로 쓴다.
+ * 값은 'YYYY-MM-DD' 문자열이며, 지우면 빈 문자열을 돌려준다.
+ */
+export function DatePicker({
   label,
   value,
   onChange,
@@ -93,19 +152,21 @@ export function WorkItemDatePicker({
   minDate,
   maxDate,
   disabled = false,
-}: WorkItemDatePickerProps) {
+  panelAlign = 'start',
+}: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [visibleMonth, setVisibleMonth] = useState(() => getMonthStartTimestamp(getWorkspaceTodayTimestamp()))
+  const [visibleMonth, setVisibleMonth] = useState(() => getMonthStartTimestamp(getTodayTimestamp()))
   const [focusedTimestamp, setFocusedTimestamp] = useState<number | null>(null)
+  const [panelPlacement, setPanelPlacement] = useState<'bottom' | 'top'>('bottom')
   const containerRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const dayButtonRefs = useRef(new Map<number, HTMLButtonElement>())
   const panelId = useId()
 
-  const todayTimestamp = useMemo(() => getWorkspaceTodayTimestamp(), [])
-  const selectedTimestamp = parseWorkspaceDay(value)
-  const minTimestamp = parseWorkspaceDay(minDate)
-  const maxTimestamp = parseWorkspaceDay(maxDate)
+  const todayTimestamp = useMemo(() => getTodayTimestamp(), [])
+  const selectedTimestamp = parseDayValue(value)
+  const minTimestamp = parseDayValue(minDate)
+  const maxTimestamp = parseDayValue(maxDate)
 
   const cells = useMemo(() => buildCalendarCells(visibleMonth), [visibleMonth])
 
@@ -195,6 +256,14 @@ export function WorkItemDatePicker({
 
   function openPanel() {
     const base = selectedTimestamp ?? todayTimestamp
+    const triggerRect = containerRef.current?.getBoundingClientRect()
+
+    // 모달 안처럼 아래 공간이 부족하면 패널을 위로 띄운다.
+    if (triggerRect) {
+      const spaceBelow = window.innerHeight - triggerRect.bottom
+      setPanelPlacement(spaceBelow < PANEL_ESTIMATED_HEIGHT && triggerRect.top > spaceBelow ? 'top' : 'bottom')
+    }
+
     setVisibleMonth(getMonthStartTimestamp(base))
     setFocusedTimestamp(selectedTimestamp ?? (isDayDisabled(todayTimestamp) ? null : todayTimestamp))
     setIsOpen(true)
@@ -280,7 +349,7 @@ export function WorkItemDatePicker({
         <span className={styles.triggerValue}>
           <Icon name="calendar" size={15} className={styles.triggerIcon} />
           {selectedTimestamp !== null ? (
-            <span className={styles.triggerText}>{formatWorkspaceDate(value)}</span>
+            <span className={styles.triggerText}>{formatPickerDate(value)}</span>
           ) : (
             <span className={styles.triggerPlaceholder}>{placeholder}</span>
           )}
@@ -291,7 +360,13 @@ export function WorkItemDatePicker({
       {isOpen ? (
         <div
           id={panelId}
-          className={styles.panel}
+          className={[
+            styles.panel,
+            panelAlign === 'end' ? styles.panelEnd : '',
+            panelPlacement === 'top' ? styles.panelTop : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
           role="dialog"
           aria-label={`${label} 달력`}
         >
@@ -363,7 +438,7 @@ export function WorkItemDatePicker({
 
           <div className={styles.panelFooter}>
             <span className={styles.footerHint}>
-              {selectedTimestamp !== null ? formatWorkspaceDate(value) : '선택 없음'}
+              {selectedTimestamp !== null ? formatPickerDate(value) : '선택 없음'}
             </span>
             <div className={styles.footerActions}>
               <button

@@ -87,7 +87,6 @@ Graduation-Project/
 - 서버 데이터가 갱신되면 workspaceCacheEvents.ts의 브라우저 이벤트로 AppShell을 다시 렌더링한다.
 - 서버 모드의 user_id/work_item_id는 접근 가능한 캐시 범위와 무관한 UUID 기반 값으로 생성하고, 목 모드의 기존 순번 ID는 유지한다.
 - 서버 세션이 있는 앱 시작 시 WorkspaceDataProvider가 /context/init을 호출해 캐시를 먼저 채운 뒤 라우트를 표시한다.
-- 각 서버 변경 요청이 성공하면 전체 context를 다시 받아 캐시를 일관된 상태로 맞춘다.
 - 서버 쓰기는 성공했지만 후속 context 재조회만 실패하면 쓰기를 실패로 되돌리지 않는다. 전역 복구 화면에서 같은 쓰기를 재제출하지 않고 context GET만 다시 시도한다.
 
 ### 2.4 기존 로딩·오류·빈 데이터 처리

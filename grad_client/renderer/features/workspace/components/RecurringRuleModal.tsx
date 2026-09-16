@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { Button } from '../../../design-system/primitives/Button'
+import { DatePicker } from '../../../design-system/primitives/DatePicker'
 import type {
   CreateRecurringRuleRequest,
   HolidayAction,
@@ -197,6 +198,11 @@ export function RecurringRuleModal({
     e.preventDefault()
     if (!title.trim()) {
       setErrorMessage('일정 제목을 입력해 주세요.')
+      return
+    }
+
+    if (!repeatStartDate) {
+      setErrorMessage('반복 시작 기준일을 선택해 주세요.')
       return
     }
 
@@ -466,23 +472,20 @@ export function RecurringRuleModal({
           <div className={styles.row}>
             <div className={styles.col}>
               <label className={styles.label}>반복 시작 기준일</label>
-              <input
-                type="date"
-                className={styles.input}
+              <DatePicker
+                label="반복 시작 기준일"
                 value={repeatStartDate}
-                onChange={(e) => setRepeatStartDate(e.target.value)}
-                required
+                onChange={setRepeatStartDate}
               />
             </div>
             <div className={styles.col}>
               <label className={styles.label}>종료일 (선택)</label>
-              <input
-                type="date"
-                className={styles.input}
+              <DatePicker
+                label="종료일"
                 value={repeatEndDate}
-                min={repeatStartDate}
+                minDate={repeatStartDate || undefined}
                 placeholder="무기한"
-                onChange={(e) => setRepeatEndDate(e.target.value)}
+                onChange={setRepeatEndDate}
               />
             </div>
           </div>

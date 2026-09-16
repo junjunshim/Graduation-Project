@@ -1,0 +1,295 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 1.1rem 1.15rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-panel);
+  background: var(--surface-panel);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 1rem;
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+}
+
+.dateField {
+  flex: 0 0 auto;
+  width: 9.6rem;
+  min-width: 0;
+}
+
+.title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.titleDetail {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.nav {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.45rem;
+}
+
+.todayButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-pill);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.todayButton:hover,
+.todayButton:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.navButton {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-pill);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.navButton:hover,
+.navButton:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.dayWeekday {
+  color: var(--axis-status-info);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.dayChip {
+  display: grid;
+  place-items: center;
+  width: 1.95rem;
+  height: 1.95rem;
+  padding: 0;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-pill);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dayChip:disabled {
+  color: var(--axis-text-disabled);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dayChip:hover:not(:disabled),
+.dayChip:focus-visible {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.dayChip[data-selected='true'] {
+  border-color: var(--axis-brand-primary);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+}
+
+.day[data-today='true'] .dayChip[data-selected='true'] {
+  box-shadow: 0 0 0 2px var(--axis-brand-border);
+}
+
+.day[data-today='true'] .dayChip {
+  border-color: var(--axis-brand-primary);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
+}
+
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 0.16rem;
+  height: 0.26rem;
+}
+
+.dot {
+  width: 0.26rem;
+  height: 0.26rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--line-strong);
+}
+
+.body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+.empty {
+  margin: 0;
+  padding: 1.4rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.78rem 0.9rem 0.78rem 1.25rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel);
+}
+
+.row:hover {
+  background: var(--surface-panel-subtle);
+}
+
+.rowAccent {
+  position: absolute;
+  top: 0.72rem;
+  bottom: 0.72rem;
+  left: 0.42rem;
+  width: 0.28rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-status-info);
+}
+
+.row[data-tone='start'] .rowAccent {
+  background: var(--axis-status-success);
+}
+
+.row[data-tone='ongoing'] .rowAccent {
+  background: var(--axis-status-info);
+}
+
+.row[data-tone='due'] .rowAccent {
+  background: var(--axis-status-danger);
+}
+
+.rowMain {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.rowTitle {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--axis-status-danger);
+  font-size: 0.84rem;
+}
+
+.rowMetaIcon {
+  flex: 0 0 auto;
+}
+
+.statusPill {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.78rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-status-info-soft);
+  color: var(--axis-status-info);
+  font-size: 0.79rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .panel {
+    min-height: 24rem;
+  }
+
+  .days {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    row-gap: 0.6rem;
+  }
+}

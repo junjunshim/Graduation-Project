@@ -72,9 +72,30 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-async function refreshWorkspaceAfterCommittedMutation() {
+// 변경(뮤테이션)이 커밋된 뒤에는 변경 대상 노드의 상세 정보만 다시 조회한다.
+// 스코프 전체를 다시 불러오는 /context/init 은 변경과 무관한 노드/업무/파일까지 전부 갱신해
+// 응답 크기와 화면 흔들림이 커지므로, 변경이 발생한 노드 단위로 좁혀서 동기화한다.
+// 대상 노드를 특정할 수 없을 때만 기존처럼 스코프 전체를 다시 불러온다.
+async function refreshNodesAfterCommittedMutation(nodeIds: Array<number | string | undefined>) {
+  const targetNodeIds = Array.from(
+    new Set(
+      nodeIds.filter((nodeId): nodeId is number | string => {
+        if (nodeId === undefined) return false
+        const parsedId = typeof nodeId === 'number' ? nodeId : Number.parseInt(nodeId, 10)
+        return Number.isFinite(parsedId) && parsedId > 0
+      }),
+    ),
+  )
+
   try {
-    await loadServerWorkspace()
+    if (targetNodeIds.length === 0) {
+      await loadServerWorkspace()
+      return
+    }
+
+    for (const nodeId of targetNodeIds) {
+      await fetchNodeDetailOnServer(nodeId)
+    }
   } catch {
     notifyWorkspaceCacheRefreshFailed(
       '변경은 서버에 반영되었지만 최신 데이터를 다시 불러오지 못했습니다. 같은 변경을 다시 제출하지 말고 “다시 시도”로 데이터를 새로고침해 주세요.',
@@ -523,7 +544,7 @@ export async function createTopNodeOnServer(payload: CreateTopNodeRequest) {
     const createdNodeItem = items.find((item) => (item.type ?? '').toUpperCase() === 'NODE')
     const newNodeId = createdNodeItem?.id !== undefined ? Number(createdNodeItem.id) : 0
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([newNodeId])
     return { status: 'success' as const, newNodeId }
   }, '공유 공간을 만들지 못했습니다.')
 }
@@ -549,7 +570,7 @@ export async function createSubNodeOnServer(payload: CreateSubNodeRequest) {
     const createdNodeItem = items.find((item) => (item.type ?? '').toUpperCase() === 'NODE')
     const newNodeId = createdNodeItem?.id !== undefined ? Number(createdNodeItem.id) : 0
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([newNodeId, payload.parentNodeId])
     return { status: 'success' as const, newNodeId }
   }, '하위 조직을 추가하지 못했습니다.')
 }
@@ -569,7 +590,7 @@ export async function assignRoleOnServer(payload: AssignRoleRequest) {
       return { status: 'error' as const, message: response.message ?? '권한을 추가하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const, newRoleId: 0 }
   }, '권한을 추가하지 못했습니다.')
 }
@@ -589,7 +610,7 @@ export async function updateNodeOnServer(payload: UpdateNodeRequest) {
       return { status: 'error' as const, message: response.message ?? '조직을 수정하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const }
   }, '조직을 수정하지 못했습니다.')
 }
@@ -609,7 +630,7 @@ export async function updateRoleOnServer(payload: UpdateRoleRequest) {
       return { status: 'error' as const, message: response.message ?? '권한을 변경하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const }
   }, '권한을 변경하지 못했습니다.')
 }
@@ -643,7 +664,7 @@ export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
       return { status: 'error' as const, message: response.message ?? '업무를 생성하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([payload.ownerNodeId])
     return { status: 'success' as const, workItemId: payload.workItemId }
   }, '업무를 생성하지 못했습니다.')
 }
@@ -671,7 +692,11 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
       return { status: 'error' as const, message: response.message ?? '업무를 수정하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    const cachedOwnerNodeId = readWorkspaceDb().workItems.find(
+      (item) => item.workItemId === payload.workItemId,
+    )?.ownerNodeId
+
+    await refreshNodesAfterCommittedMutation([cachedOwnerNodeId])
     return { status: 'success' as const, workItemId: payload.workItemId }
   }, '업무를 수정하지 못했습니다.')
 }
@@ -817,7 +842,7 @@ export async function updateRoleAuthorityOnServer(payload: UpdateRoleAuthorityRe
       return { status: 'error' as const, message: response.message ?? '역할 권한을 변경하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const }
   }, '역할 권한을 변경하지 못했습니다.')
 }
@@ -843,7 +868,7 @@ export async function createRoleDefinitionOnServer(payload: CreateRoleDefinition
       return { status: 'error' as const, message: response.message ?? '새 역할을 생성하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const }
   }, '새 역할을 생성하지 못했습니다.')
 }
@@ -870,7 +895,7 @@ export async function renameRoleDefinitionOnServer(payload: RenameRoleDefinition
       return { status: 'error' as const, message: response.message ?? '역할 이름을 변경하지 못했습니다.' }
     }
 
-    await refreshWorkspaceAfterCommittedMutation()
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const }
   }, '역할 이름을 변경하지 못했습니다.')
 }

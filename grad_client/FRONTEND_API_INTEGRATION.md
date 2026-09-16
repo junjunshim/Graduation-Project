@@ -89,7 +89,6 @@ Graduation-Project/
 - 서버 세션이 있는 앱 시작 시 WorkspaceDataProvider가 /context/init을 호출해 캐시를 먼저 채운 뒤 라우트를 표시한다.
 - 각 서버 변경 요청이 성공하면 전체 context를 다시 받아 캐시를 일관된 상태로 맞춘다.
 - 서버 쓰기는 성공했지만 후속 context 재조회만 실패하면 쓰기를 실패로 되돌리지 않는다. 전역 복구 화면에서 같은 쓰기를 재제출하지 않고 context GET만 다시 시도한다.
-- /context/sync용 구현은 준비되어 있지만 현재 자동 폴링, 포커스 재검증, 증분 동기화 스케줄러는 연결하지 않았다.
 
 ### 2.4 기존 로딩·오류·빈 데이터 처리
 
@@ -225,7 +224,6 @@ renderer/features/workspace/data/server/apiClient.ts에서 다음을 공통 처�
 | 로그인 | POST /users/login | email, password | JSON access_token과 refresh_token을 localStorage에 저장한 뒤 context 초기화 |
 | 토큰 갱신 | POST /users/refresh | JSON body의 refresh_token | 새 access_token과 refresh_token을 반환하며 서버에는 구현되어 있으나 프론트 자동 갱신은 미연결 |
 | 초기 데이터 | GET /context/init | 없음 | 응답 정규화 후 서버 캐시 교체 |
-| 증분 데이터 | GET /context/sync?last_synced_at=... | 마지막 동기화 시각 | 정규화 후 캐시 병합; 자동 호출은 아직 미연결 |
 | 최상위 조직 생성 | POST /org/topNodes | node_type, name, role_name | 성공 후 전체 context 재조회 |
 | 하위 조직 생성 | POST /org/subNodes | node_type, parent_node_id, name, email, role_name | 성공 후 전체 context 재조회 |
 | 조직 수정 | PATCH /org/nodes | node_id, name, node_type | 서버가 누락값을 빈 문자열로 덮으므로 두 필드를 항상 함께 전송한 뒤 전체 context 재조회 |
@@ -284,9 +282,9 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 
 이 기본값은 화면 표시와 공통 조회를 위한 값이며 서버의 실제 저장값으로 간주하지 않는다. 업무 편집은 최초 폼과 비교해 사용자가 실제로 바꾼 필드만 PATCH한다. 따라서 compact 응답에 없던 description, weight, progress, start/due date가 제목 수정만으로 기본값에 덮어써지지 않는다. Server 모드에서는 계약이 없는 담당자 변경을 읽기 전용으로 잠그고, compact 응답에 없는 카테고리/마감일을 기존 업무 편집의 필수 입력으로 강제하지 않는다.
 
-/context/sync처럼 일부 변경 항목만 오는 경우에는 현재 서버 캐시를 참조 컨텍스트로 전달한다. 변경 batch 안에 노드나 상위 업무가 없더라도 기존 캐시에 존재하면 정상 참조로 인정하고, sync 응답에서 생략된 업무 상세값은 기존 캐시 값을 유지한다.
+노드 상세 응답처럼 일부 항목만 오는 경우에는 현재 서버 캐시를 참조 컨텍스트로 전달한다. 응답 안에 노드나 상위 업무가 없더라도 기존 캐시에 존재하면 정상 참조로 인정하고, 생략된 업무 상세값은 기존 캐시 값을 유지한다.
 
-필수 식별자, 참조, 항목 구조가 잘못된 경우 normalization issue를 만들고 load/sync를 실패시킨다. 이 방식으로 잘못된 서버 응답이 정상적인 빈 상태로 보이는 것을 막는다.
+필수 식별자, 참조, 항목 구조가 잘못된 경우 normalization issue를 만들고 load를 실패시킨다. 이 방식으로 잘못된 서버 응답이 정상적인 빈 상태로 보이는 것을 막는다.
 
 정규화 결과는 localStorage에 저장한 뒤 다시 읽을 때도 같은 참조를 유지한다. compact의 미확인 담당자와 expanded의 이메일 없는 ID-only 담당자 모두 adapter→JSON 직렬화→서버 캐시 정규화 왕복 테스트로 업무가 유실되지 않는지 검증한다.
 
@@ -387,7 +385,7 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 | tests/all.test.ts | 프론트 단위 테스트 진입점 |
 | tests/apiClient.test.ts | access/refresh 세션 저장·삭제와 URL/JSON/204/HTTP/parse/network/body timeout/5xx 정보 노출 방지 검증 |
 | tests/apiTypes.test.ts | 로그인 성공 응답의 access/refresh 토큰 쌍 정규화와 누락·공백 토큰 거부 검증 |
-| tests/contextAdapter.test.ts | compact/확장/빈/잘못된 context, AUTHORITY/MENTION 호환 및 partial sync 검증 |
+| tests/contextAdapter.test.ts | compact/확장/빈/잘못된 context, AUTHORITY/MENTION 호환 및 부분 응답 병합 검증 |
 | tests/localStore.test.ts | compact 미확인 담당자와 expanded ID-only 담당자의 캐시 왕복 보존 검증 |
 | tests/mockScenario.test.ts | 기본 시드 무결성 및 empty/boundary/error 검증 |
 | tests/serverId.test.ts | server UUID 형식, 충돌 방지 특성, DB 길이 제한 검증 |
@@ -483,7 +481,6 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 
 - 서버의 `/users/refresh`는 JSON body의 refresh_token으로 새 access/refresh 토큰 쌍을 발급하지만 프론트 자동 갱신에는 아직 연결하지 않았다. 현재는 access token 만료 시 재로그인이 필요하다.
 - AUTHORITY와 MENTION은 현재 workspace 화면 모델에 저장하지 않는다. 권한 비트 기반 UI 제어 및 알림 UI를 구현할 때 전용 도메인·캐시·동기화 계층이 필요하다.
-- /context/sync 구현은 있으나 삭제 tombstone이 없는 현재 응답으로는 안전한 삭제 병합을 보장할 수 없어 자동 동기화에 연결하지 않았다.
 - 업무 담당자 변경/claim API가 없어 서버 모드에서는 해당 동작을 차단한다.
 - 역할/하위 조직 대상 이메일은 직접 입력할 수 있지만 사용자 검색 endpoint는 없다. datalist에는 현재 context에서 알 수 있는 사용자만 표시되며, 신규 이메일의 가입 여부는 제출 후 서버 응답으로 확인한다.
 - 서버 캐시와 access/refresh token은 현재 localStorage 기반이다. 장기적으로 Electron의 더 안전한 저장소 또는 refresh token의 HttpOnly cookie 전환을 포함한 보안 정책을 검토해야 한다.
@@ -497,24 +494,23 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 2. 문서의 context 확장 응답과 실제 컨트롤러 응답의 필드명·중첩 구조가 다르다.
 3. 현재 HTTP 컨트롤러 prefix는 /api이지만 일부 기존 문서·프론트 fallback은 /api/v1을 전제로 한다. 배포 API의 최종 prefix를 명세에 고정해야 한다.
 4. 향후 refresh token을 현재 JSON body 계약에서 HttpOnly 쿠키로 전환한다면 서버가 `Access-Control-Allow-Origin`을 정확한 프론트 Origin으로 제한하고 `Access-Control-Allow-Credentials: true`를 추가해야 한다. Electron/localhost와 원격 서버 조합에서 `SameSite`, `Secure`, Origin 정책도 함께 확정해야 한다.
-5. context sync에 삭제 tombstone이 없어 삭제 전파 방식이 불명확하다.
-6. 업무 담당자 변경/claim 및 사용자 검색·조회 계약이 확인되지 않는다. 조직/역할 endpoint의 이메일 직접 입력은 지원하지만 사전 사용자 검색은 할 수 없다.
-7. 잘못된 JWT가 401 대신 500으로 처리될 가능성이 있어 인증 오류 규약 확인이 필요하다.
-8. 조직 PATCH 응답 생성 시점과 extra_info 오타(etra_info)로 보이는 서버 코드 확인이 필요하다.
-9. main.cc는 JWT_SECRET을 `custom_config.jwt_secret`에 쓰지만 AuthController/JwtFilter는 `custom_config.app.jwt_secret`을 읽는다. 환경변수 secret이 실제 토큰 발급·검증에 반영되는지 서버 측 확인이 필요하다.
-10. 서버 포트는 Docker compose의 SERVER_PORT 매핑과 컨테이너 8080 외에 체크인된 단일 실행 설정으로 확정할 수 없었다.
-11. 역할 열거형 VIEWER의 실제 권한 의미와 hidden 필드 사용 여부를 명세에 반영할 필요가 있다.
-12. 업무 수정 SQL은 빈 description/date를 기존 값 유지로 해석하므로 화면에서 값을 완전히 지우는 계약이 필요한지 확인해야 한다.
-13. user_id/work_item_id 발급 책임을 장기적으로 서버가 맡을지, 현재 UUID 클라이언트 생성 규약을 공식화할지 확인해야 한다.
-14. 현재 회원가입 서버/SQL은 입력 password를 password_hash 열에 그대로 저장하고 로그인도 평문 비교하는 것으로 보인다. 실제 사용자 비밀번호를 쓰기 전에 서버 측 단방향 해시와 안전한 검증을 반드시 구현·확인해야 한다.
-15. 여러 컨트롤러의 DB 예외 응답은 내부 e.base().what()을 message로 반환하고 일부는 HTTP 5xx를 지정하지 않아 200 + error envelope가 될 수 있다. 프론트는 HTTP 5xx message를 숨기지만, 서버도 일관된 5xx 상태와 정제된 공개 메시지/별도 내부 로그로 고쳐야 한다.
-16. 네트워크 단절이 서버 쓰기 처리 직후 응답 수신 전에 발생하면 프론트만으로 커밋 여부를 확정할 수 없다. 생성/변경 endpoint에 idempotency key 또는 작업 상태 조회 계약이 필요하다.
-17. 현재 context에는 USER의 user_id/name도 없어 가입 시 입력한 표시명이 로그인 후 이메일 local-part 기반 이름으로 대체된다. 사용자 식별자와 표시명 조회 계약이 필요하다.
-18. 업무 category는 현재 프론트의 기존 정적 태그 표현에만 있고 POST/PATCH/DB 계약에는 없다. Server 모드에서는 저장되는 값처럼 보이지 않도록 비활성화했으며, 실제 저장 기능이 필요하면 서버 필드와 응답 계약을 추가해야 한다.
-19. 현재 조직/역할/업무 생성 SQL은 상위 노드의 상속 역할이 아니라 대상 노드의 직접 역할을 검사한다. 프론트 Server 모드는 이 동작에 맞췄지만, 제품 정책이 상속 권한을 의도했다면 서버 권한 규칙과 응답 명세를 함께 변경해야 한다.
-20. PATCH /org/nodes는 이름/유형 중 하나가 누락되면 컨트롤러가 빈 문자열을 채워 SQL에서 기존 값을 덮는다. 프론트는 두 필드를 필수 공통 요청 타입으로 만들고 항상 함께 보내지만, 서버에서도 부분 PATCH 또는 full update 중 하나로 계약을 명확히 해야 한다.
-21. 프론트의 현재 버튼 노출 권한은 역할명 중심이며 서버의 AUTHORITY 24비트 정책을 직접 소비하지 않는다. 커스텀 role_authorities를 허용할 경우 권한 상수·상속·DENY를 포함한 공개 계약이 필요하다.
-22. MENTION 초기/동기화 응답은 확인했지만 현재 프론트 알림 도메인과 삭제·읽음 병합 규칙이 없다. 알림 기능 구현 전 응답 및 갱신 계약을 확정해야 한다.
+5. 업무 담당자 변경/claim 및 사용자 검색·조회 계약이 확인되지 않는다. 조직/역할 endpoint의 이메일 직접 입력은 지원하지만 사전 사용자 검색은 할 수 없다.
+6. 잘못된 JWT가 401 대신 500으로 처리될 가능성이 있어 인증 오류 규약 확인이 필요하다.
+7. 조직 PATCH 응답 생성 시점과 extra_info 오타(etra_info)로 보이는 서버 코드 확인이 필요하다.
+8. main.cc는 JWT_SECRET을 `custom_config.jwt_secret`에 쓰지만 AuthController/JwtFilter는 `custom_config.app.jwt_secret`을 읽는다. 환경변수 secret이 실제 토큰 발급·검증에 반영되는지 서버 측 확인이 필요하다.
+9. 서버 포트는 Docker compose의 SERVER_PORT 매핑과 컨테이너 8080 외에 체크인된 단일 실행 설정으로 확정할 수 없었다.
+10. 역할 열거형 VIEWER의 실제 권한 의미와 hidden 필드 사용 여부를 명세에 반영할 필요가 있다.
+11. 업무 수정 SQL은 빈 description/date를 기존 값 유지로 해석하므로 화면에서 값을 완전히 지우는 계약이 필요한지 확인해야 한다.
+12. user_id/work_item_id 발급 책임을 장기적으로 서버가 맡을지, 현재 UUID 클라이언트 생성 규약을 공식화할지 확인해야 한다.
+13. 현재 회원가입 서버/SQL은 입력 password를 password_hash 열에 그대로 저장하고 로그인도 평문 비교하는 것으로 보인다. 실제 사용자 비밀번호를 쓰기 전에 서버 측 단방향 해시와 안전한 검증을 반드시 구현·확인해야 한다.
+14. 여러 컨트롤러의 DB 예외 응답은 내부 e.base().what()을 message로 반환하고 일부는 HTTP 5xx를 지정하지 않아 200 + error envelope가 될 수 있다. 프론트는 HTTP 5xx message를 숨기지만, 서버도 일관된 5xx 상태와 정제된 공개 메시지/별도 내부 로그로 고쳐야 한다.
+15. 네트워크 단절이 서버 쓰기 처리 직후 응답 수신 전에 발생하면 프론트만으로 커밋 여부를 확정할 수 없다. 생성/변경 endpoint에 idempotency key 또는 작업 상태 조회 계약이 필요하다.
+16. 현재 context에는 USER의 user_id/name도 없어 가입 시 입력한 표시명이 로그인 후 이메일 local-part 기반 이름으로 대체된다. 사용자 식별자와 표시명 조회 계약이 필요하다.
+17. 업무 category는 현재 프론트의 기존 정적 태그 표현에만 있고 POST/PATCH/DB 계약에는 없다. Server 모드에서는 저장되는 값처럼 보이지 않도록 비활성화했으며, 실제 저장 기능이 필요하면 서버 필드와 응답 계약을 추가해야 한다.
+18. 현재 조직/역할/업무 생성 SQL은 상위 노드의 상속 역할이 아니라 대상 노드의 직접 역할을 검사한다. 프론트 Server 모드는 이 동작에 맞췄지만, 제품 정책이 상속 권한을 의도했다면 서버 권한 규칙과 응답 명세를 함께 변경해야 한다.
+19. PATCH /org/nodes는 이름/유형 중 하나가 누락되면 컨트롤러가 빈 문자열을 채워 SQL에서 기존 값을 덮는다. 프론트는 두 필드를 필수 공통 요청 타입으로 만들고 항상 함께 보내지만, 서버에서도 부분 PATCH 또는 full update 중 하나로 계약을 명확히 해야 한다.
+20. 프론트의 현재 버튼 노출 권한은 역할명 중심이며 서버의 AUTHORITY 24비트 정책을 직접 소비하지 않는다. 커스텀 role_authorities를 허용할 경우 권한 상수·상속·DENY를 포함한 공개 계약이 필요하다.
+21. MENTION 초기/동기화 응답은 확인했지만 현재 프론트 알림 도메인과 삭제·읽음 병합 규칙이 없다. 알림 기능 구현 전 응답 및 갱신 계약을 확정해야 한다.
 
 ## 13. 변경 범위 확인
 

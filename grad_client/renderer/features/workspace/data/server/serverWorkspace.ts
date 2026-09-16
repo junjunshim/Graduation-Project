@@ -338,36 +338,6 @@ export async function loadWorkspaceDirectoryScopeOnServer(email = getCurrentServ
   return updatedDb
 }
 
-export async function syncServerWorkspace(lastSyncedAt = '1970-01-01 00:00:00') {
-  const response = await apiRequest<unknown>(
-    `/context/sync?last_synced_at=${encodeURIComponent(lastSyncedAt)}`,
-  )
-
-  if (!isServerStatusResponse(response)) {
-    throw new Error('서버 동기화 응답 형식이 올바르지 않습니다.')
-  }
-
-  if (response.status === 'error') {
-    throw new Error(response.message ?? '워크스페이스 동기화에 실패했습니다.')
-  }
-
-  const items = parseServerContextItems((response as ServerContextResponse).data)
-  const current = readWorkspaceDb()
-  const { workspace: normalized, issues } = normalizeServerContext(
-    items,
-    getCurrentServerEmail(),
-    { referenceWorkspace: current },
-  )
-
-  if (issues.length > 0) {
-    console.warn('[WorkspaceAdapter] 일부 동기화 항목 정규화 이슈:', issues)
-  }
-
-  const merged = mergeServerUpdates(current, normalized)
-  writeServerWorkspaceDb(merged)
-  return merged
-}
-
 export async function fetchNodeDetailOnServer(nodeId: number | string) {
   const parsedId = typeof nodeId === 'number' ? nodeId : parseInt(nodeId, 10)
   if (!Number.isFinite(parsedId) || parsedId <= 0) {

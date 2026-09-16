@@ -13,7 +13,6 @@ enum class DbErrorCode {
     AuthorityCheckFailed,       // P0102 권한 체크 실패
     InsufficientAuthority,      // P0103 권한 부족
     InitialContextError,        // P0201 사용자 전체 데이터 로드 실패
-    SyncContextError,           // P0202 사용자 변경 데이터 로드 실패
     CreateTopNodeError,         // P0301 최상위 노드 생성 실패
     CreateSubNodeError,         // P0302 하위 노드 생성 실패
     UpdateNodeError,            // P0303 노드 업데이트 실패

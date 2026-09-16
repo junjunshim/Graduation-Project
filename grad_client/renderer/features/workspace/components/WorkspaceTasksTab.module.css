@@ -1777,9 +1777,17 @@
   white-space: nowrap;
 }
 
-.trashRestoreButton:hover {
+.trashRestoreButton:hover:not(:disabled) {
   background: var(--axis-brand-primary);
   color: var(--axis-text-on-brand, #ffffff);
+}
+
+/* 권한이 없어 비활성화된 복구 버튼 */
+.trashRestoreButton:disabled {
+  border-color: var(--axis-line-default, #cbd5e1);
+  background: var(--axis-surface-muted, #f8fafc);
+  color: var(--axis-text-muted, #94a3b8);
+  cursor: not-allowed;
 }
 
 .trashRowDeleted {

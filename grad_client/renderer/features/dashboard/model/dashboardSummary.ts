@@ -1,8 +1,8 @@
 import { formatWorkspaceMonthDay } from '../../workspace/model/formatters'
-import { getWorkItemStatusLabel } from '../../workspace/model/labels'
-import type { RecurringRuleRecord } from '../../workspace/model/recurringRuleTypes'
+import { getRecurringCategoryLabel, getWorkItemStatusLabel } from '../../workspace/model/labels'
 import { formatRepeatSummary, getNextOccurrenceInfo } from '../../workspace/model/recurringSchedule'
 import type { WorkItemRecord } from '../../workspace/model/types'
+import type { DashboardRecurringRule, DashboardWorkItem } from './dashboardTypes'
 import type {
   DashboardCalendarDay,
   DashboardDateRange,
@@ -163,8 +163,15 @@ function getWorkItemRange(item: WorkItemRecord) {
   return { startKey, dueKey }
 }
 
-function getReferenceDateKey(item: WorkItemRecord) {
-  return readDateKey(item.dueDate) ?? readDateKey(item.startDate) ?? readDateKey(item.createdAt)
+/** 업무 기간(일자~마감)에 해당 날짜가 포함되는지. 업무 일정 패널에 보이는 기준과 같다. */
+function isWorkItemOnDate(item: WorkItemRecord, dateKey: string) {
+  if (item.isDeleted) {
+    return false
+  }
+
+  const { startKey, dueKey } = getWorkItemRange(item)
+
+  return startKey !== null && dueKey !== null && startKey <= dateKey && dueKey >= dateKey
 }
 
 function isDone(item: WorkItemRecord) {
@@ -189,12 +196,12 @@ export function buildMetrics(
   const dueSoonLimitKey = toDateKey(addDays(today, DUE_SOON_DAYS))
 
   const activeItems = workItems.filter((item) => item.status === 'in-progress')
-  const todayWorkItems = workItems.filter(
-    (item) => readDateKey(item.startDate) === todayKey || readDateKey(item.dueDate) === todayKey,
-  )
+  // 오늘 하루에 걸쳐 있는 업무 = 업무 일정 패널에서 오늘 날짜에 보이는 업무
+  const todayWorkItems = workItems.filter((item) => isWorkItemOnDate(item, todayKey))
+  // 이번 주에 마감해야 하는 업무 = 마감일이 이번 주에 있는 업무 (마감일 없는 업무는 제외)
   const weekItems = workItems.filter((item) => {
-    const referenceKey = getReferenceDateKey(item)
-    return referenceKey !== null && referenceKey >= weekStartKey && referenceKey <= weekEndKey
+    const dueKey = readDateKey(item.dueDate)
+    return dueKey !== null && dueKey >= weekStartKey && dueKey <= weekEndKey
   })
   const weekDoneCount = weekItems.filter(isDone).length
   const openItems = workItems.filter((item) => !isDone(item))
@@ -281,19 +288,9 @@ function resolveAccentTone(item: WorkItemRecord, dateKey: string): DashboardTask
  * 업무 일정 목록 — 선택한 하루 기준.
  * 그 날짜가 업무 기간(일자~마감)에 포함되면 모두 표시하고, 마감 → 시작 → 진행 중 순으로 정렬한다.
  */
-export function buildTaskRows(workItems: WorkItemRecord[], dateKey: string): DashboardTaskRow[] {
+export function buildTaskRows(workItems: DashboardWorkItem[], dateKey: string): DashboardTaskRow[] {
   return workItems
-    .filter((item) => {
-      if (item.isDeleted) return false
-
-      const { startKey, dueKey } = getWorkItemRange(item)
-
-      if (!startKey || !dueKey) {
-        return false
-      }
-
-      return startKey <= dateKey && dueKey >= dateKey
-    })
+    .filter((item) => isWorkItemOnDate(item, dateKey))
     .sort(
       (left, right) =>
         TASK_ACCENT_ORDER[resolveAccentTone(left, dateKey)] -
@@ -303,6 +300,7 @@ export function buildTaskRows(workItems: WorkItemRecord[], dateKey: string): Das
     .map((item) => ({
       workItemId: item.workItemId,
       title: item.title,
+      nodeTitle: item.nodeTitle,
       status: item.status,
       statusLabel: getWorkItemStatusLabel(item.status),
       startLabel: formatMonthDay(item.startDate),
@@ -312,7 +310,7 @@ export function buildTaskRows(workItems: WorkItemRecord[], dateKey: string): Das
 }
 
 export function buildScheduleCards(
-  rules: RecurringRuleRecord[],
+  rules: DashboardRecurringRule[],
   today: Date,
   limit?: number,
 ): DashboardSchedule[] {
@@ -320,19 +318,20 @@ export function buildScheduleCards(
     .filter((rule) => rule.isActive && !rule.isDeleted)
     .map((rule) => ({ rule, occurrence: getNextOccurrenceInfo(rule, today) }))
     .filter((entry) => entry.occurrence.nextDate !== null)
+    // 다음 발생일이 빠른 순서로 정렬한다.
     .sort((left, right) => {
       const leftTime = left.occurrence.nextDate?.getTime() ?? 0
       const rightTime = right.occurrence.nextDate?.getTime() ?? 0
       return leftTime - rightTime
     })
     .slice(0, limit)
-    .map((entry, index) => ({
+    .map((entry) => ({
       ruleId: entry.rule.ruleId,
       title: entry.rule.title,
       description: entry.rule.description?.trim() ?? '',
       category: entry.rule.category,
-      // 가장 가까운 일정만 '다가오는 일정', 나머지는 '정기 일정'으로 구분한다.
-      badgeLabel: index === 0 ? '다가오는 일정' : '정기 일정',
+      categoryLabel: getRecurringCategoryLabel(entry.rule.category),
+      nodeTitle: entry.rule.nodeTitle,
       dateLabel: entry.occurrence.nextDate
         ? SCHEDULE_DATE_FORMATTER.format(entry.occurrence.nextDate)
         : entry.occurrence.dateString,

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { claimWorkItem, updateWorkItem } from '../../workspace/data/workItemService'
+import { getWorkItemPermissions } from '../../workspace/model/workItemPermission'
 import type { WorkItemRecord } from '../../workspace/model/types'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
@@ -65,6 +66,25 @@ export function WorkItemEditPage() {
   }
 
   const { item } = detail
+  // 서버(update_work_item)가 최종 판정하지만, 권한이 없으면 화면 자체를 막는다.
+  const permissions = getWorkItemPermissions(item, currentUser.userId, snapshot)
+
+  if (!permissions.canEdit) {
+    return (
+      <div className={styles.page}>
+        <div className={editStyles.emptyState}>
+          <h2 className={editStyles.title}>업무를 수정할 권한이 없습니다.</h2>
+          <p className={editStyles.description}>
+            이 업무를 수정하려면 해당 워크스페이스의 업무 변경 권한이 필요합니다.
+          </p>
+          <Link to={`/work-items/${item.workItemId}`} className={editStyles.primaryAction}>
+            업무 상세로 돌아가기
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   const composer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
 
   function setField<Key extends keyof WorkItemCreateFormState>(
@@ -78,6 +98,12 @@ export function WorkItemEditPage() {
     event.preventDefault()
 
     if (submitting) {
+      return
+    }
+
+    if (!permissions.canEdit) {
+      setSubmitting(false)
+      setFeedback({ tone: 'error', message: '업무를 수정할 권한이 없습니다.' })
       return
     }
 

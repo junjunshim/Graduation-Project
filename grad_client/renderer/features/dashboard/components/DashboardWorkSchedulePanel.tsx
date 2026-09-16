@@ -129,6 +129,12 @@ export function DashboardWorkSchedulePanel({
                   </span>
                 </div>
 
+                {row.nodeTitle ? (
+                  <span className={styles.nodeChip} title={row.nodeTitle}>
+                    {row.nodeTitle}
+                  </span>
+                ) : null}
+
                 <span className={styles.statusPill}>{row.statusLabel}</span>
               </li>
             ))}

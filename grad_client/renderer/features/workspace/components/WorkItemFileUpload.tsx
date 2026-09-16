@@ -10,9 +10,12 @@ type Props = {
   workItemId: string
   workItemTitle: string
   onUploaded?: () => Promise<void>
+  /** 권한이 없으면 메뉴 항목을 비활성화한다 (기본: 허용) */
+  disabled?: boolean
+  disabledReason?: string
 }
 
-export function WorkItemFileUpload({ workItemId, workItemTitle, onUploaded }: Props) {
+export function WorkItemFileUpload({ workItemId, workItemTitle, onUploaded, disabled = false, disabledReason }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const busyRef = useRef(false)
   const [busy, setBusy] = useState(false)
@@ -22,7 +25,7 @@ export function WorkItemFileUpload({ workItemId, workItemTitle, onUploaded }: Pr
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     event.target.value = ''
-    if (!file || busyRef.current) return
+    if (!file || busyRef.current || disabled) return
     busyRef.current = true
     setBusy(true)
     setMessage('')
@@ -52,8 +55,15 @@ export function WorkItemFileUpload({ workItemId, workItemTitle, onUploaded }: Pr
 
   return (
     <div className={styles.upload}>
-      <input ref={inputRef} type="file" hidden onChange={handleFileChange} disabled={busy} aria-label="등록할 파일 선택" />
-      <button type="button" role="menuitem" className={menuStyles.item} disabled={busy} onClick={() => inputRef.current?.click()}>
+      <input ref={inputRef} type="file" hidden onChange={handleFileChange} disabled={busy || disabled} aria-label="등록할 파일 선택" />
+      <button
+        type="button"
+        role="menuitem"
+        className={[menuStyles.item, disabled ? menuStyles.permissionDenied : ''].join(' ')}
+        disabled={busy || disabled}
+        title={disabled ? disabledReason : undefined}
+        onClick={() => inputRef.current?.click()}
+      >
         <Icon name="plus" size={15} />
         <span>{busy ? '등록 중…' : '파일 등록'}</span>
       </button>

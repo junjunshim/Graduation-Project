@@ -453,6 +453,7 @@ $$ LANGUAGE plpgsql;
 -- A. 조회자/기준일 : 대시보드는 "오늘"과 "이번 주" 기준 집계를 쓰므로 기준일을 함께 내려준다.
 -- B. 내 업무       : 담당자가 조회자인 업무 중 최근 6개월 범위만 반환 (스코프와 무관하게 본인 업무는 항상 노출)
 -- C. 스코프 일정   : 접근 가능한 노드에 속한 정기 일정 전체를 반환
+-- B/C 의 항목에는 화면에서 "어느 노드에서 일어나는지" 표시할 수 있도록 owner_node_title 을 함께 내려준다.
 CREATE OR REPLACE FUNCTION get_dashboard_context(
     p_user_email users.email%TYPE
 )
@@ -569,6 +570,7 @@ BEGIN
         'display_id', w.display_id,
         'parent_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
+        'owner_node_title', owner_node.name,
         'owner_user_id', w.owner_user_id,
         'title', w.title,
         'description', w.description,
@@ -585,6 +587,7 @@ BEGIN
         'updated_at', w.updated_at
     )
     FROM work_items w
+    LEFT JOIN organization_nodes owner_node ON owner_node.node_id = w.owner_node_id
     LEFT JOIN (
         SELECT work_item_id, COUNT(*)::INT as cnt
         FROM work_item_comments
@@ -601,6 +604,7 @@ BEGIN
         'type', 'RECURRING_RULE',
         'rule_id', r.rule_id,
         'owner_node_id', r.owner_node_id,
+        'owner_node_title', owner_node.name,
         'creator_user_id', r.creator_user_id,
         'assignee_user_id', r.assignee_user_id,
         'title', r.title,
@@ -625,6 +629,7 @@ BEGIN
         'updated_at', r.updated_at
     )
     FROM recurring_rules r
+    LEFT JOIN organization_nodes owner_node ON owner_node.node_id = r.owner_node_id
     WHERE r.owner_node_id IN (SELECT node_id FROM filtered_nodes)
       AND r.is_deleted = FALSE;
 

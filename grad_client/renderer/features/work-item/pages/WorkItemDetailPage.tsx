@@ -27,6 +27,7 @@ import {
 } from '../../workspace/model/labels'
 import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord, WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
+import { getWorkItemPermissions } from '../../workspace/model/workItemPermission'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { CommentMentionInput, RenderCommentContent } from '../ui/CommentMentionInput'
 import {
@@ -346,6 +347,8 @@ export function WorkItemDetailPage() {
   const categoryTag = getWorkItemTag(item)
   const statusLabel = getWorkItemStatusLabel(item.status)
   const statusTone = getWorkItemStatusTone(item.status)
+  // 수정/삭제 버튼은 서버(update_work_item / delete_work_item)와 같은 기준으로 노출 여부를 정한다.
+  const permissions = getWorkItemPermissions(item, currentUser.userId, snapshot)
 
   // 상위(부모) 업무 정보 계산
   const parentId = item.parentWorkItemId
@@ -370,18 +373,22 @@ export function WorkItemDetailPage() {
 
         <div className={styles.actions}>
           <WorkItemFavoriteButton workItemId={item.workItemId} />
-          <Link to={`/work-items/${item.workItemId}/edit`} className={styles.editButton}>
-            <Icon name="pencil" size={14} />
-            수정
-          </Link>
-          <button
-            type="button"
-            className={styles.deleteButton}
-            onClick={() => setIsDeleteModalOpen(true)}
-          >
-            <Icon name="trash" size={14} />
-            삭제
-          </button>
+          {permissions.canEdit ? (
+            <Link to={`/work-items/${item.workItemId}/edit`} className={styles.editButton}>
+              <Icon name="pencil" size={14} />
+              수정
+            </Link>
+          ) : null}
+          {permissions.canDelete ? (
+            <button
+              type="button"
+              className={styles.deleteButton}
+              onClick={() => setIsDeleteModalOpen(true)}
+            >
+              <Icon name="trash" size={14} />
+              삭제
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -757,6 +764,29 @@ export function WorkItemDetailPage() {
             onConfirm={async () => {
             try {
               const { showToast } = await import('../../notification/data/toastEvents')
+              const latestSnapshot = getOrgSnapshot()
+              const latestItem = latestSnapshot.workItems.find(
+                (candidate) => candidate.workItemId === item.workItemId,
+              )
+
+              // 모달이 열린 뒤 권한이 바뀌었을 수 있으므로 제출 직전에 한 번 더 확인한다.
+              if (
+                !latestItem ||
+                !getWorkItemPermissions(
+                  latestItem,
+                  getCurrentUser(latestSnapshot)?.userId ?? null,
+                  latestSnapshot,
+                ).canDelete
+              ) {
+                showToast({
+                  title: '업무 삭제 실패',
+                  content: '업무를 삭제할 권한이 없습니다.',
+                  created_at: new Date().toISOString(),
+                })
+                setIsDeleteModalOpen(false)
+                return
+              }
+
               const res = await deleteWorkItem(item.workItemId)
               if (res.status === 'error') {
                 showToast({

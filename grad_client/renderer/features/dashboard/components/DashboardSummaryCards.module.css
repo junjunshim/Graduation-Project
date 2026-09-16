@@ -1,7 +1,8 @@
+/* 좌우 폭을 아래 일정 패널과 동일하게 맞춘다 (5 : 7, 같은 간격) */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 1.75rem;
   align-items: stretch;
 }
 
@@ -58,7 +59,8 @@
   color: var(--text-secondary);
   font-size: 0.86rem;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .label[data-tone='info'] {
@@ -235,9 +237,16 @@
   color: var(--axis-status-danger);
 }
 
+.button:disabled {
+  border-color: var(--line-default);
+  color: var(--axis-text-disabled);
+  cursor: not-allowed;
+}
+
 @media (max-width: 1180px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
   }
 
   .card {

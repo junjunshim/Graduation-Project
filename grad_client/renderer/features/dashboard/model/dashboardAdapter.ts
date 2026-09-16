@@ -4,14 +4,18 @@ import type {
   HolidayAction,
   RecurringCategory,
   RecurringFrequency,
-  RecurringRuleRecord,
 } from '../../workspace/model/recurringRuleTypes'
-import type { WorkItemRecord } from '../../workspace/model/types'
-import type { DashboardContext, DashboardViewer } from './dashboardTypes'
+import type {
+  DashboardContext,
+  DashboardRecurringRule,
+  DashboardViewer,
+  DashboardWorkItem,
+} from './dashboardTypes'
 
 /** /context/dashboard 응답에만 등장하는 필드. 공용 ServerContextItem은 그대로 둔다. */
 type DashboardContextItem = ServerContextItem & {
   node_title?: string
+  owner_node_title?: string
   today?: string
   week_start_date?: string
   week_end_date?: string
@@ -104,7 +108,7 @@ function parseViewer(item: DashboardContextItem): DashboardViewer | null {
  * 대시보드 응답에는 NODE/USER 항목이 없어서 워크스페이스 어댑터(normalizeServerContext)를
  * 그대로 쓰면 소유 노드/사용자 검증에서 업무가 전부 탈락한다. 여기서는 업무 항목만 직접 매핑한다.
  */
-function parseWorkItem(item: DashboardContextItem): WorkItemRecord | null {
+function parseWorkItem(item: DashboardContextItem): DashboardWorkItem | null {
   const workItemId = readText(item.id)
   const ownerNodeId = readNumber(item.owner_node_id, 0)
 
@@ -125,6 +129,7 @@ function parseWorkItem(item: DashboardContextItem): WorkItemRecord | null {
     workItemId,
     ...(displayId ? { displayId } : {}),
     ownerNodeId,
+    nodeTitle: readText(item.owner_node_title),
     ownerUserId: readText(item.owner_user_id) ?? '',
     title: readText(item.title) ?? workItemId,
     description: readText(item.description) ?? '',
@@ -144,7 +149,7 @@ function parseWorkItem(item: DashboardContextItem): WorkItemRecord | null {
   }
 }
 
-function parseRecurringRule(item: DashboardContextItem): RecurringRuleRecord | null {
+function parseRecurringRule(item: DashboardContextItem): DashboardRecurringRule | null {
   const ruleId = readOptionalPositiveNumber(item.rule_id)
 
   if (!ruleId) {
@@ -154,6 +159,7 @@ function parseRecurringRule(item: DashboardContextItem): RecurringRuleRecord | n
   return {
     ruleId,
     ownerNodeId: readNumber(item.owner_node_id, 0),
+    nodeTitle: readText(item.owner_node_title),
     creatorUserId: readText(item.creator_user_id) ?? '',
     assigneeUserId: readText(item.assignee_user_id),
     title: readText(item.title) ?? '',
@@ -189,10 +195,10 @@ export function adaptDashboardContext(items: ServerContextItem[]): DashboardCont
     workItems: dashboardItems
       .filter((item) => readItemType(item.type) === 'WORK_ITEM')
       .map(parseWorkItem)
-      .filter((item): item is WorkItemRecord => item !== null),
+      .filter((item): item is DashboardWorkItem => item !== null),
     recurringRules: dashboardItems
       .filter((item) => readItemType(item.type) === 'RECURRING_RULE')
       .map(parseRecurringRule)
-      .filter((rule): rule is RecurringRuleRecord => rule !== null),
+      .filter((rule): rule is DashboardRecurringRule => rule !== null),
   }
 }

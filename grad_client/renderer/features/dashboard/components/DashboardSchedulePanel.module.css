@@ -74,15 +74,28 @@
   min-width: 0;
 }
 
+/* 배경/글자/테두리 색은 카테고리 톤온톤 팔레트(getCategoryBadgeStyle)가 지정한다. */
 .badge {
   align-self: flex-start;
   padding: 0.24rem 0.6rem;
-  border: 1px solid var(--line-default);
   border-radius: var(--axis-radius-pill);
-  background: var(--surface-panel-muted);
-  color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 일정이 어느 노드(워크스페이스)에 속하는지 표시 */
+.nodeMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.nodeMetaIcon {
+  flex: 0 0 auto;
 }
 
 .cardTitle {

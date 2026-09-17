@@ -208,9 +208,9 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
 
 export const DEFAULT_ROLE_AUTHORITIES: Record<StandardRoleName, string> = {
   ADMIN: '011111111111111111111111',
-  MANAGER: '001100111111111101111111',
-  MEMBER: '000100110000001101010111',
-  VIEWER: '000000000000000000010001',
+  MANAGER: '001100111110111101111111',
+  MEMBER: '001100110000001101110111',
+  VIEWER: '001100010000000000110011',
 }
 
 export type AuthorityPreset = {
@@ -225,19 +225,19 @@ export const AUTHORITY_PRESETS: AuthorityPreset[] = [
     id: 'manager',
     label: '관리자형 (Manager)',
     description: '공간/역할/업무 전체 관리 및 모든 이력 조회',
-    bitmask: '001100111111111101111111',
+    bitmask: '001100111110111101111111',
   },
   {
     id: 'member',
     label: '일반 멤버형 (Member)',
-    description: '본인 업무 생성/수정, 파일 업로드 및 개인 이력',
-    bitmask: '000100110000001101010111',
+    description: '본인 업무 생성/수정, 타인 업무 상세/전체 이력 조회 및 파일 관리',
+    bitmask: '001100110000001101110111',
   },
   {
     id: 'viewer',
     label: '읽기 전용형 (Viewer)',
-    description: '노드 기본 정보 및 공개 업무 목록 단순 조회',
-    bitmask: '000000000000000000010001',
+    description: '노드 멤버/업무 상세/파일/이력 조회',
+    bitmask: '001100010000000000110011',
   },
   {
     id: 'clear',

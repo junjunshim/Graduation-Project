@@ -11,7 +11,7 @@ import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import { WorkItemEditSidebar } from '../components/WorkItemEditSidebar'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
 import { getWorkItemDateRangeError } from '../model/workItemFormValidation'
-import { createWorkItemUpdatePayload } from '../model/workItemUpdatePayload'
+import { createWorkItemUpdatePayload, hasWorkItemChanges } from '../model/workItemUpdatePayload'
 import styles from '../styles/WorkItemCreatePage.module.css'
 import editStyles from './WorkItemEditPage.module.css'
 
@@ -26,7 +26,7 @@ function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
     hidden: Boolean(item?.hidden),
     status: item?.status ?? 'todo',
     priority: String(item?.priority ?? 3),
-    weight: String(item?.weight ?? 1),
+    weight: String(item?.weight ?? 0),
     progress: String(item?.progress ?? 0),
     startDate: item?.startDate ?? '',
     dueDate: item?.dueDate ?? '',
@@ -45,7 +45,10 @@ export function WorkItemEditPage() {
   const [initialForm] = useState<WorkItemCreateFormState>(() => createInitialForm(detail?.item))
   const [form, setForm] = useState<WorkItemCreateFormState>(initialForm)
   const [submitting, setSubmitting] = useState(false)
-  const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
+  const [feedback, setFeedback] = useState<{
+    tone: 'error' | 'success' | 'info'
+    message: string
+  } | null>(null)
 
   if (!currentUser) {
     return null
@@ -86,6 +89,7 @@ export function WorkItemEditPage() {
   }
 
   const composer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
+  const hasChanges = hasWorkItemChanges(item.workItemId, initialForm, form)
 
   function setField<Key extends keyof WorkItemCreateFormState>(
     field: Key,
@@ -104,6 +108,12 @@ export function WorkItemEditPage() {
     if (!permissions.canEdit) {
       setSubmitting(false)
       setFeedback({ tone: 'error', message: '업무를 수정할 권한이 없습니다.' })
+      return
+    }
+
+    // 변경된 항목이 없으면 서버를 호출하지 않는다.
+    if (!hasChanges) {
+      setFeedback({ tone: 'info', message: '수정된 내용이 없습니다. 항목을 변경한 뒤 저장해 주세요.' })
       return
     }
 
@@ -178,6 +188,8 @@ export function WorkItemEditPage() {
             onFieldChange={setField}
             submitLabel="저장"
             submittingLabel="저장 중..."
+            submitDisabled={!hasChanges}
+            submitHint="변경된 항목이 없어 저장할 수 없습니다."
           />
         </main>
 

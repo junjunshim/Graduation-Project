@@ -122,8 +122,9 @@ function parseWorkItem(item: DashboardContextItem): DashboardWorkItem | null {
   const parentWorkItemId = readText(item.parent_work_item_id)
   const updatedAt = readText(item.updated_at)
   const rawPriority = readNumber(item.priority, 3)
-  const rawWeight = readNumber(item.weight, 1)
+  const rawWeight = readNumber(item.weight, 0)
   const rawProgress = readNumber(item.progress, 0)
+  const rawComputedProgress = readNumber(item.computed_progress, rawProgress)
 
   return {
     workItemId,
@@ -137,8 +138,9 @@ function parseWorkItem(item: DashboardContextItem): DashboardWorkItem | null {
     status: normalizeWorkItemStatus(item.status),
     priority: rawPriority >= 1 && rawPriority <= 5 ? rawPriority : 3,
     hidden: readBoolean(item.hidden, false),
-    weight: rawWeight >= 0 ? rawWeight : 1,
+    weight: rawWeight >= 0 ? rawWeight : 0,
     progress: Math.min(100, Math.max(0, rawProgress)),
+    computedProgress: Math.min(100, Math.max(0, rawComputedProgress)),
     commentCount: readNumber(item.comment_count, 0),
     isDeleted: readBoolean(item.is_deleted, false),
     ...(startDate ? { startDate } : {}),

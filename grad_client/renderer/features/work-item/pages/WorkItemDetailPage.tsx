@@ -28,6 +28,7 @@ import {
 import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord, WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
 import { getWorkItemPermissions } from '../../workspace/model/workItemPermission'
+import { applyProgressWeight, getChildProgressAverage } from '../../workspace/model/workItemProgress'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
 import { CommentMentionInput, RenderCommentContent } from '../ui/CommentMentionInput'
 import {
@@ -343,6 +344,17 @@ export function WorkItemDetailPage() {
   const { item, ownerUser, parentWorkItem, childWorkItems } = detail
   const priority = getWorkItemPriorityMeta(item.priority)
   const progress = Math.min(100, Math.max(0, item.progress))
+  // 자체 진행률 + 하위 업무 진행률(가중치 반영) — 하위 업무가 없으면 같은 값이다.
+  const computedProgress = Math.min(100, Math.max(0, item.computedProgress ?? progress))
+  // 좌측 바는 자체 진행률, 우측 바는 하위 업무 기여분(하위 평균 × 가중치%)이다.
+  // 가중치가 0이거나 하위 업무가 없으면 하위 진행률은 종합 진행률에 반영되지 않으므로 표시하지 않는다.
+  const hasChildProgress = childWorkItems.length > 0 && item.weight > 0
+  const childProgressAverage = hasChildProgress ? getChildProgressAverage(childWorkItems) : 0
+  // 종합 진행률 = 자체 기여분 + 하위 업무 기여분
+  //   자체 기여분 = 자체 진행률 × (100 - 가중치)%
+  //   하위 기여분 = 하위 업무 평균 진행률 × 가중치%
+  const selfProgressContribution = applyProgressWeight(progress, 100 - item.weight)
+  const childProgressContribution = applyProgressWeight(childProgressAverage, item.weight)
   const description = item.description.trim() || '업무 설명이 아직 등록되지 않았습니다.'
   const categoryTag = getWorkItemTag(item)
   const statusLabel = getWorkItemStatusLabel(item.status)
@@ -640,23 +652,62 @@ export function WorkItemDetailPage() {
         {/* 우측 영역: 진행 현황, 댓글 */}
         <aside className={styles.rightColumn}>
           {/* 3. 진행 현황 패널 */}
-          <section className={styles.progressPanel} aria-label={`진행률 ${progress}%`}>
+          <section
+            className={styles.progressPanel}
+            aria-label={
+              hasChildProgress
+                ? `자체 진행률 ${progress}%, 하위 업무 기여 ${childProgressContribution}%, 가중치 반영 진행률 ${computedProgress}%`
+                : `진행률 ${computedProgress}%`
+            }
+          >
             <div className={styles.progressHeader}>
               <div className={styles.progressTitle}>
                 <Icon name="checkCircle" size={15} />
                 <strong>진행 현황</strong>
+                <span className={styles.statusBadge} data-tone={statusTone}>
+                  {statusLabel}
+                </span>
               </div>
-              <strong className={styles.progressPercent}>{progress}%</strong>
+              <strong className={styles.progressPercent}>{computedProgress}%</strong>
             </div>
             <div className={styles.progressTrack} aria-hidden="true">
-              <span style={{ width: `${progress}%` }} />
+              <span className={styles.progressFillSelf} style={{ width: `${progress}%` }} />
+              {hasChildProgress ? (
+                <span className={styles.progressFillChild} style={{ width: `${childProgressContribution}%` }} />
+              ) : null}
             </div>
-            <div className={styles.progressFooter}>
-              <span>가중치: {item.weight}</span>
-              <span className={styles.statusBadge} data-tone={statusTone}>
-                {statusLabel}
-              </span>
-            </div>
+            <ul className={styles.progressLegend}>
+              <li className={styles.progressLegendItem}>
+                <span className={styles.progressLegendLabel}>
+                  <i className={[styles.progressLegendDot, styles.progressLegendDotSelf].join(' ')} />
+                  자체 진행률
+                </span>
+                <span className={styles.progressLegendValue}>
+                  {progress}%
+                  {hasChildProgress ? <em>기여 {selfProgressContribution}%</em> : null}
+                </span>
+              </li>
+              {hasChildProgress ? (
+                <li className={styles.progressLegendItem}>
+                  <span className={styles.progressLegendLabel}>
+                    <i className={[styles.progressLegendDot, styles.progressLegendDotChild].join(' ')} />
+                    하위 업무 평균
+                  </span>
+                  <span className={styles.progressLegendValue}>
+                    {childProgressAverage}%
+                    <em>× {item.weight}% = {childProgressContribution}%</em>
+                  </span>
+                </li>
+              ) : null}
+              {hasChildProgress ? (
+                <li className={styles.progressLegendItem} data-total="true">
+                  <span className={styles.progressLegendLabel}>종합 진행률</span>
+                  <span className={styles.progressLegendValue}>
+                    {selfProgressContribution}% + {childProgressContribution}% = {computedProgress}%
+                  </span>
+                </li>
+              ) : null}
+            </ul>
           </section>
 
           {/* 6. 댓글 패널 (내부 스크롤) */}

@@ -448,8 +448,12 @@ export function normalizeServerContext(
       item.parent_work_item_id ?? item.parent_id,
     )
     const rawPriority = toNumberValue(item.priority, referenceWorkItem?.priority ?? 3)
-    const rawWeight = toNumberValue(item.weight, referenceWorkItem?.weight ?? 1)
+    const rawWeight = toNumberValue(item.weight, referenceWorkItem?.weight ?? 0)
     const rawProgress = toNumberValue(item.progress, referenceWorkItem?.progress ?? 0)
+    const rawComputedProgress = toNumberValue(
+      item.computed_progress,
+      referenceWorkItem?.computedProgress ?? rawProgress,
+    )
     const commentCount = toNumberValue(item.comment_count, referenceWorkItem?.commentCount ?? 0)
     const startDate =
       item.start_date !== undefined
@@ -482,8 +486,9 @@ export function normalizeServerContext(
           : referenceWorkItem?.status ?? 'todo',
       priority: rawPriority >= 1 && rawPriority <= 5 ? rawPriority : 3,
       hidden: toBooleanValue(item.hidden, false),
-      weight: rawWeight >= 0 ? rawWeight : 1,
+      weight: rawWeight >= 0 ? rawWeight : 0,
       progress: Math.min(100, Math.max(0, rawProgress)),
+      computedProgress: Math.min(100, Math.max(0, rawComputedProgress)),
       commentCount,
       isDeleted: toBooleanValue(item.is_deleted, false),
       ...(startDate ? { startDate } : {}),

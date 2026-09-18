@@ -48,7 +48,10 @@ export type WorkItemRecord = {
   priority: number
   hidden?: boolean
   weight: number
+  /** 자체 진행률 (사용자가 입력한 값) */
   progress: number
+  /** 자체 진행률과 하위 업무 진행률을 가중치로 합성한 진행률 (서버 계산, 조회 전용) */
+  computedProgress?: number
   commentCount?: number
   isDeleted?: boolean
   startDate?: string

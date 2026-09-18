@@ -623,7 +623,7 @@ export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
         hidden: payload.hidden ?? false,
         status: payload.status ?? 'todo',
         priority: payload.priority ?? 3,
-        weight: payload.weight ?? 1,
+        weight: payload.weight ?? 0,
         progress: payload.progress ?? 0,
         start_date: payload.startDate ?? '',
         due_date: payload.dueDate ?? '',

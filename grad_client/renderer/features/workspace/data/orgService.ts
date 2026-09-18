@@ -120,7 +120,8 @@ export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapsho
     averageProgress:
       visibleWorkItems.length > 0
         ? Math.round(
-            visibleWorkItems.reduce((total, item) => total + item.progress, 0) / visibleWorkItems.length,
+            visibleWorkItems.reduce((total, item) => total + (item.computedProgress ?? item.progress), 0) /
+              visibleWorkItems.length,
           )
         : 0,
     myWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId === userId).length,

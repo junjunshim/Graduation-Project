@@ -500,6 +500,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'comment_count', COALESCE(cc.cnt, 0),
         'is_deleted', w.is_deleted,
         'start_date', w.start_date,

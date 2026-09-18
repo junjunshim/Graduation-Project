@@ -80,6 +80,7 @@ export type ServerContextItem = {
   category?: string | null
   weight?: string | number
   progress?: string | number
+  computed_progress?: string | number
   comment_count?: string | number
   start_date?: string | null
   due_date?: string | null

@@ -28,7 +28,7 @@ const initialForm: WorkItemCreateFormState = {
   hidden: false,
   status: 'todo',
   priority: '3',
-  weight: '1',
+  weight: '0',
   progress: '0',
   startDate: '',
   dueDate: '',

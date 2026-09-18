@@ -392,73 +392,81 @@ export function WorkItemDetailPage() {
         </div>
       </div>
 
-      {/* 업무 주요 메타 속성 바: 3개 행으로 여유롭고 명확하게 구조화 */}
-      <section className={styles.propertyPanel} aria-label="업무 주요 정보">
-        {/* 행 1: 업무 코드, 업무 명, 카테고리, 우선순위 */}
-        <div className={styles.propertyRow}>
-          <DetailProperty icon="cube" label="업무 코드">
-            <span className={styles.workItemCodeText}>{getWorkItemDisplayCode(item)}</span>
-          </DetailProperty>
-
-          <DetailProperty icon="fileText" label="업무 명">
-            <span className={styles.workItemTitleText} title={item.title}>
-              {item.title}
-            </span>
-          </DetailProperty>
-
-          <DetailProperty icon="star" label="카테고리">
-            {categoryTag ? (
-              <span
-                className={styles.categoryBadge}
-                data-tone={categoryTag.tone}
-                style={categoryTag.style}
-              >
-                {categoryTag.label}
-              </span>
-            ) : (
-              <span className={styles.mutedText}>미지정</span>
-            )}
-          </DetailProperty>
-
-          <DetailProperty icon="trendingUp" label="우선순위">
-            <span className={styles.priorityBadge} data-tone={priority.tone}>
-              {priority.symbol} {priority.label}
-            </span>
-          </DetailProperty>
+      {/* 1. 총 업무 정보 패널 */}
+      <section className={styles.propertyPanel} aria-label="총 업무 정보">
+        <div className={styles.propertyPanelHeader}>
+          <div className={styles.panelTitleRow}>
+            <Icon name="cube" size={15} />
+            <h3 className={styles.propertyPanelTitle}>총 업무 정보</h3>
+          </div>
         </div>
 
-        <div className={styles.rowDivider} />
+        <div className={styles.propertyColumns}>
+          {/* 좌측: 총 2행 구성 (업무 코드, 업무 명, 카테고리, 우선순위 / 담당자, 생성일, 시작일, 마감일) */}
+          <div className={styles.propertyLeftColumn}>
+            {/* 행 1: 업무 코드, 업무 명, 카테고리, 우선순위 */}
+            <div className={styles.propertyRow}>
+              <DetailProperty icon="cube" label="업무 코드">
+                <span className={styles.workItemCodeText}>{getWorkItemDisplayCode(item)}</span>
+              </DetailProperty>
 
-        {/* 행 2: 담당자, 생성일, 시작일, 마감일 */}
-        <div className={styles.propertyRow}>
-          <DetailProperty icon="user" label="담당자">
-            <span className={styles.ownerValue}>
-              <UserAvatar name={ownerUser.name} userId={ownerUser.userId} size="medium" />
-              <span className={styles.ownerName}>{ownerUser.name}</span>
-              {ownerUser.email && (
-                <span className={styles.ownerEmail}>({ownerUser.email})</span>
-              )}
-            </span>
-          </DetailProperty>
+              <DetailProperty icon="fileText" label="업무 명">
+                <span className={styles.workItemTitleText} title={item.title}>
+                  {item.title}
+                </span>
+              </DetailProperty>
 
-          <DetailProperty icon="clock" label="생성일">
-            {formatWorkspaceDate(item.createdAt)}
-          </DetailProperty>
+              <DetailProperty icon="star" label="카테고리">
+                {categoryTag ? (
+                  <span
+                    className={styles.categoryBadge}
+                    data-tone={categoryTag.tone}
+                    style={categoryTag.style}
+                  >
+                    {categoryTag.label}
+                  </span>
+                ) : (
+                  <span className={styles.mutedText}>미지정</span>
+                )}
+              </DetailProperty>
 
-          <DetailProperty icon="calendar" label="시작일">
-            {formatWorkspaceDate(item.startDate)}
-          </DetailProperty>
+              <DetailProperty icon="trendingUp" label="우선순위">
+                <span className={styles.priorityBadge} data-tone={priority.tone}>
+                  {priority.symbol} {priority.label}
+                </span>
+              </DetailProperty>
+            </div>
 
-          <DetailProperty icon="calendar" label="마감일">
-            {formatWorkspaceDate(item.dueDate)}
-          </DetailProperty>
-        </div>
+            <div className={styles.rowDivider} />
 
-        <div className={styles.rowDivider} />
+            {/* 행 2: 담당자, 생성일, 시작일, 마감일 */}
+            <div className={styles.propertyRow}>
+              <DetailProperty icon="user" label="담당자">
+                <span className={styles.ownerValue}>
+                  <UserAvatar name={ownerUser.name} userId={ownerUser.userId} size="small" />
+                  <span className={styles.ownerName}>{ownerUser.name}</span>
+                  {ownerUser.email && (
+                    <span className={styles.ownerEmail}>({ownerUser.email})</span>
+                  )}
+                </span>
+              </DetailProperty>
 
-        {/* 행 3: 상위 업무 & 하위 업무 (직속 하위만) */}
-        <div className={styles.hierarchyRow}>
-          <div className={styles.hierarchyColumn}>
+              <DetailProperty icon="clock" label="생성일">
+                {formatWorkspaceDate(item.createdAt)}
+              </DetailProperty>
+
+              <DetailProperty icon="calendar" label="시작일">
+                {formatWorkspaceDate(item.startDate)}
+              </DetailProperty>
+
+              <DetailProperty icon="calendar" label="마감일">
+                {formatWorkspaceDate(item.dueDate)}
+              </DetailProperty>
+            </div>
+          </div>
+
+          {/* 우측: 상위 업무 및 하위 업무 (내부 스크롤 처리) */}
+          <div className={styles.propertyRightColumn}>
             <DetailProperty icon="orgChart" label="상위 업무">
               {parentId ? (
                 <Link
@@ -474,24 +482,26 @@ export function WorkItemDetailPage() {
                 <span className={styles.noParentText}>없음 (최상위 업무)</span>
               )}
             </DetailProperty>
-          </div>
 
-          <div className={styles.hierarchyColumn}>
+            <div className={styles.rowDivider} />
+
             <DetailProperty icon="list" label={`하위 업무 (${directChildren.length})`}>
               {directChildren.length > 0 ? (
-                <div className={styles.childList}>
-                  {directChildren.map((child: WorkItemRecord) => (
-                    <Link
-                      key={child.workItemId}
-                      to={`/work-items/${child.workItemId}`}
-                      className={styles.childLink}
-                      title={`하위 업무로 이동: ${child.title}`}
-                    >
-                      <Icon name="arrowRight" size={12} className={styles.childIcon} />
-                      <span className={styles.childCode}>[{getWorkItemDisplayCode(child)}]</span>
-                      <span className={styles.childTitle}>{child.title}</span>
-                    </Link>
-                  ))}
+                <div className={styles.childScrollArea}>
+                  <div className={styles.childList}>
+                    {directChildren.map((child: WorkItemRecord) => (
+                      <Link
+                        key={child.workItemId}
+                        to={`/work-items/${child.workItemId}`}
+                        className={styles.childLink}
+                        title={`하위 업무로 이동: ${child.title}`}
+                      >
+                        <Icon name="arrowRight" size={12} className={styles.childIcon} />
+                        <span className={styles.childCode}>[{getWorkItemDisplayCode(child)}]</span>
+                        <span className={styles.childTitle}>{child.title}</span>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <span className={styles.noChildText}>없음</span>
@@ -501,14 +511,15 @@ export function WorkItemDetailPage() {
         </div>
       </section>
 
-      {/* 상단 2열 본문 레이아웃: 좌측(설명, 활동 내역) + 우측(진행 현황, 첨부파일) */}
-      <div className={styles.detailLayout}>
-        <div className={styles.primaryColumn}>
-          {/* 1. 업무 설명 */}
+      {/* 본문 2열 레이아웃: 1화면 배치 (좌측: 업무 설명, 첨부파일, 활동 내역 / 우측: 진행 현황, 댓글) */}
+      <div className={styles.mainGrid}>
+        {/* 좌측 영역: 업무 설명 (상단), 첨부 파일 & 활동 내역 좌우 배치 (하단) */}
+        <div className={styles.leftColumn}>
+          {/* 2. 업무 설명 패널 */}
           <section className={`${styles.contentPanel} ${styles.descriptionPanel}`}>
             <div className={styles.panelHeader}>
               <div className={styles.panelTitleRow}>
-                <Icon name="fileText" size={16} />
+                <Icon name="fileText" size={15} />
                 <h3>업무 설명</h3>
               </div>
             </div>
@@ -517,52 +528,118 @@ export function WorkItemDetailPage() {
             </div>
           </section>
 
-          {/* 2. 활동 내역 (Activity Timeline) */}
-          <section className={`${styles.contentPanel} ${styles.activityPanel}`}>
-            <div className={styles.panelHeader}>
-              <div className={styles.panelTitleRow}>
-                <Icon name="lineChart" size={16} />
-                <h3>활동 내역</h3>
-                <span className={styles.countBadge}>{relatedActivities.length}</span>
+          {/* 하단 2열: 첨부 파일과 활동 내역 좌우 배치 */}
+          <div className={styles.leftBottomGrid}>
+            {/* 5. 첨부 파일 패널 (내부 스크롤) */}
+            <section
+              className={styles.attachmentPanel}
+              onContextMenu={(event) =>
+                openUploadContextMenu(event, item, async () => {
+                  const result = await fetchWorkItemDetail(item.workItemId)
+                  setComments(result.comments)
+                  setServerFiles(result.files)
+                  setServerActivities(result.activities ?? [])
+                  setSnapshot(getOrgSnapshot())
+                })
+              }
+            >
+              {fileContextMenu}
+              <div className={styles.attachmentHeader}>
+                <div className={styles.attachmentTitle}>
+                  <Icon name="folder" size={15} />
+                  <h3>첨부 파일</h3>
+                  <span className={styles.countBadge}>{allFiles.length}</span>
+                </div>
               </div>
-            </div>
 
-            <div className={styles.activityList}>
-              {relatedActivities.length === 0 ? (
-                <div className={styles.emptyPanelState}>
-                  <Icon name="clock" size={20} />
-                  <span>최근 활동 내역이 없습니다.</span>
+              {allFiles.length === 0 ? (
+                <div className={styles.emptyAttachment}>
+                  <DocumentIcon size={22} />
+                  <span>첨부된 파일이 없습니다.</span>
                 </div>
               ) : (
-                <ul className={styles.activityTimeline}>
-                  {relatedActivities.map((act) => {
-                    const message = formatActivityMessage(act, {
-                      actorName: act.actorName,
-                      targetName: act.targetName,
-                      resolveUserName: (userId) => snapshot.users.find((u) => u.userId === userId)?.name,
-                      resolveWorkItemTitle: (wId) => snapshot.workItems.find((w) => w.workItemId === wId)?.title || detail.item.title,
-                    })
-                    return (
-                      <li key={act.id} className={styles.activityItem}>
-                        <span className={styles.timelineDot} />
-                        <div className={styles.activityContent}>
-                          <p className={styles.activityMessage}>{message}</p>
-                          <time className={styles.activityTime}>
-                            {formatWorkspaceTimestamp(act.createdAt)}
-                          </time>
+                <div className={styles.fileList}>
+                  {allFiles.map((file) => (
+                    <div key={file.id} className={styles.fileEntry}>
+                      <button
+                        type="button"
+                        className={styles.fileCard}
+                        onClick={() => handleOpenFileViewer(file)}
+                        onContextMenu={(event) =>
+                          openFileContextMenu(event, file, async () => {
+                            if (workItemId) {
+                              await loadDetailFromServer(workItemId)
+                            }
+                          })
+                        }
+                        title="클릭하여 파일 내용 보기"
+                      >
+                        <div className={styles.fileIconBox}>
+                          <DocumentIcon size={18} />
                         </div>
-                      </li>
-                    )
-                  })}
-                </ul>
+                        <div className={styles.fileInfo}>
+                          <span className={styles.fileName}>{file.originalFileName}</span>
+                          <div className={styles.fileMeta}>
+                            <span>{formatFileSize(file.fileSize)}</span>
+                            <span>•</span>
+                            <span>{file.uploaderName || file.uploaderEmail || '업로더'}</span>
+                          </div>
+                        </div>
+                        <Icon name="chevronRight" size={13} className={styles.fileArrow} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
-            </div>
-          </section>
+            </section>
+
+            {/* 4. 활동 내역 패널 (내부 스크롤) */}
+            <section className={`${styles.contentPanel} ${styles.activityPanel}`}>
+              <div className={styles.panelHeader}>
+                <div className={styles.panelTitleRow}>
+                  <Icon name="lineChart" size={15} />
+                  <h3>활동 내역</h3>
+                  <span className={styles.countBadge}>{relatedActivities.length}</span>
+                </div>
+              </div>
+
+              <div className={styles.activityList}>
+                {relatedActivities.length === 0 ? (
+                  <div className={styles.emptyPanelState}>
+                    <Icon name="clock" size={20} />
+                    <span>최근 활동 내역이 없습니다.</span>
+                  </div>
+                ) : (
+                  <ul className={styles.activityTimeline}>
+                    {relatedActivities.map((act) => {
+                      const message = formatActivityMessage(act, {
+                        actorName: act.actorName,
+                        targetName: act.targetName,
+                        resolveUserName: (userId) => snapshot.users.find((u) => u.userId === userId)?.name,
+                        resolveWorkItemTitle: (wId) => snapshot.workItems.find((w) => w.workItemId === wId)?.title || detail.item.title,
+                      })
+                      return (
+                        <li key={act.id} className={styles.activityItem}>
+                          <span className={styles.timelineDot} />
+                          <div className={styles.activityContent}>
+                            <p className={styles.activityMessage}>{message}</p>
+                            <time className={styles.activityTime}>
+                              {formatWorkspaceTimestamp(act.createdAt)}
+                            </time>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </section>
+          </div>
         </div>
 
-        {/* 우측 사이드 패널: 진행 현황, 첨부파일 */}
-        <aside className={styles.secondaryColumn}>
-          {/* 진행 현황 */}
+        {/* 우측 영역: 진행 현황, 댓글 */}
+        <aside className={styles.rightColumn}>
+          {/* 3. 진행 현황 패널 */}
           <section className={styles.progressPanel} aria-label={`진행률 ${progress}%`}>
             <div className={styles.progressHeader}>
               <div className={styles.progressTitle}>
@@ -582,147 +659,89 @@ export function WorkItemDetailPage() {
             </div>
           </section>
 
-          {/* 첨부파일 */}
-          <section className={styles.attachmentPanel} onContextMenu={(event) => openUploadContextMenu(event, item, async () => {
-            const result = await fetchWorkItemDetail(item.workItemId)
-            setComments(result.comments)
-            setServerFiles(result.files)
-            setServerActivities(result.activities ?? [])
-            setSnapshot(getOrgSnapshot())
-          })}>
-            {fileContextMenu}
-            <div className={styles.attachmentHeader}>
-              <div className={styles.attachmentTitle}>
-                <Icon name="folder" size={15} />
-                <h3>첨부파일</h3>
-                <span className={styles.countBadge}>{allFiles.length}</span>
+          {/* 6. 댓글 패널 (내부 스크롤) */}
+          <section className={`${styles.contentPanel} ${styles.commentsPanel}`}>
+            <div className={styles.panelHeader}>
+              <div className={styles.panelTitleRow}>
+                <Icon name="messageCircle" size={15} />
+                <h3>댓글</h3>
+                <span className={styles.countBadge}>{comments.length}</span>
               </div>
             </div>
 
-            {allFiles.length === 0 ? (
-              <div className={styles.emptyAttachment}>
-                <DocumentIcon size={24} />
-                <span>첨부된 파일이 없습니다.</span>
-              </div>
-            ) : (
-              <div className={styles.fileList}>
-                {allFiles.map((file) => (
-                  <div key={file.id} className={styles.fileEntry}>
-                  <button
-                    type="button"
-                    className={styles.fileCard}
-                    onClick={() => handleOpenFileViewer(file)}
-                    onContextMenu={(event) =>
-                      openFileContextMenu(event, file, async () => {
-                        if (workItemId) {
-                          await loadDetailFromServer(workItemId)
-                        }
-                      })
-                    }
-                    title="클릭하여 파일 내용 보기"
-                  >
-                    <div className={styles.fileIconBox}>
-                      <DocumentIcon size={20} />
+            {/* 내부 스크롤 댓글 목록 */}
+            <div ref={commentListRef} className={styles.commentList}>
+              {comments.length === 0 ? (
+                <div className={styles.emptyPanelState}>
+                  <Icon name="messageCircle" size={20} />
+                  <span>등록된 댓글이 없습니다. 첫 댓글을 남겨보세요.</span>
+                </div>
+              ) : (
+                comments.map((comment) => (
+                  <div key={comment.commentId} className={styles.commentItem}>
+                    <div className={styles.commentAvatar}>
+                      <UserAvatar
+                        name={comment.authorName}
+                        userId={comment.authorUserId}
+                        size="small"
+                      />
                     </div>
-                    <div className={styles.fileInfo}>
-                      <span className={styles.fileName}>{file.originalFileName}</span>
-                      <div className={styles.fileMeta}>
-                        <span>{formatFileSize(file.fileSize)}</span>
-                        <span>•</span>
-                        <span>{file.uploaderName || file.uploaderEmail || '업로더'}</span>
+                    <div className={styles.commentContentWrapper}>
+                      <div className={styles.commentMeta}>
+                        <strong className={styles.commentAuthor}>{comment.authorName}</strong>
+                        {comment.authorEmail && (
+                          <span className={styles.commentAuthorEmail}>({comment.authorEmail})</span>
+                        )}
+                        <span className={styles.commentTime}>
+                          {formatWorkspaceTimestamp(comment.createdAt)}
+                        </span>
+                      </div>
+                      <div className={styles.commentBody}>
+                        <RenderCommentContent content={comment.content} />
                       </div>
                     </div>
-                    <Icon name="chevronRight" size={14} className={styles.fileArrow} />
-                  </button>
                   </div>
-                ))}
+                ))
+              )}
+            </div>
+
+            {/* 하단 고정 댓글 작성 폼 */}
+            <form className={styles.commentForm} onSubmit={handleCommentSubmit}>
+              <div className={styles.commentInputWrapper}>
+                <CommentMentionInput
+                  placeholder="댓글이나 업무 진행 상황을 작성하세요... (@를 입력하여 팀원 멘션)"
+                  value={commentInput}
+                  onChange={setCommentInput}
+                  candidates={mentionCandidates}
+                  selectedMentions={selectedMentions}
+                  onSelectCandidate={(candidate) => {
+                    setSelectedMentions((prev) => {
+                      if (prev.some((m) => m.userId === candidate.userId)) return prev
+                      return [...prev, candidate]
+                    })
+                  }}
+                  onRemoveMention={(candidate) => {
+                    setSelectedMentions((prev) => prev.filter((m) => m.userId !== candidate.userId))
+                  }}
+                  rows={2}
+                  disabled={isSubmittingComment}
+                />
+                <div className={styles.commentFormFooter}>
+                  {commentError && <span className={styles.commentError}>{commentError}</span>}
+                  <button
+                    type="submit"
+                    className={styles.commentSubmitButton}
+                    disabled={!commentInput.trim() || isSubmittingComment}
+                  >
+                    <Icon name="plus" size={13} />
+                    {isSubmittingComment ? '등록 중...' : '댓글 등록'}
+                  </button>
+                </div>
               </div>
-            )}
+            </form>
           </section>
         </aside>
       </div>
-
-      {/* 최하단 전폭 댓글 (Comments) 섹션 */}
-      <section className={`${styles.contentPanel} ${styles.commentsPanel}`}>
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitleRow}>
-            <Icon name="messageCircle" size={16} />
-            <h3>댓글</h3>
-            <span className={styles.countBadge}>{comments.length}</span>
-          </div>
-        </div>
-
-        {/* 댓글 목록 */}
-        <div ref={commentListRef} className={styles.commentList}>
-          {comments.length === 0 ? (
-            <div className={styles.emptyPanelState}>
-              <Icon name="messageCircle" size={20} />
-              <span>등록된 댓글이 없습니다. 첫 댓글을 남겨보세요.</span>
-            </div>
-          ) : (
-            comments.map((comment) => (
-              <div key={comment.commentId} className={styles.commentItem}>
-                <div className={styles.commentAvatar}>
-                  <UserAvatar
-                    name={comment.authorName}
-                    userId={comment.authorUserId}
-                    size="medium"
-                  />
-                </div>
-                <div className={styles.commentContentWrapper}>
-                  <div className={styles.commentMeta}>
-                    <strong className={styles.commentAuthor}>{comment.authorName}</strong>
-                    {comment.authorEmail && (
-                      <span className={styles.commentAuthorEmail}>({comment.authorEmail})</span>
-                    )}
-                    <span className={styles.commentTime}>
-                      {formatWorkspaceTimestamp(comment.createdAt)}
-                    </span>
-                  </div>
-                  <div className={styles.commentBody}>
-                    <RenderCommentContent content={comment.content} />
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* 댓글 작성 폼 (하단 배치) */}
-        <form className={styles.commentForm} onSubmit={handleCommentSubmit}>
-          <div className={styles.commentInputWrapper}>
-            <CommentMentionInput
-              placeholder="댓글이나 업무 진행 상황을 작성하세요... (@를 입력하여 팀원 멘션)"
-              value={commentInput}
-              onChange={setCommentInput}
-              candidates={mentionCandidates}
-              selectedMentions={selectedMentions}
-              onSelectCandidate={(candidate) => {
-                setSelectedMentions((prev) => {
-                  if (prev.some((m) => m.userId === candidate.userId)) return prev
-                  return [...prev, candidate]
-                })
-              }}
-              onRemoveMention={(candidate) => {
-                setSelectedMentions((prev) => prev.filter((m) => m.userId !== candidate.userId))
-              }}
-              rows={3}
-              disabled={isSubmittingComment}
-            />
-            <div className={styles.commentFormFooter}>
-              {commentError && <span className={styles.commentError}>{commentError}</span>}
-              <button
-                type="submit"
-                className={styles.commentSubmitButton}
-                disabled={!commentInput.trim() || isSubmittingComment}
-              >
-                <Icon name="plus" size={13} />
-                {isSubmittingComment ? '등록 중...' : '댓글 등록'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </section>
 
       {/* 파일 내용 뷰어 모달 */}
       <FileContentViewerModal

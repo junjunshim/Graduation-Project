@@ -1,6 +1,6 @@
 import {
   parseAuthorityBitSet,
-} from './authorityDefinitions'
+} from './authorityDefinitions.js'
 import type {
   RoleAssignmentRecord,
   WorkspaceSnapshot,

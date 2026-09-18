@@ -16,6 +16,7 @@ const compactInitialForm: WorkItemCreateFormState = {
   progress: '0',
   startDate: '',
   dueDate: '',
+  hidden: false,
 }
 
 test('editing a compact server work item sends only fields the user actually changed', () => {

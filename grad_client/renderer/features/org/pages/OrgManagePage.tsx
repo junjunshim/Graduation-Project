@@ -9,12 +9,10 @@ import { OrgDetailPanel } from '../components/OrgDetailPanel'
 import { OrgTree } from '../components/OrgTree'
 import { UpdateRoleForm } from '../components/UpdateRoleForm'
 import { useOrgManagement } from '../hooks/useOrgManagement'
-import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import styles from '../styles/OrgManagePage.module.css'
 
 export function OrgManagePage() {
   const currentUser = getCurrentUser()
-  const isServerMode = isServerDataSource()
   const {
     assignRoleName,
     editNodeName,
@@ -129,7 +127,7 @@ export function OrgManagePage() {
             users={snapshot.users.filter(
               (user) => Boolean(user.email) && !user.email.endsWith('@local.invalid'),
             )}
-            allowCustomManagerEmail={isServerMode}
+            allowCustomManagerEmail
             disabled={!selectedDetail?.canManage || Boolean(pendingAction)}
             busy={pendingAction === 'create-sub-node'}
             onManagerEmailChange={setManagerEmail}
@@ -145,7 +143,7 @@ export function OrgManagePage() {
             users={snapshot.users.filter(
               (user) => Boolean(user.email) && !user.email.endsWith('@local.invalid'),
             )}
-            allowCustomEmail={isServerMode}
+            allowCustomEmail
             disabled={!selectedDetail?.canManage || Boolean(pendingAction)}
             busy={pendingAction === 'assign-role'}
             onAssignRoleNameChange={setAssignRoleName}

@@ -190,7 +190,6 @@ export function adaptDashboardContext(items: ServerContextItem[]): DashboardCont
   const viewerItem = dashboardItems.find((item) => readItemType(item.type) === 'DASHBOARD_VIEWER')
 
   return {
-    source: 'server',
     viewer: viewerItem ? parseViewer(viewerItem) : null,
     workItems: dashboardItems
       .filter((item) => readItemType(item.type) === 'WORK_ITEM')

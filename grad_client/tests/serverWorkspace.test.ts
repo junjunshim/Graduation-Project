@@ -7,7 +7,7 @@ import {
 } from '../renderer/features/workspace/data/server/apiClient.js'
 import { getServerContextSnapshot } from '../renderer/features/workspace/data/server/contextCache.js'
 import { signInServerUser } from '../renderer/features/workspace/data/server/serverWorkspace.js'
-import { readServerWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
+import { readWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
 
 type MemoryStorageOptions = {
   failSetKey?: string
@@ -186,7 +186,7 @@ function assertEmptyServerState() {
   assert.equal(getServerSessionEmail(), null)
   assert.equal(getServerContextSnapshot(), null)
 
-  const workspace = readServerWorkspaceDb()
+  const workspace = readWorkspaceDb()
   assert.equal(workspace.nodes.length, 0)
   assert.equal(workspace.roles.length, 0)
   assert.equal(workspace.workItems.length, 0)
@@ -238,7 +238,7 @@ test('server login stores both tokens before loading and preserving the document
     assert.equal(response.status, 'success')
     assert.equal(calls.length, 2)
 
-    const workspace = readServerWorkspaceDb()
+    const workspace = readWorkspaceDb()
     assert.equal(workspace.nodes.length, 1)
     assert.equal(workspace.nodes[0]?.id, 4)
     assert.deepEqual(workspace.nodes[0]?.path, [4])

@@ -9,8 +9,6 @@ export type UserRecord = {
   userId: string
   email: string
   name: string
-  /** Mock authentication only. Real server users never persist a password in the domain cache. */
-  password?: string
   personalNodeId?: number
   createdAt: string
 }

@@ -1,4 +1,4 @@
-import { resolveRoleAssignments } from '../../model/roleDefinitions'
+import { resolveRoleAssignments } from '../../model/roleDefinitions.js'
 import type {
   ActivityRecord,
   AuthorityRecord,

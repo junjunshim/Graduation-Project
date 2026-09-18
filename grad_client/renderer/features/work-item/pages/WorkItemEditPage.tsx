@@ -126,10 +126,7 @@ export function WorkItemEditPage() {
 
     try {
       if (form.ownerUserId !== item.ownerUserId) {
-        const claimResponse = await claimWorkItem({
-          workItemId: item.workItemId,
-          ownerUserId: form.ownerUserId,
-        })
+        const claimResponse = await claimWorkItem()
 
         if (claimResponse.status === 'error') {
           setFeedback({ tone: 'error', message: claimResponse.message })

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { WindowTitleBar } from '../chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../chrome/windowControls'
@@ -46,6 +46,8 @@ export function AppShell() {
   const currentUser = getCurrentUser(snapshot)
   const hasCustomTitleBar = hasCustomWindowControls()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
+  // 캘린더 페이지가 셸 헤더의 툴바 자리로 포털할 수 있게 하는 참조.
+  const calendarToolbarRef = useRef<HTMLDivElement>(null)
 
   useBodyScrollSurface('workspace')
 
@@ -147,12 +149,14 @@ export function AppShell() {
   const isWorkItemDetailRoute = /^\/work-items\/[^/]+$/.test(location.pathname)
   const isWorkItemFormRoute = isWorkItemCreateRoute || isWorkItemEditRoute
   const isDashboardRoute = location.pathname === '/dashboard'
+  const isCalendarRoute = location.pathname === '/calendar'
   const hasInternalScroll =
     isWorkspaceTimelineRoute ||
     isWorkspacePanelRoute ||
     isWorkspaceSelectRoute ||
     isWorkItemFormRoute ||
     isDashboardRoute ||
+    isCalendarRoute ||
     isWorkItemDetailRoute
   const shellClassName = [
     styles.shell,
@@ -212,6 +216,11 @@ export function AppShell() {
             currentUser={currentUser}
             heading={shellHeading}
             inset="standard"
+            actions={
+              isCalendarRoute ? (
+                <div ref={calendarToolbarRef} className={styles.shellCalendarActions} />
+              ) : undefined
+            }
           />
 
           <main
@@ -223,7 +232,7 @@ export function AppShell() {
               .filter(Boolean)
               .join(' ')}
           >
-            <Outlet />
+            <Outlet context={{ calendarToolbarRef }} />
           </main>
         </div>
       </div>

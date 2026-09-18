@@ -5,11 +5,13 @@ import styles from './TaskFilterDropdown.module.css'
 
 type Option = { value: string; label: string; icon?: ReactNode }
 
-export function TaskFilterDropdown({ label, value, options, onChange }: {
+export function TaskFilterDropdown({ label, value, options, onChange, hideLabel = false }: {
   label: string
   value: string
   options: Option[]
   onChange: (value: string) => void
+  /** 라벨을 화면에서는 감추고 스크린리더에만 남긴다 (툴바처럼 좁은 곳) */
+  hideLabel?: boolean
 }) {
   const id = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -59,7 +61,7 @@ export function TaskFilterDropdown({ label, value, options, onChange }: {
 
   return (
     <div className={styles.field}>
-      <span id={`${id}-label`} className={styles.label}>{label}</span>
+      <span id={`${id}-label`} className={hideLabel ? styles.labelHidden : styles.label}>{label}</span>
       <button
         ref={triggerRef}
         type="button"

@@ -119,7 +119,7 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean, searc
     return {
       section: 'Calendar',
       title: '캘린더',
-      description: '마감 일정과 업무 일정을 한 화면에서 볼 수 있도록 준비 중입니다.',
+      description: '내 업무와 일정을 달력으로 한눈에 확인합니다.',
       actionLabel: '업무 등록',
       actionTo: '/work-items/new',
     }

@@ -148,7 +148,10 @@ const router = createHashRouter([
           },
           {
             path: '/calendar',
-            element: <ShellPlaceholderPage />,
+            lazy: async () => {
+              const { CalendarPage } = await import('../features/calendar/pages/CalendarPage')
+              return { Component: CalendarPage }
+            },
           },
           {
             path: '/documents',

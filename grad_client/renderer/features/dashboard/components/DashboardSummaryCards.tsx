@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import type { DashboardMetrics } from '../model/dashboardTypes'
 import styles from './DashboardSummaryCards.module.css'
@@ -19,7 +18,7 @@ export function DashboardSummaryCards({ metrics }: DashboardSummaryCardsProps) {
           <p className={styles.label} data-tone="info">진행 중인 업무</p>
           <div className={styles.valueRow}>
             <strong className={styles.value}>{metrics.activeCount}건</strong>
-            <span className={styles.pill} data-tone="info">오늘 {metrics.todayWorkCount}건</span>
+            <span className={styles.pill} data-tone="info">오늘 진행 중 {metrics.todayWorkCount}건</span>
           </div>
         </div>
 
@@ -51,43 +50,36 @@ export function DashboardSummaryCards({ metrics }: DashboardSummaryCardsProps) {
           <Icon name="alertTriangle" size={28} />
         </span>
 
-        <div className={styles.primary}>
-          <p className={styles.label} data-tone="danger">마감 임박</p>
-          <div className={styles.valueRow}>
-            <strong className={styles.dueValue}>오늘 {metrics.dueTodayCount}건</strong>
-            <span className={styles.pill} data-tone="warning">3일 이내 {metrics.dueSoonCount}건</span>
+        <div className={styles.stats}>
+          <div className={styles.primary}>
+            <p className={styles.label} data-tone="danger">마감 임박</p>
+            <div className={styles.valueRow}>
+              <strong className={styles.dueValue}>오늘 {metrics.dueTodayCount}건</strong>
+              <span className={styles.pill} data-tone="warning">3일 이내 {metrics.dueSoonCount}건</span>
+            </div>
+          </div>
+
+          <span className={styles.divider} aria-hidden="true" />
+
+          <div className={styles.count}>
+            <p className={styles.label} data-tone="danger">지연</p>
+            <strong className={styles.overdueValue}>{metrics.overdueCount}건</strong>
+          </div>
+
+          <span className={styles.divider} aria-hidden="true" />
+
+          <div className={styles.count}>
+            <p className={styles.label}>이번 주 남은 마감</p>
+            <strong className={styles.countValue}>{metrics.weekRemainingCount}건</strong>
+          </div>
+
+          <span className={styles.divider} aria-hidden="true" />
+
+          <div className={styles.count}>
+            <p className={styles.label}>마감 미정</p>
+            <strong className={styles.countValue}>{metrics.noDueDateCount}건</strong>
           </div>
         </div>
-
-        <span className={styles.divider} aria-hidden="true" />
-
-        <div className={styles.nearest}>
-          <p className={styles.label}>가장 가까운 마감</p>
-          {metrics.nearestDue ? (
-            <div className={styles.nearestItem}>
-              <Icon name="fileText" size={18} className={styles.nearestIcon} />
-              <div className={styles.nearestText}>
-                <span className={styles.nearestTitle}>{metrics.nearestDue.title}</span>
-                <span className={styles.nearestDate}>{metrics.nearestDue.dateLabel}</span>
-              </div>
-            </div>
-          ) : (
-            <p className={styles.nearestEmpty}>예정된 마감이 없습니다.</p>
-          )}
-        </div>
-
-        {metrics.nearestDue ? (
-          <Link
-            className={`${styles.button} ${styles.dueButton}`}
-            to={`/work-items/${metrics.nearestDue.workItemId}`}
-          >
-            마감 업무 보기
-          </Link>
-        ) : (
-          <button type="button" className={`${styles.button} ${styles.dueButton}`} disabled>
-            마감 업무 보기
-          </button>
-        )}
       </article>
     </div>
   )

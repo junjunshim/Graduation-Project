@@ -4,39 +4,31 @@ import { formatRepeatSummary, getNextOccurrenceInfo } from '../../workspace/mode
 import type { WorkItemRecord } from '../../workspace/model/types'
 import type { DashboardRecurringRule, DashboardWorkItem } from './dashboardTypes'
 import type {
-  DashboardCalendarDay,
   DashboardDateRange,
   DashboardMetrics,
   DashboardSchedule,
   DashboardTaskAccent,
   DashboardTaskRow,
-  DashboardWindow,
+  DashboardWeekBoard,
+  DashboardWeekDay,
 } from './dashboardTypes'
 
 const DATE_KEY_PATTERN = /(\d{4})-(\d{2})-(\d{2})/
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
-/** 업무 일정 스트립은 선택한 날짜를 가운데 두고 2주를 보여준다. (6일 전 ~ 7일 후) */
-export const CALENDAR_WINDOW_DAYS = 14
-const CALENDAR_WINDOW_LEAD_DAYS = Math.floor((CALENDAR_WINDOW_DAYS - 1) / 2)
+/** 업무 일정은 월요일부터 일요일까지 한 주를 보여준다. */
+export const WEEK_DAY_COUNT = 7
 
 /** '3일 이내 마감' 기준 */
 const DUE_SOON_DAYS = 3
 
-const MAX_DOT_COUNT = 3
 
-/** 업무 목록은 그날 마감 → 그날 시작 → 그날 진행 중 순으로 보여준다. */
-const TASK_ACCENT_ORDER: Record<DashboardTaskAccent, number> = {
+/** 같은 날 이벤트는 그날 마감 → 그날 시작 순으로 보여준다. */
+const EVENT_TONE_ORDER: Record<'due' | 'start', number> = {
   due: 0,
   start: 1,
-  ongoing: 2,
 }
 
-const SELECTED_DATE_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
-  month: 'long',
-  day: 'numeric',
-  weekday: 'short',
-})
 const SCHEDULE_DATE_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
   month: 'long',
   day: 'numeric',
@@ -98,13 +90,6 @@ export function getWeekWindow(today: Date) {
   return { start, end: addDays(start, 6) }
 }
 
-/** 선택한 날짜를 가운데 두는 2주 구간을 만든다. */
-export function buildCalendarWindow(anchorDate: Date): DashboardWindow {
-  const start = addDays(anchorDate, -CALENDAR_WINDOW_LEAD_DAYS)
-
-  return { start, end: addDays(start, CALENDAR_WINDOW_DAYS - 1) }
-}
-
 /** 대시보드 업무 일정에서 고를 수 있는 범위 (오늘 기준 ±6개월) */
 export const SELECTABLE_MONTH_RANGE = 6
 
@@ -144,10 +129,16 @@ export function clampDateKeyToRange(dateKey: string, range: DashboardDateRange) 
   return dateKey
 }
 
-/** 업무 일정 헤더에 쓰는 '9월 16일 (수)' 형태 라벨 */
-export function formatCalendarDateLabel(dateKey: string) {
-  const date = parseDateKey(dateKey)
-  return date ? SELECTED_DATE_FORMATTER.format(date) : dateKey
+/** 업무 일정 헤더에 쓰는 '9월 15일 ~ 9월 21일' 형태 라벨 */
+export function formatWeekRangeLabel(startKey: string, endKey: string) {
+  const start = parseDateKey(startKey)
+  const end = parseDateKey(endKey)
+
+  if (!start || !end) {
+    return `${startKey} ~ ${endKey}`
+  }
+
+  return `${start.getMonth() + 1}월 ${start.getDate()}일 ~ ${end.getMonth() + 1}월 ${end.getDate()}일`
 }
 
 function formatMonthDay(value?: string) {
@@ -178,11 +169,6 @@ function isDone(item: WorkItemRecord) {
   return item.status === 'done'
 }
 
-function compareByDate(left: WorkItemRecord, right: WorkItemRecord) {
-  const leftKey = readDateKey(left.startDate) ?? readDateKey(left.dueDate) ?? '9999-12-31'
-  const rightKey = readDateKey(right.startDate) ?? readDateKey(right.dueDate) ?? '9999-12-31'
-  return leftKey.localeCompare(rightKey)
-}
 
 export function buildMetrics(
   workItems: WorkItemRecord[],
@@ -195,118 +181,154 @@ export function buildMetrics(
   const weekEndKey = toDateKey(weekEnd)
   const dueSoonLimitKey = toDateKey(addDays(today, DUE_SOON_DAYS))
 
-  const activeItems = workItems.filter((item) => item.status === 'in-progress')
-  // 오늘 하루에 걸쳐 있는 업무 = 업무 일정 패널에서 오늘 날짜에 보이는 업무
-  const todayWorkItems = workItems.filter((item) => isWorkItemOnDate(item, todayKey))
+  const visibleItems = workItems.filter((item) => !item.isDeleted)
+  const activeItems = visibleItems.filter((item) => item.status === 'in-progress')
+  // 진행 중인 업무 중 오늘 날짜가 업무 기간(일자~마감)에 포함된 업무
+  const todayActiveItems = activeItems.filter((item) => isWorkItemOnDate(item, todayKey))
   // 이번 주에 마감해야 하는 업무 = 마감일이 이번 주에 있는 업무 (마감일 없는 업무는 제외)
-  const weekItems = workItems.filter((item) => {
+  const weekItems = visibleItems.filter((item) => {
     const dueKey = readDateKey(item.dueDate)
     return dueKey !== null && dueKey >= weekStartKey && dueKey <= weekEndKey
   })
   const weekDoneCount = weekItems.filter(isDone).length
-  const openItems = workItems.filter((item) => !isDone(item))
+  const weekRemainingCount = weekItems.filter((item) => !isDone(item)).length
+  const openItems = visibleItems.filter((item) => !isDone(item))
   const dueTodayCount = openItems.filter((item) => readDateKey(item.dueDate) === todayKey).length
   const dueSoonCount = openItems.filter((item) => {
     const dueKey = readDateKey(item.dueDate)
     return dueKey !== null && dueKey >= todayKey && dueKey <= dueSoonLimitKey
   }).length
 
-  const nearestDueItem = openItems
-    .filter((item) => {
-      const dueKey = readDateKey(item.dueDate)
-      return dueKey !== null && dueKey >= todayKey
-    })
-    .sort((left, right) => (readDateKey(left.dueDate) ?? '').localeCompare(readDateKey(right.dueDate) ?? ''))[0]
+  // 지연 = 마감일이 오늘보다 이전인 미완료 업무. 임박(오늘/3일 이내)과 섞지 않고 따로 집계한다.
+  const overdueItems = openItems.filter((item) => {
+    const dueKey = readDateKey(item.dueDate)
+    return dueKey !== null && dueKey < todayKey
+  })
+  // 마감 미정 = 진행 중인데 마감일이 없어 일정이 잡히지 않은 업무
+  const noDueDateCount = activeItems.filter((item) => readDateKey(item.dueDate) === null).length
 
   return {
     activeCount: activeItems.length,
-    todayWorkCount: todayWorkItems.length,
+    todayWorkCount: todayActiveItems.length,
     weekProgress: weekItems.length > 0 ? Math.round((weekDoneCount / weekItems.length) * 100) : 0,
     weekDoneCount,
     weekTotalCount: weekItems.length,
     dueTodayCount,
     dueSoonCount,
-    nearestDue: nearestDueItem
-      ? {
-          workItemId: nearestDueItem.workItemId,
-          title: nearestDueItem.title,
-          dateLabel: formatMonthDay(nearestDueItem.dueDate) ?? '',
-        }
-      : null,
+    overdueCount: overdueItems.length,
+    weekRemainingCount,
+    noDueDateCount,
   }
 }
 
-export function buildCalendarDays(
-  workItems: WorkItemRecord[],
-  window: DashboardWindow,
+function resolveEventTone(item: WorkItemRecord, dateKey: string): 'due' | 'start' {
+  return readDateKey(item.dueDate) === dateKey ? 'due' : 'start'
+}
+
+function toTaskRow(item: DashboardWorkItem, accentTone: DashboardTaskAccent): DashboardTaskRow {
+  return {
+    workItemId: item.workItemId,
+    title: item.title,
+    nodeTitle: item.nodeTitle,
+    status: item.status,
+    statusLabel: getWorkItemStatusLabel(item.status),
+    startLabel: formatMonthDay(item.startDate),
+    dueLabel: formatMonthDay(item.dueDate),
+    accentTone,
+  }
+}
+
+/** 마감이 빠른 순 → 같은 날이면 제목 순. */
+function compareByDue(left: WorkItemRecord, right: WorkItemRecord) {
+  const leftKey = readDateKey(left.dueDate) ?? '9999-12-31'
+  const rightKey = readDateKey(right.dueDate) ?? '9999-12-31'
+  return leftKey.localeCompare(rightKey) || left.title.localeCompare(right.title, 'ko')
+}
+
+/**
+ * 업무 일정 보드 — 한 주(월~일) 기준.
+ * 요일마다 그날 시작하거나 마감하는 업무(이벤트)와 그날 걸쳐 있는 진행 중 업무를 나눠 담고,
+ * 날짜가 잡히지 않은 지연/마감 미정 업무는 따로 모은다.
+ */
+export function buildWeekBoard(
+  workItems: DashboardWorkItem[],
+  weekStart: Date,
   today: Date,
-  range: DashboardDateRange,
-): DashboardCalendarDay[] {
+): DashboardWeekBoard {
   const todayKey = toDateKey(today)
-  const taskCountByDate = new Map<string, number>()
+
+  const days: DashboardWeekDay[] = Array.from({ length: WEEK_DAY_COUNT }, (_, index) => {
+    const date = addDays(weekStart, index)
+    const key = toDateKey(date)
+
+    return {
+      key,
+      dayLabel: `${date.getMonth() + 1}월 ${date.getDate()}일`,
+      weekdayLabel: WEEKDAY_LABELS[date.getDay()],
+      isToday: key === todayKey,
+      isPast: key < todayKey,
+      events: [],
+      ongoing: [],
+    }
+  })
+
+  const eventBuckets: DashboardWorkItem[][] = days.map(() => [])
+  const ongoingBuckets: DashboardWorkItem[][] = days.map(() => [])
+  const overdue: DashboardWorkItem[] = []
+  const unscheduled: DashboardWorkItem[] = []
 
   workItems
     .filter((item) => !item.isDeleted)
     .forEach((item) => {
-      const { startKey, dueKey } = getWorkItemRange(item)
-      const keys = new Set([startKey, dueKey].filter(Boolean) as string[])
-      keys.forEach((key) => taskCountByDate.set(key, (taskCountByDate.get(key) ?? 0) + 1))
+      const startKey = readDateKey(item.startDate)
+      const dueKey = readDateKey(item.dueDate)
+
+      // 마감일이 없으면 어느 날에도 놓을 수 없어 '마감 미정'으로 모은다.
+      if (dueKey === null) {
+        if (item.status === 'in-progress') {
+          unscheduled.push(item)
+        }
+        return
+      }
+
+      // 아직 끝나지 않았는데 마감일이 지난 업무는 '지연'으로 모은다.
+      if (!isDone(item) && dueKey < todayKey) {
+        overdue.push(item)
+      }
+
+      days.forEach((day, index) => {
+        if (day.key === dueKey || day.key === startKey) {
+          eventBuckets[index].push(item)
+        } else if (startKey !== null && startKey < day.key && day.key < dueKey) {
+          ongoingBuckets[index].push(item)
+        }
+      })
     })
 
-  return Array.from({ length: CALENDAR_WINDOW_DAYS }, (_, index) => {
-    const date = addDays(window.start, index)
-    const key = toDateKey(date)
-    const taskCount = taskCountByDate.get(key) ?? 0
+  days.forEach((day, index) => {
+    const events = eventBuckets[index]
+    const ongoing = ongoingBuckets[index]
 
-    return {
-      key,
-      dayLabel: String(date.getDate()),
-      weekdayLabel: WEEKDAY_LABELS[date.getDay()],
-      isToday: key === todayKey,
-      isSelectable: isDateKeySelectable(key, range),
-      dotCount: Math.min(taskCount, MAX_DOT_COUNT),
-    }
-  })
-}
-
-/** 선택한 날짜를 기준으로 시작/진행 중/마감을 구분한다. (같은 날이면 마감 우선) */
-function resolveAccentTone(item: WorkItemRecord, dateKey: string): DashboardTaskAccent {
-  const { startKey, dueKey } = getWorkItemRange(item)
-
-  if (dueKey === dateKey) {
-    return 'due'
-  }
-
-  if (startKey === dateKey) {
-    return 'start'
-  }
-
-  return 'ongoing'
-}
-
-/**
- * 업무 일정 목록 — 선택한 하루 기준.
- * 그 날짜가 업무 기간(일자~마감)에 포함되면 모두 표시하고, 마감 → 시작 → 진행 중 순으로 정렬한다.
- */
-export function buildTaskRows(workItems: DashboardWorkItem[], dateKey: string): DashboardTaskRow[] {
-  return workItems
-    .filter((item) => isWorkItemOnDate(item, dateKey))
-    .sort(
+    events.sort(
       (left, right) =>
-        TASK_ACCENT_ORDER[resolveAccentTone(left, dateKey)] -
-          TASK_ACCENT_ORDER[resolveAccentTone(right, dateKey)] ||
-        compareByDate(left, right),
+        EVENT_TONE_ORDER[resolveEventTone(left, day.key)] -
+          EVENT_TONE_ORDER[resolveEventTone(right, day.key)] ||
+        compareByDue(left, right),
     )
-    .map((item) => ({
-      workItemId: item.workItemId,
-      title: item.title,
-      nodeTitle: item.nodeTitle,
-      status: item.status,
-      statusLabel: getWorkItemStatusLabel(item.status),
-      startLabel: formatMonthDay(item.startDate),
-      dueLabel: formatMonthDay(item.dueDate),
-      accentTone: resolveAccentTone(item, dateKey),
-    }))
+    ongoing.sort(compareByDue)
+
+    day.events = events.map((item) => toTaskRow(item, resolveEventTone(item, day.key)))
+    day.ongoing = ongoing.map((item) => toTaskRow(item, 'ongoing'))
+  })
+
+  overdue.sort(compareByDue)
+  unscheduled.sort(compareByDue)
+
+  return {
+    days,
+    overdue: overdue.map((item) => toTaskRow(item, 'overdue')),
+    unscheduled: unscheduled.map((item) => toTaskRow(item, 'unscheduled')),
+  }
 }
 
 export function buildScheduleCards(
@@ -339,8 +361,8 @@ export function buildScheduleCards(
     }))
 }
 
-/** 좌우 화살표: 선택 날짜를 하루 이동시킨다. 스트립은 선택 날짜를 가운데 두고 다시 그려진다. */
-export function shiftSelectedDateKey(dateKey: string, direction: number) {
+/** 좌우 화살표: 보고 있는 주를 한 주씩 이동시킨다. */
+export function shiftWeekDateKey(dateKey: string, direction: number) {
   const date = parseDateKey(dateKey) ?? new Date()
-  return toDateKey(addDays(date, direction))
+  return toDateKey(addDays(date, direction * WEEK_DAY_COUNT))
 }

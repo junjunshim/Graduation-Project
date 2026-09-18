@@ -27,12 +27,6 @@
   margin-left: auto;
 }
 
-.dateField {
-  flex: 0 0 auto;
-  width: 9.6rem;
-  min-width: 0;
-}
-
 .title {
   display: flex;
   align-items: baseline;
@@ -99,93 +93,13 @@
   color: var(--text-primary);
 }
 
-.days {
-  display: grid;
-  grid-template-columns: repeat(14, minmax(0, 1fr));
-  gap: 0.2rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.day {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.32rem;
-  min-width: 0;
-}
-
-.dayWeekday {
-  color: var(--axis-status-info);
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.dayChip {
-  display: grid;
-  place-items: center;
-  width: 1.95rem;
-  height: 1.95rem;
-  padding: 0;
-  border: 1px solid var(--line-default);
-  border-radius: var(--axis-radius-pill);
-  background: var(--surface-panel);
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.dayChip:disabled {
-  color: var(--axis-text-disabled);
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.dayChip:hover:not(:disabled),
-.dayChip:focus-visible {
-  border-color: var(--line-strong);
-  background: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.dayChip[data-selected='true'] {
-  border-color: var(--axis-brand-primary);
-  background: var(--axis-brand-primary-soft);
-  color: var(--axis-brand-primary);
-}
-
-.day[data-today='true'] .dayChip[data-selected='true'] {
-  box-shadow: 0 0 0 2px var(--axis-brand-border);
-}
-
-.day[data-today='true'] .dayChip {
-  border-color: var(--axis-brand-primary);
-  background: var(--axis-brand-primary);
-  color: var(--axis-text-on-brand);
-}
-
-.dots {
-  display: flex;
-  align-items: center;
-  gap: 0.16rem;
-  height: 0.26rem;
-}
-
-.dot {
-  width: 0.26rem;
-  height: 0.26rem;
-  border-radius: var(--axis-radius-pill);
-  background: var(--line-strong);
-}
-
 .body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
+  gap: 0.95rem;
   min-height: 0;
+  padding-right: 0.15rem;
   overflow-y: auto;
   overscroll-behavior-y: contain;
 }
@@ -198,10 +112,178 @@
   text-align: center;
 }
 
+/* 요일 그룹 */
+.day {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.dayHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line-default);
+}
+
+.dayWeekday {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.day[data-today='true'] .dayWeekday {
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
+}
+
+.dayDate {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.day[data-past='true'] .dayDate {
+  color: var(--text-muted);
+}
+
+.todayBadge {
+  flex: 0 0 auto;
+  padding: 0.16rem 0.5rem;
+  border: 1px solid var(--axis-brand-border);
+  border-radius: var(--axis-radius-pill);
+  color: var(--axis-brand-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.dayCounts {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.dayCount {
+  padding: 0.16rem 0.5rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dayCount[data-tone='due'] {
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+}
+
+.dayCount[data-tone='start'] {
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+}
+
+.dayCount[data-tone='ongoing'] {
+  background: var(--axis-status-info-soft);
+  color: var(--axis-status-info);
+}
+
+.dayEmpty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.subToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: var(--axis-radius-surface);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subToggle:hover,
+.subToggle:focus-visible {
+  border-color: var(--line-default);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.subToggleIcon {
+  flex: 0 0 auto;
+}
+
+.subToggleCount {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+/* 하단 고정 그룹 (지연 / 마감 미정) */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line-default);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sectionIcon {
+  flex: 0 0 auto;
+}
+
+.section[data-kind='overdue'] .sectionIcon {
+  color: var(--axis-status-warning);
+}
+
+.section[data-kind='unscheduled'] .sectionIcon {
+  color: var(--text-muted);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.sectionCount {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
 .list {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.55rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -222,6 +304,14 @@
   background: var(--surface-panel-subtle);
 }
 
+/* 그날 걸쳐 있는 진행 중 업무는 한 톤 옅게 그려 이벤트와 구분한다. */
+.row[data-variant='ongoing'] {
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+  border-style: dashed;
+  background: var(--surface-panel-subtle);
+}
+
 .rowAccent {
   position: absolute;
   top: 0.72rem;
@@ -230,6 +320,11 @@
   width: 0.28rem;
   border-radius: var(--axis-radius-pill);
   background: var(--axis-status-info);
+}
+
+.row[data-variant='ongoing'] .rowAccent {
+  top: 0.5rem;
+  bottom: 0.5rem;
 }
 
 .row[data-tone='start'] .rowAccent {
@@ -242,6 +337,14 @@
 
 .row[data-tone='due'] .rowAccent {
   background: var(--axis-status-danger);
+}
+
+.row[data-tone='overdue'] .rowAccent {
+  background: var(--axis-status-warning);
+}
+
+.row[data-tone='unscheduled'] .rowAccent {
+  background: var(--line-strong);
 }
 
 .rowMain {
@@ -264,8 +367,28 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  color: var(--axis-status-danger);
+  color: var(--text-secondary);
   font-size: 0.84rem;
+}
+
+.row[data-tone='start'] .rowMeta {
+  color: var(--axis-status-success);
+}
+
+.row[data-tone='ongoing'] .rowMeta {
+  color: var(--axis-status-info);
+}
+
+.row[data-tone='due'] .rowMeta {
+  color: var(--axis-status-danger);
+}
+
+.row[data-tone='overdue'] .rowMeta {
+  color: var(--axis-status-warning);
+}
+
+.row[data-tone='unscheduled'] .rowMeta {
+  color: var(--text-muted);
 }
 
 .rowMetaIcon {
@@ -302,10 +425,5 @@
 @media (max-width: 1180px) {
   .panel {
     min-height: 24rem;
-  }
-
-  .days {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    row-gap: 0.6rem;
   }
 }

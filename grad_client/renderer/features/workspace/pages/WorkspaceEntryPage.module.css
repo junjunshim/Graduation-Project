@@ -1121,6 +1121,32 @@
   overflow-x: auto;
 }
 
+/* 목록 보기: 페이지 높이를 고정하고 목록 영역만 내부 스크롤한다. */
+.pageListView {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pageListView .listSection {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior-y: contain;
+}
+
+/* 목록을 스크롤해도 페이지네이션은 하단에 남는다. */
+.pageListView .listFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--entry-background);
+}
+
 .workspaceRows {
   display: grid;
   gap: 0.48rem;

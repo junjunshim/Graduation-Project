@@ -712,8 +712,14 @@ function ListView({
   const startPage = currentGroup * PAGE_GROUP_SIZE + 1
   const endPage = Math.min(startPage + PAGE_GROUP_SIZE - 1, totalPages)
   const visiblePages = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i)
+  const listRef = useRef<HTMLElement>(null)
+  // 페이지를 넘기면 목록 맨 위부터 보여준다.
+  const changePage = (page: number) => {
+    onPageChange(page)
+    listRef.current?.scrollTo({ top: 0 })
+  }
   return (
-    <section className={styles.listSection} aria-label="워크스페이스 목록">
+    <section className={styles.listSection} aria-label="워크스페이스 목록" ref={listRef}>
       <ol className={styles.workspaceRows}>
         {rows.length > 0 ? (
           rows.map((item) => (
@@ -792,7 +798,7 @@ function ListView({
             type="button"
             aria-label="이전 페이지"
             disabled={currentPage === 1}
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            onClick={() => changePage(Math.max(1, currentPage - 1))}
           >
             <Icon name="chevronLeft" size={17} />
           </button>
@@ -803,7 +809,7 @@ function ListView({
                   type="button"
                   className={currentPage === page ? styles.currentPageButton : undefined}
                   aria-current={currentPage === page ? 'page' : undefined}
-                  onClick={() => onPageChange(page)}
+                  onClick={() => changePage(page)}
                 >
                   {page}
                 </button>
@@ -814,7 +820,7 @@ function ListView({
             type="button"
             aria-label="다음 페이지"
             disabled={currentPage >= totalPages}
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            onClick={() => changePage(Math.min(totalPages, currentPage + 1))}
           >
             <Icon name="chevronRight" size={17} />
           </button>
@@ -1272,7 +1278,9 @@ export function WorkspaceEntryPage() {
   }
 
   return (
-    <div className={[styles.page, view === 'hierarchy' ? styles.pageHierarchy : ''].filter(Boolean).join(' ')}>
+    <div
+      className={[styles.page, view === 'hierarchy' ? styles.pageHierarchy : '', view === 'list' ? styles.pageListView : ''].filter(Boolean).join(' ')}
+    >
       <WorkspaceEntryViewToggle
         view={view}
         onChange={handleViewChange}

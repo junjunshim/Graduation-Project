@@ -143,7 +143,6 @@ export function AppShell() {
             subtitle: pageMeta.description,
           }
         : { type: 'none' }
-  const isWorkspaceSelectHierarchyRoute = isWorkspaceSelectRoute && !isWorkspaceSelectListView
   const isWorkItemCreateRoute = location.pathname === '/work-items/new'
   const isWorkItemDetailRoute = /^\/work-items\/[^/]+$/.test(location.pathname)
   const isWorkItemFormRoute = isWorkItemCreateRoute || isWorkItemEditRoute
@@ -151,7 +150,7 @@ export function AppShell() {
   const hasInternalScroll =
     isWorkspaceTimelineRoute ||
     isWorkspacePanelRoute ||
-    isWorkspaceSelectHierarchyRoute ||
+    isWorkspaceSelectRoute ||
     isWorkItemFormRoute ||
     isDashboardRoute ||
     isWorkItemDetailRoute

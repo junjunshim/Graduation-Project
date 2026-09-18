@@ -77,21 +77,37 @@
 
 .header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 1.2rem 1.25rem 0.9rem;
-}
-
-.headerMain {
-  display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  padding: 1.2rem 1.25rem 0.9rem;
+  border-bottom: 1px solid var(--line-default);
+}
+
+/* 1줄: 배지 · 닫기 버튼 */
+.headerTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+/* 2줄: 제목 · 액션 버튼 (세로 가운데 정렬) */
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   min-width: 0;
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
 .badge {
-  align-self: flex-start;
   padding: 2px 8px;
   border: 1px solid transparent;
   border-radius: var(--axis-radius-action);
@@ -136,9 +152,11 @@
 }
 
 .title {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   color: var(--text-primary);
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 650;
   line-height: 1.35;
   word-break: break-word;
@@ -164,12 +182,6 @@
   color: var(--text-primary);
 }
 
-.actions {
-  display: flex;
-  gap: 0.45rem;
-  padding: 0 1.25rem 0.9rem;
-  border-bottom: 1px solid var(--line-default);
-}
 
 .actionButton {
   display: flex;
@@ -266,11 +278,14 @@
 
 .section {
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 0.5rem;
+  min-height: 0;
 }
 
 .sectionTitle {
+  flex: 0 0 auto;
   margin: 0;
   color: var(--text-primary);
   font-size: 0.85rem;
@@ -278,7 +293,13 @@
 }
 
 .description {
+  flex: 0 1 auto;
+  /* 길어지면 본문을 밀어내지 않고 이 영역 안에서 스크롤한다. */
+  max-height: min(12rem, 26vh);
+  min-height: 0;
   margin: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   color: var(--text-secondary);
   font-size: 0.85rem;
   line-height: 1.6;
@@ -287,10 +308,16 @@
 
 .fileList {
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 0.35rem;
+  /* 파일이 많아지면 목록 안에서만 스크롤한다. */
+  max-height: min(14rem, 30vh);
+  min-height: 0;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   list-style: none;
 }
 

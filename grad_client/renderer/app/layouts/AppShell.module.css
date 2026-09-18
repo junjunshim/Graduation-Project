@@ -428,6 +428,14 @@
   transform: translate3d(0, -50%, 0);
 }
 
+/* 캘린더 페이지가 셸 헤더로 포털해 넣는 툴바 자리 */
+.shellCalendarActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
 .srOnly {
   position: absolute;
   width: 1px;

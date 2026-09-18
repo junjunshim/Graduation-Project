@@ -14,6 +14,7 @@ import {
 import type { OrganizationNodeRecord, UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
+import { applyProgressWeight, getChildProgressAverage } from '../model/workItemProgress'
 import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItemDue'
 import type { DueScheduleType } from '../model/workItemDue'
 import { canRestoreWorkItem } from '../model/workItemPermission'
@@ -228,6 +229,12 @@ function TaskTreeNodeCard({
   const hasChildren = children.length > 0
   const isCollapsed = collapsedMap.get(item.workItemId) ?? false
   const restorable = canRestoreItem ? canRestoreItem(item) : true
+  // 자체 진행률은 좌측에서, 하위 업무 기여분(하위 평균 × 가중치%)은 우측에서 채운다.
+  // 가중치가 0이면 하위 업무가 종합 진행률에 반영되지 않으므로 우측 바를 그리지 않는다.
+  const selfProgressValue = Math.min(100, Math.max(0, item.progress))
+  const childProgressValue = item.weight > 0
+    ? applyProgressWeight(getChildProgressAverage(children.map((child) => child.item)), item.weight)
+    : 0
 
   return (
     <div className={styles.treeNodeContainer}>
@@ -265,12 +272,15 @@ function TaskTreeNodeCard({
           ) : null}
         </div>
 
-        {typeof item.progress === 'number' && item.progress > 0 ? (
+        {selfProgressValue > 0 || childProgressValue > 0 ? (
           <div className={styles.treeProgressTrack}>
             <div
-              className={styles.treeProgressBar}
-              data-status={item.status}
-              style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }}
+              className={styles.treeProgressSelf}
+              style={{ width: `${selfProgressValue}%` }}
+            />
+            <div
+              className={styles.treeProgressChild}
+              style={{ width: `${childProgressValue}%` }}
             />
           </div>
         ) : null}

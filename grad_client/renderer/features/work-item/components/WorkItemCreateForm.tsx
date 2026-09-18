@@ -13,7 +13,7 @@ type WorkItemCreateFormProps = {
   composer: WorkItemComposerContext
   form: WorkItemCreateFormState
   submitting: boolean
-  feedback: { tone: 'error' | 'success'; message: string } | null
+  feedback: { tone: 'error' | 'success' | 'info'; message: string } | null
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onCancel: () => void
   submitLabel?: string
@@ -23,6 +23,7 @@ type WorkItemCreateFormProps = {
   dueDateRequired?: boolean
   ownerLocked?: boolean
   submitDisabled?: boolean
+  submitHint?: string
   onFieldChange: <Key extends keyof WorkItemCreateFormState>(
     field: Key,
     value: WorkItemCreateFormState[Key],
@@ -51,8 +52,11 @@ export function WorkItemCreateForm({
   dueDateRequired = false,
   ownerLocked = false,
   submitDisabled = false,
+  submitHint,
   onFieldChange,
 }: WorkItemCreateFormProps) {
+  // 완료 상태는 항상 자체 진행률 100%이므로 진행률 입력을 잠근다.
+  const progressLocked = form.status === 'done'
   const [isNodeDropdownOpen, setIsNodeDropdownOpen] = useState(false)
   const [isParentDropdownOpen, setIsParentDropdownOpen] = useState(false)
   const parentDropdownId = useId()
@@ -610,7 +614,14 @@ export function WorkItemCreateForm({
                         isSelected ? styles.statusButtonSelected : '',
                       ].filter(Boolean).join(' ')}
                       data-status={status}
-                      onClick={() => onFieldChange('status', status)}
+                      onClick={() => {
+                        onFieldChange('status', status)
+
+                        // 완료 상태로 바꾸면 자체 진행률은 자동으로 100%가 된다.
+                        if (status === 'done') {
+                          onFieldChange('progress', '100')
+                        }
+                      }}
                     >
                       <span className={styles.statusIndicator} data-status={status} />
                       {getWorkItemStatusLabel(status)}
@@ -677,10 +688,10 @@ export function WorkItemCreateForm({
           {/* 가중치 및 진행률 */}
           <div className={styles.fieldGridTwo}>
             <label className={styles.field}>
-              <span className={styles.fieldLabel}>가중치 (Weight)</span>
+              <span className={styles.fieldLabel}>하위 업무 가중치 (Weight)</span>
               <input
                 type="number"
-                min="1"
+                min="0"
                 max="100"
                 className={styles.textInput}
                 value={form.weight}
@@ -692,18 +703,20 @@ export function WorkItemCreateForm({
                     return
                   }
 
-                  const clampedWeight = Math.min(100, Math.max(1, Number(raw)))
+                  const clampedWeight = Math.min(100, Math.max(0, Number(raw)))
 
                   if (!Number.isNaN(clampedWeight)) {
                     onFieldChange('weight', String(clampedWeight))
                   }
                 }}
               />
-              <span className={styles.fieldHelpText}>업무의 상대적 비중(기본: 1)</span>
+              <span className={styles.fieldHelpText}>
+                하위 업무가 차지하는 비중(%)입니다. 하위 업무가 없으면 반영되지 않습니다.
+              </span>
             </label>
 
             <div className={styles.field}>
-              <span className={styles.fieldLabel}>초기 진행률 ({form.progress}%)</span>
+              <span className={styles.fieldLabel}>자체 진행률 ({progressLocked ? 100 : form.progress}%)</span>
               <div className={styles.sliderRow}>
                 <input
                   type="range"
@@ -711,17 +724,22 @@ export function WorkItemCreateForm({
                   max="100"
                   step="5"
                   className={styles.rangeSlider}
-                  value={form.progress}
+                  value={progressLocked ? 100 : form.progress}
+                  disabled={progressLocked}
                   onChange={(event) => onFieldChange('progress', event.target.value)}
                 />
-                <div className={styles.progressInputWrapper}>
+                <div
+                  className={styles.progressInputWrapper}
+                  data-locked={progressLocked ? 'true' : undefined}
+                >
                   <input
                     type="number"
                     min="0"
                     max="100"
                     step="1"
                     className={styles.progressNumberInput}
-                    value={form.progress}
+                    value={progressLocked ? 100 : form.progress}
+                    disabled={progressLocked}
                     onChange={(event) => {
                       const raw = event.target.value
                       if (raw === '') {
@@ -737,6 +755,11 @@ export function WorkItemCreateForm({
                   <span className={styles.progressUnit}>%</span>
                 </div>
               </div>
+              {progressLocked ? (
+                <span className={styles.fieldHelpText}>
+                  완료 상태에서는 자체 진행률이 100%로 고정됩니다.
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -811,17 +834,26 @@ export function WorkItemCreateForm({
         <div
           className={[
             styles.feedbackBanner,
-            feedback.tone === 'error' ? styles.feedbackError : styles.feedbackSuccess,
+            feedback.tone === 'error'
+              ? styles.feedbackError
+              : feedback.tone === 'info'
+                ? styles.feedbackInfo
+                : styles.feedbackSuccess,
           ].join(' ')}
           role="alert"
         >
-          <span className={styles.feedbackIcon}>{feedback.tone === 'error' ? '⚠️' : '✅'}</span>
+          <span className={styles.feedbackIcon}>
+            {feedback.tone === 'error' ? '⚠️' : feedback.tone === 'info' ? 'ℹ️' : '✅'}
+          </span>
           <span>{feedback.message}</span>
         </div>
       ) : null}
 
       {/* 하단 액션 버튼 바 */}
       <div className={styles.formActionBar}>
+        {submitDisabled && submitHint ? (
+          <span className={styles.actionHint}>{submitHint}</span>
+        ) : null}
         <button
           type="button"
           className={styles.cancelBtn}

@@ -21,3 +21,21 @@ export function createWorkItemUpdatePayload(
 
   return payload
 }
+
+/**
+ * 수정 페이지에서 서버로 보낼 변경 사항이 실제로 있는지 판단한다.
+ * 담당자 변경은 수정 페이로드가 아니라 별도 배정 경로(claimWorkItem)로 처리되므로 함께 확인한다.
+ */
+export function hasWorkItemChanges(
+  workItemId: string,
+  initial: WorkItemCreateFormState,
+  current: WorkItemCreateFormState,
+): boolean {
+  const payload = createWorkItemUpdatePayload(workItemId, initial, current)
+
+  if (Object.keys(payload).length > 1) {
+    return true
+  }
+
+  return current.ownerUserId !== initial.ownerUserId
+}

@@ -1,5 +1,49 @@
 -- 컨트롤러에서 사용될 work_items 관련 함수 생성
 
+-- 업무 진행률 계산: 자체 진행률과 하위 업무들의 평균 진행률을 가중치로 합성한다.
+-- 가중치 W(%)는 하위 업무가 차지하는 비중이고, 자체 진행률은 (100 - W)% 비중을 가진다.
+-- 하위 업무가 없거나 가중치가 0이면 자체 진행률을 그대로 사용한다.
+CREATE OR REPLACE FUNCTION compute_work_item_progress(
+    p_work_item_id work_items.work_item_id%TYPE,
+    p_depth INTEGER DEFAULT 0
+) RETURNS INTEGER AS $$
+DECLARE
+    v_weight      work_items.weight%TYPE;
+    v_progress    work_items.progress%TYPE;
+    v_child_count INTEGER;
+    v_child_avg   NUMERIC;
+    v_ratio       NUMERIC;
+BEGIN
+    SELECT weight, progress
+    INTO v_weight, v_progress
+    FROM work_items
+    WHERE work_item_id = p_work_item_id;
+
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
+
+    -- 자기 참조/순환 연결 방어
+    IF p_depth >= 32 THEN
+        RETURN v_progress;
+    END IF;
+
+    SELECT COUNT(*), AVG(compute_work_item_progress(child.work_item_id, p_depth + 1))
+    INTO v_child_count, v_child_avg
+    FROM work_items child
+    WHERE child.parent_work_item_id = p_work_item_id
+      AND child.is_deleted = FALSE;
+
+    v_ratio := LEAST(GREATEST(COALESCE(v_weight, 0), 0), 100) / 100.0;
+
+    IF v_child_count = 0 OR v_ratio = 0 THEN
+        RETURN v_progress;
+    END IF;
+
+    RETURN LEAST(100, GREATEST(0, ROUND(v_progress * (1 - v_ratio) + v_child_avg * v_ratio)))::INTEGER;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
 -- WorkItemController::createWorkItem
 CREATE OR REPLACE FUNCTION create_work_item(
     p_requester_email users.email%TYPE,
@@ -13,7 +57,7 @@ CREATE OR REPLACE FUNCTION create_work_item(
     p_hidden work_items.hidden%TYPE DEFAULT FALSE,
     p_status work_items.status%TYPE DEFAULT 'todo',
     p_priority work_items.priority%TYPE DEFAULT 3,
-    p_weight work_items.weight%TYPE DEFAULT 1,
+    p_weight work_items.weight%TYPE DEFAULT 0,
     p_progress work_items.progress%TYPE DEFAULT 0,
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL
@@ -122,8 +166,8 @@ BEGIN
         COALESCE(p_hidden, FALSE),
         COALESCE(NULLIF(p_status, ''), 'todo'),
         COALESCE(p_priority, 3),
-        COALESCE(p_weight, 1),
-        COALESCE(p_progress, 0),
+        COALESCE(p_weight, 0),
+        CASE WHEN COALESCE(NULLIF(p_status, ''), 'todo') = 'done' THEN 100 ELSE COALESCE(p_progress, 0) END,
         NULLIF(p_start_date, '')::DATE,
         NULLIF(p_due_date, '')::DATE
     );
@@ -148,6 +192,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
@@ -252,7 +297,12 @@ BEGIN
         status = COALESCE(NULLIF(p_status, ''), status),
         priority = CASE WHEN p_priority >= 1 AND p_priority <= 5 THEN p_priority ELSE priority END,
         weight = CASE WHEN p_weight >= 0 THEN p_weight ELSE weight END,
-        progress = CASE WHEN p_progress >= 0 AND p_progress <= 100 THEN p_progress ELSE progress END,
+        -- 완료 상태는 항상 자체 진행률 100%를 유지한다.
+        progress = CASE
+            WHEN COALESCE(NULLIF(p_status, ''), status) = 'done' THEN 100
+            WHEN p_progress >= 0 AND p_progress <= 100 THEN p_progress
+            ELSE progress
+        END,
         start_date = COALESCE(NULLIF(p_start_date, '')::DATE, start_date),
         due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date)
     WHERE work_item_id = p_work_item_id;
@@ -267,7 +317,9 @@ BEGIN
     IF p_status <> '' AND p_status <> v_old_status THEN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'status', v_old_status, p_status);
     END IF;
-    IF p_progress >= 0 AND p_progress <> v_old_progress THEN
+    IF COALESCE(NULLIF(p_status, ''), v_old_status) = 'done' AND v_old_progress <> 100 THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, '100');
+    ELSIF p_progress >= 0 AND p_progress <> v_old_progress THEN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, p_progress::VARCHAR);
     END IF;
 
@@ -288,6 +340,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
@@ -593,6 +646,7 @@ BEGIN
         'priority', w.priority,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'hidden', w.hidden,
         'is_deleted', w.is_deleted,
         'start_date', w.start_date,
@@ -1092,6 +1146,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'comment_count', COALESCE(cc.cnt, 0),
         'is_deleted', w.is_deleted,
         'start_date', w.start_date,

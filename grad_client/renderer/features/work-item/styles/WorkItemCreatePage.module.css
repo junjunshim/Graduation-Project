@@ -716,6 +716,22 @@
   box-sizing: border-box;
 }
 
+.progressInputWrapper[data-locked='true'] {
+  background: var(--axis-surface-muted);
+  border-color: var(--axis-line-default);
+}
+
+.progressInputWrapper[data-locked='true']:focus-within {
+  border-color: var(--axis-line-default);
+  box-shadow: none;
+}
+
+.rangeSlider:disabled,
+.progressNumberInput:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .progressInputWrapper:focus-within {
   border-color: var(--axis-brand-primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--axis-brand-primary) 15%, transparent);
@@ -940,6 +956,12 @@
   color: var(--axis-status-success);
 }
 
+.feedbackInfo {
+  background: var(--axis-status-info-soft);
+  border: 1px solid var(--axis-status-info-border);
+  color: var(--axis-status-info);
+}
+
 .feedbackIcon {
   font-size: 1.1rem;
 }
@@ -951,6 +973,12 @@
   justify-content: flex-end;
   gap: 0.85rem;
   padding-top: 0.5rem;
+}
+
+.actionHint {
+  margin-right: auto;
+  font-size: 0.8rem;
+  color: var(--axis-text-muted);
 }
 
 .cancelBtn {

@@ -642,6 +642,7 @@
 }
 
 .progressTrack {
+  position: relative;
   width: 100%;
   height: 0.45rem;
   overflow: hidden;
@@ -650,20 +651,91 @@
 }
 
 .progressTrack span {
-  display: block;
+  position: absolute;
+  top: 0;
   height: 100%;
   border-radius: inherit;
-  background: var(--axis-brand-primary);
   transition: width 240ms ease;
 }
 
-.progressFooter {
+/* 자체 진행률: 좌측에서 채워진다. */
+.progressFillSelf {
+  left: 0;
+  background: var(--axis-status-neutral);
+}
+
+/* 하위 업무 기여분(하위 평균 × 가중치%): 우측에서 채워진다. */
+.progressFillChild {
+  right: 0;
+  background: var(--axis-brand-primary);
+}
+
+.progressLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.34rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.progressLegendItem {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--axis-text-muted);
-  font-size: 0.76rem;
+  gap: 0.5rem;
+  font-size: 0.74rem;
   font-weight: 600;
+  color: var(--axis-text-secondary);
+}
+
+.progressLegendItem[data-total='true'] {
+  margin-top: 0.1rem;
+  padding-top: 0.34rem;
+  border-top: 1px solid var(--axis-line-default);
+  color: var(--axis-text-primary);
+  font-weight: 700;
+}
+
+.progressLegendLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.progressLegendValue {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.progressLegendValue em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--axis-text-muted);
+}
+
+.progressLegendItem[data-total='true'] .progressLegendValue {
+  color: var(--axis-brand-primary);
+}
+
+.progressLegendDot {
+  flex: 0 0 auto;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: var(--axis-radius-pill, 999px);
+}
+
+.progressLegendDotSelf {
+  background: var(--axis-status-neutral);
+}
+
+.progressLegendDotChild {
+  background: var(--axis-brand-primary);
 }
 
 /* 5. 첨부 파일 패널 (내부 스크롤) */

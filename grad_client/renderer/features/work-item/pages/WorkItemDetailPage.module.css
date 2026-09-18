@@ -1,29 +1,37 @@
 .page {
-  display: grid;
-  gap: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
-  padding: 1.75rem calc(var(--space-page-x) + 1.5rem) var(--space-page-bottom);
+  padding: 0.65rem var(--space-page-x) 0.75rem;
   color: var(--axis-text-primary);
+  background: var(--axis-surface-canvas);
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-.breadcrumbRow {
+.header {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-shrink: 0;
+  padding: 0 0 0.1rem;
 }
 
 .backLink {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.25rem 0.6rem;
+  padding: 0.25rem 0.55rem;
   border: 1px solid var(--axis-line-default);
   border-radius: var(--axis-radius-sm, 6px);
   background: var(--axis-surface-panel);
   color: var(--axis-text-secondary);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 160ms ease;
@@ -32,92 +40,176 @@
 .backLink:hover {
   background: var(--axis-surface-muted);
   color: var(--axis-text-primary);
-  border-color: var(--axis-line-focus, #3b82f6);
+  border-color: var(--axis-line-strong);
 }
 
-.parentBreadcrumb {
+.backLink:focus-visible,
+.editButton:focus-visible,
+.deleteButton:focus-visible {
+  outline: 2px solid var(--axis-brand-primary);
+  outline-offset: 2px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.editButton {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.82rem;
-}
-
-.breadcrumbSeparator {
-  color: var(--axis-text-muted);
-  font-size: 0.85rem;
-}
-
-.parentIcon {
-  color: var(--axis-brand-primary);
-}
-
-.parentLabel {
-  color: var(--axis-text-muted);
-  font-weight: 500;
-}
-
-.parentLink {
-  display: inline-flex;
-  align-items: center;
+  justify-content: center;
   gap: 0.35rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: var(--axis-radius-sm, 6px);
-  background: var(--accent-purple-soft, rgba(110, 86, 207, 0.1));
-  border: 1px solid rgba(110, 86, 207, 0.25);
-  color: var(--axis-text-primary);
-  font-size: 0.82rem;
-  text-decoration: none;
-  max-width: 100%;
-  transition: all 160ms ease;
-}
-
-.parentLink:hover {
-  background: rgba(110, 86, 207, 0.18);
-  border-color: #6e56cf;
-}
-
-.parentIcon {
-  color: #6e56cf;
-  flex-shrink: 0;
-}
-
-.parentCode {
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--axis-brand-primary);
+  border-radius: var(--axis-radius-action, 8px);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
   font: inherit;
+  font-size: 0.82rem;
   font-weight: 700;
-  color: #6e56cf;
-  flex-shrink: 0;
-}
-
-.parentTitle {
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-decoration: none;
+  transition: opacity 160ms ease;
   white-space: nowrap;
 }
 
-.noParentText {
-  color: var(--axis-text-muted);
-  font-size: 0.85rem;
-  font-weight: normal;
+.editButton:hover {
+  opacity: 0.92;
 }
 
-.header {
+.deleteButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--axis-status-danger-border);
+  border-radius: var(--axis-radius-action, 8px);
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+  white-space: nowrap;
+}
+
+.deleteButton:hover {
+  opacity: 0.88;
+}
+
+/* 패널 공통 컨테이너 */
+.propertyPanel,
+.contentPanel,
+.progressPanel,
+.attachmentPanel,
+.emptyState {
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-panel, 12px);
+  background: var(--axis-surface-panel);
+  box-shadow: var(--axis-shadow-field, 0 1px 2px rgba(15, 23, 42, 0.03));
+}
+
+/* 1. 총 업무 정보 패널 */
+.propertyPanel {
+  flex-shrink: 0;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 1rem;
+}
+
+.propertyPanelHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0 0 0.15rem;
 }
 
-.workItemIdBadge {
-  padding: 0.25rem 0.55rem;
-  border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-surface-muted);
-  border: 1px solid var(--axis-line-default);
-  color: var(--axis-text-secondary);
-  font-size: 0.78rem;
-  font-weight: 800;
-  font-family: var(--font-mono, monospace);
+.propertyPanelTitle {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--axis-text-primary);
+}
+
+.propertyColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1.15fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.propertyLeftColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.propertyRightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  border-left: 1px solid var(--axis-line-default);
+  padding-left: 1rem;
+}
+
+.propertyRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.rowDivider {
+  width: 100%;
+  height: 1px;
+  background: var(--axis-line-default);
+}
+
+.property {
+  display: grid;
+  align-content: start;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.propertyLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--axis-text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.propertyValue {
+  min-width: 0;
+  color: var(--axis-text-primary);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.workItemCodeText {
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--axis-brand-primary);
+}
+
+.workItemTitleText {
+  font-weight: 700;
+  color: var(--axis-text-primary);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .categoryBadge,
@@ -128,137 +220,171 @@
   justify-content: center;
   width: fit-content;
   border-radius: var(--axis-radius-sm, 6px);
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
   white-space: nowrap;
 }
 
 .categoryBadge {
-  padding: 0.28rem 0.55rem;
+  padding: 0.2rem 0.5rem;
   background: var(--axis-surface-muted);
   color: var(--axis-text-secondary);
 }
 
 .statusBadge {
-  padding: 0.32rem 0.65rem;
+  padding: 0.25rem 0.55rem;
 }
 
 .statusBadge[data-tone='done'] {
-  background: var(--accent-green-soft, #edf7ee);
-  color: var(--accent-green, #217346);
-  border: 1px solid rgba(33, 115, 70, 0.25);
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+  border: 1px solid var(--axis-status-success-border);
 }
 
 .statusBadge[data-tone='inProgress'] {
-  background: var(--accent-blue-soft, #edf4ff);
-  color: var(--accent-blue, #2f5fb8);
-  border: 1px solid rgba(47, 95, 184, 0.25);
+  background: var(--axis-status-info-soft);
+  color: var(--axis-status-info);
+  border: 1px solid var(--axis-status-info-border);
 }
 
 .statusBadge[data-tone='todo'] {
-  background: var(--accent-purple-soft, #f1edff);
-  color: var(--accent-purple, #6e56cf);
-  border: 1px solid rgba(110, 86, 207, 0.25);
+  background: var(--axis-status-neutral-soft);
+  color: var(--axis-status-neutral);
+  border: 1px solid var(--axis-status-neutral-border);
 }
 
-.progressPanel,
-.propertyPanel,
-.propertyGrid,
-.contentPanel,
-.attachmentPanel,
-.emptyState {
-  border: 1px solid var(--axis-line-default);
-  border-radius: var(--axis-radius-panel, 12px);
-  background: var(--axis-surface-panel);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+.priorityBadge {
+  min-width: 3.5rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--axis-radius-pill, 999px);
+  font-size: 0.76rem;
 }
 
-.propertyPanel {
-  display: grid;
-  gap: 1rem;
-  padding: 1.25rem 1.4rem;
+.priorityBadge[data-tone='highest'],
+.priorityBadge[data-tone='high'] {
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+  border: 1px solid var(--axis-status-danger-border);
 }
 
-.propertyRow {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1.25rem;
-  align-items: start;
+.priorityBadge[data-tone='medium'] {
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
+  border: 1px solid var(--axis-status-warning-border);
 }
 
-.propertyRowFull {
+.priorityBadge[data-tone='low'],
+.priorityBadge[data-tone='lowest'] {
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+  border: 1px solid var(--axis-status-success-border);
+}
+
+.ownerValue {
   display: flex;
   align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
-.rowDivider {
-  width: 100%;
-  height: 1px;
-  background: var(--axis-line-default);
+.ownerName {
+  font-weight: 700;
+  font-size: 0.84rem;
 }
 
-.workItemCodeText {
+.ownerEmail {
+  color: var(--axis-text-muted);
+  font-size: 0.76rem;
+  font-weight: normal;
+}
+
+.parentLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--axis-radius-sm, 6px);
+  background: var(--axis-brand-primary-soft);
+  border: 1px solid var(--axis-brand-border);
+  color: var(--axis-brand-primary);
+  font-size: 0.78rem;
+  text-decoration: none;
+  max-width: 100%;
+  transition: all 160ms ease;
+}
+
+.parentLink:hover {
+  background: var(--axis-surface-muted);
+}
+
+.parentIcon {
+  color: var(--axis-brand-primary);
+  flex-shrink: 0;
+}
+
+.parentCode {
   font: inherit;
-  font-size: 0.95rem;
   font-weight: 700;
-  color: var(--axis-text-primary);
+  color: var(--axis-brand-primary);
+  flex-shrink: 0;
 }
 
-.workItemTitleText {
-  font-weight: 700;
-  color: var(--axis-text-primary);
-  font-size: 0.95rem;
-  line-height: 1.4;
-  word-break: break-word;
+.parentTitle {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hierarchyRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
-  gap: 1.5rem;
-  align-items: start;
+.noParentText,
+.noChildText,
+.mutedText {
+  color: var(--axis-text-muted);
+  font-size: 0.8rem;
+  font-weight: normal;
 }
 
-.hierarchyColumn {
-  min-width: 0;
+.childScrollArea {
+  max-height: 3.6rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
 }
 
 .childList {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.35rem;
   align-items: center;
 }
 
 .childLink {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.6rem;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
   border-radius: var(--axis-radius-sm, 6px);
-  background: var(--accent-blue-soft, rgba(47, 95, 184, 0.1));
-  border: 1px solid rgba(47, 95, 184, 0.25);
-  color: var(--axis-text-primary);
-  font-size: 0.82rem;
+  background: var(--axis-status-info-soft);
+  border: 1px solid var(--axis-status-info-border);
+  color: var(--axis-status-info);
+  font-size: 0.78rem;
   text-decoration: none;
   max-width: 100%;
   transition: all 160ms ease;
 }
 
 .childLink:hover {
-  background: rgba(47, 95, 184, 0.18);
-  border-color: #2f5fb8;
+  background: var(--axis-surface-muted);
 }
 
 .childIcon {
-  color: #2f5fb8;
+  color: var(--axis-status-info);
   flex-shrink: 0;
 }
 
 .childCode {
   font: inherit;
   font-weight: 700;
-  color: #2f5fb8;
+  color: var(--axis-status-info);
   flex-shrink: 0;
 }
 
@@ -269,124 +395,52 @@
   white-space: nowrap;
 }
 
-.noChildText {
-  color: var(--axis-text-muted);
-  font-size: 0.85rem;
-  font-weight: normal;
-}
-
-.mutedText {
-  color: var(--axis-text-muted);
-  font-size: 0.85rem;
-}
-
-.property {
+/* 본문 메인 2열 그리드 */
+.mainGrid {
   display: grid;
-  align-content: start;
-  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  flex: 1 1 0;
+  min-height: 0;
   min-width: 0;
 }
 
-.propertyLabel {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--axis-text-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.propertyValue {
-  min-width: 0;
-  color: var(--axis-text-primary);
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.ownerValue {
+.leftColumn,
+.rightColumn {
   display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-}
-
-.ownerName {
-  font-weight: 700;
-}
-
-.ownerEmail {
-  color: var(--axis-text-muted);
-  font-size: 0.8rem;
-  font-weight: normal;
-}
-
-.priorityBadge {
-  min-width: 3.8rem;
-  padding: 0.25rem 0.55rem;
-  border-radius: var(--axis-radius-pill, 9999px);
-  font-size: 0.82rem;
-}
-
-.priorityBadge[data-tone='highest'],
-.priorityBadge[data-tone='high'] {
-  background: var(--axis-danger-soft, rgba(239, 68, 68, 0.15));
-  color: var(--axis-danger, #ef4444);
-}
-
-.priorityBadge[data-tone='medium'] {
-  background: var(--axis-surface-muted);
-  color: var(--axis-text-secondary);
-}
-
-.priorityBadge[data-tone='low'],
-.priorityBadge[data-tone='lowest'] {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-}
-
-.detailLayout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.8fr) minmax(18rem, 0.9fr);
-  align-items: start;
-  gap: 1.25rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
   min-width: 0;
 }
 
-.primaryColumn,
-.secondaryColumn {
+.leftBottomGrid {
+  flex: 1.25 1 0;
+  min-height: 0;
   display: grid;
-  align-content: start;
-  gap: 1.25rem;
-  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
 }
 
-.contentPanel,
-.attachmentPanel {
-  padding: 1.25rem 1.4rem;
-}
-
-.contentPanel {
-  display: grid;
-  gap: 1rem;
-}
-
+/* 패널 헤더 공통 */
 .panelHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--axis-line-default);
-  padding-bottom: 0.75rem;
+  padding-bottom: 0.45rem;
+  flex-shrink: 0;
 }
 
 .panelTitleRow {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
 }
 
 .panelTitleRow h3 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--axis-text-primary);
 }
@@ -395,86 +449,127 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.3rem;
-  height: 1.3rem;
-  padding: 0 0.4rem;
-  border-radius: 9999px;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0 0.35rem;
+  border-radius: var(--axis-radius-pill, 999px);
   background: var(--axis-surface-muted);
   color: var(--axis-text-secondary);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
+/* 2. 업무 설명 패널 */
+.descriptionPanel {
+  flex: 0.75 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+}
+
 .descriptionBody {
-  min-height: 4rem;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  margin-top: 0.4rem;
 }
 
 .description {
   margin: 0;
   color: var(--axis-text-secondary);
-  line-height: 1.7;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 0.95rem;
+  font-size: 0.86rem;
 }
 
-/* 댓글(Comments) 관련 스타일 */
+/* 6. 댓글 패널 (내부 스크롤) */
+.commentsPanel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+}
+
 .commentList {
-  display: grid;
-  gap: 0.9rem;
-  max-height: 28rem;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
-  padding-right: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-right: 0.35rem;
+  margin-top: 0.45rem;
   scroll-behavior: smooth;
 }
 
-.commentList::-webkit-scrollbar {
-  width: 6px;
+.commentItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--axis-radius-sm, 6px);
+  background: var(--axis-surface-muted);
+  border: 1px solid var(--axis-line-default);
 }
 
-.commentList::-webkit-scrollbar-track {
-  background: transparent;
+.commentAvatar {
+  flex-shrink: 0;
+  padding-top: 0.1rem;
 }
 
-.commentList::-webkit-scrollbar-thumb {
-  background: var(--axis-line-default);
-  border-radius: 9999px;
+.commentContentWrapper {
+  display: grid;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
 }
 
-.commentList::-webkit-scrollbar-thumb:hover {
-  background: var(--axis-text-muted);
+.commentMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+}
+
+.commentAuthor {
+  color: var(--axis-text-primary);
+  font-weight: 700;
+}
+
+.commentAuthorEmail {
+  color: var(--axis-text-muted);
+  font-size: 0.74rem;
+}
+
+.commentTime {
+  color: var(--axis-text-muted);
+  font-size: 0.74rem;
+  margin-left: auto;
+}
+
+.commentBody {
+  color: var(--axis-text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .commentForm {
-  margin-top: 1rem;
-  padding-top: 1rem;
+  flex-shrink: 0;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
   border-top: 1px solid var(--axis-line-default);
 }
 
 .commentInputWrapper {
   display: grid;
-  gap: 0.6rem;
-}
-
-.commentInput {
-  width: 100%;
-  padding: 0.75rem 0.85rem;
-  border: 1px solid var(--axis-line-default);
-  border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-surface-input, var(--axis-surface-muted));
-  color: var(--axis-text-primary);
-  font: inherit;
-  font-size: 0.88rem;
-  line-height: 1.5;
-  resize: vertical;
-  min-height: 4.5rem;
-  transition: border-color 160ms ease;
-  box-sizing: border-box;
-}
-
-.commentInput:focus {
-  outline: none;
-  border-color: var(--axis-brand-primary);
+  gap: 0.45rem;
 }
 
 .commentFormFooter {
@@ -485,29 +580,29 @@
 }
 
 .commentError {
-  color: var(--axis-danger, #ef4444);
-  font-size: 0.82rem;
+  color: var(--axis-status-danger);
+  font-size: 0.78rem;
 }
 
 .commentSubmitButton {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
   border: 1px solid var(--axis-brand-primary);
   border-radius: var(--axis-radius-sm, 6px);
   background: var(--axis-brand-primary);
-  color: #fff;
+  color: var(--axis-text-on-brand);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 160ms ease;
 }
 
 .commentSubmitButton:hover:not(:disabled) {
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 .commentSubmitButton:disabled {
@@ -515,146 +610,12 @@
   cursor: not-allowed;
 }
 
-.commentItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-surface-muted);
-  border: 1px solid rgba(0, 0, 0, 0.04);
-}
-
-.commentAvatar {
-  flex-shrink: 0;
-  padding-top: 0.1rem;
-}
-
-.commentContentWrapper {
-  display: grid;
-  gap: 0.35rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.commentMeta {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-  font-size: 0.82rem;
-}
-
-.commentAuthor {
-  color: var(--axis-text-primary);
-  font-weight: 700;
-}
-
-.commentAuthorEmail {
-  color: var(--axis-text-muted);
-  font-size: 0.78rem;
-}
-
-.commentTime {
-  color: var(--axis-text-muted);
-  font-size: 0.78rem;
-  margin-left: auto;
-}
-
-.commentBody {
-  color: var(--axis-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* 활동 내역(Activity Timeline) 스타일 */
-.activityList {
-  max-height: 22rem;
-  overflow-y: auto;
-  padding-right: 0.45rem;
-  scroll-behavior: smooth;
-}
-
-.activityList::-webkit-scrollbar {
-  width: 6px;
-}
-
-.activityList::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.activityList::-webkit-scrollbar-thumb {
-  background: var(--axis-line-default);
-  border-radius: 9999px;
-}
-
-.activityList::-webkit-scrollbar-thumb:hover {
-  background: var(--axis-text-muted);
-}
-
-.activityTimeline {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
-  position: relative;
-}
-
-.activityTimeline::before {
-  content: '';
-  position: absolute;
-  top: 0.5rem;
-  bottom: 0.5rem;
-  left: 0.45rem;
-  width: 2px;
-  background: var(--axis-line-default);
-}
-
-.activityItem {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.85rem;
-  position: relative;
-}
-
-.timelineDot {
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 50%;
-  background: var(--axis-brand-primary);
-  margin-top: 0.35rem;
-  flex-shrink: 0;
-  z-index: 1;
-  box-shadow: 0 0 0 3px var(--axis-surface-panel);
-}
-
-.activityContent {
-  display: grid;
-  gap: 0.2rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.activityMessage {
-  margin: 0;
-  color: var(--axis-text-primary);
-  font-size: 0.85rem;
-  line-height: 1.45;
-}
-
-.activityTime {
-  color: var(--axis-text-muted);
-  font-size: 0.76rem;
-}
-
-/* 우측 사이드 패널 스타일 */
+/* 3. 진행 현황 패널 */
 .progressPanel {
+  flex-shrink: 0;
   display: grid;
-  gap: 0.85rem;
-  padding: 1.15rem 1.4rem;
+  gap: 0.45rem;
+  padding: 0.65rem 1rem;
 }
 
 .progressHeader {
@@ -667,22 +628,24 @@
 .progressTitle {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  font-size: 0.92rem;
+  gap: 0.4rem;
+  font-size: 0.88rem;
   font-weight: 700;
+  color: var(--axis-text-primary);
 }
 
 .progressPercent {
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   font-variant-numeric: tabular-nums;
   color: var(--axis-brand-primary);
+  font-weight: 800;
 }
 
 .progressTrack {
   width: 100%;
-  height: 0.5rem;
+  height: 0.45rem;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--axis-radius-pill, 999px);
   background: var(--axis-surface-muted);
 }
 
@@ -696,16 +659,20 @@
 
 .progressFooter {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   color: var(--axis-text-muted);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 600;
 }
 
-/* 첨부파일 스타일 */
+/* 5. 첨부 파일 패널 (내부 스크롤) */
 .attachmentPanel {
-  display: grid;
-  gap: 0.85rem;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
 }
 
 .attachmentHeader {
@@ -713,30 +680,38 @@
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--axis-line-default);
-  padding-bottom: 0.65rem;
+  padding-bottom: 0.45rem;
+  flex-shrink: 0;
 }
 
 .attachmentTitle {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .attachmentTitle h3 {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 700;
+  color: var(--axis-text-primary);
 }
 
 .fileList {
-  display: grid;
-  gap: 0.65rem;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-right: 0.35rem;
+  margin-top: 0.45rem;
 }
 
 .fileEntry {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .fileCard {
@@ -744,8 +719,8 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.65rem 0.85rem;
+  gap: 0.65rem;
+  padding: 0.5rem 0.75rem;
   border: 1px solid var(--axis-line-default);
   border-radius: var(--axis-radius-sm, 6px);
   background: var(--axis-surface-muted);
@@ -760,8 +735,7 @@
 .fileCard:hover {
   background: var(--axis-surface-panel);
   border-color: var(--axis-brand-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--axis-shadow-field);
 }
 
 .fileIconBox {
@@ -771,14 +745,14 @@
 
 .fileInfo {
   display: grid;
-  gap: 0.15rem;
+  gap: 0.1rem;
   flex: 1;
   min-width: 0;
 }
 
 .fileName {
   color: var(--axis-text-primary);
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -788,9 +762,9 @@
 .fileMeta {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   color: var(--axis-text-muted);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 
 .fileArrow {
@@ -798,76 +772,92 @@
   flex-shrink: 0;
 }
 
+/* 4. 활동 내역 패널 (내부 스크롤) */
+.activityPanel {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+}
+
+.activityList {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.activityTimeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+  position: relative;
+}
+
+.activityTimeline::before {
+  content: '';
+  position: absolute;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  left: 0.38rem;
+  width: 2px;
+  background: var(--axis-line-default);
+}
+
+.activityItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  position: relative;
+}
+
+.timelineDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--axis-brand-primary);
+  margin-top: 0.32rem;
+  flex-shrink: 0;
+  z-index: 1;
+  box-shadow: 0 0 0 3px var(--axis-surface-panel);
+}
+
+.activityContent {
+  display: grid;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.activityMessage {
+  margin: 0;
+  color: var(--axis-text-primary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.activityTime {
+  color: var(--axis-text-muted);
+  font-size: 0.72rem;
+}
+
+/* 비어있는 상태 공통 */
 .emptyPanelState,
 .emptyAttachment {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
+  gap: 0.45rem;
   color: var(--axis-text-muted);
-  font-size: 0.85rem;
-  padding: 2rem 1rem;
+  font-size: 0.8rem;
+  padding: 1.5rem 1rem;
   text-align: center;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-}
-
-.editButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-height: 2.25rem;
-  padding: 0 1rem;
-  border: 1px solid var(--axis-brand-primary);
-  border-radius: var(--axis-radius-action, 8px);
-  background: var(--axis-brand-primary);
-  color: #fff;
-  font: inherit;
-  font-size: 0.84rem;
-  font-weight: 700;
-  text-decoration: none;
-  transition: opacity 160ms ease;
-  white-space: nowrap;
-}
-
-.editButton:hover {
-  opacity: 0.9;
-}
-
-.deleteButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  min-height: 2.25rem;
-  padding: 0 1rem;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: var(--axis-radius-action, 8px);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
-  font: inherit;
-  font-size: 0.84rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 160ms ease;
-  white-space: nowrap;
-}
-
-.deleteButton:hover {
-  background: rgba(239, 68, 68, 0.16);
-  border-color: #ef4444;
-}
-
-.backLink:focus-visible,
-.editButton:focus-visible {
-  outline: 2px solid var(--axis-status-info, #3b82f6);
-  outline-offset: 2px;
+  flex: 1;
 }
 
 .emptyState {
@@ -878,52 +868,82 @@
   padding: 1.25rem;
 }
 
+/* 공통 내부 스크롤바 디자인 */
+.descriptionBody::-webkit-scrollbar,
+.commentList::-webkit-scrollbar,
+.fileList::-webkit-scrollbar,
+.activityList::-webkit-scrollbar,
+.childScrollArea::-webkit-scrollbar {
+  width: 5px;
+}
+
+.descriptionBody::-webkit-scrollbar-track,
+.commentList::-webkit-scrollbar-track,
+.fileList::-webkit-scrollbar-track,
+.activityList::-webkit-scrollbar-track,
+.childScrollArea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.descriptionBody::-webkit-scrollbar-thumb,
+.commentList::-webkit-scrollbar-thumb,
+.fileList::-webkit-scrollbar-thumb,
+.activityList::-webkit-scrollbar-thumb,
+.childScrollArea::-webkit-scrollbar-thumb {
+  background: var(--axis-line-default);
+  border-radius: var(--axis-radius-pill, 999px);
+}
+
+.descriptionBody::-webkit-scrollbar-thumb:hover,
+.commentList::-webkit-scrollbar-thumb:hover,
+.fileList::-webkit-scrollbar-thumb:hover,
+.activityList::-webkit-scrollbar-thumb:hover,
+.childScrollArea::-webkit-scrollbar-thumb:hover {
+  background: var(--axis-text-muted);
+}
+
+/* 반응형 (작은 화면에서는 세로 스크롤 허용) */
 @media (max-width: 980px) {
   .page {
-    padding-right: calc(var(--space-page-x) + 1.5rem);
-    padding-left: calc(var(--space-page-x) + 1.5rem);
+    height: auto;
+    overflow-y: auto;
+    padding: var(--space-page-top-mobile) var(--space-page-x-mobile) var(--space-page-bottom-mobile);
+  }
+
+  .propertyColumns {
+    grid-template-columns: 1fr;
+  }
+
+  .propertyRightColumn {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--axis-line-default);
+    padding-top: 0.55rem;
   }
 
   .propertyRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
 
-@media (max-width: 860px) {
-  .detailLayout {
+  .mainGrid {
     grid-template-columns: 1fr;
   }
-}
 
-@media (max-width: 720px) {
-  .page {
-    padding: var(--space-page-top-mobile) calc(var(--space-page-x-mobile) + 1rem)
-      var(--space-page-bottom-mobile);
-  }
-
-  .header,
-  .attachmentPanel {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .propertyRow,
-  .hierarchyRow {
+  .leftBottomGrid {
     grid-template-columns: 1fr;
   }
 
   .descriptionPanel {
     min-height: 10rem;
+    max-height: none;
   }
 
-  .progressPercent {
-    text-align: left;
+  .commentsPanel {
+    min-height: 24rem;
   }
 
-  .addFileButton,
-  .actions,
-  .editButton,
-  .deleteButton {
-    width: 100%;
+  .attachmentPanel,
+  .activityPanel {
+    min-height: 18rem;
   }
 }

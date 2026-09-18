@@ -102,34 +102,38 @@ export function CalendarDetailDrawer({
         onClick={(event) => event.stopPropagation()}
       >
         <header className={styles.header}>
-          <div className={styles.headerMain}>
+          <div className={styles.headerTop}>
             <span className={styles.badge} data-tone={badgeTone}>
               {badgeLabel}
             </span>
+
+            <button type="button" className={styles.closeButton} onClick={onClose} aria-label="닫기">
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+
+          {/* 제목과 액션 버튼은 같은 줄에서 가운데를 맞춘다. */}
+          <div className={styles.headerTitleRow}>
             <h2 className={styles.title}>{title}</h2>
-          </div>
 
-          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="닫기">
-            <Icon name="close" size={16} />
-          </button>
+            {actions.length > 0 ? (
+              <div className={styles.headerActions}>
+                {actions.map((action) => (
+                  <button
+                    key={action.key}
+                    type="button"
+                    className={styles.actionButton}
+                    data-tone={action.tone ?? 'default'}
+                    onClick={action.onClick}
+                  >
+                    <Icon name={action.icon} size={15} />
+                    <span>{action.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </header>
-
-        {actions.length > 0 ? (
-          <div className={styles.actions}>
-            {actions.map((action) => (
-              <button
-                key={action.key}
-                type="button"
-                className={styles.actionButton}
-                data-tone={action.tone ?? 'default'}
-                onClick={action.onClick}
-              >
-                <Icon name={action.icon} size={15} />
-                <span>{action.label}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
 
         <div className={styles.body}>
           <dl className={styles.metaList}>

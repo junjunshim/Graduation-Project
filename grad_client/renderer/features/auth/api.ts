@@ -1,5 +1,4 @@
 import {
-  enterDemoWorkspace as enterDemoWorkspaceWorkspace,
   getCurrentUser as getCurrentUserWorkspace,
   getNextGeneratedUserId,
   signInUser,
@@ -22,10 +21,6 @@ export function signUp(payload: SignUpRequest) {
 
 export function signOut() {
   signOutUser()
-}
-
-export function enterDemoWorkspace() {
-  return enterDemoWorkspaceWorkspace()
 }
 
 export function getSuggestedUserId() {

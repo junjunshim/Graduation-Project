@@ -1,7 +1,6 @@
 import { apiRequest, getServerAccessToken } from './server/apiClient'
 import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
-import { isServerDataSource } from './workspaceMode'
 import { readWorkspaceDb, writeServerWorkspaceDb } from './localStore'
 import { waitForDownloadCompletion } from './downloadCompletion'
 
@@ -16,9 +15,6 @@ export type CachedFileItem = {
 const FILE_CACHE_PREFIX = 'grad-file-cache-'
 
 export async function downloadWorkItemFile(fileId: number, fileName: string): Promise<void> {
-  if (!isServerDataSource()) {
-    throw new Error('파일 다운로드는 서버 연결 모드에서 사용할 수 있습니다.')
-  }
   const blob = await apiRequest<Blob>(`/workItems/files/download?file_id=${fileId}`, {
     responseType: 'blob',
     timeoutMs: 120_000,
@@ -43,9 +39,6 @@ export async function downloadWorkItemFile(fileId: number, fileName: string): Pr
 }
 
 export async function uploadWorkItemFile(workItemId: string, file: File): Promise<void> {
-  if (!isServerDataSource()) {
-    throw new Error('파일 등록은 서버 연결 모드에서 사용할 수 있습니다.')
-  }
   if (!workItemId.trim()) {
     throw new Error('파일을 등록할 업무를 선택해 주세요.')
   }
@@ -66,10 +59,6 @@ export async function uploadWorkItemFile(workItemId: string, file: File): Promis
 }
 
 export async function deleteWorkItemFile(fileId: number): Promise<void> {
-  if (!isServerDataSource()) {
-    throw new Error('파일 삭제는 서버 연결 모드에서 사용할 수 있습니다.')
-  }
-
   const response = await apiRequest<unknown>('/workItems/files', {
     method: 'DELETE',
     body: { file_id: fileId },
@@ -99,10 +88,6 @@ export async function deleteWorkItemFile(fileId: number): Promise<void> {
 }
 
 export async function restoreWorkItemFile(fileId: number): Promise<void> {
-  if (!isServerDataSource()) {
-    throw new Error('파일 복구는 서버 연결 모드에서 사용할 수 있습니다.')
-  }
-
   const response = await apiRequest<unknown>('/workItems/files/restore', {
     method: 'PATCH',
     body: { file_id: fileId },
@@ -162,25 +147,8 @@ export type FetchFileContentResult = {
  */
 export async function fetchWorkItemFileContent(
   fileId: number,
-  fallbackSampleText?: string,
 ): Promise<FetchFileContentResult> {
   const cached = getCachedFile(fileId)
-
-  // 오프라인 / 모의 데이터 모드인 경우
-  if (!isServerDataSource()) {
-    if (cached) {
-      return { content: cached.content, fromCache: true, lastModified: cached.lastModified }
-    }
-    const sample = fallbackSampleText || `# 문서 내용\n\n해당 파일은 데모 파일입니다.`
-    setCachedFile({
-      fileId,
-      fileName: `file_${fileId}`,
-      content: sample,
-      cachedAt: Date.now(),
-    })
-    return { content: sample, fromCache: false }
-  }
-
   const token = getServerAccessToken()
   const baseUrl = getWorkspaceApiBaseUrl()
   const path = 'workItems/files/download'

@@ -1,8 +1,6 @@
 import type { RecurringCategory, RecurringRuleRecord } from '../../workspace/model/recurringRuleTypes'
 import type { WorkItemRecord, WorkItemStatus } from '../../workspace/model/types'
 
-export type DashboardSource = 'mock' | 'server'
-
 export type DashboardViewer = {
   userId: string
   email: string
@@ -26,7 +24,6 @@ export type DashboardRecurringRule = RecurringRuleRecord & {
 }
 
 export type DashboardContext = {
-  source: DashboardSource
   viewer: DashboardViewer | null
   /** 담당자가 나인 업무 (서버 기준 최근 6개월) */
   workItems: DashboardWorkItem[]

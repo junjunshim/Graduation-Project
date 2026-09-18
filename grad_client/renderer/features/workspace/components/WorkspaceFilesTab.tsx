@@ -54,34 +54,6 @@ function getFileIcon(filename: string) {
   return 'fileText'
 }
 
-function getSampleDocumentContent(fileName: string, itemTitle: string) {
-  return `# ${fileName}
-
-## 1. 개요
-- **대상 업무**: ${itemTitle}
-- **작성일시**: ${new Date().toLocaleDateString('ko-KR')}
-- **문서 버전**: v1.0.0
-- **상태**: 검토 완료
-
----
-
-## 2. 주요 요구사항 및 상세 내역
-1. **시스템 아키텍처 연동**
-   - 계층형 조직 노드 및 업무 객체와 실시간 동기화
-   - 파일 다운로드 및 HTTP 304 조건부 캐시 처리 지원
-2. **산출물 명세**
-   - 사용자 인터페이스: GitHub 스타일 뷰어 (Preview / Raw 토글 지원)
-   - 줄 번호(Line Numbers) 및 원시 데이터 복사 기능 내장
-
----
-
-## 3. 변경 이력 (Changelog)
-| 버전 | 변경 내용 | 작성자 | 일자 |
-| :--- | :--- | :--- | :--- |
-| v1.0.0 | 초안 작성 및 시스템 요구사항 정의 | 담당자 | ${new Date().toLocaleDateString('ko-KR')} |
-`
-}
-
 export function WorkspaceFilesTab({
   nodeId,
   workItems,
@@ -350,16 +322,13 @@ export function WorkspaceFilesTab({
     setIsLoadingFile(true)
     setFileError(null)
 
-    const folderTitle = folderMode === 'tasks' ? selectedWorkItem?.title || '업무' : selectedRecurringRule?.title || '일정'
-    const fallbackSample = getSampleDocumentContent(file.originalFileName, folderTitle)
-
     try {
       if (file.fileType === 'recurring_rule') {
         const fileId = file.fileId ?? file.id
-        const res = await fetchRecurringRuleFileContent(fileId, fallbackSample)
+        const res = await fetchRecurringRuleFileContent(fileId)
         setFileContentData(res)
       } else {
-        const res = await fetchWorkItemFileContent(file.id, fallbackSample)
+        const res = await fetchWorkItemFileContent(file.id)
         setFileContentData(res)
       }
     } catch (err) {

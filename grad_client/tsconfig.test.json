@@ -16,8 +16,6 @@
   },
   "include": [
     "renderer/features/workspace/model/types.ts",
-    "renderer/features/workspace/data/seed.ts",
-    "renderer/features/workspace/data/mockScenario.ts",
     "renderer/features/workspace/data/server/apiTypes.ts",
     "renderer/features/workspace/data/server/workspaceMode.ts",
     "renderer/features/workspace/data/server/apiClient.ts",

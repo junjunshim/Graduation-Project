@@ -9,10 +9,7 @@ import {
 } from 'react'
 import { hasServerSession } from './apiClient'
 import { loadServerWorkspace, signOutServerUser } from './serverWorkspace'
-import {
-  getWorkspaceRuntimeConfiguration,
-  type WorkspaceDataSource,
-} from './workspaceMode'
+import { getWorkspaceRuntimeConfiguration } from './workspaceMode'
 import {
   subscribeToWorkspaceCache,
   subscribeToWorkspaceCacheRefreshFailure,
@@ -22,7 +19,6 @@ import styles from './WorkspaceDataProvider.module.css'
 type WorkspaceDataStatus = 'loading' | 'ready' | 'error'
 
 type WorkspaceDataContextValue = {
-  dataSource: WorkspaceDataSource
   status: WorkspaceDataStatus
   error: string | null
   revision: number
@@ -53,7 +49,7 @@ export function WorkspaceDataProvider({ children }: PropsWithChildren) {
       return 'error'
     }
 
-    return configuration.dataSource === 'server' && hasServerSession() ? 'loading' : 'ready'
+    return hasServerSession() ? 'loading' : 'ready'
   })
   const [error, setError] = useState<string | null>(configuration.configurationError)
   const [revision, setRevision] = useState(0)
@@ -65,7 +61,7 @@ export function WorkspaceDataProvider({ children }: PropsWithChildren) {
       return
     }
 
-    if (configuration.dataSource === 'mock' || !hasServerSession()) {
+    if (!hasServerSession()) {
       setError(null)
       setStatus('ready')
       return
@@ -85,7 +81,7 @@ export function WorkspaceDataProvider({ children }: PropsWithChildren) {
       )
       setStatus('error')
     }
-  }, [configuration.configurationError, configuration.dataSource])
+  }, [configuration.configurationError])
 
   const resetServerSession = useCallback(() => {
     signOutServerUser()
@@ -111,27 +107,22 @@ export function WorkspaceDataProvider({ children }: PropsWithChildren) {
   }, [])
 
   useEffect(() => {
-    if (
-      configuration.configurationError ||
-      configuration.dataSource !== 'server' ||
-      !hasServerSession()
-    ) {
+    if (configuration.configurationError || !hasServerSession()) {
       return
     }
 
     void refresh()
-  }, [configuration.configurationError, configuration.dataSource, refresh])
+  }, [configuration.configurationError, refresh])
 
   const value = useMemo<WorkspaceDataContextValue>(
     () => ({
-      dataSource: configuration.dataSource,
       status,
       error,
       revision,
       refresh,
       resetServerSession,
     }),
-    [configuration.dataSource, error, refresh, resetServerSession, revision, status],
+    [error, refresh, resetServerSession, revision, status],
   )
 
   return <WorkspaceDataContext.Provider value={value}>{children}</WorkspaceDataContext.Provider>
@@ -149,7 +140,7 @@ export function useWorkspaceData() {
 }
 
 export function WorkspaceDataGate({ children }: PropsWithChildren) {
-  const { dataSource, status, error, refresh, resetServerSession } = useWorkspaceData()
+  const { status, error, refresh, resetServerSession } = useWorkspaceData()
 
   if (status === 'ready') {
     return children
@@ -171,21 +162,15 @@ export function WorkspaceDataGate({ children }: PropsWithChildren) {
     <main className={styles.statePage}>
       <div className={styles.stateCard} role="alert">
         <span className={styles.errorMark} aria-hidden="true">!</span>
-        <h1>
-          {dataSource === 'server'
-            ? '서버 데이터에 연결하지 못했습니다.'
-            : '워크스페이스 데이터 설정을 확인해 주세요.'}
-        </h1>
+        <h1>서버 데이터에 연결하지 못했습니다.</h1>
         <p>{error ?? 'API 주소와 네트워크 상태를 확인해 주세요.'}</p>
         <div className={styles.actions}>
           <button type="button" className={styles.primaryAction} onClick={() => void refresh()}>
             다시 시도
           </button>
-          {dataSource === 'server' ? (
-            <button type="button" className={styles.secondaryAction} onClick={resetServerSession}>
-              로그인 화면으로 돌아가기
-            </button>
-          ) : null}
+          <button type="button" className={styles.secondaryAction} onClick={resetServerSession}>
+            로그인 화면으로 돌아가기
+          </button>
         </div>
       </div>
     </main>

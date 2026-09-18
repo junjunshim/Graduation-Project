@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { createWorkItem } from '../../workspace/data/workItemService'
-import { isServerDataSource } from '../../workspace/data/workspaceMode'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import { WorkItemCreateSidebar } from '../components/WorkItemCreateSidebar'
 import { useWorkItemCreateForm } from '../hooks/useWorkItemCreateForm'
@@ -18,7 +17,6 @@ export function WorkItemCreatePage() {
   const currentUser = getCurrentUser()
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const isServerMode = isServerDataSource()
   const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId, initialNodeId, searchParams.get('parentWorkItemId') ?? undefined)
 
   if (!currentUser || !composer) {
@@ -26,13 +24,11 @@ export function WorkItemCreatePage() {
   }
 
   const activeComposer = composer
-  const serverAvailabilityMessage = isServerMode
-    ? !activeComposer.selectedNode
-      ? '업무를 생성할 직접 권한(업무 생성 권한)이 있는 조직이 없습니다.'
-      : activeComposer.assignableUsers.length === 0
-        ? '선택한 조직에 업무 담당자로 지정할 직접 멤버가 없습니다.'
-        : null
-    : null
+  const serverAvailabilityMessage = !activeComposer.selectedNode
+    ? '업무를 생성할 직접 권한(업무 생성 권한)이 있는 조직이 없습니다.'
+    : activeComposer.assignableUsers.length === 0
+      ? '선택한 조직에 업무 담당자로 지정할 직접 멤버가 없습니다.'
+      : null
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

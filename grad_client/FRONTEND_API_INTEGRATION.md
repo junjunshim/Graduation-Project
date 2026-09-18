@@ -1,10 +1,10 @@
-# 프론트엔드 Mock/실제 서버 API 연동
+# 프론트엔드 실제 서버 API 연동
 
 작성일: 2026-08-29 (최종 갱신: 2026-08-30)
 
 ## 1. 작업 범위와 원칙
 
-이 문서는 기존 목 데이터 기반 화면을 유지하면서 같은 프론트엔드 서비스 인터페이스로 실제 서버 API를 선택해 사용할 수 있도록 정리한 결과를 설명한다.
+이 문서는 프론트엔드가 실제 서버 API만 사용하도록 정리한 결과를 설명한다. 과거에 있던 목 데이터 모드는 제거되었고, 모든 읽기·쓰기는 서버 응답과 서버 캐시를 기준으로 동작한다.
 
 - 작업 시작 시 Git 상태는 깨끗했다.
 - 저장소의 추적 파일 297개와 전체 디렉터리 구조를 확인했다.
@@ -27,7 +27,7 @@ Graduation-Project/
 │  │     ├─ auth/
 │  │     ├─ org/
 │  │     ├─ work-item/
-│  │     └─ workspace/         # 도메인 타입, 데이터 서비스, 쿼리, 목 데이터
+│  │     └─ workspace/         # 도메인 타입, 데이터 서비스, 쿼리
 │  ├─ shared/
 │  └─ tests/                   # 이번 작업에서 프론트 단위 테스트 추가
 ├─ grad_server/                # 읽기 전용: 실제 라우트/컨트롤러 확인
@@ -39,10 +39,12 @@ Graduation-Project/
 
 ## 2. 기존 프론트엔드 데이터 흐름 분석
 
-### 2.1 목 데이터와 목 API 위치
+### 2.1 서버 API와 서버 캐시 위치
 
-- 원본 목 데이터: renderer/features/workspace/data/seed.ts
-- 브라우저 저장소와 시드 복구: renderer/features/workspace/data/localStore.ts
+- 서버 전송·인증: renderer/features/workspace/data/server/apiClient.ts
+- 서버 DTO 정규화: renderer/features/workspace/data/server/contextAdapter.ts
+- endpoint 호출과 payload 변환: renderer/features/workspace/data/server/serverWorkspace.ts
+- 서버 캐시 저장소: renderer/features/workspace/data/localStore.ts
 - 인증 서비스: renderer/features/workspace/data/userService.ts
 - 조직 서비스: renderer/features/workspace/data/orgService.ts
 - 업무 서비스: renderer/features/workspace/data/workItemService.ts
@@ -50,7 +52,7 @@ Graduation-Project/
 - 요청·응답 및 도메인 타입: renderer/features/workspace/model/types.ts
 - 인증 진입점: renderer/features/auth/api.ts
 
-기존 “목 API”는 별도 HTTP 목 서버가 아니라 서비스 함수가 localStorage의 WorkspaceDatabase를 읽고 수정하는 구조다. 컴포넌트는 서비스 함수만 호출하므로, 서비스 내부의 분기만으로 목/서버 구현을 바꿀 수 있다.
+서비스 함수는 모두 실제 HTTP endpoint를 호출하고, 응답을 정규화해 localStorage의 서버 캐시에 저장한다. 컴포넌트는 서비스 함수만 호출하므로 데이터 출처를 알 필요가 없다.
 
 ### 2.2 호출과 데이터 가공
 
@@ -69,23 +71,19 @@ Graduation-Project/
 ~~~
 폼·페이지
   → userService / orgService / workItemService
-  → 모드 선택
-     ├─ mock: localStorage 데이터 검증·수정
-     └─ server: HTTP 요청 → /context/init 재조회 → 서버 전용 캐시 교체
+  → HTTP 요청 → /context/init 재조회 → 서버 캐시 교체
   → 공통 결과 타입
   → 화면 피드백 및 재조회
 ~~~
 
-서비스 계층은 SignInRequest, CreateTopNodeRequest, CreateWorkItemRequest 같은 공통 도메인 요청 타입을 받는다. 서버 모드의 snake_case 전송 형식은 serverWorkspace.ts에서만 만든다. 화면과 쿼리는 서버 DTO를 직접 알지 못한다.
+서비스 계층은 SignInRequest, CreateTopNodeRequest, CreateWorkItemRequest 같은 공통 도메인 요청 타입을 받는다. snake_case 전송 형식은 serverWorkspace.ts에서만 만든다. 화면과 쿼리는 서버 DTO를 직접 알지 못한다.
 
 ### 2.3 상태 관리와 캐싱
 
 - Redux, React Query, SWR 같은 외부 전역 상태/서버 캐시 라이브러리는 사용하지 않는다.
 - 도메인 데이터 캐시는 localStorage의 WorkspaceDatabase다.
-- mock DB와 server DB는 별도 키를 사용한다.
-- mock/session과 server/session도 별도 키를 사용한다.
 - 서버 데이터가 갱신되면 workspaceCacheEvents.ts의 브라우저 이벤트로 AppShell을 다시 렌더링한다.
-- 서버 모드의 user_id/work_item_id는 접근 가능한 캐시 범위와 무관한 UUID 기반 값으로 생성하고, 목 모드의 기존 순번 ID는 유지한다.
+- user_id/work_item_id는 접근 가능한 캐시 범위와 무관한 UUID 기반 값으로 생성한다.
 - 서버 세션이 있는 앱 시작 시 WorkspaceDataProvider가 /context/init을 호출해 캐시를 먼저 채운 뒤 라우트를 표시한다.
 - 서버 쓰기는 성공했지만 후속 context 재조회만 실패하면 쓰기를 실패로 되돌리지 않는다. 전역 복구 화면에서 같은 쓰기를 재제출하지 않고 context GET만 다시 시도한다.
 
@@ -104,69 +102,43 @@ Graduation-Project/
 - 성공한 빈 context를 오류와 구분
 - 잘못된 context 구조를 빈 데이터로 간주하지 않고 명시적으로 실패
 
-## 3. Mock 모드와 Server 모드 구조
+## 3. Server 구조
 
-두 모드는 VITE_WORKSPACE_DATA_SOURCE 값으로 결정한다.
+프론트엔드는 목 데이터 모드 없이 실제 서버 API만 사용한다. 모드 선택 환경변수는 없앴고, 서버 캐시와 서버 세션 키만 사용한다.
 
-| 모드 | 값 | 원본 데이터 | 쓰기 방식 | 캐시 |
-|---|---|---|---|---|
-| Mock | mock | seed.ts 및 선택한 목 시나리오 | localStorage 직접 변경 | grad-client-mvp-db |
-| Server | server | 실제 /context/init 응답 | 실제 API 호출 후 context 재조회 | grad-client-server-db |
+| 항목 | 값 |
+|---|---|
+| 원본 데이터 | 실제 /context/init 응답 |
+| 쓰기 방식 | 실제 API 호출 후 context 재조회 |
+| 캐시 | grad-client-server-db |
 
-공통 서비스 파일은 isServerDataSource()로 구현을 선택한다. 컴포넌트, 도메인 타입, 조회 함수는 두 모드에서 공유된다. 따라서 기존 목 화면 흐름을 삭제하지 않고 실제 서버 경로를 추가했다.
+조직 변경은 현재 SQL과 같은 대상 노드의 직접 ADMIN/MANAGER 역할만 관리 권한으로 인정한다. 업무 생성도 요청자와 담당자 모두 대상 노드에 직접 ADMIN/MANAGER/MEMBER 역할이 있는 선택지만 제공하며 VIEWER는 제외한다.
 
-권한을 실제 변경 요청에 적용하는 UI는 모드별 서버 계약도 반영한다. Mock 모드의 기존 상속 관리 권한은 유지하고, Server 모드의 조직 변경은 현재 SQL과 같은 대상 노드의 직접 ADMIN/MANAGER 역할만 관리 권한으로 인정한다. Server 모드 업무 생성도 요청자와 담당자 모두 대상 노드에 직접 ADMIN/MANAGER/MEMBER 역할이 있는 선택지만 제공하며 VIEWER는 제외한다.
-
-세션 저장소도 다음과 같이 분리했다.
+세션 저장소는 다음과 같다.
 
 | 용도 | 키 |
 |---|---|
-| Mock 사용자 세션 | grad-client-mock-session |
 | Server 사용자 식별 세션 | grad-client-server-session-user |
 | Server access token | grad-client-server-access-token |
 | Server refresh token | grad-client-server-refresh-token |
 | Server email | grad-client-server-email |
 
-기존 grad-client-mvp-session 값은 값의 형태에 따라 해당 모드의 키로 한 번 이전한다. 서버 로그인 성공 시 JSON 응답의 access token과 refresh token을 각각 위 localStorage 키에 저장하고, 로그아웃 시 두 토큰을 모두 제거한다. 서버 사용자 캐시에 비밀번호를 저장하지 않도록 UserRecord.password를 선택 필드로 바꿨다.
+서버 로그인 성공 시 JSON 응답의 access token과 refresh token을 각각 위 localStorage 키에 저장하고, 로그아웃 시 두 토큰을 모두 제거한다. 서버 사용자 캐시에는 비밀번호를 저장하지 않으며 UserRecord에 비밀번호 필드를 두지 않는다.
 
-## 4. 환경변수와 모드 전환
+## 4. 환경변수와 실행
 
 ### 4.1 환경변수
 
 | 변수 | 허용값/예시 | 기본값 | 설명 |
 |---|---|---|---|
-| VITE_WORKSPACE_DATA_SOURCE | mock 또는 server | mock | 데이터 소스 선택 |
-| VITE_WORKSPACE_API_BASE_URL | http://localhost:8080/api/v1 | http://localhost:8080/api/v1 | 실제 API 공통 URL |
+| VITE_WORKSPACE_API_BASE_URL | http://localhost:8080/api | http://localhost:8080/api | 실제 API 공통 URL |
 | VITE_WORKSPACE_API_TIMEOUT_MS | 10000 | 10000 | 요청 타임아웃(ms), 0보다 커야 함 |
-| VITE_WORKSPACE_MOCK_SCENARIO | default, empty, boundary, error | default | 목 데이터 시나리오 |
 
-Server 모드에서는 Base URL이 http/https URL인지 검사하고 마지막 슬래시를 제거한다. 모드, URL, 타임아웃이 잘못되면 앱의 서버 데이터 gate에서 설정 오류로 표시한다. Mock 모드는 사용하지 않는 API URL/timeout 오타의 영향을 받지 않으며, 잘못된 모드 값만 오류로 처리한다. Vite 변수는 빌드 시 번들에 포함되므로 비밀 키를 넣으면 안 된다.
+Base URL이 http/https URL인지 검사하고 마지막 슬래시를 제거한다. URL이나 타임아웃이 잘못되면 앱의 서버 데이터 gate에서 설정 오류로 표시한다. Vite 변수는 빌드 시 번들에 포함되므로 비밀 키를 넣으면 안 된다.
 
-안전한 예시는 .env.example에 있으며, 실행별 기본값은 .env.mock과 .env.server에 분리했다.
+안전한 예시는 .env.example에 있으며, 실행별 기본값은 .env.server에 있다.
 
-### 4.2 Mock 모드 실행
-
-~~~
-cd grad_client
-npm run dev:mock
-~~~
-
-기본 시나리오의 데모 계정:
-
-- 이메일: backend.lead@team404.dev
-- 비밀번호: team404-demo
-
-빈 화면, 경계값 또는 오류 fallback을 확인하려면 .env.mock의 VITE_WORKSPACE_MOCK_SCENARIO를 각각 empty, boundary, error로 바꾼 후 다시 실행한다. error는 의도적인 목 데이터 예외를 발생시켜 라우트 오류 화면을 확인한다. 데이터 시나리오가 바뀌면 datasetId/seedVersion 비교를 통해 해당 목 DB가 새 시나리오로 초기화된다.
-
-목 모드 번들 검증:
-
-~~~
-npm run build:bundle:mock
-~~~
-
-Electron 설치 패키지까지 만들 때는 npm run build:mock을 사용한다.
-
-### 4.3 실제 서버 모드 실행
+### 4.2 실행
 
 1. .env.server의 VITE_WORKSPACE_API_BASE_URL을 실행 중인 API 주소로 수정한다.
 2. API 서버를 별도로 실행한다. 프론트엔드 작업에서는 서버 실행 설정을 변경하지 않았다.
@@ -180,7 +152,7 @@ npm run dev:server
 4. 실제 서버에 등록된 계정으로 로그인한다.
 5. 개발자 도구 Network에서 Base URL 아래 /users/login, /context/init 및 기능별 요청과 Authorization: Bearer 헤더를 확인한다.
 
-서버 모드 번들 검증:
+번들 검증:
 
 ~~~
 npm run build:bundle:server
@@ -233,15 +205,15 @@ renderer/features/workspace/data/server/apiClient.ts에서 다음을 공통 처�
 
 서버가 생성 요청에서 새 ID를 안정적으로 반환하지 않는 현재 계약 때문에 조직/역할 생성 결과의 임시 ID는 화면 이동 판단에 사용하지 않고 context 재조회 결과를 기준으로 한다.
 
-users.user_id와 work_items.work_item_id는 서버 DB의 전역 문자열 기본키다. 서버에 ID 발급 endpoint가 없으므로 server 모드에서는 각각 U-{UUID}, WI-{UUID} 형식으로 생성한다. 두 값 모두 현재 VARCHAR(50) 제한 안에 들어간다. mock 모드에서는 기존 U-{순번}, WI-{순번}을 그대로 쓴다.
+users.user_id와 work_items.work_item_id는 서버 DB의 전역 문자열 기본키다. 서버에 ID 발급 endpoint가 없으므로 각각 U-{UUID}, WI-{UUID} 형식으로 생성한다. 두 값 모두 현재 VARCHAR(50) 제한 안에 들어간다.
 
-업무 가져오기(claim)는 목 모드에서는 유지되지만, 현재 서버에는 담당자 변경 계약이 없어 서버 모드에서 명시적인 미지원 오류를 반환한다. 존재하지 않는 서버 경로를 임의로 호출하지 않는다.
+업무 가져오기(claim)는 현재 서버에 담당자 변경 계약이 없어 명시적인 미지원 오류를 반환한다. 존재하지 않는 서버 경로를 임의로 호출하지 않는다.
 
 ## 7. 요청·응답 타입과 변환 방식
 
 ### 7.1 계층 분리
 
-- model/types.ts: 화면과 목/서버 서비스가 공유하는 도메인 타입
+- model/types.ts: 화면과 서비스가 공유하는 도메인 타입
 - server/apiTypes.ts: 실제 전송 envelope와 context DTO
 - server/contextAdapter.ts: 서버 DTO를 WorkspaceDatabase로 정규화
 - server/serverWorkspace.ts: 도메인 요청을 서버 snake_case payload로 변환
@@ -287,34 +259,19 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 
 정규화 결과는 localStorage에 저장한 뒤 다시 읽을 때도 같은 참조를 유지한다. compact의 미확인 담당자와 expanded의 이메일 없는 ID-only 담당자 모두 adapter→JSON 직렬화→서버 캐시 정규화 왕복 테스트로 업무가 유실되지 않는지 검증한다.
 
-## 8. 목 데이터 점검과 변경
+## 8. 목 데이터 모드 제거
 
-기존 default 시드는 삭제하거나 축소하지 않았다.
+이제 프론트엔드는 실제 서버 API만 사용하므로 목 데이터 모드를 제거했다.
 
-- 사용자 128명
-- 조직 노드 26개
-- 역할 147개
-- 업무 18개
-- 사용자 ID/이메일, 노드 ID, 역할 ID, 업무 ID 중복 없음
-- 역할의 사용자/노드 참조 유효
-- 조직 parent/path 참조 유효
-- 업무 담당자/노드/상위 업무 참조 유효
-- 우선순위 1~5, 진행률 0~100, 음수가 아닌 weight
-- 시작일이 있는 경우 시작일이 마감일보다 늦지 않음
+| 구분 | 내용 |
+|---|---|
+| 삭제 | renderer/features/workspace/data/seed.ts, mockScenario.ts, mockRoleDefinitions.ts |
+| 삭제 | tests/mockScenario.test.ts, .env.mock, package.json의 mock 실행·번들 스크립트 |
+| 삭제 | VITE_WORKSPACE_DATA_SOURCE, VITE_WORKSPACE_MOCK_SCENARIO 환경변수와 모드 분기 |
+| 유지 | 서버 응답 정규화와 서버 캐시(localStorage) - 실제 서버 데이터 보관에 필요 |
+| 유지 | VIEWER 역할 값 - 실제 DB/서버 열거형과 공통 타입 일치 |
 
-수정·추가·삭제 내역:
-
-| 구분 | 내용 | 이유 |
-|---|---|---|
-| 유지 | seed.ts의 기존 default 레코드 전체 | 기존 목 테스트와 화면 동작 보존 |
-| 추가 | empty 시나리오 | 로그인 가능한 사용자만 남기고 조직/역할/업무가 없는 빈 화면 검증 |
-| 추가 | boundary 시나리오 | 우선순위 1/5, weight 0, 진행률 0/100, 선택 날짜 없음, 시작일=마감일 검증 |
-| 추가 | error 시나리오 | 의도적인 목 데이터 예외로 프론트 오류 fallback 검증 |
-| 추가 | VIEWER 역할 값 | 실제 DB/서버 열거형과 공통 타입 일치 |
-| 수정 | UserRecord.password를 선택 필드로 변경 | 서버 세션 사용자 캐시에 평문 비밀번호를 만들거나 저장하지 않기 위함 |
-| 삭제 | 없음 | 사용되지 않거나 잘못된 기존 시드 레코드는 무결성 검사에서 발견되지 않음 |
-
-목/서버 DB와 세션 키를 분리했으므로 server 모드 테스트가 기존 mock 데이터를 덮어쓰지 않는다.
+UserRecord.password 필드는 서버 캐시에 어떤 형태로도 남지 않도록 도메인 타입과 정규화에서 제거했다.
 
 ## 9. UI 상태 처리
 
@@ -323,31 +280,29 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 - 초기 요청 실패 화면에서 “다시 시도”와 “로그인으로 돌아가기”를 제공한다.
 - 쓰기 성공 후 캐시 갱신 실패도 같은 복구 화면으로 전환하되, 이미 반영된 쓰기를 다시 제출하지 말라는 메시지를 표시한다.
 - 회원가입 성공 후 자동 로그인만 실패하면 가입 폼에 남기지 않고 로그인 화면으로 이동해 중복 계정 생성 시도를 막는다.
-- 로그인/회원가입은 server 모드에서 목 데모 진입 UI를 노출하지 않는다.
 - 로그인은 서버가 전달한 메시지 또는 공통 네트워크 오류를 표시한다.
 - 조직 변경은 ref 기반 요청 잠금으로 같은 이벤트 루프의 중복 요청까지 차단하고, 로그인·최상위 조직·업무 폼은 submitting 상태와 disabled 버튼으로 반복 제출을 막는다.
-- Server 모드 조직 변경은 대상 노드의 직접 ADMIN/MANAGER만 활성화한다. 하위 조직 관리자와 역할 대상은 이메일을 직접 입력할 수 있고, 현재 캐시 사용자는 datalist 자동완성 후보로 제공한다. Mock 모드는 기존 사용자 select를 유지한다.
-- Server 모드 업무 생성은 직접 역할 계약에 맞는 노드와 담당자만 제공하며 생성 가능한 노드/담당자가 없으면 이유를 표시하고 제출을 차단한다.
+- 조직 변경은 대상 노드의 직접 ADMIN/MANAGER만 활성화한다. 하위 조직 관리자와 역할 대상은 이메일을 직접 입력할 수 있고, 현재 캐시 사용자는 datalist 자동완성 후보로 제공한다.
+- 업무 생성은 직접 역할 계약에 맞는 노드와 담당자만 제공하며 생성 가능한 노드/담당자가 없으면 이유를 표시하고 제출을 차단한다.
 - 조직 이름의 공백 입력과 업무 시작일보다 이른 마감일을 요청 전에 검증해 빈 이름 저장이나 DB 날짜 제약 오류를 막는다.
 - 라우트 lazy loading 상태와 예상하지 못한 render/loader 오류 fallback을 제공한다.
-- 기존 목록별 빈 상태 UI는 유지하며, server의 성공한 빈 context도 같은 공통 도메인 구조를 사용한다.
+- 기존 목록별 빈 상태 UI는 유지하며, 성공한 빈 context도 같은 공통 도메인 구조를 사용한다.
 
 ## 10. 변경된 파일과 목적
 
 | 파일 | 변경 목적 |
 |---|---|
 | .env.example | 안전한 환경변수 이름과 기본 예시 |
-| .env.mock | 목 실행 모드와 시나리오 기본값 |
-| .env.server | 실제 서버 실행 모드와 Base URL/timeout 기본값 |
-| package.json | mock/server 실행·번들·테스트·타입 검사 스크립트 |
+| .env.server | 서버 실행 모드의 Base URL/timeout 기본값 |
+| package.json | server 실행·번들·테스트·타입 검사 스크립트 |
 | tsconfig.test.json | 외부 테스트 라이브러리 없이 node:test용 TS 컴파일 |
 | renderer/vite-env.d.ts | 신규 Vite 환경변수 타입 |
 | renderer/app/providers.tsx | WorkspaceDataProvider 연결 |
 | renderer/app/routes.tsx | lazy route loading과 error fallback |
 | renderer/app/RouteState.module.css | 라우트 상태 화면 스타일 |
 | renderer/app/layouts/AppShell.tsx | workspace cache 갱신 이벤트 반영 |
-| renderer/features/auth/pages/LoginPage.tsx | 실제 오류/가입 완료 안내, 제출 잠금, server 모드 데모 숨김 |
-| renderer/features/auth/pages/SignupPage.tsx | 제출 잠금, server 모드 데모 숨김, 가입 후 로그인 실패 분리 |
+| renderer/features/auth/pages/LoginPage.tsx | 실제 오류/가입 완료 안내, 제출 잠금 |
+| renderer/features/auth/pages/SignupPage.tsx | 제출 잠금, 가입 후 로그인 실패 분리 |
 | renderer/features/org/components/AssignRoleForm.tsx | 비동기 pending/disabled 및 server 이메일 직접 입력+datalist |
 | renderer/features/org/components/CreateSubNodeForm.tsx | 비동기 pending/disabled, 필수 이름, server 관리자 이메일 직접 입력+datalist |
 | renderer/features/org/components/NodeEditForm.tsx | 비동기 pending/disabled와 필수 조직 이름 |
@@ -364,32 +319,30 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 | renderer/features/workspace/data/WorkspaceDataProvider.tsx | 서버 초기 hydration, 재시도, 오류/로딩 gate |
 | renderer/features/workspace/data/WorkspaceDataProvider.module.css | 초기 데이터 상태 UI 스타일 |
 | renderer/features/workspace/data/workspaceCacheEvents.ts | 캐시 갱신과 쓰기 후 재조회 실패를 React에 전달 |
-| renderer/features/workspace/data/localStore.ts | mock/server DB 분리, 목 시나리오 시드, server 이메일 없는 사용자 참조 보존 |
-| renderer/features/workspace/data/session.ts | 모드별 세션 분리와 legacy 세션 이전 |
-| renderer/features/workspace/data/userService.ts | server 사용자 ID는 UUID, mock 사용자 ID는 기존 순번으로 분리 |
-| renderer/features/workspace/data/workItemService.ts | server 업무 ID는 UUID, mock 업무 ID는 기존 순번으로 분리 |
-| renderer/features/workspace/data/mockScenario.ts | default/empty/boundary 목 데이터 생성 |
-| renderer/features/workspace/data/server/workspaceMode.ts | 모드, Base URL, timeout 파싱·검증 |
+| renderer/features/workspace/data/localStore.ts | 서버 캐시 정규화와 서버 이메일 없는 사용자 참조 보존 |
+| renderer/features/workspace/data/session.ts | 서버 세션 키 저장과 조회 |
+| renderer/features/workspace/data/userService.ts | 서버 사용자 ID를 UUID로 생성 |
+| renderer/features/workspace/data/workItemService.ts | 서버 업무 ID를 UUID로 생성 |
+| renderer/features/workspace/data/server/workspaceMode.ts | Base URL, timeout 파싱·검증 |
 | renderer/features/workspace/data/server/apiClient.ts | 공통 fetch, 인증, timeout, 오류 분류 |
 | renderer/features/workspace/data/server/apiTypes.ts | 전송 DTO와 응답 envelope 및 access/refresh 로그인 토큰 쌍 런타임 검사 |
 | renderer/features/workspace/data/server/contextAdapter.ts | compact/확장 context의 도메인 정규화 |
 | renderer/features/workspace/data/server/serverId.ts | DB 길이 안의 UUID 기반 server entity ID 생성 |
 | renderer/features/workspace/data/server/serverWorkspace.ts | 실제 endpoint 호출과 payload 변환, 캐시 갱신 |
 | renderer/features/workspace/data/workspaceMode.ts | 기존 import 경로에서 server 모드 설정 재노출 |
-| renderer/features/workspace/model/types.ts | VIEWER 및 비밀번호 없는 서버 사용자 지원 |
+| renderer/features/workspace/model/types.ts | VIEWER 역할 지원 |
 | renderer/features/workspace/model/options.ts | VIEWER 선택 옵션 |
 | renderer/features/workspace/queries/selectedNodeDetail.ts | Server 모드 조직 변경의 직접 ADMIN/MANAGER 권한 계산 |
-| renderer/features/workspace/queries/workItemComposer.ts | 모드별 업무 생성 노드·담당자·상위 업무 후보 계산 |
+| renderer/features/workspace/queries/workItemComposer.ts | 업무 생성 노드·담당자·상위 업무 후보 계산 |
 | renderer/features/workspace/queries/serverWorkItemCreateContract.ts | server 업무 생성 직접 역할 계약의 순수 필터 |
 | tests/all.test.ts | 프론트 단위 테스트 진입점 |
 | tests/apiClient.test.ts | access/refresh 세션 저장·삭제와 URL/JSON/204/HTTP/parse/network/body timeout/5xx 정보 노출 방지 검증 |
 | tests/apiTypes.test.ts | 로그인 성공 응답의 access/refresh 토큰 쌍 정규화와 누락·공백 토큰 거부 검증 |
 | tests/contextAdapter.test.ts | compact/확장/빈/잘못된 context, AUTHORITY/MENTION 호환 및 부분 응답 병합 검증 |
 | tests/localStore.test.ts | compact 미확인 담당자와 expanded ID-only 담당자의 캐시 왕복 보존 검증 |
-| tests/mockScenario.test.ts | 기본 시드 무결성 및 empty/boundary/error 검증 |
 | tests/serverId.test.ts | server UUID 형식, 충돌 방지 특성, DB 길이 제한 검증 |
 | tests/serverWorkItemCreateContract.test.ts | server 업무 생성의 직접 역할 및 VIEWER 제외 계약 검증 |
-| tests/workspaceMode.test.ts | mock 설정 격리와 server URL/timeout 검증 |
+| tests/workspaceMode.test.ts | Base URL/timeout 검증 |
 | tests/workItemFormValidation.test.ts | 시작일/마감일 경계와 역전 검증 |
 | tests/workItemUpdatePayload.test.ts | compact 기본값이 수정 요청으로 역전송되지 않는지 검증 |
 | FRONTEND_API_INTEGRATION.md | 분석, 실행법, 검증, 계약 차이와 TODO 기록 |
@@ -411,6 +364,8 @@ compact 응답만 왔을 때 복원할 수 없는 값은 다음처럼 보수적�
 기존 package.json에는 test 스크립트와 테스트 파일이 없었다.
 
 ### 11.2 작업 후 결과
+
+(참고) 아래 표는 목 데이터 모드가 있던 시점의 검증 기록이며, mock 관련 스크립트와 .env.mock은 이후 제거되었다.
 
 | 명령 | 결과 |
 |---|---|
@@ -480,7 +435,7 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 
 - 서버의 `/users/refresh`는 JSON body의 refresh_token으로 새 access/refresh 토큰 쌍을 발급하지만 프론트 자동 갱신에는 아직 연결하지 않았다. 현재는 access token 만료 시 재로그인이 필요하다.
 - AUTHORITY와 MENTION은 현재 workspace 화면 모델에 저장하지 않는다. 권한 비트 기반 UI 제어 및 알림 UI를 구현할 때 전용 도메인·캐시·동기화 계층이 필요하다.
-- 업무 담당자 변경/claim API가 없어 서버 모드에서는 해당 동작을 차단한다.
+- 업무 담당자 변경/claim API가 없어 해당 동작을 차단한다.
 - 역할/하위 조직 대상 이메일은 직접 입력할 수 있지만 사용자 검색 endpoint는 없다. datalist에는 현재 context에서 알 수 있는 사용자만 표시되며, 신규 이메일의 가입 여부는 제출 후 서버 응답으로 확인한다.
 - 서버 캐시와 access/refresh token은 현재 localStorage 기반이다. 장기적으로 Electron의 더 안전한 저장소 또는 refresh token의 HttpOnly cookie 전환을 포함한 보안 정책을 검토해야 한다.
 - 현재는 시작 시 hydration과 변경 후 전체 재조회 방식이다. 서버 계약이 안정되면 query cache, retry/backoff, focus revalidation을 검토할 수 있다.
@@ -505,8 +460,8 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 14. 여러 컨트롤러의 DB 예외 응답은 내부 e.base().what()을 message로 반환하고 일부는 HTTP 5xx를 지정하지 않아 200 + error envelope가 될 수 있다. 프론트는 HTTP 5xx message를 숨기지만, 서버도 일관된 5xx 상태와 정제된 공개 메시지/별도 내부 로그로 고쳐야 한다.
 15. 네트워크 단절이 서버 쓰기 처리 직후 응답 수신 전에 발생하면 프론트만으로 커밋 여부를 확정할 수 없다. 생성/변경 endpoint에 idempotency key 또는 작업 상태 조회 계약이 필요하다.
 16. 현재 context에는 USER의 user_id/name도 없어 가입 시 입력한 표시명이 로그인 후 이메일 local-part 기반 이름으로 대체된다. 사용자 식별자와 표시명 조회 계약이 필요하다.
-17. 업무 category는 현재 프론트의 기존 정적 태그 표현에만 있고 POST/PATCH/DB 계약에는 없다. Server 모드에서는 저장되는 값처럼 보이지 않도록 비활성화했으며, 실제 저장 기능이 필요하면 서버 필드와 응답 계약을 추가해야 한다.
-18. 현재 조직/역할/업무 생성 SQL은 상위 노드의 상속 역할이 아니라 대상 노드의 직접 역할을 검사한다. 프론트 Server 모드는 이 동작에 맞췄지만, 제품 정책이 상속 권한을 의도했다면 서버 권한 규칙과 응답 명세를 함께 변경해야 한다.
+17. 업무 category는 현재 프론트의 기존 정적 태그 표현에만 있고 POST/PATCH/DB 계약에는 없다. 서버에는 저장되는 값처럼 보이지 않도록 비활성화했으며, 실제 저장 기능이 필요하면 서버 필드와 응답 계약을 추가해야 한다.
+18. 현재 조직/역할/업무 생성 SQL은 상위 노드의 상속 역할이 아니라 대상 노드의 직접 역할을 검사한다. 프론트는 이 동작에 맞췄지만, 제품 정책이 상속 권한을 의도했다면 서버 권한 규칙과 응답 명세를 함께 변경해야 한다.
 19. PATCH /org/nodes는 이름/유형 중 하나가 누락되면 컨트롤러가 빈 문자열을 채워 SQL에서 기존 값을 덮는다. 프론트는 두 필드를 필수 공통 요청 타입으로 만들고 항상 함께 보내지만, 서버에서도 부분 PATCH 또는 full update 중 하나로 계약을 명확히 해야 한다.
 20. 프론트의 현재 버튼 노출 권한은 역할명 중심이며 서버의 AUTHORITY 24비트 정책을 직접 소비하지 않는다. 커스텀 role_authorities를 허용할 경우 권한 상수·상속·DENY를 포함한 공개 계약이 필요하다.
 21. MENTION 초기/동기화 응답은 확인했지만 현재 프론트 알림 도메인과 삭제·읽음 병합 규칙이 없다. 알림 기능 구현 전 응답 및 갱신 계약을 확정해야 한다.

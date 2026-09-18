@@ -1,5 +1,5 @@
 import type { WorkspaceSnapshot } from '../model/types'
-import { getEffectiveAuthorityBitSet } from '../model/effectiveAuthority'
+import { getEffectiveAuthorityBitSet } from '../model/effectiveAuthority.js'
 
 /**
  * 업무 생성 권한(WI_PERSONAL_CHANGE, Bit 8 또는 WI_ASSIGN, Bit 10)이

@@ -59,7 +59,7 @@ test('server work item creation options follow direct role requirements', () => 
     ['requester', 'member'],
   )
   assert.deepEqual(
-    getServerAvailableParentItems('requester', [10, 20], snapshot).map((item) => item.workItemId),
+    getServerAvailableParentItems('requester', 20, snapshot).map((item) => item.workItemId),
     ['WI-ROOT', 'WI-CHILD'],
   )
 })

@@ -3,10 +3,8 @@ import { assignRoleToNode, createSubNode, getOrgSnapshot, updateNode, updateRole
 import { getSelectedNodeDetail } from '../../workspace/queries/selectedNodeDetail'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
 import type { NodeType, RoleName, UserRecord } from '../../workspace/model/types'
-import { isServerDataSource } from '../../workspace/data/workspaceMode'
 
 export function useOrgManagement(currentUser: UserRecord | null) {
-  const requireDirectManagementRole = isServerDataSource()
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null)
   const [subNodeType, setSubNodeType] = useState<Exclude<NodeType, 'USER'>>('TEAM')
   const [subNodeName, setSubNodeName] = useState('')
@@ -98,10 +96,10 @@ export function useOrgManagement(currentUser: UserRecord | null) {
             selectedNodeId,
             currentUserId,
             snapshot,
-            { requireDirectManagementRole },
+            { requireDirectManagementRole: true },
           )
         : null,
-    [currentUserId, requireDirectManagementRole, selectedNodeId, snapshot],
+    [currentUserId, selectedNodeId, snapshot],
   )
   const selectedDetailNodeId = selectedDetail?.node.id
   const selectedDetailNodeName = selectedDetail?.node.name ?? ''

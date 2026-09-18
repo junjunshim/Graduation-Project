@@ -7,8 +7,7 @@ import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
 import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
-import { isMockDataSource } from '../../workspace/data/workspaceMode'
-import { enterDemoWorkspace, getCurrentUser, signIn } from '../api'
+import { getCurrentUser, signIn } from '../api'
 import styles from './LoginPage.module.css'
 
 const REMEMBERED_EMAIL_KEY = 'axis-remembered-login-email'
@@ -30,7 +29,6 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const currentUser = getCurrentUser()
-  const isMockMode = isMockDataSource()
   const hasCustomTitleBar = hasCustomWindowControls()
   const rememberedEmail = readRememberedEmail()
   const [form, setForm] = useState({ email: rememberedEmail, password: '' })
@@ -138,17 +136,6 @@ export function LoginPage() {
     } finally {
       setSubmitting(false)
     }
-  }
-
-  function handleDemoEnter() {
-    const response = enterDemoWorkspace()
-
-    if (response.status === 'error') {
-      setFeedback({ tone: 'error', message: '데모 환경에 접속하지 못했습니다. 잠시 후 다시 시도해 주세요.' })
-      return
-    }
-
-    navigate('/dashboard', { replace: true })
   }
 
   function handlePasswordHelp() {
@@ -368,14 +355,6 @@ export function LoginPage() {
             </div>
 
             <div className={styles.secondaryActions}>
-              {isMockMode ? (
-                <>
-                  <button type="button" className={styles.secondaryLink} onClick={handleDemoEnter}>
-                    데모로 둘러보기
-                  </button>
-                  <span aria-hidden="true">·</span>
-                </>
-              ) : null}
               <Link to="/signup" className={styles.secondaryLink}>
                 회원가입
               </Link>

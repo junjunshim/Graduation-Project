@@ -1,5 +1,4 @@
-import { resolveRoleAssignments } from '../model/roleDefinitions'
-import { ensureMockRoleDefinitions } from './mockRoleDefinitions'
+import { resolveRoleAssignments } from '../model/roleDefinitions.js'
 import type {
   OrganizationNodeRecord,
   RoleAssignmentRecord,
@@ -7,12 +6,9 @@ import type {
   WorkItemRecord,
   WorkspaceDatabase,
 } from '../model/types'
-import { createConfiguredMockWorkspaceSeed } from './mockScenario.js'
-import { ensureSessionUserExists } from './session.js'
-import { isServerDataSource } from './workspaceMode.js'
 import { notifyWorkspaceCacheUpdated } from './workspaceCacheEvents.js'
 
-const DB_STORAGE_KEY = 'grad-client-mvp-db'
+/** 서버에서 내려받은 컨텍스트를 담아 두는 로컬 캐시 키 */
 const SERVER_DB_STORAGE_KEY = 'grad-client-server-db'
 const SERVER_DATASET_ID = 'server-workspace'
 const SERVER_SEED_VERSION = 1
@@ -21,35 +17,10 @@ function hasStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 }
 
-export function nowIso() {
-  return new Date().toISOString()
-}
-
 function getDefaultTimestamp(offsetDays = 0) {
   const base = new Date('2026-03-01T09:00:00+09:00')
   base.setDate(base.getDate() + offsetDays)
   return base.toISOString()
-}
-
-function getMaxNumericSuffix(values: string[], prefix: string) {
-  return values.reduce((maxValue, value) => {
-    const normalized = value.trim().toUpperCase()
-
-    if (!normalized.startsWith(prefix)) {
-      return maxValue
-    }
-
-    const numeric = Number.parseInt(normalized.slice(prefix.length), 10)
-    return Number.isFinite(numeric) ? Math.max(maxValue, numeric) : maxValue
-  }, 0)
-}
-
-export function generateUserId(db: WorkspaceDatabase) {
-  return `U-${getMaxNumericSuffix(db.users.map((user) => user.userId), 'U-') + 1}`
-}
-
-export function generateWorkItemId(workspace: Pick<WorkspaceDatabase, 'workItems'>) {
-  return `WI-${getMaxNumericSuffix(workspace.workItems.map((item) => item.workItemId), 'WI-') + 1}`
 }
 
 function computePath(nodeId: number, nodes: OrganizationNodeRecord[], trail = new Set<number>()): number[] {
@@ -92,10 +63,9 @@ function createEmptyServerWorkspace(): WorkspaceDatabase {
 
 function normalizeDb(
   raw: unknown,
-  options: { allowExternalDataset?: boolean; fallback?: () => WorkspaceDatabase } = {},
+  options: { fallback?: () => WorkspaceDatabase } = {},
 ): WorkspaceDatabase {
-  const configuredMockSeed = options.allowExternalDataset ? null : createConfiguredMockWorkspaceSeed()
-  const createFallback = options.fallback ?? createConfiguredMockWorkspaceSeed
+  const createFallback = options.fallback ?? createEmptyServerWorkspace
 
   if (!raw || typeof raw !== 'object') {
     return createFallback()
@@ -104,13 +74,6 @@ function normalizeDb(
   const rawDb = raw as Record<string, unknown>
   const datasetId = String(rawDb.datasetId ?? '')
   const seedVersion = Number(rawDb.seedVersion)
-
-  if (
-    configuredMockSeed &&
-    (datasetId !== configuredMockSeed.datasetId || seedVersion !== configuredMockSeed.seedVersion)
-  ) {
-    return createFallback()
-  }
 
   if (
     !Array.isArray(rawDb.users) ||
@@ -126,12 +89,11 @@ function normalizeDb(
   rawDb.users.forEach((entry, index) => {
     const item = entry as Record<string, unknown>
     const rawUserId = item.userId ?? item.user_id
-    const userId = String(rawUserId ?? (options.allowExternalDataset ? '' : `U-${index + 1}`)).trim()
+    const userId = String(rawUserId ?? '').trim()
     const email = String(item.email ?? '').trim().toLowerCase()
     const name = String(item.name ?? userId).trim()
-    const password = String(item.password ?? item.password_hash ?? '')
 
-    if (!userId || !name || (!email && !options.allowExternalDataset)) {
+    if (!userId || !name || !email) {
       return
     }
 
@@ -144,7 +106,6 @@ function normalizeDb(
       userId,
       email,
       name,
-      ...(password ? { password } : {}),
       ...(Number.isFinite(personalNodeId) ? { personalNodeId } : {}),
       createdAt: String(item.createdAt ?? item.createAt ?? item.create_at ?? getDefaultTimestamp(index)),
     })
@@ -239,13 +200,9 @@ function normalizeDb(
         ...(updatedAt ? { updatedAt } : {}),
       }
     })
-    .filter((entry): entry is RoleAssignmentRecord => Boolean(entry))
+    .filter((role): role is RoleAssignmentRecord => role !== null)
 
   users.forEach((user) => {
-    if (user.personalNodeId && nodeIds.has(user.personalNodeId)) {
-      return
-    }
-
     const personalRole = roles.find((role) => {
       if (role.userId !== user.userId || !role.isTopRole) {
         return false
@@ -347,17 +304,11 @@ function normalizeDb(
   const files = Array.isArray(rawDb.files) ? rawDb.files : []
 
   return {
-    datasetId: options.allowExternalDataset
-      ? datasetId || SERVER_DATASET_ID
-      : configuredMockSeed?.datasetId ?? datasetId,
-    seedVersion: options.allowExternalDataset
-      ? Number.isFinite(seedVersion)
-        ? seedVersion
-        : SERVER_SEED_VERSION
-      : configuredMockSeed?.seedVersion ?? seedVersion,
+    datasetId: datasetId || SERVER_DATASET_ID,
+    seedVersion: Number.isFinite(seedVersion) ? seedVersion : SERVER_SEED_VERSION,
     users,
     nodes,
-    roles: options.allowExternalDataset ? resolveRoleAssignments(roles, authorities as NonNullable<WorkspaceDatabase['authorities']>) : roles,
+    roles: resolveRoleAssignments(roles, authorities as NonNullable<WorkspaceDatabase['authorities']>),
     workItems,
     authorities: authorities as WorkspaceDatabase['authorities'],
     mentions: mentions as WorkspaceDatabase['mentions'],
@@ -371,74 +322,14 @@ function normalizeDb(
 }
 
 export function normalizeServerWorkspaceDb(raw: unknown): WorkspaceDatabase {
-  return normalizeDb(raw, {
-    allowExternalDataset: true,
-    fallback: createEmptyServerWorkspace,
-  })
+  return normalizeDb(raw, { fallback: createEmptyServerWorkspace })
 }
 
 // In-memory cache to eliminate repetitive, expensive JSON.parse / JSON.stringify calls
 let inMemoryServerDb: WorkspaceDatabase | null = null
-let inMemoryMockDb: WorkspaceDatabase | null = null
 
+/** 서버 컨텍스트를 로컬에 캐시한 워크스페이스 DB */
 export function readWorkspaceDb(): WorkspaceDatabase {
-  if (isServerDataSource()) {
-    return readServerWorkspaceDb()
-  }
-
-  if (inMemoryMockDb) {
-    return inMemoryMockDb
-  }
-
-  if (!hasStorage()) {
-    inMemoryMockDb = createConfiguredMockWorkspaceSeed()
-    return inMemoryMockDb
-  }
-
-  const raw = window.localStorage.getItem(DB_STORAGE_KEY)
-
-  if (!raw) {
-    const seededDb = createConfiguredMockWorkspaceSeed()
-    window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(seededDb))
-    ensureSessionUserExists(seededDb)
-    inMemoryMockDb = seededDb
-    return seededDb
-  }
-
-  try {
-    const normalized = ensureMockRoleDefinitions(normalizeDb(JSON.parse(raw)))
-    const changed = ensureSeedData(normalized)
-    ensureMockRoleDefinitions(normalized)
-    const clearedInvalidSession = ensureSessionUserExists(normalized)
-    const normalizedRaw = JSON.stringify(normalized)
-
-    if (changed || clearedInvalidSession || normalizedRaw !== raw) {
-      window.localStorage.setItem(DB_STORAGE_KEY, normalizedRaw)
-    }
-
-    inMemoryMockDb = normalized
-    return normalized
-  } catch {
-    const seededDb = createConfiguredMockWorkspaceSeed()
-    window.localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(seededDb))
-    ensureSessionUserExists(seededDb)
-    inMemoryMockDb = seededDb
-    return seededDb
-  }
-}
-
-export function writeWorkspaceDb(db: WorkspaceDatabase) {
-  if (!isServerDataSource()) ensureMockRoleDefinitions(db)
-  inMemoryMockDb = db
-  if (!hasStorage()) {
-    return
-  }
-
-  window.localStorage.setItem(isServerDataSource() ? SERVER_DB_STORAGE_KEY : DB_STORAGE_KEY, JSON.stringify(db))
-  notifyWorkspaceCacheUpdated()
-}
-
-export function readServerWorkspaceDb(): WorkspaceDatabase {
   if (inMemoryServerDb) {
     return inMemoryServerDb
   }
@@ -483,78 +374,4 @@ export function clearServerWorkspaceDb() {
 
   window.localStorage.removeItem(SERVER_DB_STORAGE_KEY)
   notifyWorkspaceCacheUpdated()
-}
-
-function ensureSeedData(db: WorkspaceDatabase) {
-  const seedDb = createConfiguredMockWorkspaceSeed()
-  let changed = false
-
-  if (db.datasetId !== seedDb.datasetId || db.seedVersion !== seedDb.seedVersion) {
-    db.datasetId = seedDb.datasetId
-    db.seedVersion = seedDb.seedVersion
-    changed = true
-  }
-
-  const userIds = new Set(db.users.map((user) => user.userId))
-  const userEmails = new Set(db.users.map((user) => user.email.toLowerCase()))
-
-  seedDb.users.forEach((user) => {
-    if (userIds.has(user.userId) || userEmails.has(user.email.toLowerCase())) {
-      return
-    }
-
-    db.users.push(user)
-    userIds.add(user.userId)
-    userEmails.add(user.email.toLowerCase())
-    changed = true
-  })
-
-  const nodeIds = new Set(db.nodes.map((node) => node.id))
-
-  seedDb.nodes.forEach((node) => {
-    if (nodeIds.has(node.id)) {
-      return
-    }
-
-    db.nodes.push(node)
-    nodeIds.add(node.id)
-    changed = true
-  })
-
-  const roleIds = new Set(db.roles.map((role) => role.id))
-
-  seedDb.roles.forEach((role) => {
-    if (roleIds.has(role.id)) {
-      return
-    }
-
-    db.roles.push(role)
-    roleIds.add(role.id)
-    changed = true
-  })
-
-  const workItemIds = new Set(db.workItems.map((item) => item.workItemId))
-
-  seedDb.workItems.forEach((item) => {
-    if (workItemIds.has(item.workItemId)) {
-      return
-    }
-
-    db.workItems.push(item)
-    workItemIds.add(item.workItemId)
-    changed = true
-  })
-
-  db.counters.node = Math.max(db.counters.node, seedDb.counters.node, Math.max(0, ...db.nodes.map((node) => node.id)) + 1)
-  db.counters.role = Math.max(db.counters.role, seedDb.counters.role, Math.max(0, ...db.roles.map((role) => role.id)) + 1)
-
-  return changed
-}
-
-export function delay(ms = 160) {
-  return new Promise((resolve) => globalThis.setTimeout(resolve, ms))
-}
-
-export function getUserByEmail(email: string, users: UserRecord[]) {
-  return users.find((user) => user.email.toLowerCase() === email.trim().toLowerCase())
 }

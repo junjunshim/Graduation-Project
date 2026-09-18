@@ -1,13 +1,10 @@
-export type WorkspaceDataSource = 'mock' | 'server'
-
 export type WorkspaceRuntimeConfiguration = {
-  dataSource: WorkspaceDataSource
   apiBaseUrl: string
   apiTimeoutMs: number
   configurationError: string | null
 }
 
-const DEFAULT_API_BASE_URL = 'http://localhost:8080/api/v1'
+const DEFAULT_API_BASE_URL = 'http://localhost:8080/api'
 const DEFAULT_API_TIMEOUT_MS = 10_000
 
 function getWorkspaceEnvironment(): Partial<ImportMetaEnv> {
@@ -56,38 +53,18 @@ function normalizeApiTimeout(value: string | undefined) {
 export function resolveWorkspaceRuntimeConfiguration(
   environment: Partial<ImportMetaEnv>,
 ): WorkspaceRuntimeConfiguration {
-  const rawDataSource = environment.VITE_WORKSPACE_DATA_SOURCE?.trim().toLowerCase()
-  const dataSource: WorkspaceDataSource = rawDataSource === 'server' ? 'server' : 'mock'
-  const sourceError =
-    rawDataSource && rawDataSource !== 'mock' && rawDataSource !== 'server'
-      ? 'VITE_WORKSPACE_DATA_SOURCE는 mock 또는 server여야 합니다.'
-      : null
   const baseUrl = normalizeApiBaseUrl(environment.VITE_WORKSPACE_API_BASE_URL)
   const timeout = normalizeApiTimeout(environment.VITE_WORKSPACE_API_TIMEOUT_MS)
 
   return {
-    dataSource,
     apiBaseUrl: baseUrl.value,
     apiTimeoutMs: timeout.value,
-    configurationError:
-      sourceError ?? (dataSource === 'server' ? baseUrl.error ?? timeout.error : null),
+    configurationError: baseUrl.error ?? timeout.error,
   }
 }
 
 export function getWorkspaceRuntimeConfiguration(): WorkspaceRuntimeConfiguration {
   return resolveWorkspaceRuntimeConfiguration(getWorkspaceEnvironment())
-}
-
-export function getWorkspaceDataSource() {
-  return getWorkspaceRuntimeConfiguration().dataSource
-}
-
-export function isServerDataSource() {
-  return getWorkspaceDataSource() === 'server'
-}
-
-export function isMockDataSource() {
-  return getWorkspaceDataSource() === 'mock'
 }
 
 export function getWorkspaceApiBaseUrl() {

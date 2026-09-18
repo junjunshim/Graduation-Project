@@ -80,6 +80,8 @@
 
 .value,
 .dueValue,
+.overdueValue,
+.countValue,
 .rateValue {
   color: var(--text-primary);
   font-size: 1.75rem;
@@ -89,7 +91,8 @@
   white-space: nowrap;
 }
 
-.dueValue {
+.dueValue,
+.overdueValue {
   color: var(--axis-status-danger);
 }
 
@@ -162,85 +165,25 @@
   white-space: nowrap;
 }
 
-.nearest {
+.count {
   display: grid;
-  flex: 1 1 auto;
-  gap: 0.4rem;
+  flex: 0 0 auto;
+  gap: 0.35rem;
   min-width: 0;
 }
 
-.nearestItem {
+/* 4개 지표를 카드 폭에 맞춰 같은 간격으로 끝에서 끝까지 배치한다. */
+.stats {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.45rem 0.7rem;
-  border: 1px solid var(--axis-status-warning-border);
-  border-radius: var(--axis-radius-surface);
-  background: var(--surface-panel);
-}
-
-.nearestIcon {
-  flex: 0 0 auto;
-  color: var(--axis-status-danger);
-}
-
-.nearestText {
-  display: grid;
+  justify-content: space-between;
+  gap: 1.15rem;
   min-width: 0;
 }
 
-.nearestTitle {
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
+.count .label {
   white-space: nowrap;
-}
-
-.nearestDate {
-  color: var(--axis-status-danger);
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.nearestEmpty {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
-.button {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 0.62rem 1.1rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--axis-radius-action);
-  background: var(--surface-panel);
-  color: var(--text-primary);
-  font-size: 0.88rem;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.dueButton {
-  color: var(--axis-status-danger);
-  border-color: var(--axis-status-danger-border);
-}
-
-.button:hover,
-.button:focus-visible {
-  background: var(--surface-hover);
-  color: var(--axis-status-danger);
-}
-
-.button:disabled {
-  border-color: var(--line-default);
-  color: var(--axis-text-disabled);
-  cursor: not-allowed;
 }
 
 @media (max-width: 1180px) {

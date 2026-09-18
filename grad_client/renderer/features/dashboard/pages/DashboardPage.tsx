@@ -9,18 +9,17 @@ import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { useDashboardContext } from '../data/useDashboardContext'
 import type { DashboardRecurringRule, DashboardWorkItem } from '../model/dashboardTypes'
 import {
-  buildCalendarDays,
-  buildCalendarWindow,
   buildMetrics,
   buildScheduleCards,
   buildSelectableDateRange,
-  buildTaskRows,
+  buildWeekBoard,
   clampDateKeyToRange,
-  formatCalendarDateLabel,
+  formatWeekRangeLabel,
   getWeekWindow,
+  isDateKeySelectable,
   parseDateKey,
   resolveTodayDate,
-  shiftSelectedDateKey,
+  shiftWeekDateKey,
   toDateKey,
 } from '../model/dashboardSummary'
 import styles from './DashboardPage.module.css'
@@ -34,7 +33,8 @@ const FALLBACK_ERROR_MESSAGE = '대시보드 정보를 불러오지 못했습니
 export function DashboardPage() {
   const { status, context, error, reload } = useDashboardContext()
   const navigate = useNavigate()
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null)
+  // 보고 있는 주의 기준 날짜. 따로 고른 날짜가 없으면 오늘이 속한 주를 보여준다.
+  const [anchorDateKey, setAnchorDateKey] = useState<string | null>(null)
   const [openedScheduleRuleId, setOpenedScheduleRuleId] = useState<number | null>(null)
 
   const viewerToday = context?.viewer?.today ?? null
@@ -43,48 +43,48 @@ export function DashboardPage() {
 
   const today = useMemo(() => resolveTodayDate(viewerToday), [viewerToday])
   const todayKey = useMemo(() => toDateKey(today), [today])
-  // 따로 고른 날짜가 없으면 오늘 하루를 보여준다.
-  const activeDateKey = selectedDateKey ?? todayKey
+  const activeDateKey = anchorDateKey ?? todayKey
   const activeDate = useMemo(() => parseDateKey(activeDateKey) ?? today, [activeDateKey, today])
-  const activeDateLabel = useMemo(() => formatCalendarDateLabel(activeDateKey), [activeDateKey])
 
   // 오늘 기준 ±6개월 밖의 날짜는 고를 수 없다.
   const selectableRange = useMemo(() => buildSelectableDateRange(today), [today])
 
-  // 드롭다운에서 지우기를 누르면 선택이 없는 상태(= 오늘)로 되돌린다.
-  const handleSelectDate = useCallback(
-    (dateKey: string) => {
-      setSelectedDateKey(dateKey.length > 0 ? clampDateKeyToRange(dateKey, selectableRange) : null)
-    },
-    [selectableRange],
-  )
-
   const handleGoToday = useCallback(() => {
-    setSelectedDateKey(todayKey)
+    setAnchorDateKey(todayKey)
   }, [todayKey])
 
-  const handleShiftDate = useCallback(
+  const handleShiftWeek = useCallback(
     (direction: number) => {
-      setSelectedDateKey(clampDateKeyToRange(shiftSelectedDateKey(activeDateKey, direction), selectableRange))
+      setAnchorDateKey(clampDateKeyToRange(shiftWeekDateKey(activeDateKey, direction), selectableRange))
     },
     [activeDateKey, selectableRange],
   )
 
+  // 상단 카드 지표는 언제나 오늘이 속한 주를 기준으로 계산한다.
   const week = useMemo(() => getWeekWindow(today), [today])
   const metrics = useMemo(
     () => buildMetrics(workItems, today, week.start, week.end),
     [workItems, today, week],
   )
-  // 달력 스트립은 항상 선택한 날짜를 가운데 둔다.
-  const calendarWindow = useMemo(() => buildCalendarWindow(activeDate), [activeDate])
-  const calendarDays = useMemo(
-    () => buildCalendarDays(workItems, calendarWindow, today, selectableRange),
-    [workItems, calendarWindow, today, selectableRange],
+  // 업무 일정 패널은 보고 있는 주(월~일)를 그린다.
+  const boardWeek = useMemo(() => getWeekWindow(activeDate), [activeDate])
+  const weekStartKey = useMemo(() => toDateKey(boardWeek.start), [boardWeek])
+  const weekEndKey = useMemo(() => toDateKey(boardWeek.end), [boardWeek])
+  const weekLabel = useMemo(
+    () => formatWeekRangeLabel(weekStartKey, weekEndKey),
+    [weekStartKey, weekEndKey],
   )
-  const taskRows = useMemo(
-    () => buildTaskRows(workItems, activeDateKey),
-    [workItems, activeDateKey],
+  const board = useMemo(
+    () => buildWeekBoard(workItems, boardWeek.start, today),
+    [workItems, boardWeek, today],
   )
+  // 오늘이 보고 있는 주에 있으면 오늘 요일 그룹에, 없으면 기준 날짜에 머문다.
+  const focusDateKey = useMemo(() => {
+    const todayInWeek = todayKey >= weekStartKey && todayKey <= weekEndKey
+    const key = todayInWeek ? todayKey : activeDateKey
+
+    return isDateKeySelectable(key, selectableRange) ? key : weekStartKey
+  }, [todayKey, weekStartKey, weekEndKey, activeDateKey, selectableRange])
   const schedules = useMemo(() => buildScheduleCards(recurringRules, today), [recurringRules, today])
   // '일정 보기'로 연 정기 일정 상세
   const orgMembers = useMemo(() => getOrgSnapshot().users, [])
@@ -131,14 +131,10 @@ export function DashboardPage() {
       <div className={styles.columns}>
         <DashboardSchedulePanel schedules={schedules} onOpenSchedule={setOpenedScheduleRuleId} />
         <DashboardWorkSchedulePanel
-          days={calendarDays}
-          rows={taskRows}
-          selectedDateKey={activeDateKey}
-          selectedDateLabel={activeDateLabel}
-          minSelectableDateKey={selectableRange.minDateKey}
-          maxSelectableDateKey={selectableRange.maxDateKey}
-          onSelectDate={handleSelectDate}
-          onShiftDate={handleShiftDate}
+          board={board}
+          focusDateKey={focusDateKey}
+          weekLabel={weekLabel}
+          onShiftWeek={handleShiftWeek}
           onGoToday={handleGoToday}
         />
       </div>

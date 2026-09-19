@@ -228,6 +228,8 @@ export type UpdateWorkItemRequest = {
   progress?: number
   startDate?: string
   dueDate?: string
+  /** 빈 문자열은 최상위 업무로 이동을 의미한다. 값이 없으면 부모를 변경하지 않는다. */
+  parentWorkItemId?: string
 }
 
 export type ClaimWorkItemRequest = {

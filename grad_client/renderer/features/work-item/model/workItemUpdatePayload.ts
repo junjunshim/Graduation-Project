@@ -18,6 +18,9 @@ export function createWorkItemUpdatePayload(
   if (current.progress !== initial.progress) payload.progress = Number(current.progress)
   if (current.startDate !== initial.startDate) payload.startDate = current.startDate
   if (current.dueDate !== initial.dueDate) payload.dueDate = current.dueDate
+  if (current.parentWorkItemId !== initial.parentWorkItemId) {
+    payload.parentWorkItemId = current.parentWorkItemId
+  }
 
   return payload
 }

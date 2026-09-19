@@ -22,6 +22,7 @@ type WorkItemCreateFormProps = {
   categorySupported?: boolean
   dueDateRequired?: boolean
   ownerLocked?: boolean
+  nodeLocked?: boolean
   submitDisabled?: boolean
   submitHint?: string
   onFieldChange: <Key extends keyof WorkItemCreateFormState>(
@@ -51,6 +52,7 @@ export function WorkItemCreateForm({
   categorySupported = true,
   dueDateRequired = false,
   ownerLocked = false,
+  nodeLocked = false,
   submitDisabled = false,
   submitHint,
   onFieldChange,
@@ -205,8 +207,15 @@ export function WorkItemCreateForm({
                     styles.workspaceDropdownTrigger,
                     isNodeDropdownOpen ? styles.workspaceDropdownTriggerOpen : '',
                   ].join(' ')}
-                  onClick={() => setIsNodeDropdownOpen((prev) => !prev)}
-                  aria-expanded={isNodeDropdownOpen}
+                  disabled={nodeLocked}
+                  onClick={() => {
+                    if (nodeLocked) {
+                      return
+                    }
+
+                    setIsNodeDropdownOpen((prev) => !prev)
+                  }}
+                  aria-expanded={nodeLocked ? undefined : isNodeDropdownOpen}
                   aria-haspopup="listbox"
                 >
                   <div className={styles.workspaceSelectedDisplay}>
@@ -234,7 +243,7 @@ export function WorkItemCreateForm({
                   />
                 </button>
 
-                {isNodeDropdownOpen && (
+                {isNodeDropdownOpen && !nodeLocked && (
                   <div className={styles.workspaceDropdownMenu} role="listbox">
                     {composer.availableNodes.map((node) => {
                       const isSelected = String(node.id) === form.ownerNodeId
@@ -267,7 +276,9 @@ export function WorkItemCreateForm({
                 )}
               </div>
               <span className={styles.fieldHelpText}>
-                상속된 권한을 포함해 업무 생성 권한이 있는 {composer.availableNodes.length}개 조직 중 선택 가능합니다.
+                {nodeLocked
+                  ? '업무를 만든 뒤에는 소속 조직을 변경할 수 없습니다.'
+                  : `상속된 권한을 포함해 업무 생성 권한이 있는 ${composer.availableNodes.length}개 조직 중 선택 가능합니다.`}
               </span>
             </div>
 

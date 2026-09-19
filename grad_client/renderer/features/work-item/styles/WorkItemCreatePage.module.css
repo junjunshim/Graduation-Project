@@ -317,8 +317,15 @@
   text-align: left;
 }
 
-.workspaceDropdownTrigger:hover {
+.workspaceDropdownTrigger:hover:not(:disabled) {
   border-color: var(--axis-line-strong);
+}
+
+.workspaceDropdownTrigger:disabled {
+  cursor: not-allowed;
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-secondary);
+  box-shadow: none;
 }
 
 .workspaceDropdownTrigger:focus-visible,

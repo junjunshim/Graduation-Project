@@ -139,6 +139,10 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         if ((*jsonPtr)[key].isNull()) return std::nullopt;
         return (*jsonPtr)[key].asBool();
     };
+
+    // 상위 업무(부모) 변경: 키가 아예 없으면 "변경 없음", 빈 문자열이면 "최상위 업무로 이동"
+    bool parent_changed = jsonPtr->isMember("parent_work_item_id");
+    std::string parent_work_item_id = parent_changed ? getStrOrNull("parent_work_item_id") : "";
     
 
     // 2. 비지니스 로직
@@ -146,7 +150,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
     auto dbClient = drogon::app().getDbClient();
     
     // DB 함수 호출 SQL
-    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
+    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)";
     
     // DB 함수 비동기 실행
     dbClient->execSqlAsync(
@@ -189,7 +193,9 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         getIntOrNull("weight", -1),
         getIntOrNull("progress", -1),
         getStrOrNull("start_date"),
-        getStrOrNull("due_date")
+        getStrOrNull("due_date"),
+        parent_work_item_id,
+        parent_changed
     );
 }
 

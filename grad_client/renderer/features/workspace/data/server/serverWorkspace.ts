@@ -655,6 +655,9 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
         ...(payload.progress !== undefined ? { progress: payload.progress } : {}),
         ...(payload.startDate !== undefined ? { start_date: payload.startDate } : {}),
         ...(payload.dueDate !== undefined ? { due_date: payload.dueDate } : {}),
+        ...(payload.parentWorkItemId !== undefined
+          ? { parent_work_item_id: payload.parentWorkItemId }
+          : {}),
       },
     })
 
@@ -662,11 +665,16 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
       return { status: 'error' as const, message: response.message ?? '업무를 수정하지 못했습니다.' }
     }
 
-    const cachedOwnerNodeId = readWorkspaceDb().workItems.find(
+    const cachedWorkItems = readWorkspaceDb().workItems
+    const cachedOwnerNodeId = cachedWorkItems.find(
       (item) => item.workItemId === payload.workItemId,
     )?.ownerNodeId
+    // 부모가 다른 노드로 바뀌면 새 부모 노드의 계층/진행률도 함께 갱신한다.
+    const newParentNodeId = payload.parentWorkItemId
+      ? cachedWorkItems.find((item) => item.workItemId === payload.parentWorkItemId)?.ownerNodeId
+      : undefined
 
-    await refreshNodesAfterCommittedMutation([cachedOwnerNodeId])
+    await refreshNodesAfterCommittedMutation([cachedOwnerNodeId, newParentNodeId])
     return { status: 'success' as const, workItemId: payload.workItemId }
   }, '업무를 수정하지 못했습니다.')
 }

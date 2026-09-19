@@ -226,7 +226,9 @@ CREATE OR REPLACE FUNCTION update_work_item(
     p_weight work_items.weight%TYPE DEFAULT -1,
     p_progress work_items.progress%TYPE DEFAULT -1,
     p_start_date VARCHAR DEFAULT NULL,
-    p_due_date VARCHAR DEFAULT NULL
+    p_due_date VARCHAR DEFAULT NULL,
+    p_parent_work_item_id work_items.parent_work_item_id%TYPE DEFAULT NULL,
+    p_parent_changed BOOLEAN DEFAULT FALSE
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id  users.user_id%TYPE;
@@ -238,6 +240,11 @@ DECLARE
     v_old_category work_items.category%TYPE;
     v_old_status work_items.status%TYPE;
     v_old_progress work_items.progress%TYPE;
+    v_old_parent_id work_items.parent_work_item_id%TYPE;
+    v_effective_parent_id work_items.parent_work_item_id%TYPE;
+    v_new_parent_node_id organization_nodes.node_id%TYPE;
+    v_new_parent_hidden work_items.hidden%TYPE;
+    v_owner_node_parent_id organization_nodes.node_id%TYPE;
 BEGIN
     -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
@@ -248,8 +255,8 @@ BEGIN
     END IF;
 
     -- 2. work_item 정보 한 번에 가져오기 (성능 최적화)
-    SELECT owner_node_id, owner_user_id, hidden, title, category, status, progress
-    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_category, v_old_status, v_old_progress
+    SELECT owner_node_id, owner_user_id, hidden, title, category, status, progress, parent_work_item_id
+    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_category, v_old_status, v_old_progress, v_old_parent_id
     FROM work_items 
     WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
 
@@ -287,7 +294,65 @@ BEGIN
         USING ERRCODE = 'P0103';
     END IF;
 
-    -- 7. work_item 업데이트
+    -- 7. 상위 업무(부모) 변경 처리 (노드 이동은 지원하지 않는다)
+    IF p_parent_changed THEN
+        IF p_parent_work_item_id IS NULL OR p_parent_work_item_id = '' THEN
+            -- 빈 값은 최상위 업무로 이동을 의미한다.
+            v_effective_parent_id := NULL;
+        ELSE
+            SELECT owner_node_id, hidden INTO v_new_parent_node_id, v_new_parent_hidden
+            FROM work_items
+            WHERE work_item_id = p_parent_work_item_id AND is_deleted = FALSE;
+
+            IF NOT FOUND THEN
+                RAISE EXCEPTION '[P0601]Parent work item does not exist or already deleted: %', p_parent_work_item_id
+                USING ERRCODE = 'P0601';
+            END IF;
+
+            -- 자기 자신 또는 자신의 하위 업무를 부모로 지정할 수 없다 (순환 방지)
+            IF EXISTS (
+                WITH RECURSIVE ancestors AS (
+                    SELECT p_parent_work_item_id AS ancestor_id, 1 AS depth
+                    UNION ALL
+                    SELECT w.parent_work_item_id, a.depth + 1
+                    FROM work_items w
+                    JOIN ancestors a ON w.work_item_id = a.ancestor_id
+                    WHERE w.parent_work_item_id IS NOT NULL AND a.depth < 64
+                )
+                SELECT 1 FROM ancestors WHERE ancestor_id = p_work_item_id
+            ) THEN
+                RAISE EXCEPTION '[P0620]Parent work item cannot be itself or its descendant: %', p_parent_work_item_id
+                USING ERRCODE = 'P0620';
+            END IF;
+
+            -- 부모 후보는 현재 노드 또는 직속 상위 노드의 업무만 허용한다
+            SELECT parent_node_id INTO v_owner_node_parent_id
+            FROM organization_nodes WHERE node_id = v_owner_node_id;
+
+            IF v_new_parent_node_id <> v_owner_node_id
+               AND (v_owner_node_parent_id IS NULL OR v_new_parent_node_id <> v_owner_node_parent_id) THEN
+                RAISE EXCEPTION '[P0621]Parent work item must belong to the same node or its direct parent node: %', p_parent_work_item_id
+                USING ERRCODE = 'P0621';
+            END IF;
+
+            -- 생성과 동일한 기준으로 부모 업무에 대한 권한을 확인한다
+            IF v_new_parent_hidden THEN
+                IF NOT check_authority_with_override(v_requester_id, v_new_parent_node_id, 'WI_HIDDEN_VIEW') THEN
+                    RAISE EXCEPTION '[P0103]Requester does not have WI_HIDDEN_VIEW permission on parent node: %', v_new_parent_node_id
+                    USING ERRCODE = 'P0103';
+                END IF;
+            END IF;
+
+            IF NOT check_authority_with_override(v_requester_id, v_new_parent_node_id, 'WI_PERSONAL_CHANGE') THEN
+                RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on parent node: %', v_new_parent_node_id
+                USING ERRCODE = 'P0103';
+            END IF;
+
+            v_effective_parent_id := p_parent_work_item_id;
+        END IF;
+    END IF;
+
+    -- 7-1. work_item 업데이트
     UPDATE work_items
     SET
         title = COALESCE(NULLIF(p_title, ''), title),
@@ -304,7 +369,9 @@ BEGIN
             ELSE progress
         END,
         start_date = COALESCE(NULLIF(p_start_date, '')::DATE, start_date),
-        due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date)
+        due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date),
+        -- 부모 변경은 플래그로 명시된 경우에만 적용한다("" 은 최상위 업무를 의미)
+        parent_work_item_id = CASE WHEN p_parent_changed THEN v_effective_parent_id ELSE parent_work_item_id END
     WHERE work_item_id = p_work_item_id;
 
     -- 7.5 활동 로그 적재 (제목, 카테고리, 상태, 진행률 변경 시 기록)
@@ -321,6 +388,19 @@ BEGIN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, '100');
     ELSIF p_progress >= 0 AND p_progress <> v_old_progress THEN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, p_progress::VARCHAR);
+    END IF;
+    IF p_parent_changed AND COALESCE(p_parent_work_item_id, '') <> COALESCE(v_old_parent_id, '') THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'parent',
+            COALESCE(v_old_parent_id, 'ROOT'),
+            COALESCE(NULLIF(p_parent_work_item_id, ''), 'ROOT')
+        );
     END IF;
 
     -- 8. 업데이트된 work_item 반환
@@ -354,6 +434,12 @@ BEGIN
         WHEN SQLSTATE 'P0103' THEN
         RAISE;
         WHEN SQLSTATE 'P0603' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0601' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0620' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0621' THEN
         RAISE;
         WHEN OTHERS THEN
         RAISE EXCEPTION '[P0604]Failed to update work item: %', SQLERRM

@@ -21,6 +21,6 @@ test('legacy role targets containing user IDs still resolve to names', () => {
 })
 
 test('role changes and revocations also preserve the recorded target name', () => {
-  assert.equal(formatActivityMessage({ ...activity, actionType: 'updated', oldValue: 'MEMBER', newValue: 'LEADER' }, options), '삼성 계정 관리자님이 ‘김민수’님의 역할을 ‘MEMBER’에서 ‘LEADER’(으)로 변경했습니다.')
+  assert.equal(formatActivityMessage({ ...activity, actionType: 'updated', oldValue: 'MEMBER', newValue: 'LEADER' }, options), '삼성 계정 관리자님이 ‘김민수’님의 역할을 변경했습니다. (‘MEMBER’ → ‘LEADER’)')
   assert.equal(formatActivityMessage({ ...activity, actionType: 'deleted' }, options), '삼성 계정 관리자님이 ‘김민수’님의 ‘MEMBER’ 역할을 회수했습니다.')
 })

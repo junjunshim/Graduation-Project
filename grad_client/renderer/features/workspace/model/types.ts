@@ -74,6 +74,8 @@ export type MentionRecord = {
   id: number
   commentId: number
   workItemId: string
+  actorName?: string
+  actorUserId?: string
   message: string
   isRead: boolean
   createdAt: string

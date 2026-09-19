@@ -82,5 +82,5 @@ namespace app_utils {
     // DB 에러 발생 시 Json::Value 반환하는 함수
     Json::Value parseDbError(const drogon::orm::DrogonDbException &e);
     // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
-    bool sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message = "");
+    bool sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message = "", const Json::Value &extra = Json::Value());
 }

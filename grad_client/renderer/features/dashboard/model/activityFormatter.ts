@@ -13,6 +13,7 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
 const FIELD_NAME_LABELS: Record<string, string> = {
   title: '제목',
   name: '이름',
+  owner: '담당자',
   description: '설명',
   status: '상태',
   priority: '우선순위',

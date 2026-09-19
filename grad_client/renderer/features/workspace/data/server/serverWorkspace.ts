@@ -641,6 +641,13 @@ export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
 
 export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
   return withServerOperationError(async () => {
+    // 담당자는 서버가 email 로 식별하므로 캐시에서 email 을 찾아 변환한다.
+    const ownerUserEmail =
+      payload.ownerUserId !== undefined
+        ? (readWorkspaceDb().users.find((user) => user.userId === payload.ownerUserId)?.email ??
+          payload.ownerUserId)
+        : undefined
+
     const response = await requestServerStatus('/workItems', {
       method: 'PATCH',
       body: {
@@ -658,6 +665,7 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
         ...(payload.parentWorkItemId !== undefined
           ? { parent_work_item_id: payload.parentWorkItemId }
           : {}),
+        ...(ownerUserEmail !== undefined ? { owner_user_email: ownerUserEmail } : {}),
       },
     })
 

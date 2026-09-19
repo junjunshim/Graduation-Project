@@ -143,6 +143,10 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
     // 상위 업무(부모) 변경: 키가 아예 없으면 "변경 없음", 빈 문자열이면 "최상위 업무로 이동"
     bool parent_changed = jsonPtr->isMember("parent_work_item_id");
     std::string parent_work_item_id = parent_changed ? getStrOrNull("parent_work_item_id") : "";
+
+    // 담당자 변경: 키가 아예 없으면 "변경 없음"
+    bool owner_changed = jsonPtr->isMember("owner_user_email");
+    std::string owner_user_email = owner_changed ? getStrOrNull("owner_user_email") : "";
     
 
     // 2. 비지니스 로직
@@ -150,7 +154,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
     auto dbClient = drogon::app().getDbClient();
     
     // DB 함수 호출 SQL
-    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)";
+    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)";
     
     // DB 함수 비동기 실행
     dbClient->execSqlAsync(
@@ -195,7 +199,9 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         getStrOrNull("start_date"),
         getStrOrNull("due_date"),
         parent_work_item_id,
-        parent_changed
+        parent_changed,
+        owner_user_email,
+        owner_changed
     );
 }
 

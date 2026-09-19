@@ -266,6 +266,50 @@
   outline-offset: -2px;
 }
 
+.favoriteGroup {
+  display: grid;
+  align-content: start;
+  gap: 0.1rem;
+}
+
+.favoriteGroup + .favoriteGroup {
+  margin-top: 0.45rem;
+}
+
+.favoriteGroupTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.3rem 0.38rem 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.favoriteGroupIcon {
+  color: var(--text-muted);
+}
+
+.favoriteGroupCount {
+  margin-left: auto;
+  padding: 0 0.35rem;
+  border-radius: var(--radius-xs);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.recentWorkItemIcon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
 .recentWorkItem {
   display: flex;
   align-items: center;

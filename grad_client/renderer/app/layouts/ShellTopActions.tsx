@@ -14,8 +14,15 @@ export type ShellTopActionsHeading =
   | {
       type: 'breadcrumb'
       label: string
+      /** 중간 경로 (예: 업무가 속한 워크스페이스) */
+      parent?: {
+        label: string
+        to?: string
+      }
       title: string
-      subtitle: string
+      /** 제목 뒤에 붙는 보조 표기 (예: (수정)) */
+      titleSuffix?: string
+      subtitle?: string
     }
   | {
       type: 'page'
@@ -70,10 +77,27 @@ export function ShellTopActions({
         <div className={styles.shellHeading}>
           <p className={styles.shellBreadcrumb}>
             <span>{heading.label}</span>
+            {heading.parent ? (
+              <>
+                <Icon name="chevronRight" size={14} />
+                {heading.parent.to ? (
+                  <Link to={heading.parent.to} className={styles.shellBreadcrumbLink}>
+                    {heading.parent.label}
+                  </Link>
+                ) : (
+                  <span>{heading.parent.label}</span>
+                )}
+              </>
+            ) : null}
             <Icon name="chevronRight" size={14} />
-            <strong>{heading.title}</strong>
+            <strong>
+              {heading.title}
+              {heading.titleSuffix ? (
+                <span className={styles.shellBreadcrumbSuffix}>{heading.titleSuffix}</span>
+              ) : null}
+            </strong>
           </p>
-          <p className={styles.shellSubtitle}>{heading.subtitle}</p>
+          {heading.subtitle ? <p className={styles.shellSubtitle}>{heading.subtitle}</p> : null}
         </div>
       ) : heading.type === 'page' ? (
         <div className={styles.shellHeading}>

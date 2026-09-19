@@ -64,11 +64,17 @@ export function DashboardWorkSchedulePanel({
   const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
   const bodyRef = useRef<HTMLDivElement>(null)
   const dayRefs = useRef(new Map<string, HTMLElement | null>())
-  // 그날 걸쳐 있는 진행 중 업무는 접어 두고 필요할 때 펼쳐 본다.
-  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({})
+  // 그날 걸쳐 있는 진행 중 업무는 기본으로 접어 두되, 오늘 날짜만 펼쳐서 보여 준다.
+  // 사용자가 직접 접거나 펼친 상태는 날짜별로 기억한다.
+  const [toggledDays, setToggledDays] = useState<Record<string, boolean>>({})
 
-  const toggleOngoing = useCallback((dateKey: string) => {
-    setExpandedDays((previous) => ({ ...previous, [dateKey]: !previous[dateKey] }))
+  const isOngoingExpanded = useCallback(
+    (dateKey: string, isToday: boolean) => toggledDays[dateKey] ?? isToday,
+    [toggledDays],
+  )
+
+  const toggleOngoing = useCallback((dateKey: string, isToday: boolean) => {
+    setToggledDays((previous) => ({ ...previous, [dateKey]: !(previous[dateKey] ?? isToday) }))
   }, [])
 
   const scrollToDay = useCallback((dateKey: string) => {
@@ -135,6 +141,7 @@ export function DashboardWorkSchedulePanel({
             {board.days.map((day) => {
               const dueCount = day.events.filter((row) => row.accentTone === 'due').length
               const startCount = day.events.length - dueCount
+              const ongoingExpanded = isOngoingExpanded(day.key, day.isToday)
 
               return (
                 <section
@@ -182,11 +189,11 @@ export function DashboardWorkSchedulePanel({
                       <button
                         className={styles.subToggle}
                         type="button"
-                        aria-expanded={expandedDays[day.key] === true}
-                        onClick={() => toggleOngoing(day.key)}
+                        aria-expanded={ongoingExpanded}
+                        onClick={() => toggleOngoing(day.key, day.isToday)}
                       >
                         <Icon
-                          name={expandedDays[day.key] ? 'chevronDown' : 'chevronRight'}
+                          name={ongoingExpanded ? 'chevronDown' : 'chevronRight'}
                           size={15}
                           className={styles.subToggleIcon}
                         />
@@ -194,7 +201,7 @@ export function DashboardWorkSchedulePanel({
                         <span className={styles.subToggleCount}>{day.ongoing.length}건</span>
                       </button>
 
-                      {expandedDays[day.key] ? (
+                      {ongoingExpanded ? (
                         <ul className={styles.list}>
                           {day.ongoing.map((row) => (
                             <TaskRow

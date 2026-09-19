@@ -126,12 +126,13 @@ export function WorkspacePage() {
 
       // 알림의 소속 노드가 현재 보고 있는 노드와 일치할 때
       if (notifNodeId === currentNodeId) {
-        // 1. 일정 관련 알림 (일정 생성/수정/삭제/복구 또는 일정 양식 파일)인 경우:
+        // 1. 일정 관련 알림 (일정 생성/수정/삭제/복구 또는 일정 전용 파일)인 경우:
         //    일정 전용 캐시 갱신 브로드캐스트만 수행 (fetchNodeDetail 중복 호출 방지)
+        //    일정 파일은 노드 상세가 아닌 일정(정기 규칙) 조회로 목록을 구성하므로 반드시 이 경로로 갱신해야 한다.
         const isRecurringEvent =
-          payload.link_url?.includes('view=schedules') ||
-          payload.target_name?.includes('정기') ||
-          payload.target_name?.includes('recurring')
+          payload.entity_type === 'RECURRING_RULE' ||
+          payload.is_recurring_file === true ||
+          payload.link_url?.includes('view=schedules')
 
         if (isRecurringEvent) {
           notifyRecurringCacheUpdated(currentNodeId)

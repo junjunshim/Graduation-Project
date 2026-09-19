@@ -533,6 +533,8 @@ export function normalizeServerContext(
         id,
         commentId,
         workItemId,
+        actorName: toOptionalString(item.author_name),
+        actorUserId: toOptionalString(item.author_user_id),
         message: toStringValue(item.message),
         isRead: toBooleanValue(item.is_read, false),
         createdAt: toOptionalString(item.created_at) ?? timestamp,

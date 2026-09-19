@@ -6,6 +6,7 @@ import { DashboardSummaryCards } from '../components/DashboardSummaryCards'
 import { DashboardWorkSchedulePanel } from '../components/DashboardWorkSchedulePanel'
 import { RecurringRuleDetailModal } from '../../workspace/components/RecurringRuleDetailModal'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
+import { useKoreanHolidays } from '../../workspace/model/koreanHolidays'
 import { useDashboardContext } from '../data/useDashboardContext'
 import type { DashboardRecurringRule, DashboardWorkItem } from '../model/dashboardTypes'
 import {
@@ -42,6 +43,12 @@ export function DashboardPage() {
   const recurringRules = context?.recurringRules ?? EMPTY_RECURRING_RULES
 
   const today = useMemo(() => resolveTodayDate(viewerToday), [viewerToday])
+  // 공휴일 데이터가 늦게 도착해도 '다음 발생'이 공휴일 정책에 맞게 다시 계산되도록 구독한다.
+  const holidayRevision = useKoreanHolidays([
+    today.getFullYear() - 1,
+    today.getFullYear(),
+    today.getFullYear() + 1,
+  ])
   const todayKey = useMemo(() => toDateKey(today), [today])
   const activeDateKey = anchorDateKey ?? todayKey
   const activeDate = useMemo(() => parseDateKey(activeDateKey) ?? today, [activeDateKey, today])
@@ -85,7 +92,10 @@ export function DashboardPage() {
 
     return isDateKeySelectable(key, selectableRange) ? key : weekStartKey
   }, [todayKey, weekStartKey, weekEndKey, activeDateKey, selectableRange])
-  const schedules = useMemo(() => buildScheduleCards(recurringRules, today), [recurringRules, today])
+  const schedules = useMemo(() => {
+    void holidayRevision
+    return buildScheduleCards(recurringRules, today)
+  }, [recurringRules, today, holidayRevision])
   // '일정 보기'로 연 정기 일정 상세
   const orgMembers = useMemo(() => getOrgSnapshot().users, [])
   const openedScheduleRule = useMemo(

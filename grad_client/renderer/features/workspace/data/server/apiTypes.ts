@@ -94,6 +94,8 @@ export type ServerContextItem = {
   work_item_id?: string
   message?: string
   is_read?: boolean
+  author_user_id?: string
+  author_name?: string
 
   actor_user_id?: string
   actor_name?: string

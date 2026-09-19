@@ -641,6 +641,13 @@ export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
 
 export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
   return withServerOperationError(async () => {
+    // 담당자는 서버가 email 로 식별하므로 캐시에서 email 을 찾아 변환한다.
+    const ownerUserEmail =
+      payload.ownerUserId !== undefined
+        ? (readWorkspaceDb().users.find((user) => user.userId === payload.ownerUserId)?.email ??
+          payload.ownerUserId)
+        : undefined
+
     const response = await requestServerStatus('/workItems', {
       method: 'PATCH',
       body: {
@@ -658,6 +665,7 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
         ...(payload.parentWorkItemId !== undefined
           ? { parent_work_item_id: payload.parentWorkItemId }
           : {}),
+        ...(ownerUserEmail !== undefined ? { owner_user_email: ownerUserEmail } : {}),
       },
     })
 
@@ -1222,10 +1230,17 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
               entity_type: data.entity_type || (payload.sub_type === 'MENTION' ? 'COMMENT' : undefined),
               entity_id: data.entity_id || data.work_item_id,
               action: data.action,
-              actor_user_id: data.actor_user_id || data.mentioned_user_id,
-              actor_name: data.actor_name || data.mentioned_user_name,
+              actor_user_id: data.actor_user_id,
+              actor_name: data.actor_name,
               title: data.title || (payload.sub_type === 'MENTION' ? '멘션 알림' : '새로운 알림'),
-              content: data.content || data.message || '새로운 활동이 발생했습니다.',
+              content: data.content || data.message,
+              work_item_id: data.work_item_id,
+              sub_type: data.sub_type ?? payload.sub_type,
+              is_recurring_file: data.is_recurring_file === true,
+              target_name: data.target_name,
+              field_name: data.field_name ?? null,
+              old_value: data.old_value ?? null,
+              new_value: data.new_value ?? null,
               link_url: data.link_url || (data.work_item_id ? `/work-items/${data.work_item_id}` : undefined),
               is_read: Boolean(data.is_read),
               created_at: data.created_at || new Date().toISOString(),

@@ -3,10 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { getCascadeWorkItemSummary } from '../../workspace/data/cascadeWorkItemHelper'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
-import { claimWorkItem, updateWorkItem } from '../../workspace/data/workItemService'
-import { getWorkItemPermissions } from '../../workspace/model/workItemPermission'
+import { updateWorkItem } from '../../workspace/data/workItemService'
+import {
+  canAssignOthersWorkItem,
+  getWorkItemPermissions,
+} from '../../workspace/model/workItemPermission'
 import type { WorkItemRecord } from '../../workspace/model/types'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
+import { getServerAssignableUsers } from '../../workspace/queries/serverWorkItemCreateContract'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import { WorkItemEditSidebar } from '../components/WorkItemEditSidebar'
@@ -96,8 +100,24 @@ export function WorkItemEditPage() {
     ) ?? [item.workItemId],
   )
   const baseComposer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
+
+  // 담당자 후보는 서버(update_work_item)와 같은 기준으로 거른다.
+  // - 후보: 해당 노드에서 업무를 수행할 수 있는(WI_PERSONAL_CHANGE) 사용자 (+ 숨김 업무면 WI_HIDDEN_CHANGE)
+  // - 다른 사람에게 배정하려면 WI_ASSIGN 이 필요하므로, 없으면 본인만 후보로 남긴다.
+  const assignablePool = getServerAssignableUsers(item.ownerNodeId, snapshot, form.hidden)
+  const assignableCandidates = canAssignOthersWorkItem(item, currentUser.userId, snapshot)
+    ? assignablePool
+    : assignablePool.filter((user) => user.userId === currentUser.userId)
+  // 현재 담당자는 후보 조건을 만족하지 못하더라도 표시와 유지를 위해 항상 포함한다.
+  const currentOwnerUser = snapshot.users.find((user) => user.userId === item.ownerUserId)
+  const assignableUsers =
+    currentOwnerUser && !assignableCandidates.some((user) => user.userId === currentOwnerUser.userId)
+      ? [currentOwnerUser, ...assignableCandidates]
+      : assignableCandidates
+
   const composer = {
     ...baseComposer,
+    assignableUsers,
     availableParentItems: baseComposer.availableParentItems.filter(
       (parent) => !excludedParentIds.has(parent.workItemId),
     ),
@@ -148,15 +168,6 @@ export function WorkItemEditPage() {
     }
 
     try {
-      if (form.ownerUserId !== item.ownerUserId) {
-        const claimResponse = await claimWorkItem()
-
-        if (claimResponse.status === 'error') {
-          setFeedback({ tone: 'error', message: claimResponse.message })
-          return
-        }
-      }
-
       const response = await updateWorkItem(
         createWorkItemUpdatePayload(item.workItemId, initialForm, form),
       )

@@ -20,14 +20,6 @@ export async function updateWorkItem(payload: UpdateWorkItemRequest) {
   return updateWorkItemOnServer(payload)
 }
 
-/** 서버 API에는 아직 업무 소유권 변경 엔드포인트가 없다. */
-export async function claimWorkItem() {
-  return {
-    status: 'error' as const,
-    message: '서버 API에는 아직 업무 소유권 변경 엔드포인트가 없습니다.',
-  }
-}
-
 export async function deleteWorkItem(workItemId: string) {
   const { deleteWorkItemOnServer } = await import('./server/serverWorkspace')
   return deleteWorkItemOnServer(workItemId)

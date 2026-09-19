@@ -5,6 +5,7 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { useNotificationStore, type NotificationItem } from '../data/notificationStore'
 import { readWorkspaceDb } from '../../workspace/data/localStore'
 import { navigateNotification } from './navigateNotification'
+import { formatNotificationMessage } from '../model/notificationMessage'
 import styles from './NotificationPopover.module.css'
 
 type NotificationPopoverProps = {
@@ -150,7 +151,9 @@ export function NotificationPopover({ userId, buttonClassName }: NotificationPop
                           {formatRelativeTime(item.created_at)}
                         </span>
                       </div>
-                      <div className={styles.itemMessage}>{item.content}</div>
+                      <div className={styles.itemMessage}>
+                        {formatNotificationMessage(item, { workItems: db?.workItems })}
+                      </div>
                     </div>
                   )
                 })

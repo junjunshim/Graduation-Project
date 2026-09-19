@@ -5,6 +5,7 @@ import { getCategoryBadgeStyle, getRecurringCategoryLabel } from '../model/label
 import { canCreateRecurringRule, canManageRecurringRule } from '../model/recurringRulePermission'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
+import { useKoreanHolidays } from '../model/koreanHolidays'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
 import { fetchRecurringRules, fetchRecurringRuleDetail, restoreRecurringRule } from '../data/recurringRuleService'
 import { formatCycleText, getNextOccurrenceInfo } from '../model/recurringSchedule'
@@ -36,6 +37,9 @@ export function WorkspaceSchedulesTab({
   activeNodeId = 1,
   members = [],
 }: WorkspaceSchedulesTabProps) {
+  // 공휴일 데이터가 늦게 도착하면 '다음 발생'을 다시 계산하도록 구독한다.
+  const currentYear = new Date().getFullYear()
+  const holidayRevision = useKoreanHolidays([currentYear - 1, currentYear, currentYear + 1])
   const [loadedRecurringRules, setLoadedRecurringRules] = useState<RecurringRuleRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showDeletedSchedules, setShowDeletedSchedules] = useState(false)
@@ -148,6 +152,7 @@ export function WorkspaceSchedulesTab({
 
   // 각 일정에 nextOccurrence 정보 계산 및 남은 일수(dDay) 오름차순 정렬
   const enrichedAndSortedRules = useMemo(() => {
+    void holidayRevision
     return displayedRules
       .map((rule) => {
         const occ = getNextOccurrenceInfo(rule)
@@ -162,7 +167,7 @@ export function WorkspaceSchedulesTab({
         if (b.nextOccurrence.dDay === null) return -1
         return a.nextOccurrence.dDay - b.nextOccurrence.dDay
       })
-  }, [displayedRules])
+  }, [displayedRules, holidayRevision])
 
   // 일/주/월/년 단위로 섹션 그룹핑
   const rulesByFrequency = useMemo(() => {

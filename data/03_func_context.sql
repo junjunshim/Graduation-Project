@@ -215,6 +215,8 @@ BEGIN
         'id', m.mention_id,
         'comment_id', m.comment_id,
         'work_item_id', c.work_item_id,
+        'author_user_id', c.author_user_id,
+        'author_name', u_author.name,
         'message', u_author.name || '님이 댓글에서 회원님을 멘션했습니다.',
         'is_read', m.is_read,
         'created_at', m.created_at,

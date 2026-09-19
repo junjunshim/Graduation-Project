@@ -245,6 +245,10 @@ DECLARE
     v_old_status work_items.status%TYPE;
     v_old_progress work_items.progress%TYPE;
     v_old_parent_id work_items.parent_work_item_id%TYPE;
+    v_old_description work_items.description%TYPE;
+    v_old_priority work_items.priority%TYPE;
+    v_old_start_date work_items.start_date%TYPE;
+    v_old_due_date work_items.due_date%TYPE;
     v_effective_parent_id work_items.parent_work_item_id%TYPE;
     v_new_parent_node_id organization_nodes.node_id%TYPE;
     v_new_parent_hidden work_items.hidden%TYPE;
@@ -259,8 +263,10 @@ BEGIN
     END IF;
 
     -- 2. work_item 정보 한 번에 가져오기 (성능 최적화)
-    SELECT owner_node_id, owner_user_id, hidden, title, category, status, progress, parent_work_item_id
-    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_category, v_old_status, v_old_progress, v_old_parent_id
+    SELECT owner_node_id, owner_user_id, hidden, title, category, status, progress, parent_work_item_id,
+           description, priority, start_date, due_date
+    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_category, v_old_status, v_old_progress, v_old_parent_id,
+         v_old_description, v_old_priority, v_old_start_date, v_old_due_date
     FROM work_items 
     WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
 
@@ -416,7 +422,7 @@ BEGIN
         owner_user_id = CASE WHEN p_owner_changed THEN v_new_owner_user_id ELSE owner_user_id END
     WHERE work_item_id = p_work_item_id;
 
-    -- 7.5 활동 로그 적재 (제목, 카테고리, 상태, 진행률 변경 시 기록)
+    -- 7.5 활동 로그 적재 (변경된 필드마다 1건씩 기록)
     IF p_title <> '' AND p_title <> v_old_title THEN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, p_title, 'updated', 'title', v_old_title, p_title);
     END IF;
@@ -442,6 +448,58 @@ BEGIN
             'parent',
             COALESCE(v_old_parent_id, 'ROOT'),
             COALESCE(NULLIF(p_parent_work_item_id, ''), 'ROOT')
+        );
+    END IF;
+    IF p_description <> '' AND p_description <> COALESCE(v_old_description, '') THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'description',
+            NULL,
+            NULL
+        );
+    END IF;
+    IF p_priority BETWEEN 1 AND 5 AND p_priority <> COALESCE(v_old_priority, -1) THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'priority',
+            v_old_priority::VARCHAR,
+            p_priority::VARCHAR
+        );
+    END IF;
+    IF p_start_date <> '' AND NULLIF(p_start_date, '')::DATE IS DISTINCT FROM v_old_start_date THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'start_date',
+            COALESCE(v_old_start_date::VARCHAR, '없음'),
+            p_start_date
+        );
+    END IF;
+    IF p_due_date <> '' AND NULLIF(p_due_date, '')::DATE IS DISTINCT FROM v_old_due_date THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'due_date',
+            COALESCE(v_old_due_date::VARCHAR, '없음'),
+            p_due_date
         );
     END IF;
     IF p_owner_changed AND v_new_owner_user_id <> v_owner_user_id THEN
@@ -679,7 +737,8 @@ BEGIN
         'comment_id', m.comment_id,
         'mention_id', m.mention_id,
         'mentioned_user_id', m.mentioned_user_id,
-        'mentioned_user_name', u.name
+        'mentioned_user_name', u.name,
+        'created_at', to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
     )::jsonb AS out_data
     FROM comment_mentions m
     JOIN work_item_comments c ON m.comment_id = c.comment_id

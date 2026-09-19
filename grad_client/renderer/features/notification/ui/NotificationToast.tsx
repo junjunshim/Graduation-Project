@@ -8,6 +8,7 @@ import {
 } from '../../workspace/data/workspaceCacheEvents'
 import { navigateNotification } from './navigateNotification'
 import { subscribeToToasts } from '../data/toastEvents'
+import { formatNotificationMessage } from '../model/notificationMessage'
 import styles from './NotificationToast.module.css'
 
 type NotificationToastContainerProps = {
@@ -71,7 +72,7 @@ export function NotificationToastContainer({ userId }: NotificationToastContaine
           </div>
           <div className={styles.toastContent}>
             <div className={styles.toastTitle}>{toast.title}</div>
-            <div className={styles.toastMessage}>{toast.content}</div>
+            <div className={styles.toastMessage}>{formatNotificationMessage(toast)}</div>
           </div>
           <button
             type="button"

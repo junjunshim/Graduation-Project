@@ -169,13 +169,8 @@ static void processActivityNotification(const std::string &rawPayload)
     std::string actionType = root["action_type"].asString();
     std::string createdAt = root["created_at"].asString();
 
-    // 알림 제목 및 기본 내용 생성
+    // 알림 제목만 서버가 결정한다. 본문 문장은 클라이언트가 원시 값으로 생성한다.
     std::string title;
-    std::string actionKorean = "수정했습니다.";
-    if (actionType == "inserted") actionKorean = "생성했습니다.";
-    else if (actionType == "deleted") actionKorean = "삭제했습니다.";
-    else if (actionType == "restored") actionKorean = "복구했습니다.";
-
     if (entityType == "WORK_ITEM") title = "업무 알림";
     else if (entityType == "RECURRING_RULE") title = "일정 알림";
     else if (entityType == "NODE") title = "노드 알림";
@@ -217,7 +212,25 @@ static void processActivityNotification(const std::string &rawPayload)
     fullPayload["data"]["actor_user_id"] = actorUserId;
     fullPayload["data"]["actor_name"] = actorName;
     fullPayload["data"]["title"] = title;
-    fullPayload["data"]["content"] = actorName + "님이 '" + targetName + "'을(를) " + actionKorean;
+    fullPayload["data"]["target_name"] = targetName;
+
+    // 변경 상세는 가공하지 않고 원시 값 그대로 전달한다(문장은 클라이언트가 생성).
+    if (root.isMember("field_name") && !root["field_name"].isNull()) {
+        fullPayload["data"]["field_name"] = root["field_name"].asString();
+    } else {
+        fullPayload["data"]["field_name"] = Json::Value();
+    }
+    if (root.isMember("old_value") && !root["old_value"].isNull()) {
+        fullPayload["data"]["old_value"] = root["old_value"].asString();
+    } else {
+        fullPayload["data"]["old_value"] = Json::Value();
+    }
+    if (root.isMember("new_value") && !root["new_value"].isNull()) {
+        fullPayload["data"]["new_value"] = root["new_value"].asString();
+    } else {
+        fullPayload["data"]["new_value"] = Json::Value();
+    }
+
     fullPayload["data"]["link_url"] = linkUrl;
     fullPayload["data"]["is_read"] = false;
     fullPayload["data"]["created_at"] = createdAt;
@@ -225,9 +238,12 @@ static void processActivityNotification(const std::string &rawPayload)
 
     // 2. 업무 상세 조회 권한이 없는(마스킹된) 사용자용 페이로드 직렬화
     Json::Value maskedPayload = fullPayload;
-    if (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") {
-        std::string targetCode = !workItemId.empty() ? workItemId : entityId;
-        maskedPayload["data"]["content"] = actorName + "님이 업무[" + targetCode + "] 관련 활동을 " + actionKorean;
+    if ((entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !isRecurringFile) {
+        // 업무 상세를 볼 수 없는 사용자에게는 대상 이름과 변경 상세를 노출하지 않는다.
+        maskedPayload["data"]["target_name"] = "";
+        maskedPayload["data"]["field_name"] = Json::Value();
+        maskedPayload["data"]["old_value"] = Json::Value();
+        maskedPayload["data"]["new_value"] = Json::Value();
         maskedPayload["data"]["link_url"] = "/workspace?nodeId=" + std::to_string(nodeId) + "&view=timeline";
     }
     maskedPayload["data"]["can_view_detail"] = false;
@@ -241,7 +257,8 @@ static void processActivityNotification(const std::string &rawPayload)
     {
         std::string email = recipient["email"].asString();
         bool canView = recipient["can_view_work_items"].asBool();
-        bool isWorkRelated = (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE");
+        // 일정(정기 규칙) 파일은 업무 상세 권한과 무관하게 마스킹하지 않는다.
+        bool isWorkRelated = (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !isRecurringFile;
         if (canView || !isWorkRelated) {
             NotificationWebSocketController::sendNotificationToUser(email, fullMsg);
         } else {

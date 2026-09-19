@@ -79,13 +79,17 @@ export type LiveNotificationPayload = {
   entity_type?: string
   entity_id?: string
   work_item_id?: string
+  sub_type?: string
   is_recurring_file?: boolean
   action?: string
   actor_user_id?: string
   actor_name?: string
   target_name?: string
-  title: string
-  content: string
+  field_name?: string | null
+  old_value?: string | null
+  new_value?: string | null
+  title?: string
+  content?: string
   link_url?: string
   is_read?: boolean
   created_at: string

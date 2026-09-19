@@ -440,6 +440,20 @@ DECLARE
     v_current_assignee_id users.user_id%TYPE;
     v_target_assignee_id users.user_id%TYPE;
     v_old_title recurring_rules.title%TYPE;
+    v_old_rule recurring_rules%ROWTYPE;
+    v_new_rule recurring_rules%ROWTYPE;
+    v_old_assignee_name VARCHAR(100);
+    v_new_assignee_name VARCHAR(100);
+    v_old_checklist_text TEXT;
+    v_new_checklist_text TEXT;
+    v_old_freq_text TEXT;
+    v_new_freq_text TEXT;
+    v_old_time_text TEXT;
+    v_new_time_text TEXT;
+    v_old_period_text TEXT;
+    v_new_period_text TEXT;
+    v_old_holiday_text TEXT;
+    v_new_holiday_text TEXT;
     v_item JSONB;
     v_sort_order INTEGER := 0;
 BEGIN
@@ -451,8 +465,7 @@ BEGIN
     END IF;
 
     -- 2. 기존 규칙 정보 조회
-    SELECT owner_node_id, creator_user_id, assignee_user_id, title
-    INTO v_owner_node_id, v_creator_user_id, v_current_assignee_id, v_old_title
+    SELECT * INTO v_old_rule
     FROM recurring_rules
     WHERE rule_id = p_rule_id AND is_deleted = FALSE;
 
@@ -460,6 +473,18 @@ BEGIN
         RAISE EXCEPTION '[P0603]Recurring rule does not exist or is deleted: %', p_rule_id
         USING ERRCODE = 'P0603';
     END IF;
+
+    v_owner_node_id := v_old_rule.owner_node_id;
+    v_creator_user_id := v_old_rule.creator_user_id;
+    v_current_assignee_id := v_old_rule.assignee_user_id;
+    v_old_title := v_old_rule.title;
+
+    -- 변경 항목 로그 비교용: 이전 담당자 이름과 체크리스트 시그니처
+    SELECT name INTO v_old_assignee_name FROM users WHERE user_id = v_current_assignee_id;
+    SELECT string_agg(trim(content), chr(31) ORDER BY sort_order, checklist_id)
+    INTO v_old_checklist_text
+    FROM recurring_rule_checklists
+    WHERE rule_id = p_rule_id;
 
     -- 3. 권한 체크 (작성자/담당자이거나 노드의 WI_PERSONAL_CHANGE / WI_OTHERS_CHANGE 권한 보유)
     IF v_creator_user_id <> v_requester_id AND (v_current_assignee_id IS NULL OR v_current_assignee_id <> v_requester_id) THEN
@@ -513,6 +538,12 @@ BEGIN
 
     -- 6. 체크리스트 갱신 (배열이 전달된 경우 기존 항목 교체)
     IF p_checklists IS NOT NULL THEN
+        -- 변경 여부만 판별하기 위한 정규화 시그니처(값은 로그에 남기지 않는다)
+        SELECT string_agg(trim(elem->>'content'), chr(31) ORDER BY ord)
+        INTO v_new_checklist_text
+        FROM jsonb_array_elements(p_checklists) WITH ORDINALITY AS t(elem, ord)
+        WHERE trim(COALESCE(elem->>'content', '')) <> '';
+
         DELETE FROM recurring_rule_checklists WHERE rule_id = p_rule_id;
         IF jsonb_array_length(p_checklists) > 0 THEN
             FOR v_item IN SELECT * FROM jsonb_array_elements(p_checklists)
@@ -533,8 +564,74 @@ BEGIN
         END IF;
     END IF;
 
-    -- 7. 활동 로그 기록
-    PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, COALESCE(p_title, v_old_title), 'updated');
+    -- 7. 활동 로그 기록 (변경된 의미 그룹마다 1건)
+    SELECT * INTO v_new_rule FROM recurring_rules WHERE rule_id = p_rule_id;
+    SELECT name INTO v_new_assignee_name FROM users WHERE user_id = v_new_rule.assignee_user_id;
+
+    v_old_freq_text := COALESCE(v_old_rule.frequency, '') || '|' || COALESCE(v_old_rule.interval_value::VARCHAR, '')
+        || '|' || COALESCE(v_old_rule.by_day, '') || '|' || COALESCE(v_old_rule.by_month_day::VARCHAR, '')
+        || '|' || COALESCE(v_old_rule.by_set_pos::VARCHAR, '');
+    v_new_freq_text := COALESCE(v_new_rule.frequency, '') || '|' || COALESCE(v_new_rule.interval_value::VARCHAR, '')
+        || '|' || COALESCE(v_new_rule.by_day, '') || '|' || COALESCE(v_new_rule.by_month_day::VARCHAR, '')
+        || '|' || COALESCE(v_new_rule.by_set_pos::VARCHAR, '');
+
+    v_old_time_text := COALESCE(to_char(v_old_rule.start_time, 'HH24:MI'), '') || '|' || COALESCE(v_old_rule.duration_minutes::VARCHAR, '');
+    v_new_time_text := COALESCE(to_char(v_new_rule.start_time, 'HH24:MI'), '') || '|' || COALESCE(v_new_rule.duration_minutes::VARCHAR, '');
+
+    v_old_period_text := COALESCE(to_char(v_old_rule.repeat_start_date, 'YYYY-MM-DD'), '') || '|'
+        || COALESCE(to_char(v_old_rule.repeat_end_date, 'YYYY-MM-DD'), '') || '|' || COALESCE(v_old_rule.max_occurrences::VARCHAR, '');
+    v_new_period_text := COALESCE(to_char(v_new_rule.repeat_start_date, 'YYYY-MM-DD'), '') || '|'
+        || COALESCE(to_char(v_new_rule.repeat_end_date, 'YYYY-MM-DD'), '') || '|' || COALESCE(v_new_rule.max_occurrences::VARCHAR, '');
+
+    v_old_holiday_text := (CASE WHEN v_old_rule.exclude_holidays THEN 'TRUE' ELSE 'FALSE' END) || '|' || COALESCE(v_old_rule.holiday_action, '');
+    v_new_holiday_text := (CASE WHEN v_new_rule.exclude_holidays THEN 'TRUE' ELSE 'FALSE' END) || '|' || COALESCE(v_new_rule.holiday_action, '');
+
+    IF v_old_rule.assignee_user_id IS DISTINCT FROM v_new_rule.assignee_user_id THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'assignee', COALESCE(v_old_assignee_name, ''), COALESCE(v_new_assignee_name, ''));
+    END IF;
+    IF v_old_rule.title IS DISTINCT FROM v_new_rule.title THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'title', v_old_rule.title, v_new_rule.title);
+    END IF;
+    IF COALESCE(v_old_rule.description, '') IS DISTINCT FROM COALESCE(v_new_rule.description, '') THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'description', NULL, NULL);
+    END IF;
+    IF v_old_rule.category IS DISTINCT FROM v_new_rule.category THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'category', v_old_rule.category, v_new_rule.category);
+    END IF;
+    IF v_old_freq_text IS DISTINCT FROM v_new_freq_text THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'frequency', v_old_freq_text, v_new_freq_text);
+    END IF;
+    IF v_old_time_text IS DISTINCT FROM v_new_time_text THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'time', v_old_time_text, v_new_time_text);
+    END IF;
+    IF v_old_period_text IS DISTINCT FROM v_new_period_text THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'repeat_period', v_old_period_text, v_new_period_text);
+    END IF;
+    IF v_old_holiday_text IS DISTINCT FROM v_new_holiday_text THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'holiday_policy', v_old_holiday_text, v_new_holiday_text);
+    END IF;
+    IF v_old_rule.auto_create_task IS DISTINCT FROM v_new_rule.auto_create_task THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'auto_create', CASE WHEN v_old_rule.auto_create_task THEN 'TRUE' ELSE 'FALSE' END,
+            CASE WHEN v_new_rule.auto_create_task THEN 'TRUE' ELSE 'FALSE' END);
+    END IF;
+    IF v_old_rule.is_active IS DISTINCT FROM v_new_rule.is_active THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'is_active', CASE WHEN v_old_rule.is_active THEN 'TRUE' ELSE 'FALSE' END,
+            CASE WHEN v_new_rule.is_active THEN 'TRUE' ELSE 'FALSE' END);
+    END IF;
+    IF p_checklists IS NOT NULL AND COALESCE(v_old_checklist_text, '') IS DISTINCT FROM COALESCE(v_new_checklist_text, '') THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'RECURRING_RULE', p_rule_id::VARCHAR, v_new_rule.title,
+            'updated', 'checklist', NULL, NULL);
+    END IF;
 
     -- 8. 갱신된 단일 규칙 통합 반환
     RETURN QUERY

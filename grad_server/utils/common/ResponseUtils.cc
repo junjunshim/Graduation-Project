@@ -2,7 +2,7 @@
 #include "NotificationWebSocketController.h"
 
 // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
-bool app_utils::sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message) {
+bool app_utils::sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message, const Json::Value &extra) {
     if (result.empty()) return false;
 
     Json::Reader reader;
@@ -29,6 +29,13 @@ bool app_utils::sendNotificationFromDbResult(const drogon::orm::Result &result, 
         // API에서 커스텀 message를 전달한 경우 메시지 주입
         if (!message.empty()) {
             item["message"] = message;
+        }
+
+        // API가 추가로 넘긴 원시 필드(수행자 등)를 병합한다. 문장은 클라이언트가 만든다.
+        if (!extra.isNull() && extra.isObject()) {
+            for (const auto &key : extra.getMemberNames()) {
+                item[key] = extra[key];
+            }
         }
 
         std::string payloadStr = Json::writeString(writer, item);

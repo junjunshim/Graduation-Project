@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { WorkItemCreateFormState } from '../renderer/features/work-item/hooks/useWorkItemCreateForm.js'
-import { createWorkItemUpdatePayload } from '../renderer/features/work-item/model/workItemUpdatePayload.js'
+import {
+  createWorkItemUpdatePayload,
+  hasWorkItemChanges,
+} from '../renderer/features/work-item/model/workItemUpdatePayload.js'
 
 const compactInitialForm: WorkItemCreateFormState = {
   categoryId: '',
@@ -51,4 +54,22 @@ test('editing a compact server work item sends only fields the user actually cha
       dueDate: '2026-09-01',
     },
   )
+})
+
+test('changing the assignee sends ownerUserId so the server can reassign the work item', () => {
+  const ownerChanged = {
+    ...compactInitialForm,
+    ownerUserId: 'server-owner-2',
+  }
+
+  assert.deepEqual(
+    createWorkItemUpdatePayload('WI-10', compactInitialForm, ownerChanged),
+    {
+      workItemId: 'WI-10',
+      ownerUserId: 'server-owner-2',
+    },
+  )
+
+  assert.equal(hasWorkItemChanges('WI-10', compactInitialForm, ownerChanged), true)
+  assert.equal(hasWorkItemChanges('WI-10', compactInitialForm, compactInitialForm), false)
 })

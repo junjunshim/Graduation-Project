@@ -228,13 +228,17 @@ CREATE OR REPLACE FUNCTION update_work_item(
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL,
     p_parent_work_item_id work_items.parent_work_item_id%TYPE DEFAULT NULL,
-    p_parent_changed BOOLEAN DEFAULT FALSE
+    p_parent_changed BOOLEAN DEFAULT FALSE,
+    p_owner_user_email users.email%TYPE DEFAULT NULL,
+    p_owner_changed BOOLEAN DEFAULT FALSE
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id  users.user_id%TYPE;
     v_owner_node_id organization_nodes.node_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
     v_owner_user_email users.email%TYPE;
+    v_new_owner_user_id users.user_id%TYPE;
+    v_new_owner_user_email users.email%TYPE;
     v_current_hidden work_items.hidden%TYPE;
     v_old_title work_items.title%TYPE;
     v_old_category work_items.category%TYPE;
@@ -352,6 +356,42 @@ BEGIN
         END IF;
     END IF;
 
+    -- 6.5 담당자(owner) 변경 처리
+    IF p_owner_changed THEN
+        SELECT user_id INTO v_new_owner_user_id
+        FROM users
+        WHERE email = p_owner_user_email AND is_deleted = FALSE;
+
+        IF v_new_owner_user_id IS NULL THEN
+            RAISE EXCEPTION '[P0002]Owner user does not exist: %', COALESCE(p_owner_user_email, '')
+            USING ERRCODE = 'P0002';
+        END IF;
+
+        IF v_new_owner_user_id <> v_owner_user_id THEN
+            -- 다른 사람에게 배정하려면 WI_ASSIGN 권한이 필요하다 (생성과 동일 기준)
+            IF v_new_owner_user_id <> v_requester_id
+               AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_ASSIGN') THEN
+                RAISE EXCEPTION '[P0103]Requester does not have WI_ASSIGN permission on node: %, requester: %', v_owner_node_id, p_requester_email
+                USING ERRCODE = 'P0103';
+            END IF;
+
+            -- 새 담당자는 해당 노드에서 업무를 수행(WI_PERSONAL_CHANGE)할 수 있어야 한다
+            IF NOT check_authority_with_override(v_new_owner_user_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+                SELECT email INTO v_new_owner_user_email FROM users WHERE user_id = v_new_owner_user_id;
+                RAISE EXCEPTION '[P0103]Owner does not have WI_PERSONAL_CHANGE permission on node: %, requester: %', v_new_owner_user_email, p_requester_email
+                USING ERRCODE = 'P0103';
+            END IF;
+
+            -- 최종 숨김 상태의 업무는 숨김 속성 권한이 있는 담당자에게만 배정할 수 있다
+            IF COALESCE(p_hidden, v_current_hidden)
+               AND NOT check_authority_with_override(v_new_owner_user_id, v_owner_node_id, 'WI_HIDDEN_CHANGE') THEN
+                SELECT email INTO v_new_owner_user_email FROM users WHERE user_id = v_new_owner_user_id;
+                RAISE EXCEPTION '[P0103]Owner does not have WI_HIDDEN_CHANGE permission on node: %, requester: %', v_new_owner_user_email, p_requester_email
+                USING ERRCODE = 'P0103';
+            END IF;
+        END IF;
+    END IF;
+
     -- 7-1. work_item 업데이트
     UPDATE work_items
     SET
@@ -371,7 +411,9 @@ BEGIN
         start_date = COALESCE(NULLIF(p_start_date, '')::DATE, start_date),
         due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date),
         -- 부모 변경은 플래그로 명시된 경우에만 적용한다("" 은 최상위 업무를 의미)
-        parent_work_item_id = CASE WHEN p_parent_changed THEN v_effective_parent_id ELSE parent_work_item_id END
+        parent_work_item_id = CASE WHEN p_parent_changed THEN v_effective_parent_id ELSE parent_work_item_id END,
+        -- 담당자 변경은 플래그로 명시된 경우에만 적용한다
+        owner_user_id = CASE WHEN p_owner_changed THEN v_new_owner_user_id ELSE owner_user_id END
     WHERE work_item_id = p_work_item_id;
 
     -- 7.5 활동 로그 적재 (제목, 카테고리, 상태, 진행률 변경 시 기록)
@@ -379,15 +421,15 @@ BEGIN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, p_title, 'updated', 'title', v_old_title, p_title);
     END IF;
     IF p_category IS NOT NULL AND p_category <> COALESCE(v_old_category, '') THEN
-        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'category', v_old_category, p_category);
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'category', v_old_category, p_category);
     END IF;
     IF p_status <> '' AND p_status <> v_old_status THEN
-        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'status', v_old_status, p_status);
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'status', v_old_status, p_status);
     END IF;
     IF COALESCE(NULLIF(p_status, ''), v_old_status) = 'done' AND v_old_progress <> 100 THEN
-        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, '100');
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, '100');
     ELSIF p_progress >= 0 AND p_progress <> v_old_progress THEN
-        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, p_progress::VARCHAR);
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, p_progress::VARCHAR);
     END IF;
     IF p_parent_changed AND COALESCE(p_parent_work_item_id, '') <> COALESCE(v_old_parent_id, '') THEN
         PERFORM log_activity(
@@ -400,6 +442,19 @@ BEGIN
             'parent',
             COALESCE(v_old_parent_id, 'ROOT'),
             COALESCE(NULLIF(p_parent_work_item_id, ''), 'ROOT')
+        );
+    END IF;
+    IF p_owner_changed AND v_new_owner_user_id <> v_owner_user_id THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'owner',
+            (SELECT name FROM users WHERE user_id = v_owner_user_id),
+            (SELECT name FROM users WHERE user_id = v_new_owner_user_id)
         );
     END IF;
 

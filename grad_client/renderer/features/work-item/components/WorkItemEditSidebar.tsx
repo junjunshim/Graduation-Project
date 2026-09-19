@@ -66,7 +66,7 @@ export function WorkItemEditSidebar({ item, initialForm, form, composer }: WorkI
 
   const assignedUserName = composer.assignableUsers.find((user) => user.userId === form.ownerUserId)?.name
 
-  // 담당자 변경은 claimWorkItem, 나머지는 수정 페이로드에 포함되는 항목만 노출한다
+  // 수정 페이로드에 포함되는 항목만 노출한다(담당자 포함).
   const candidates: ChangeEntry[] = [
     {
       label: '업무 제목',

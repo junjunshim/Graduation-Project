@@ -7,6 +7,8 @@ const PERSONAL_CHANGE_BIT = 8
 const HIDDEN_CHANGE_BIT = 9
 /** WI_OTHERS_CHANGE (bit 11) — 다른 사용자 work-item 변경 및 삭제 */
 const OTHERS_CHANGE_BIT = 11
+/** WI_ASSIGN (bit 10) — 다른 사용자에게 work-item 배정 */
+const ASSIGN_BIT = 10
 
 type WorkItemAuthorityTarget = Pick<WorkItemRecord, 'ownerNodeId' | 'ownerUserId' | 'hidden'>
 
@@ -43,6 +45,24 @@ export function canEditWorkItem(
   }
 
   return true
+}
+
+/**
+ * 담당자를 다른 사용자로 변경(배정)할 수 있는지.
+ *
+ * DB 의 update_work_item 과 같은 기준이다. 다른 사람에게 배정하려면
+ * 해당 노드에 WI_ASSIGN(bit 10) 이 필요하고, 본인으로 지정할 때는 필요 없다.
+ */
+export function canAssignOthersWorkItem(
+  item: WorkItemAuthorityTarget,
+  userId: string | null | undefined,
+  snapshot: WorkspaceSnapshot,
+) {
+  if (!userId) {
+    return false
+  }
+
+  return getEffectiveAuthorityBitSet(userId, item.ownerNodeId, snapshot).has(ASSIGN_BIT)
 }
 
 /**

@@ -25,12 +25,16 @@ export function ShellSidebar({ userId, isCollapsed, onToggleCollapsed, onSignOut
             {navigationItems.map((item) => {
               const prefixes = item.activePathPrefixes ?? (item.activePathPrefix ? [item.activePathPrefix] : [])
               const hasPrefixMatching = prefixes.length > 0
+              const matchesActivePattern = Boolean(
+                item.activePathPatterns?.some((pattern) => pattern.test(location.pathname)),
+              )
               const isSectionActive = Boolean(
-                hasPrefixMatching &&
-                  prefixes.some(
-                    (prefix) =>
-                      location.pathname === prefix || location.pathname.startsWith(`${prefix}/`),
-                  ),
+                matchesActivePattern ||
+                  (hasPrefixMatching &&
+                    prefixes.some(
+                      (prefix) =>
+                        location.pathname === prefix || location.pathname.startsWith(`${prefix}/`),
+                    )),
               )
               const linkContent = (
                 <>

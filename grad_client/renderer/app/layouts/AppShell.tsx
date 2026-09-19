@@ -88,9 +88,10 @@ export function AppShell() {
     location.pathname === '/setup/sub-node'
   const isWorkItemEditRoute = WORK_ITEM_EDIT_PATH_PATTERN.test(location.pathname)
   const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname) || isWorkItemEditRoute
-  const workItemDetailMatch = location.pathname.match(/^\/work-items\/([^/]+)$/)
-  const workItemDetail = workItemDetailMatch
-    ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
+  // 상세(/work-items/:id)와 수정(/work-items/:id/edit) 모두 같은 업무를 가리킨다.
+  const workItemRouteMatch = location.pathname.match(/^\/work-items\/([^/]+)(\/edit)?\/?$/)
+  const workItemDetail = workItemRouteMatch
+    ? getSelectedWorkItemDetail(workItemRouteMatch[1], currentUser.userId, snapshot)
     : null
   const parentNodeParam = searchParams.get('parentNodeId')
   const parentNodeForHeading = parentNodeParam
@@ -134,9 +135,14 @@ export function AppShell() {
       : workItemDetail
         ? {
             type: 'breadcrumb',
-            label: '업무',
+            label: '워크스페이스',
+            parent: {
+              label: workItemDetail.ownerNode.name,
+              to: `/workspace?nodeId=${workItemDetail.ownerNode.id}`,
+            },
             title: workItemDetail.item.title,
-            subtitle: workItemDetail.ownerNode.name,
+            titleSuffix: isWorkItemEditRoute ? '(수정)' : undefined,
+            subtitle: workItemDetail.ownerNodePathLabel,
           }
       : hasSectionHeading
         ? {

@@ -371,17 +371,12 @@ export function WorkItemDetailPage() {
 
   return (
     <section className={styles.page}>
-      {/* 상단 액션 바: 뒤로가기 & 업무 수정 */}
+      {/* 상단 액션 바: 업무 목록 이동 & 업무 수정 */}
       <div className={styles.header}>
-        <button
-          type="button"
-          className={styles.backLink}
-          onClick={() => navigate(-1)}
-          aria-label="이전 페이지로 이동"
-        >
+        <Link to="/work-items" className={styles.backLink} aria-label="업무 목록으로 이동">
           <Icon name="chevronLeft" size={14} />
-          <span>뒤로가기</span>
-        </button>
+          <span>업무 목록으로</span>
+        </Link>
 
         <div className={styles.actions}>
           <WorkItemFavoriteButton workItemId={item.workItemId} />

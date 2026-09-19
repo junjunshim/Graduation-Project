@@ -44,6 +44,8 @@ export type CalendarDayCell = {
   isToday: boolean
   isSunday: boolean
   isSaturday: boolean
+  /** 법정 공휴일 명칭 (공휴일이 아니면 null) */
+  holiday: string | null
   /** 그날 시작하거나 마감하는 업무 */
   events: CalendarChip[]
   /** 그날 발생하는 정기 일정 (전부 표시) */

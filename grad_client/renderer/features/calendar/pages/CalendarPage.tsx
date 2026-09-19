@@ -7,6 +7,7 @@ import { readDateKey, resolveTodayDate, toDateKey } from '../../dashboard/model/
 import type { DashboardRecurringRule, DashboardWorkItem } from '../../dashboard/model/dashboardTypes'
 import { TaskFilterDropdown } from '../../workspace/components/TaskFilterDropdown'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
+import { useKoreanHolidays } from '../../workspace/model/koreanHolidays'
 import {
   getCategoryBadgeStyle,
   getRecurringCategoryLabel,
@@ -169,10 +170,19 @@ export function CalendarPage() {
     [recurringRules, activeWorkspaceId],
   )
 
-  const cells = useMemo(
-    () => buildMonthCells(visibleMonth, filteredWorkItems, filteredRules, today),
-    [visibleMonth, filteredWorkItems, filteredRules, today],
-  )
+  // 공휴일 데이터(연도별)를 미리 적재한다. 적재가 끝나면 달력이 다시 그려진다.
+  const holidayRevision = useKoreanHolidays([
+    visibleMonth.getFullYear() - 1,
+    visibleMonth.getFullYear(),
+    visibleMonth.getFullYear() + 1,
+  ])
+
+  const cells = useMemo(() => {
+    // holidayRevision은 값 자체를 쓰지 않고, 공휴일 데이터가 늦게 도착했을 때
+    // 달력을 다시 계산하게 만드는 의존성이다.
+    void holidayRevision
+    return buildMonthCells(visibleMonth, filteredWorkItems, filteredRules, today)
+  }, [visibleMonth, filteredWorkItems, filteredRules, today, holidayRevision])
 
   // 셸 헤더에 마련된 자리로 툴바를 옮겨, 달력이 세로 공간을 온전히 쓴다.
   useLayoutEffect(() => {
@@ -514,6 +524,7 @@ export function CalendarPage() {
                   data-today={cell.isToday}
                   data-sunday={cell.isSunday}
                   data-saturday={cell.isSaturday}
+                  data-holiday={cell.holiday != null}
                   data-range={
                     getCalendarRangeState(
                       cell.key,
@@ -523,6 +534,12 @@ export function CalendarPage() {
                   }
                 >
                   <span className={styles.dayNumber}>{cell.dayNumber}</span>
+
+                  {cell.holiday ? (
+                    <span className={styles.holidayName} title={cell.holiday}>
+                      {cell.holiday}
+                    </span>
+                  ) : null}
 
                   <div className={styles.cellBody}>
                     {cell.schedules.map((chip) => (

@@ -13,6 +13,7 @@ import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
 import { fetchRecurringRules } from '../data/recurringRuleService'
 import { subscribeToRecurringCache } from '../data/workspaceCacheEvents'
 import { getSchedulesForCalendarDate } from '../model/recurringCalendar'
+import { useKoreanHolidays } from '../model/koreanHolidays'
 import styles from './WorkspaceOverviewTab.module.css'
 
 const FREQUENCY_LABELS: Record<RecurringRuleRecord['frequency'], string> = {
@@ -72,6 +73,9 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   const userName = (id: string) => resolveUserName(id) || '미지정'
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
   const dayDifference = (date: string) => Math.round((Date.parse(date.slice(0, 10)) - Date.parse(today)) / 86400000)
+  // 일정 패널도 공휴일 정책을 반영하므로, 공휴일 데이터가 늦게 도착하면 이번 주 일정을 다시 계산한다.
+  const scheduleYear = Number(today.slice(0, 4))
+  useKoreanHolidays([scheduleYear - 1, scheduleYear, scheduleYear + 1])
   const tasks = overview.visibleWorkItems.filter((item) => !item.isDeleted)
   const pending = tasks.filter((item) => item.status !== 'done').sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || a.title.localeCompare(b.title, 'ko'))
   const overdue = pending.filter((item) => item.dueDate && dayDifference(item.dueDate) < 0).length

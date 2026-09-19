@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { ensureHolidayYears, getHolidayNames } from '../renderer/features/workspace/model/koreanHolidays.js'
 import { getSchedulesForCalendarDate, occursOnCalendarDate } from '../renderer/features/workspace/model/recurringCalendar.js'
+import { getNextOccurrenceInfo } from '../renderer/features/workspace/model/recurringSchedule.js'
 import type { RecurringRuleRecord } from '../renderer/features/workspace/model/recurringRuleTypes.js'
 import { optionalRecurringNumber } from '../renderer/features/workspace/model/recurringRuleValues.js'
 
@@ -46,6 +48,51 @@ test('monthly and yearly expansion respects month lengths and intervals', () => 
   const yearly = { ...daily, frequency: 'YEARLY' as const, intervalValue: 2 }
   assert.equal(occursOnCalendarDate(yearly, '2027-09-15'), false)
   assert.equal(occursOnCalendarDate(yearly, '2028-09-15'), true)
+})
+
+test('holiday policy skips, postpones, or advances occurrences (2026 추석)', async () => {
+  await ensureHolidayYears([2026])
+  assert.deepEqual(getHolidayNames('2026-09-25'), ['추석'])
+
+  const skipped = { ...daily, excludeHolidays: true, holidayAction: 'SKIP' as const }
+  assert.equal(occursOnCalendarDate(skipped, '2026-09-24'), false)
+  assert.equal(occursOnCalendarDate(skipped, '2026-09-26'), false)
+  assert.equal(occursOnCalendarDate(skipped, '2026-09-27'), true)
+
+  const postponed = { ...daily, excludeHolidays: true, holidayAction: 'NEXT_WORKDAY' as const }
+  assert.equal(occursOnCalendarDate(postponed, '2026-09-24'), false)
+  assert.equal(occursOnCalendarDate(postponed, '2026-09-25'), false)
+  assert.equal(occursOnCalendarDate(postponed, '2026-09-28'), true)
+
+  const advanced = { ...daily, excludeHolidays: true, holidayAction: 'PREV_WORKDAY' as const }
+  assert.equal(occursOnCalendarDate(advanced, '2026-09-24'), false)
+  assert.equal(occursOnCalendarDate(advanced, '2026-09-23'), true)
+
+  assert.equal(occursOnCalendarDate({ ...daily, excludeHolidays: false }, '2026-09-24'), true)
+})
+
+test('next occurrence follows the rule holiday policy', async () => {
+  await ensureHolidayYears([2026])
+  const thursday = {
+    ...daily, frequency: 'WEEKLY' as const, byDay: 'TH',
+    repeatStartDate: '2026-09-03', repeatEndDate: '2026-12-31',
+    excludeHolidays: true, holidayAction: 'SKIP' as const,
+  }
+  const beforeChuseok = new Date(2026, 8, 23, 10, 0)
+  assert.equal(getNextOccurrenceInfo(thursday, beforeChuseok).dateString, '2026.10.01 09:00')
+  assert.equal(
+    getNextOccurrenceInfo({ ...thursday, holidayAction: 'NEXT_WORKDAY' as const }, beforeChuseok).dateString,
+    '2026.09.28 09:00',
+  )
+  assert.equal(
+    getNextOccurrenceInfo({ ...thursday, holidayAction: 'PREV_WORKDAY' as const }, new Date(2026, 8, 23, 8, 0)).dateString,
+    '2026.09.23 09:00',
+  )
+  assert.equal(
+    getNextOccurrenceInfo({ ...thursday, excludeHolidays: false }, beforeChuseok).dateString,
+    '2026.09.24 09:00',
+  )
+  assert.equal(getNextOccurrenceInfo({ ...thursday, repeatEndDate: '2026-09-01' }, beforeChuseok).dateString, '종료됨')
 })
 
 test('inactive and deleted schedules are excluded; cards sort by time', () => {

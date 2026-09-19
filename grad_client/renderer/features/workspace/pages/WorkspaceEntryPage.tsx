@@ -1152,6 +1152,21 @@ export function WorkspaceEntryPage() {
   const [collapsingIds, setCollapsingIds] = useState<Set<string>>(new Set())
   const [expandingIds, setExpandingIds] = useState<Set<string>>(new Set())
 
+  // 개별 노드 접기 애니메이션(160ms) 타이머.
+  // 전체 펼치기/하위 전체 펼치기를 실행할 때 예약된 접기를 취소하기 위해 id별로 보관한다.
+  const collapseTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  // 예약된 접기 타이머를 취소한다(취소하지 않으면 애니메이션 종료 시점에 노드가 다시 접힌다).
+  function cancelPendingCollapse(ids: Iterable<string>) {
+    for (const id of ids) {
+      const timer = collapseTimersRef.current.get(id)
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        collapseTimersRef.current.delete(id)
+      }
+    }
+  }
+
   // 루트 워크스페이스 변경 시 새 루트의 모든 하위 브랜치 노드들도 기본 접힘 처리
   useEffect(() => {
     if (hierarchyBranches.length > 0) {
@@ -1178,8 +1193,10 @@ export function WorkspaceEntryPage() {
       }, 350)
     } else {
       // 접기: 먼저 collapsingIds에 추가하여 페이드아웃 애니메이션을 실행하고 160ms 후 collapsedIds에 추가
+      cancelPendingCollapse([id])
       setCollapsingIds((prev) => new Set(prev).add(id))
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        collapseTimersRef.current.delete(id)
         setCollapsedIds((prev) => new Set(prev).add(id))
         setCollapsingIds((prev) => {
           const next = new Set(prev)
@@ -1187,8 +1204,50 @@ export function WorkspaceEntryPage() {
           return next
         })
       }, 160)
+      collapseTimersRef.current.set(id, timer)
     }
   }
+
+  // 도구 모음의 "전체 펼치기/접기": 하위 워크스페이스를 한 번에 펼치거나 접는다.
+  function toggleExpandAllSubWorkspaces() {
+    cancelPendingCollapse(collapseTimersRef.current.keys())
+    setCollapsingIds(new Set())
+    setExpandingIds(new Set())
+
+    if (collapsedIds.size === 0) {
+      // 모두 펼쳐진 상태이므로 전체 접기 (기본 상태와 동일하게 루트는 펼친 채로 둔다)
+      setCollapsedIds(collectAllCollapsibleIds(hierarchyBranches))
+      return
+    }
+
+    setCollapsedIds(new Set())
+  }
+
+  // 우클릭 메뉴의 "하위 워크스페이스 모두 펼치기": 해당 노드와 그 아래 트리 전체를 펼친다.
+  function expandSubWorkspacesOf(item: WorkspaceDirectoryItem) {
+    const descendantCollapsibleIds = collectAllCollapsibleIds(item.children ?? [])
+    cancelPendingCollapse([item.id, ...descendantCollapsibleIds])
+
+    setCollapsingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(item.id)
+      for (const id of descendantCollapsibleIds) {
+        next.delete(id)
+      }
+      return next
+    })
+
+    setCollapsedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(item.id)
+      for (const id of descendantCollapsibleIds) {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const isHierarchyFullyExpanded = collapsedIds.size === 0
 
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -1222,7 +1281,7 @@ export function WorkspaceEntryPage() {
 
     // 권한이 있는 경우 컨텍스트 메뉴 표시 (화면 벗어남 방지)
     const menuWidth = 220
-    const menuHeight = 150
+    const menuHeight = 230
     const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
     const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
 
@@ -1285,6 +1344,8 @@ export function WorkspaceEntryPage() {
         view={view}
         onChange={handleViewChange}
         onOpenChooser={() => openChooser()}
+        isAllExpanded={isHierarchyFullyExpanded}
+        onToggleExpandAll={toggleExpandAllSubWorkspaces}
       />
 
       {view === 'hierarchy' && hierarchyRoot ? (
@@ -1362,6 +1423,22 @@ export function WorkspaceEntryPage() {
             >
               <Icon name={collapsedIds.has(contextMenu.item.id) ? 'chevronDown' : 'chevronUp'} size={15} />
               <span>{collapsedIds.has(contextMenu.item.id) ? '하위 노드 펼치기' : '하위 노드 숨기기'}</span>
+            </button>
+          ) : null}
+
+          {/* 하위 트리 전체 펼치기 */}
+          {contextMenu.item.children && contextMenu.item.children.length > 0 ? (
+            <button
+              type="button"
+              className={styles.contextMenuItem}
+              onClick={() => {
+                const item = contextMenu.item
+                setContextMenu(null)
+                expandSubWorkspacesOf(item)
+              }}
+            >
+              <Icon name="maximize2" size={15} />
+              <span>하위 워크스페이스 모두 펼치기</span>
             </button>
           ) : null}
 

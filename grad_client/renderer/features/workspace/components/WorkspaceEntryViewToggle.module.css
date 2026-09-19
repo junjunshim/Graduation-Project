@@ -7,6 +7,13 @@
   min-width: 0;
 }
 
+.viewGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
 .viewSegmentGroup {
   display: inline-flex;
   align-items: center;
@@ -58,6 +65,16 @@
   gap: 0.65rem;
 }
 
+.expandAllButton {
+  --axis-button-height: 2.62rem;
+  --axis-button-padding: 0 1rem;
+  --axis-button-radius: var(--axis-radius-surface, 8px);
+  gap: 0.45rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .chooserButton {
   --axis-button-height: 2.62rem;
   --axis-button-padding: 0 1rem;
@@ -90,13 +107,18 @@
     gap: 0.75rem;
   }
 
-  .viewSegmentGroup,
+  .viewGroup,
   .actionGroup {
     width: 100%;
     justify-content: stretch;
   }
 
+  .viewGroup {
+    flex-wrap: wrap;
+  }
+
   .viewSegmentButton,
+  .expandAllButton,
   .chooserButton,
   .createButton {
     flex: 1 1 auto;

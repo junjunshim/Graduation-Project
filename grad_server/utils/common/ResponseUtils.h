@@ -67,6 +67,8 @@ enum class DbErrorCode {
     RestoreWorkItemFailed,      // P0617 업무 복구 실패
     WorkItemIsDeletedForFile,   // P0618 소속 업무가 삭제되어 파일 복구 불가
     RestoreWorkItemFileFailed,  // P0619 파일 복구 실패
+    InvalidParentHierarchy,     // P0620 부모 업무를 자기 자신/하위 업무로 지정
+    ParentNodeOutOfScope,       // P0621 부모 업무가 현재 노드/직속 상위 노드 범위 밖
     LogActivityFailed,          // P0703 활동 로그 기록 실패
     Unknown                     // 알 수 없는 에러
 };

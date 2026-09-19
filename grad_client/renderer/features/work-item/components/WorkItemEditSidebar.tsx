@@ -53,6 +53,17 @@ export function WorkItemEditSidebar({ item, initialForm, form, composer }: WorkI
     return hidden ? '🔒 숨김 업무' : '🌐 일반 공개'
   }
 
+  function getParentLabel(parentWorkItemId: string) {
+    if (!parentWorkItemId) {
+      return '최상위 업무'
+    }
+
+    return (
+      composer.availableParentItems.find((parent) => parent.workItemId === parentWorkItemId)?.title ??
+      '알 수 없는 업무'
+    )
+  }
+
   const assignedUserName = composer.assignableUsers.find((user) => user.userId === form.ownerUserId)?.name
 
   // 담당자 변경은 claimWorkItem, 나머지는 수정 페이로드에 포함되는 항목만 노출한다
@@ -68,6 +79,12 @@ export function WorkItemEditSidebar({ item, initialForm, form, composer }: WorkI
       changed: form.description !== initialForm.description,
       before: summarizeText(initialForm.description, '내용 없음'),
       after: summarizeText(form.description, '내용 없음'),
+    },
+    {
+      label: '상위 업무',
+      changed: form.parentWorkItemId !== initialForm.parentWorkItemId,
+      before: getParentLabel(initialForm.parentWorkItemId),
+      after: getParentLabel(form.parentWorkItemId),
     },
     {
       label: '담당자',
@@ -197,6 +214,7 @@ export function WorkItemEditSidebar({ item, initialForm, form, composer }: WorkI
           <li>수정한 항목만 전송되며, 변경하지 않은 값은 그대로 유지됩니다.</li>
           <li>담당자를 다른 사람으로 변경하면 해당 담당자에게 업무가 배정됩니다.</li>
           <li>시작일보다 빠른 마감일은 저장할 수 없고, 마감일이 지난 업무는 지연으로 표시됩니다.</li>
+          <li>소속 조직은 만든 뒤 변경할 수 없고, 상위 업무는 현재 노드 또는 직속 상위 노드의 업무로만 옮길 수 있습니다.</li>
         </ul>
       </section>
     </div>

@@ -127,6 +127,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0617") != std::string::npos) return DbErrorCode::RestoreWorkItemFailed;
     else if (errMsg.find("P0618") != std::string::npos) return DbErrorCode::WorkItemIsDeletedForFile;
     else if (errMsg.find("P0619") != std::string::npos) return DbErrorCode::RestoreWorkItemFileFailed;
+    else if (errMsg.find("P0620") != std::string::npos) return DbErrorCode::InvalidParentHierarchy;
+    else if (errMsg.find("P0621") != std::string::npos) return DbErrorCode::ParentNodeOutOfScope;
     else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
     else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
     else if (errMsg.find("P0703") != std::string::npos) return DbErrorCode::LogActivityFailed;
@@ -448,6 +450,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::FetchActivitiesFailed:{
             ret["message"] = "활동 조회에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::InvalidParentHierarchy:{
+            ret["message"] = "부모 업무를 자기 자신이나 하위 업무로 지정할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::ParentNodeOutOfScope:{
+            ret["message"] = "상위 업무는 현재 노드 또는 직속 상위 노드의 업무만 선택할 수 있습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
             break;
         }
         case DbErrorCode::LogActivityFailed:{

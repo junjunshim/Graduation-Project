@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
+import { getCascadeWorkItemSummary } from '../../workspace/data/cascadeWorkItemHelper'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { claimWorkItem, updateWorkItem } from '../../workspace/data/workItemService'
 import { getWorkItemPermissions } from '../../workspace/model/workItemPermission'
@@ -88,7 +89,19 @@ export function WorkItemEditPage() {
     )
   }
 
-  const composer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
+  // 자기 자신과 하위 업무는 상위 업무 후보에서 제외한다(순환 방지).
+  const excludedParentIds = new Set(
+    getCascadeWorkItemSummary(item.workItemId, snapshot.workItems)?.allWorkItems.map(
+      (workItem) => workItem.workItemId,
+    ) ?? [item.workItemId],
+  )
+  const baseComposer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
+  const composer = {
+    ...baseComposer,
+    availableParentItems: baseComposer.availableParentItems.filter(
+      (parent) => !excludedParentIds.has(parent.workItemId),
+    ),
+  }
   const hasChanges = hasWorkItemChanges(item.workItemId, initialForm, form)
 
   function setField<Key extends keyof WorkItemCreateFormState>(
@@ -186,6 +199,7 @@ export function WorkItemEditPage() {
             onSubmit={handleSubmit}
             onCancel={() => navigate(`/work-items/${item.workItemId}`)}
             onFieldChange={setField}
+            nodeLocked
             submitLabel="저장"
             submittingLabel="저장 중..."
             submitDisabled={!hasChanges}

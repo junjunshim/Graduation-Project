@@ -185,6 +185,8 @@ static void processActivityNotification(const std::string &rawPayload)
     else title = "활동 알림";
 
     std::string workItemId = root.isMember("work_item_id") && !root["work_item_id"].isNull() ? root["work_item_id"].asString() : "";
+    // 일정(정기 규칙) 전용 파일 활동 여부: 수신 클라이언트가 일정 데이터를 다시 조회하도록 알려주는 구분자
+    bool isRecurringFile = root.isMember("is_recurring_file") && root["is_recurring_file"].asBool();
 
     std::string linkUrl;
     if (entityType == "RECURRING_RULE") {
@@ -211,6 +213,7 @@ static void processActivityNotification(const std::string &rawPayload)
         fullPayload["data"]["work_item_id"] = workItemId;
     }
     fullPayload["data"]["action"] = actionType;
+    fullPayload["data"]["is_recurring_file"] = isRecurringFile;
     fullPayload["data"]["actor_user_id"] = actorUserId;
     fullPayload["data"]["actor_name"] = actorName;
     fullPayload["data"]["title"] = title;

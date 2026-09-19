@@ -1,5 +1,6 @@
 import { addDays, parseDateKey, readDateKey, toDateKey } from '../../dashboard/model/dashboardSummary'
 import type { DashboardRecurringRule, DashboardWorkItem } from '../../dashboard/model/dashboardTypes'
+import { getHolidayLabel } from '../../workspace/model/koreanHolidays'
 import { getSchedulesForCalendarDate } from '../../workspace/model/recurringCalendar'
 import type { RecurringCategory } from '../../workspace/model/recurringRuleTypes'
 import type { CalendarChip, CalendarChipTone, CalendarDayCell, CalendarOngoingItem } from './calendarTypes'
@@ -231,6 +232,7 @@ export function buildMonthCells(
       isToday: key === todayKey,
       isSunday: date.getDay() === 0,
       isSaturday: date.getDay() === 6,
+      holiday: getHolidayLabel(key),
       events,
       schedules,
       ongoing,

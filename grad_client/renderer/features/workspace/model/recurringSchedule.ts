@@ -1,3 +1,5 @@
+import { ensureHolidayYears } from './koreanHolidays.js'
+import { occursOnCalendarDate } from './recurringCalendar.js'
 import type { RecurringRuleRecord } from './recurringRuleTypes'
 
 const WEEKLY_DAY_LABELS: Record<string, string> = {
@@ -8,16 +10,6 @@ const WEEKLY_DAY_LABELS: Record<string, string> = {
   FR: '금',
   SA: '토',
   SU: '일',
-}
-
-const WEEKLY_DAY_INDEXES: Record<string, number> = {
-  SU: 0,
-  MO: 1,
-  TU: 2,
-  WE: 3,
-  TH: 4,
-  FR: 5,
-  SA: 6,
 }
 
 const MONTHLY_POSITION_LABELS = ['첫째', '둘째', '셋째', '넷째', '다섯째']
@@ -37,24 +29,6 @@ function parseDayList(value?: string | null) {
     .split(',')
     .map((day) => day.trim().toUpperCase())
     .filter(Boolean)
-}
-
-function resolveMonthlyDayOfMonth(rule: RecurringRuleRecord, year: number, monthIndex: number) {
-  const lastDayOfMonth = new Date(year, monthIndex + 1, 0).getDate()
-
-  if (rule.bySetPos && rule.byDay) {
-    const weekdayIndexes = parseDayList(rule.byDay)
-      .map((day) => WEEKLY_DAY_INDEXES[day])
-      .filter((index) => index !== undefined)
-    const matchingDays = Array.from({ length: lastDayOfMonth }, (_, index) => index + 1).filter((day) =>
-      weekdayIndexes.includes(new Date(year, monthIndex, day).getDay()),
-    )
-    const positionIndex = rule.bySetPos > 0 ? rule.bySetPos - 1 : matchingDays.length + rule.bySetPos
-
-    return matchingDays[positionIndex] ?? null
-  }
-
-  return Math.min(rule.byMonthDay || 1, lastDayOfMonth)
 }
 
 /** 시간을 제외한 반복 주기 문구 (예: '매주 화요일', '매월 셋째 금요일') */
@@ -96,8 +70,46 @@ export function formatCycleText(rule: RecurringRuleRecord): string {
   return `${formatRepeatSummary(rule)}${time ? ` (${time})` : ''}`
 }
 
+/** 공휴일 순연/조정으로 표시일이 밀릴 수 있는 최대 일수 */
+const MAX_HOLIDAY_SHIFT_DAYS = 10
+
 /**
- * 오늘을 기준으로 다음 발생 일시(Next Occurrence) 및 D-Day 계산
+ * 규칙 한 주기 안에서 다음 회차가 나올 수 있는 넉넉한 탐색 범위(일).
+ * 공휴일 조정(±10일)과 시작일이 미래인 경우까지 고려한다.
+ */
+function resolveScanHorizonDays(rule: RecurringRuleRecord) {
+  const interval = Math.max(1, Math.trunc(rule.intervalValue) || 1)
+
+  switch (rule.frequency) {
+    case 'DAILY':
+      return interval + MAX_HOLIDAY_SHIFT_DAYS
+    case 'WEEKLY':
+      return interval * 7 + 7 + MAX_HOLIDAY_SHIFT_DAYS
+    case 'MONTHLY':
+      return interval * 31 + 31 + MAX_HOLIDAY_SHIFT_DAYS
+    case 'YEARLY':
+      return interval * 366 + 366 + MAX_HOLIDAY_SHIFT_DAYS
+    default:
+      return 366 + MAX_HOLIDAY_SHIFT_DAYS
+  }
+}
+
+function parseLocalDate(value?: string | null) {
+  const parts = value ? value.split('-').map(Number) : []
+  if (parts.length !== 3 || !parts.every((part) => Number.isFinite(part))) return null
+
+  return new Date(parts[0], parts[1] - 1, parts[2])
+}
+
+function toLocalDateKey(date: Date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+/**
+ * 오늘을 기준으로 다음 발생 일시(Next Occurrence) 및 D-Day 계산.
+ *
+ * 달력(occursOnCalendarDate)과 동일하게 규칙의 공휴일 정책(제외/다음 영업일/이전 영업일)을
+ * 적용한 '실제 표시일'을 기준으로 찾는다.
  */
 export function getNextOccurrenceInfo(
   rule: RecurringRuleRecord,
@@ -108,136 +120,43 @@ export function getNextOccurrenceInfo(
   dateString: string
 } {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const [hour, minute] = rule.startTime ? rule.startTime.split(':').map(Number) : [9, 0]
 
-  const [sYear, sMonth, sDay] = rule.repeatStartDate.split('-').map(Number)
-  const startDate = new Date(sYear, sMonth - 1, sDay)
+  const startDate = parseLocalDate(rule.repeatStartDate)
+  const endDate = parseLocalDate(rule.repeatEndDate)
 
-  const endDate = rule.repeatEndDate
-    ? new Date(
-        Number(rule.repeatEndDate.split('-')[0]),
-        Number(rule.repeatEndDate.split('-')[1]) - 1,
-        Number(rule.repeatEndDate.split('-')[2]),
-        23,
-        59,
-        59,
-      )
-    : null
+  const daysUntilStart = startDate
+    ? Math.max(0, Math.round((startDate.getTime() - today.getTime()) / DAY_MS))
+    : 0
+  const horizonDays = daysUntilStart + resolveScanHorizonDays(rule)
 
-  // 이미 만료된 경우
+  // 공휴일 데이터는 비동기로 적재되므로, 탐색 범위에 걸치는 연도를 미리 요청해 둔다.
+  // (시작일이 아주 먼 미래여도 초기 렌더가 느려지지 않도록 최대 4년까지만 요청한다)
+  const horizonYear = new Date(today.getFullYear(), today.getMonth(), today.getDate() + horizonDays).getFullYear()
+  const lastPrefetchYear = Math.min(horizonYear, today.getFullYear() + 3)
+  const prefetchYears: number[] = []
+  for (let year = today.getFullYear(); year <= lastPrefetchYear; year += 1) {
+    prefetchYears.push(year)
+  }
+  void ensureHolidayYears(prefetchYears)
+
+  for (let offset = 0; offset <= horizonDays; offset += 1) {
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + offset)
+
+    // 종료일 이후로도 공휴일 순연만큼은 표시될 수 있다.
+    if (endDate && date.getTime() > endDate.getTime() + MAX_HOLIDAY_SHIFT_DAYS * DAY_MS) break
+    if (!occursOnCalendarDate(rule, toLocalDateKey(date))) continue
+
+    const candidate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute, 0, 0)
+    if (candidate < now) continue
+
+    const dDay = Math.round((date.getTime() - today.getTime()) / DAY_MS)
+    return { nextDate: candidate, dDay, dateString: formatTimestamp(candidate, hour, minute) }
+  }
+
   if (endDate && today > endDate) {
     return { nextDate: null, dDay: null, dateString: '종료됨' }
   }
 
-  const [hour, minute] = rule.startTime ? rule.startTime.split(':').map(Number) : [9, 0]
-
-  // 1. 일간(DAILY)
-  if (rule.frequency === 'DAILY') {
-    const step = Math.max(1, rule.intervalValue)
-    let candidate = new Date(startDate)
-    candidate.setHours(hour, minute, 0, 0)
-
-    if (candidate < now) {
-      const diffDays = Math.ceil((today.getTime() - startDate.getTime()) / DAY_MS)
-      const cycles = Math.max(0, Math.ceil(diffDays / step))
-      candidate = new Date(startDate.getTime() + cycles * step * DAY_MS)
-      candidate.setHours(hour, minute, 0, 0)
-      if (candidate < now) {
-        candidate = new Date(candidate.getTime() + step * DAY_MS)
-      }
-    }
-
-    if (endDate && candidate > endDate) {
-      return { nextDate: null, dDay: null, dateString: '종료됨' }
-    }
-
-    const candidateDay = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate())
-    const dDay = Math.round((candidateDay.getTime() - today.getTime()) / DAY_MS)
-    return { nextDate: candidate, dDay, dateString: formatTimestamp(candidate, hour, minute) }
-  }
-
-  // 2. 주간(WEEKLY)
-  if (rule.frequency === 'WEEKLY') {
-    const targetDays = rule.byDay
-      ? parseDayList(rule.byDay).map((day) => WEEKLY_DAY_INDEXES[day]).filter((index) => index !== undefined)
-      : [1] // 기본 월요일
-
-    let candidateDate: Date | null = null
-    // 향후 180일 탐색
-    for (let i = 0; i <= 180; i++) {
-      const test = new Date(today.getTime() + i * DAY_MS)
-      if (test < startDate) continue
-      if (endDate && test > endDate) break
-
-      if (targetDays.includes(test.getDay())) {
-        test.setHours(hour, minute, 0, 0)
-        if (test >= now) {
-          candidateDate = test
-          break
-        }
-      }
-    }
-
-    if (!candidateDate) {
-      return { nextDate: null, dDay: null, dateString: '예정 없음' }
-    }
-
-    const candidateDay = new Date(candidateDate.getFullYear(), candidateDate.getMonth(), candidateDate.getDate())
-    const dDay = Math.round((candidateDay.getTime() - today.getTime()) / DAY_MS)
-    return { nextDate: candidateDate, dDay, dateString: formatTimestamp(candidateDate, hour, minute) }
-  }
-
-  // 3. 월간(MONTHLY)
-  if (rule.frequency === 'MONTHLY') {
-    let candidateDate: Date | null = null
-
-    for (let m = 0; m < 24; m++) {
-      const testMonth = new Date(now.getFullYear(), now.getMonth() + m, 1)
-      const day = resolveMonthlyDayOfMonth(rule, testMonth.getFullYear(), testMonth.getMonth())
-      if (day === null) continue
-      const test = new Date(testMonth.getFullYear(), testMonth.getMonth(), day, hour, minute, 0, 0)
-
-      if (test < startDate) continue
-      if (endDate && test > endDate) break
-
-      if (test >= now) {
-        candidateDate = test
-        break
-      }
-    }
-
-    if (!candidateDate) {
-      return { nextDate: null, dDay: null, dateString: '예정 없음' }
-    }
-
-    const candidateDay = new Date(candidateDate.getFullYear(), candidateDate.getMonth(), candidateDate.getDate())
-    const dDay = Math.round((candidateDay.getTime() - today.getTime()) / DAY_MS)
-    return { nextDate: candidateDate, dDay, dateString: formatTimestamp(candidateDate, hour, minute) }
-  }
-
-  // 4. 연간(YEARLY)
-  if (rule.frequency === 'YEARLY') {
-    let candidateDate: Date | null = null
-    for (let y = 0; y < 5; y++) {
-      const testYear = now.getFullYear() + y
-      const test = new Date(testYear, startDate.getMonth(), startDate.getDate(), hour, minute, 0, 0)
-
-      if (test < startDate) continue
-      if (endDate && test > endDate) break
-
-      if (test >= now) {
-        candidateDate = test
-        break
-      }
-    }
-
-    if (!candidateDate) {
-      return { nextDate: null, dDay: null, dateString: '예정 없음' }
-    }
-
-    const candidateDay = new Date(candidateDate.getFullYear(), candidateDate.getMonth(), candidateDate.getDate())
-    const dDay = Math.round((candidateDay.getTime() - today.getTime()) / DAY_MS)
-    return { nextDate: candidateDate, dDay, dateString: formatTimestamp(candidateDate, hour, minute) }
-  }
-
-  return { nextDate: null, dDay: null, dateString: '-' }
+  return { nextDate: null, dDay: null, dateString: '예정 없음' }
 }

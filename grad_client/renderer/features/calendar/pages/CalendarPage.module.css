@@ -189,6 +189,22 @@
   color: var(--axis-status-info);
 }
 
+.cell[data-outside='false'][data-holiday='true'] .dayNumber {
+  color: var(--axis-status-danger);
+}
+
+.holidayName {
+  display: block;
+  padding: 0 0.3rem 0.1rem;
+  color: var(--axis-status-danger);
+  font-size: 0.62rem;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .cell[data-today='true'] .dayNumber {
   background: var(--axis-brand-primary);
   color: var(--axis-text-on-brand);

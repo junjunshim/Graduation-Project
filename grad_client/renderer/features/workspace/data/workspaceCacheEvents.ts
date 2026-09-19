@@ -78,6 +78,8 @@ export type LiveNotificationPayload = {
   node_id?: number
   entity_type?: string
   entity_id?: string
+  work_item_id?: string
+  is_recurring_file?: boolean
   action?: string
   actor_user_id?: string
   actor_name?: string

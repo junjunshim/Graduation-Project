@@ -1370,6 +1370,7 @@ export function WorkspaceEntryPage() {
     canCreateSub: boolean
     canDelete: boolean
     canRestore: boolean
+    restoreBlockedByParent: boolean
     isItemDeleted: boolean
   } | null>(null)
 
@@ -1407,7 +1408,13 @@ export function WorkspaceEntryPage() {
       Number.isFinite(parsedNodeId) && currentUser && !isItemDeleted
         ? canChangeNodeInfo(currentUser.userId, parsedNodeId, snapshot)
         : false
-    const canRestore = targetNode ? isRestorableFromTrash(targetNode, snapshot.nodes) : false
+    const restoreBlockedByParent = targetNode ? !isRestorableFromTrash(targetNode, snapshot.nodes) : false
+    // 서버 restore_node 가 요구하는 NODE_INFO_CHANGE(Bit 12) 와 동일한 기준으로 막는다.
+    const canRestoreByAuthority =
+      targetNode && Number.isFinite(parsedNodeId) && currentUser
+        ? canChangeNodeInfo(currentUser.userId, parsedNodeId, snapshot)
+        : false
+    const canRestore = Boolean(targetNode) && !restoreBlockedByParent && canRestoreByAuthority
 
     // 권한이 있는 경우 컨텍스트 메뉴 표시 (화면 벗어남 방지)
     const menuWidth = 220
@@ -1422,6 +1429,7 @@ export function WorkspaceEntryPage() {
       canCreateSub,
       canDelete,
       canRestore,
+      restoreBlockedByParent,
       isItemDeleted,
     })
   }
@@ -1588,13 +1596,19 @@ export function WorkspaceEntryPage() {
               title={
                 contextMenu.canRestore
                   ? '이 워크스페이스를 하위 워크스페이스·업무와 함께 복구합니다.'
-                  : '상위 워크스페이스를 먼저 복구해 주세요.'
+                  : contextMenu.restoreBlockedByParent
+                    ? '상위 워크스페이스를 먼저 복구해 주세요.'
+                    : '워크스페이스를 복구할 권한이 없습니다.'
               }
               onClick={() => {
                 const item = contextMenu.item
                 setContextMenu(null)
                 if (!contextMenu.canRestore) {
-                  showToast('상위 워크스페이스를 먼저 복구해 주세요.')
+                  showToast(
+                    contextMenu.restoreBlockedByParent
+                      ? '상위 워크스페이스를 먼저 복구해 주세요.'
+                      : '워크스페이스를 복구할 권한이 없습니다.',
+                  )
                   return
                 }
                 void restoreFromTrash(item)

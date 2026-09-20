@@ -128,6 +128,7 @@ function createDocumentedContextResponse() {
         type: 'ROLE',
         id: 20,
         node_id: 4,
+        role_id: 2,
         email: 'user@example.com',
         role: 'ADMIN',
         updated_at: timestamp,
@@ -220,7 +221,15 @@ test('server login stores both tokens before loading and preserving the document
       })
     }
 
-    assert.equal(calls.length, 2)
+    if (calls.length === 2) {
+      assert.match(String(input), /\/users\?target_email=user%40example\.com$/)
+      assert.equal(init?.method, 'GET')
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer access-token')
+
+      return jsonResponse({ status: 'success', data: [] })
+    }
+
+    assert.equal(calls.length, 3)
     assert.match(path, /\/context\/init$/)
     assert.equal(init?.method, 'GET')
     assert.equal(getServerAccessToken(), 'access-token')
@@ -239,7 +248,7 @@ test('server login stores both tokens before loading and preserving the document
     })
 
     assert.equal(response.status, 'success')
-    assert.equal(calls.length, 2)
+    assert.equal(calls.length, 3)
 
     const workspace = readWorkspaceDb()
     assert.equal(workspace.nodes.length, 1)
@@ -252,22 +261,20 @@ test('server login stores both tokens before loading and preserving the document
     assert.equal(workspace.workItems[0]?.status, 'in-progress')
     assert.equal(workspace.workItems[0]?.progress, 40)
 
-    const snapshot = getServerContextSnapshot()
-    assert.ok(snapshot)
-    assert.equal(snapshot.serverTime, '2026-03-19 12:29:24.745634+00')
-    assert.equal(snapshot.authorities.length, 1)
-    assert.equal(snapshot.authorities[0]?.nodeId, 4)
-    assert.equal(snapshot.authorities[0]?.authority, '011111111111111111111111')
-    assert.equal(snapshot.mentions.length, 1)
-    assert.equal(snapshot.mentions[0]?.workItemId, 'WI-1101')
-    assert.equal(snapshot.mentions[0]?.isRead, false)
-    assert.equal(snapshot.activities.length, 1)
-    assert.equal(snapshot.activities[0]?.actionType, 'updated')
-    assert.equal(snapshot.activities[0]?.newValue, 'in_progress')
-    assert.equal(snapshot.files.length, 1)
-    assert.equal(snapshot.files[0]?.originalFileName, 'architecture_diagram.png')
-    assert.equal(snapshot.files[0]?.fileSize, 2_048_576)
-    assert.equal(snapshot.files[0]?.mimeType, 'image/png')
+    // 권한/멘션/활동/파일 같은 부가 컨텍스트는 워크스페이스 캐시에 그대로 보존된다.
+    assert.equal(workspace.authorities?.length, 1)
+    assert.equal(workspace.authorities?.[0]?.nodeId, 4)
+    assert.equal(workspace.authorities?.[0]?.authority, '011111111111111111111111')
+    assert.equal(workspace.mentions?.length, 1)
+    assert.equal(workspace.mentions?.[0]?.workItemId, 'WI-1101')
+    assert.equal(workspace.mentions?.[0]?.isRead, false)
+    assert.equal(workspace.activities?.length, 1)
+    assert.equal(workspace.activities?.[0]?.actionType, 'updated')
+    assert.equal(workspace.activities?.[0]?.newValue, 'in_progress')
+    assert.equal(workspace.files?.length, 1)
+    assert.equal(workspace.files?.[0]?.originalFileName, 'architecture_diagram.png')
+    assert.equal(workspace.files?.[0]?.fileSize, 2_048_576)
+    assert.equal(workspace.files?.[0]?.mimeType, 'image/png')
   } finally {
     globalThis.fetch = originalFetch
     restoreWindow()
@@ -291,7 +298,12 @@ test('server login rolls back tokens and all context caches when initial context
       })
     }
 
-    assert.equal(requestCount, 2)
+    if (requestCount === 2) {
+      assert.match(String(input), /\/users\?target_email=/)
+      return jsonResponse({ status: 'success', data: [] })
+    }
+
+    assert.equal(requestCount, 3)
     assert.match(getRequestPath(input), /\/context\/init$/)
     assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer access-token')
     assert.equal(getServerRefreshToken(), 'refresh-token')
@@ -310,7 +322,7 @@ test('server login rolls back tokens and all context caches when initial context
     })
 
     assert.equal(response.status, 'error')
-    assert.equal(requestCount, 2)
+    assert.equal(requestCount, 3)
     assertEmptyServerState()
   } finally {
     globalThis.fetch = originalFetch

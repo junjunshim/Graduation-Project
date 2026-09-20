@@ -34,14 +34,23 @@ test('checked-in compact context response is normalized without inventing the cu
         type: 'ROLE',
         id: '5',
         parent_id: '10',
+        role_id: '5',
         title: 'viewer@example.com',
         status: 'VIEWER',
         updated_at: '2026-08-29 01:00:00+00',
       },
       {
+        type: 'AUTHORITY',
+        id: '5',
+        node_id: '10',
+        role: 'VIEWER',
+        authority: '001100010000000000110011',
+        updated_at: '2026-08-29 01:00:00+00',
+      },
+      {
         type: 'WORK_ITEM',
         id: 'WI-PARENT',
-        parent_id: '10',
+        owner_node_id: '10',
         title: '상위 업무',
         status: 'doing',
         priority: 1,
@@ -50,11 +59,11 @@ test('checked-in compact context response is normalized without inventing the cu
       {
         type: 'WORK_ITEM',
         id: 'WI-CHILD',
-        parent_id: '10',
+        owner_node_id: '10',
         title: '하위 업무',
         status: 'end',
         priority: 5,
-        extra_info: 'WI-PARENT',
+        parent_work_item_id: 'WI-PARENT',
         updated_at: '2026-08-29 03:00:00+00',
       },
     ],
@@ -138,6 +147,7 @@ test('documented authority and mention metadata do not block workspace normaliza
         type: 'ROLE',
         id: 9,
         node_id: 30,
+        role_id: 2,
         email: 'admin@example.com',
         role: 'ADMIN',
         updated_at: '2026-08-30T01:01:00Z',
@@ -183,7 +193,7 @@ test('malformed context envelopes are rejected instead of being treated as empty
   assert.throws(() => parseServerContextItems([null]), /1번째 항목 형식이 올바르지 않습니다/)
 })
 
-test('context records with missing required references report normalization issues', () => {
+test('context records that reference out-of-scope nodes are dropped without blocking normalization', () => {
   const result = normalizeServerContext(
     [
       {
@@ -198,19 +208,19 @@ test('context records with missing required references report normalization issu
   )
 
   assert.equal(result.workspace.roles.length, 0)
-  assert.match(result.issues[0]?.message ?? '', /참조하는 노드/)
+  assert.equal(result.issues.length, 0)
 })
 
 test('missing, unsupported, and incomplete context item types report normalization issues', () => {
   const result = normalizeServerContext(
-    [{}, { type: 'BROKEN' }, { type: 'USER' }],
+    [{}, { type: 'BROKEN' }, { type: 'NODE' }],
     'signed-in@example.com',
   )
 
   assert.equal(result.issues.length, 3)
   assert.match(result.issues[0]?.message ?? '', /type이 없어/)
   assert.match(result.issues[1]?.message ?? '', /지원하지 않는/)
-  assert.match(result.issues[2]?.message ?? '', /사용자 ID 또는 이메일/)
+  assert.match(result.issues[2]?.message ?? '', /노드 ID/)
 })
 
 test('partial sync records can reference cached nodes and preserve omitted work item details', () => {
@@ -279,11 +289,11 @@ test('partial sync records can reference cached nodes and preserve omitted work 
       {
         type: 'WORK_ITEM',
         id: 'WI-CHILD',
-        parent_id: 10,
+        owner_node_id: 10,
         title: 'After Sync',
         status: 'done',
         priority: 2,
-        extra_info: 'WI-PARENT',
+        parent_work_item_id: 'WI-PARENT',
         updated_at: '2026-08-29T00:00:00Z',
       },
     ],

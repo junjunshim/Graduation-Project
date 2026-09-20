@@ -33,8 +33,8 @@ BEGIN
         USING ERRCODE = 'P0002';
     END IF;
 
-    -- 3. 요청자 권한 체크 (NODE_ADD_ROLE 권한 필요)
-    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
+    -- 3. 요청자 권한 체크 (해당 노드에 직접 부여된 NODE_ADD_ROLE 권한 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
         RAISE EXCEPTION '[P0103]Requester does not have authority to add role on this node : %', p_requester_email
         USING ERRCODE = 'P0103';
     END IF;
@@ -140,9 +140,9 @@ BEGIN
         USING ERRCODE = 'P0002';
     END IF;
 
-    -- 3. 요청자 권한 체크 (NODE_ADD_ROLE 권한 필요)
-    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have authority to add role on this node : %', p_requester_email
+    -- 3. 요청자 권한 체크 (해당 노드에 직접 부여된 NODE_ADD_ROLE 권한 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have authority to update role on this node : %', p_requester_email
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -238,8 +238,8 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 요청자 권한 체크 (ROLE_CHANGE: bit 15 필요)
-    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
+    -- 2. 요청자 권한 체크 (해당 노드에 직접 부여된 ROLE_CHANGE: bit 15 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
         RAISE EXCEPTION '[P0103]Requester does not have ROLE_CHANGE authority on node : %', p_node_id
         USING ERRCODE = 'P0103';
     END IF;
@@ -326,8 +326,8 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 요청자 권한 체크 (ROLE_CHANGE: bit 15 필요)
-    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
+    -- 2. 요청자 권한 체크 (해당 노드에 직접 부여된 ROLE_CHANGE: bit 15 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
         RAISE EXCEPTION '[P0103]Requester does not have ROLE_CHANGE authority on node : %', p_node_id
         USING ERRCODE = 'P0103';
     END IF;
@@ -409,8 +409,8 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 요청자 권한 체크 (ROLE_CHANGE: bit 15 필요)
-    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
+    -- 2. 요청자 권한 체크 (해당 노드에 직접 부여된 ROLE_CHANGE: bit 15 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
         RAISE EXCEPTION '[P0103]Requester does not have ROLE_CHANGE authority on node : %', p_node_id
         USING ERRCODE = 'P0103';
     END IF;
@@ -474,5 +474,383 @@ BEGIN
         WHEN OTHERS THEN
             RAISE EXCEPTION '[P0414]Failed to rename role : % to %, (REASON: %)', p_old_role_name, p_new_role_name, SQLERRM
             USING ERRCODE = 'P0414';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================================================
+-- 역할 회수(제거) 지원
+-- ============================================================================
+
+-- RoleController::get_role_removal_preview (역할 회수 사전 확인)
+-- 회수 대상 사용자의 직속 역할, 이관해야 할 업무 목록, 이관 가능한 대상 목록을 반환한다.
+CREATE OR REPLACE FUNCTION get_role_removal_preview(
+    p_requester_email users.email%TYPE,
+    p_target_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_target_id users.user_id%TYPE;
+    v_target_name users.name%TYPE;
+    v_target_role role_authorities.role%TYPE;
+    v_target_role_id role_authorities.authority_id%TYPE;
+    v_is_top_role BOOLEAN;
+    v_subtree_ids INTEGER[];
+    v_path organization_nodes.path%TYPE;
+    v_work_items JSONB;
+    v_transfer_targets JSONB;
+    v_work_item_count INTEGER;
+    v_can_remove BOOLEAN;
+    v_blocked_reason TEXT;
+BEGIN
+    -- 1. 요청자 / 대상 사용자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT user_id, name INTO v_target_id, v_target_name FROM users WHERE email = p_target_email AND is_deleted = FALSE;
+    IF v_target_id IS NULL THEN
+        RAISE EXCEPTION '[P0002]Target user does not exist : %', p_target_email
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 2. 노드 확인
+    SELECT path INTO v_path FROM organization_nodes WHERE node_id = p_node_id AND is_deleted = FALSE;
+    IF v_path IS NULL THEN
+        RAISE EXCEPTION '[P0002]Owner node does not exist or is deleted : %', p_node_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 요청자 권한 체크 (해당 노드에 직접 부여된 NODE_ADD_ROLE 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have direct authority to remove role on this node : %', p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 대상이 해당 노드에 직속 역할을 보유해야 한다 (상속 멤버는 회수 대상이 아니다)
+    SELECT a.role, a.authority_id, a.is_top_role
+    INTO v_target_role, v_target_role_id, v_is_top_role
+    FROM role_assignments r
+    JOIN role_authorities a ON a.authority_id = r.role_id
+    WHERE r.user_id = v_target_id AND r.node_id = p_node_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0403]Target user does not have a direct role on this node : %', p_target_email
+        USING ERRCODE = 'P0403';
+    END IF;
+
+    -- 5. 이 노드의 하위 트리
+    SELECT array_agg(node_id) INTO v_subtree_ids
+    FROM organization_nodes
+    WHERE p_node_id = ANY(path) AND is_deleted = FALSE;
+
+    -- 6. 이관 대상 업무 (완료 업무는 그대로 두고, 미완료 업무만 이관한다)
+    SELECT
+        COALESCE(jsonb_agg(
+            jsonb_build_object(
+                'work_item_id', src.work_item_id,
+                'title', CASE
+                    WHEN src.hidden AND NOT check_authority_with_override(v_requester_id, src.owner_node_id, 'WI_HIDDEN_VIEW')
+                        THEN '숨김 업무'
+                    ELSE src.title
+                END,
+                'owner_node_id', src.owner_node_id,
+                'owner_node_name', src.owner_node_name,
+                'hidden', src.hidden,
+                'status', src.status
+            )
+            ORDER BY src.due_date NULLS LAST, src.work_item_id
+        ), '[]'::jsonb),
+        COUNT(*)
+    INTO v_work_items, v_work_item_count
+    FROM (
+        SELECT w.work_item_id, w.title, w.owner_node_id, w.hidden, w.status, w.due_date,
+               n.name AS owner_node_name
+        FROM work_items w
+        LEFT JOIN organization_nodes n ON n.node_id = w.owner_node_id
+        WHERE w.owner_user_id = v_target_id
+          AND w.is_deleted = FALSE
+          AND w.status <> 'done'
+          AND w.owner_node_id = ANY(v_subtree_ids)
+          AND get_authority_source_node(v_target_id, w.owner_node_id) = p_node_id
+    ) src;
+
+    -- 7. 이관 가능한 대상: 이 노드 스코프의 구성원 중, 이관 대상 업무 전부를 수행할 자격이 있는 사용자
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'user_id', c.user_id,
+        'name', c.name,
+        'email', c.email
+    ) ORDER BY c.name), '[]'::jsonb)
+    INTO v_transfer_targets
+    FROM (
+        SELECT DISTINCT u.user_id, u.name, u.email
+        FROM users u
+        WHERE u.is_deleted = FALSE
+          AND u.user_id <> v_target_id
+          AND EXISTS (
+              SELECT 1 FROM role_assignments ra
+              WHERE ra.user_id = u.user_id AND ra.node_id = ANY(v_path)
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM work_items w2
+              WHERE w2.owner_user_id = v_target_id
+                AND w2.is_deleted = FALSE
+                AND w2.status <> 'done'
+                AND w2.owner_node_id = ANY(v_subtree_ids)
+                AND get_authority_source_node(v_target_id, w2.owner_node_id) = p_node_id
+                AND (
+                    NOT check_authority_with_override(u.user_id, w2.owner_node_id, 'WI_PERSONAL_CHANGE')
+                    OR (w2.hidden AND NOT check_authority_with_override(u.user_id, w2.owner_node_id, 'WI_HIDDEN_CHANGE'))
+                )
+          )
+    ) c;
+
+    -- 8. 회수 가능 여부
+    v_can_remove := TRUE;
+    v_blocked_reason := NULL;
+
+    IF v_is_top_role THEN
+        v_can_remove := FALSE;
+        v_blocked_reason := '최상위 담당자(ADMIN) 역할은 회수할 수 없습니다.';
+    ELSIF v_target_id = v_requester_id THEN
+        v_can_remove := FALSE;
+        v_blocked_reason := '본인의 역할은 회수할 수 없습니다.';
+    ELSIF v_work_item_count > 0 AND jsonb_array_length(v_transfer_targets) = 0 THEN
+        v_can_remove := FALSE;
+        v_blocked_reason := '이관해야 할 업무가 있지만 이관 가능한 대상이 없습니다. 먼저 이관 대상에게 업무 수행 권한을 부여해 주세요.';
+    END IF;
+
+    RETURN QUERY SELECT jsonb_build_object(
+        'type', 'ROLE_REMOVAL_PREVIEW',
+        'can_remove', v_can_remove,
+        'blocked_reason', v_blocked_reason,
+        'node_id', p_node_id,
+        'target_user_id', v_target_id,
+        'target_user_name', v_target_name,
+        'target_user_email', p_target_email,
+        'role_id', v_target_role_id,
+        'role', v_target_role,
+        'is_top_role', COALESCE(v_is_top_role, FALSE),
+        'work_items', v_work_items,
+        'transfer_targets', v_transfer_targets
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0102' OR SQLSTATE 'P0103' OR SQLSTATE 'P0403' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0418]Failed to load role removal preview : %, (REASON: %)', p_target_email, SQLERRM
+            USING ERRCODE = 'P0418';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- RoleController::remove_role (사용자 역할 회수)
+-- 완료 업무는 그대로 두고, 미완료 업무는 지정한 담당자에게 이관한 뒤 역할 할당을 삭제한다.
+-- 이관 대상이 하나라도 자격 미달이면 전체를 롤백한다.
+CREATE OR REPLACE FUNCTION remove_role(
+    p_requester_email users.email%TYPE,
+    p_target_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_new_owner_email users.email%TYPE DEFAULT NULL
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_target_id users.user_id%TYPE;
+    v_target_name users.name%TYPE;
+    v_target_role role_authorities.role%TYPE;
+    v_assignment_id role_assignments.assignment_id%TYPE;
+    v_is_top_role BOOLEAN;
+    v_new_owner_id users.user_id%TYPE;
+    v_new_owner_name users.name%TYPE;
+    v_path organization_nodes.path%TYPE;
+    v_subtree_ids INTEGER[];
+    v_item RECORD;
+    v_block_item_id work_items.work_item_id%TYPE;
+    v_block_node_id work_items.owner_node_id%TYPE;
+    v_work_item_count INTEGER := 0;
+    v_schedule_count INTEGER := 0;
+BEGIN
+    -- 1. 요청자 / 대상 사용자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    SELECT user_id, name INTO v_target_id, v_target_name FROM users WHERE email = p_target_email AND is_deleted = FALSE;
+    IF v_target_id IS NULL THEN
+        RAISE EXCEPTION '[P0002]Target user does not exist : %', p_target_email
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 2. 노드 확인
+    SELECT path INTO v_path FROM organization_nodes WHERE node_id = p_node_id AND is_deleted = FALSE;
+    IF v_path IS NULL THEN
+        RAISE EXCEPTION '[P0002]Owner node does not exist or is deleted : %', p_node_id
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3. 요청자 권한 체크 (해당 노드에 직접 부여된 NODE_ADD_ROLE 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'NODE_ADD_ROLE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have direct authority to remove role on this node : %', p_requester_email
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 대상의 직속 역할 조회
+    SELECT r.assignment_id, a.role, a.is_top_role
+    INTO v_assignment_id, v_target_role, v_is_top_role
+    FROM role_assignments r
+    JOIN role_authorities a ON a.authority_id = r.role_id
+    WHERE r.user_id = v_target_id AND r.node_id = p_node_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0403]Target user does not have a direct role on this node : %', p_target_email
+        USING ERRCODE = 'P0403';
+    END IF;
+
+    -- 5. 최상위 담당자와 본인은 회수할 수 없다
+    IF v_is_top_role THEN
+        RAISE EXCEPTION '[P0404]Cannot remove the top role of a node : %', p_target_email
+        USING ERRCODE = 'P0404';
+    END IF;
+
+    IF v_target_id = v_requester_id THEN
+        RAISE EXCEPTION '[P0415]Requester cannot remove their own role : %', p_requester_email
+        USING ERRCODE = 'P0415';
+    END IF;
+
+    -- 6. 이 노드의 하위 트리
+    SELECT array_agg(node_id) INTO v_subtree_ids
+    FROM organization_nodes
+    WHERE p_node_id = ANY(path) AND is_deleted = FALSE;
+
+    -- 7. 이관 대상 업무 수 확인
+    SELECT COUNT(*) INTO v_work_item_count
+    FROM work_items w
+    WHERE w.owner_user_id = v_target_id
+      AND w.is_deleted = FALSE
+      AND w.status <> 'done'
+      AND w.owner_node_id = ANY(v_subtree_ids)
+      AND get_authority_source_node(v_target_id, w.owner_node_id) = p_node_id;
+
+    IF v_work_item_count > 0 THEN
+        -- 7-1. 이관 대상 지정 필수
+        IF p_new_owner_email IS NULL OR TRIM(p_new_owner_email) = '' THEN
+            RAISE EXCEPTION '[P0416]Transfer target is required for % work item(s) : %', v_work_item_count, p_target_email
+            USING ERRCODE = 'P0416';
+        END IF;
+
+        SELECT user_id, name INTO v_new_owner_id, v_new_owner_name
+        FROM users WHERE email = p_new_owner_email AND is_deleted = FALSE;
+
+        IF v_new_owner_id IS NULL THEN
+            RAISE EXCEPTION '[P0002]Transfer target user does not exist : %', p_new_owner_email
+            USING ERRCODE = 'P0002';
+        END IF;
+
+        IF v_new_owner_id = v_target_id THEN
+            RAISE EXCEPTION '[P0416]Cannot transfer work items to the removed user : %', p_new_owner_email
+            USING ERRCODE = 'P0416';
+        END IF;
+
+        -- 7-2. 이관 대상이 모든 업무(숨김 포함)를 수행할 자격이 있는지 한 번 더 검증한다.
+        SELECT w.work_item_id, w.owner_node_id
+        INTO v_block_item_id, v_block_node_id
+        FROM work_items w
+        WHERE w.owner_user_id = v_target_id
+          AND w.is_deleted = FALSE
+          AND w.status <> 'done'
+          AND w.owner_node_id = ANY(v_subtree_ids)
+          AND get_authority_source_node(v_target_id, w.owner_node_id) = p_node_id
+          AND (
+              NOT check_authority_with_override(v_new_owner_id, w.owner_node_id, 'WI_PERSONAL_CHANGE')
+              OR (w.hidden AND NOT check_authority_with_override(v_new_owner_id, w.owner_node_id, 'WI_HIDDEN_CHANGE'))
+          )
+        LIMIT 1;
+
+        IF FOUND THEN
+            RAISE EXCEPTION '[P0416]Transfer target lacks authority for work item % on node % : %, %',
+                v_block_item_id, v_block_node_id, p_new_owner_email, p_target_email
+            USING ERRCODE = 'P0416';
+        END IF;
+    END IF;
+
+    -- 8. 미완료 업무 이관 + 활동 로그
+    FOR v_item IN
+        SELECT w.work_item_id, w.title, w.owner_node_id
+        FROM work_items w
+        WHERE w.owner_user_id = v_target_id
+          AND w.is_deleted = FALSE
+          AND w.status <> 'done'
+          AND w.owner_node_id = ANY(v_subtree_ids)
+          AND get_authority_source_node(v_target_id, w.owner_node_id) = p_node_id
+        ORDER BY w.work_item_id
+    LOOP
+        UPDATE work_items
+        SET owner_user_id = v_new_owner_id
+        WHERE work_item_id = v_item.work_item_id;
+
+        PERFORM log_activity(
+            v_item.owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            v_item.work_item_id,
+            v_item.title,
+            'updated',
+            'owner',
+            v_target_name,
+            v_new_owner_name
+        );
+    END LOOP;
+
+    -- 9. 일정 담당자 정리 (담당자가 워크스페이스를 떠나면 담당자 미정으로 되돌린다)
+    WITH affected AS (
+        SELECT r.rule_id
+        FROM recurring_rules r
+        WHERE r.assignee_user_id = v_target_id
+          AND r.is_deleted = FALSE
+          AND r.owner_node_id = ANY(v_subtree_ids)
+          AND get_authority_source_node(v_target_id, r.owner_node_id) = p_node_id
+    )
+    UPDATE recurring_rules
+    SET assignee_user_id = NULL
+    WHERE rule_id IN (SELECT rule_id FROM affected);
+
+    GET DIAGNOSTICS v_schedule_count = ROW_COUNT;
+
+    -- 10. 역할 회수 로그 (할당 삭제 전에 남겨야 대상 사용자가 알림을 받는다)
+    PERFORM log_activity(p_node_id, p_requester_email, 'ROLE', v_assignment_id::VARCHAR, v_target_name, 'deleted', 'role', v_target_role, NULL);
+
+    -- 11. 역할 할당 삭제
+    DELETE FROM role_assignments
+    WHERE user_id = v_target_id AND node_id = p_node_id;
+
+    RETURN QUERY SELECT jsonb_build_object(
+        'type', 'ROLE',
+        'action', 'removed',
+        'node_id', p_node_id,
+        'user_id', v_target_id,
+        'user_name', v_target_name,
+        'email', p_target_email,
+        'role', v_target_role,
+        'transferred_work_item_count', v_work_item_count,
+        'transfer_target_user_id', v_new_owner_id,
+        'transfer_target_name', v_new_owner_name,
+        'transfer_target_email', p_new_owner_email,
+        'cleared_schedule_count', v_schedule_count
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0102' OR SQLSTATE 'P0103' OR SQLSTATE 'P0403'
+          OR SQLSTATE 'P0404' OR SQLSTATE 'P0415' OR SQLSTATE 'P0416' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0417]Failed to remove role of user : %, (REASON: %)', p_target_email, SQLERRM
+            USING ERRCODE = 'P0417';
 END;
 $$ LANGUAGE plpgsql;

@@ -417,7 +417,8 @@ function formatRoleMessage(
   // 레거시 로그는 대상 이름 자리에 사용자 ID가 들어 있을 수 있다.
   const personName = targetName ? text(options.resolveUserName?.(targetName)) || targetName : ''
   const person = personName ? `${quoted(personName)}님` : '대상 사용자'
-  const roleName = text(activity.newValue)
+  // 회수(deleted) 로그는 회수된 역할명이 oldValue 에 담긴다. (기존 로그는 newValue 를 사용)
+  const roleName = action === 'deleted' ? text(activity.oldValue ?? activity.newValue) : text(activity.newValue)
 
   if (action === 'inserted' || action === 'created') {
     return roleName

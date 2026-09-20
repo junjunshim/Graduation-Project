@@ -120,6 +120,9 @@ BEGIN
         'parent_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
         'owner_user_id', w.owner_user_id,
+        -- 역할 목록에 없는 담당자(퇴장·스코프 밖)도 이름을 표시할 수 있도록 함께 내려준다.
+        'owner_user_email', u_owner.email,
+        'owner_user_name', u_owner.name,
         'title', w.title,
         'description', w.description,
         'category', w.category,
@@ -137,6 +140,7 @@ BEGIN
     )
     FROM work_items w
     JOIN filtered_nodes fn ON w.owner_node_id = fn.node_id
+    LEFT JOIN users u_owner ON w.owner_user_id = u_owner.user_id
     LEFT JOIN (
         SELECT work_item_id, COUNT(*)::INT as cnt
         FROM work_item_comments
@@ -575,6 +579,8 @@ BEGIN
         'owner_node_id', w.owner_node_id,
         'owner_node_title', owner_node.name,
         'owner_user_id', w.owner_user_id,
+        'owner_user_email', u_owner.email,
+        'owner_user_name', u_owner.name,
         'title', w.title,
         'description', w.description,
         'category', w.category,
@@ -592,6 +598,7 @@ BEGIN
     )
     FROM work_items w
     LEFT JOIN organization_nodes owner_node ON owner_node.node_id = w.owner_node_id
+    LEFT JOIN users u_owner ON w.owner_user_id = u_owner.user_id
     LEFT JOIN (
         SELECT work_item_id, COUNT(*)::INT as cnt
         FROM work_item_comments

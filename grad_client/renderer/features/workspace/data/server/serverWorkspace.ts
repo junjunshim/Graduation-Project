@@ -10,6 +10,11 @@ import type {
   UpdateNodeRequest,
   UpdateRoleRequest,
   UpdateWorkItemRequest,
+  RemoveRoleRequest,
+  RemoveRoleResult,
+  RoleRemovalPreview,
+  RoleRemovalTransferTarget,
+  RoleRemovalWorkItem,
   UserRecord,
   WorkItemCommentRecord,
   WorkItemFileRecord,
@@ -722,6 +727,125 @@ export async function updateRoleOnServer(payload: UpdateRoleRequest) {
     await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const }
   }, '권한을 변경하지 못했습니다.')
+}
+
+/** 서버가 내려준 역할 회수 미리보기 원시 데이터를 클라이언트 모델로 변환한다. */
+function readRoleRemovalPreview(item: Record<string, unknown> | undefined): RoleRemovalPreview | null {
+  if (!item) return null
+
+  const rawWorkItems = Array.isArray(item.work_items) ? (item.work_items as Array<Record<string, unknown>>) : []
+  const rawTargets = Array.isArray(item.transfer_targets)
+    ? (item.transfer_targets as Array<Record<string, unknown>>)
+    : []
+
+  const workItems: RoleRemovalWorkItem[] = rawWorkItems.map((raw) => ({
+    workItemId: String(raw.work_item_id ?? ''),
+    title: String(raw.title ?? ''),
+    ownerNodeId: Number(raw.owner_node_id ?? 0),
+    ownerNodeName: String(raw.owner_node_name ?? ''),
+    isHidden: Boolean(raw.hidden),
+    status: String(raw.status ?? ''),
+  }))
+
+  const transferTargets: RoleRemovalTransferTarget[] = rawTargets.map((raw) => ({
+    userId: String(raw.user_id ?? ''),
+    name: String(raw.name ?? raw.email ?? '이름 없음'),
+    email: String(raw.email ?? ''),
+  }))
+
+  return {
+    canRemove: Boolean(item.can_remove),
+    blockedReason: item.blocked_reason ? String(item.blocked_reason) : null,
+    nodeId: Number(item.node_id ?? 0),
+    targetUserId: String(item.target_user_id ?? ''),
+    targetUserName: String(item.target_user_name ?? ''),
+    targetUserEmail: String(item.target_user_email ?? ''),
+    roleId: item.role_id !== undefined && item.role_id !== null ? Number(item.role_id) : undefined,
+    roleName: String(item.role ?? ''),
+    isTopRole: Boolean(item.is_top_role),
+    workItems,
+    transferTargets,
+  }
+}
+
+/**
+ * 역할 회수 사전 확인.
+ * 회수 시 이관해야 할 미완료 업무와 이관 가능한 대상 목록을 서버에서 받아온다.
+ */
+export async function fetchRoleRemovalPreviewOnServer(
+  email: string,
+  nodeId: number,
+): Promise<{ status: 'success'; preview: RoleRemovalPreview } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await apiRequest<unknown>(
+      `/roles/removal-preview?email=${encodeURIComponent(normalizeEmail(email))}&node_id=${nodeId}`,
+    )
+
+    if (!isServerStatusResponse(response)) {
+      return { status: 'error' as const, message: '역할 회수 정보 응답 형식이 올바르지 않습니다.' }
+    }
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할 회수 정보를 불러오지 못했습니다.' }
+    }
+
+    let items: Array<Record<string, unknown>> = []
+    try {
+      items = parseServerContextItems((response as ServerContextResponse).data) as Array<Record<string, unknown>>
+    } catch {
+      return { status: 'error' as const, message: '역할 회수 정보 형식이 올바르지 않습니다.' }
+    }
+
+    const preview = readRoleRemovalPreview(items[0])
+
+    if (!preview) {
+      return { status: 'error' as const, message: '역할 회수 정보를 찾을 수 없습니다.' }
+    }
+
+    return { status: 'success' as const, preview }
+  }, '역할 회수 정보를 불러오지 못했습니다.')
+}
+
+/**
+ * 사용자 역할 회수.
+ * 서버가 실패를 반환하면 로컬 캐시를 건드리지 않는다.
+ */
+export async function removeRoleOnServer(
+  payload: RemoveRoleRequest,
+): Promise<{ status: 'success'; result: RemoveRoleResult } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/roles', {
+      method: 'DELETE',
+      body: {
+        email: normalizeEmail(payload.email),
+        node_id: payload.nodeId,
+        ...(payload.newOwnerEmail ? { new_owner_email: normalizeEmail(payload.newOwnerEmail) } : {}),
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할을 회수하지 못했습니다.' }
+    }
+
+    let summary: Record<string, unknown> | undefined
+    try {
+      const items = parseServerContextItems((response as ServerContextResponse).data) as Array<Record<string, unknown>>
+      summary = items[0]
+    } catch {
+      summary = undefined
+    }
+
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
+
+    return {
+      status: 'success' as const,
+      result: {
+        transferredWorkItemCount: Number(summary?.transferred_work_item_count ?? 0),
+        clearedScheduleCount: Number(summary?.cleared_schedule_count ?? 0),
+        transferTargetName: summary?.transfer_target_name ? String(summary.transfer_target_name) : undefined,
+      },
+    }
+  }, '역할을 회수하지 못했습니다.')
 }
 
 export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {

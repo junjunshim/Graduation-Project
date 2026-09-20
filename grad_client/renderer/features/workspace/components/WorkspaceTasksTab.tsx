@@ -479,13 +479,21 @@ export function WorkspaceTasksTab({
   }, [openDropdown])
 
   const ownerOptions = useMemo(() => {
+    // 역할이 제거된 담당자도 업무에 남아 있으므로, 업무에 등장하는 담당자를 후보에 함께 넣는다.
+    const ownerIds = new Set<string>()
+    ;[...workItems, ...deletedWorkItems, ...allWorkItems].forEach((item) => ownerIds.add(item.ownerUserId))
+
+    const ownersFromWorkItems = members.filter(
+      (member) => ownerIds.has(member.userId) || Boolean(member.email && ownerIds.has(member.email)),
+    )
+
     return Array.from(
       new Map(
-        filterMembers
+        [...filterMembers, ...ownersFromWorkItems]
           .map((member) => [member.userId, member]),
       ).values(),
     ).sort((left, right) => left.name.localeCompare(right.name, 'ko'))
-  }, [filterMembers])
+  }, [allWorkItems, deletedWorkItems, filterMembers, members, workItems])
 
   const tagOptions = useMemo(() => {
     const map = new Map<string, { id: string; label: string }>()

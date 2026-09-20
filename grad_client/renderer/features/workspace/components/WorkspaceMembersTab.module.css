@@ -496,7 +496,15 @@
 }
 
 .actionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.72rem;
+}
+
+.actionHint {
+  color: var(--text-muted);
+  font-size: 0.7rem;
 }
 
 .emptyCell {

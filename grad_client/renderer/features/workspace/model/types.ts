@@ -201,6 +201,51 @@ export type UpdateRoleRequest = {
   roleName: RoleName
 }
 
+/** 역할 회수 시 이관해야 하는 미완료 업무 */
+export type RoleRemovalWorkItem = {
+  workItemId: string
+  title: string
+  ownerNodeId: number
+  ownerNodeName: string
+  isHidden: boolean
+  status: string
+}
+
+/** 역할 회수 시 업무를 넘겨받을 수 있는 후보 사용자 */
+export type RoleRemovalTransferTarget = {
+  userId: string
+  name: string
+  email: string
+}
+
+/** 역할 회수 사전 확인 결과 */
+export type RoleRemovalPreview = {
+  canRemove: boolean
+  blockedReason: string | null
+  nodeId: number
+  targetUserId: string
+  targetUserName: string
+  targetUserEmail: string
+  roleId?: number
+  roleName: RoleName
+  isTopRole: boolean
+  workItems: RoleRemovalWorkItem[]
+  transferTargets: RoleRemovalTransferTarget[]
+}
+
+export type RemoveRoleRequest = {
+  email: string
+  nodeId: number
+  /** 이관할 미완료 업무가 없으면 생략할 수 있다. */
+  newOwnerEmail?: string
+}
+
+export type RemoveRoleResult = {
+  transferredWorkItemCount: number
+  clearedScheduleCount: number
+  transferTargetName?: string
+}
+
 export type CreateWorkItemRequest = {
   workItemId: string
   ownerNodeId: number

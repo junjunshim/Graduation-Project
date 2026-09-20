@@ -492,6 +492,9 @@ BEGIN
         'parent_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
         'owner_user_id', w.owner_user_id,
+        -- 역할 목록에 없는 담당자(퇴장·스코프 밖)도 이름을 표시할 수 있도록 함께 내려준다.
+        'owner_user_email', u_owner.email,
+        'owner_user_name', u_owner.name,
         'title', w.title,
         'description', w.description,
         'category', w.category,
@@ -508,6 +511,7 @@ BEGIN
         'updated_at', w.updated_at
     )
     FROM work_items w
+    LEFT JOIN users u_owner ON w.owner_user_id = u_owner.user_id
     LEFT JOIN (
         SELECT work_item_id, COUNT(*)::INT as cnt
         FROM work_item_comments
@@ -526,7 +530,14 @@ BEGIN
       );
 
     -- 4-5. 노드 소속 업무에 공유된 파일 목록 (FILE)
-    IF (v_authority & v_file_view) = v_file_view THEN
+    -- 담당자 본인 업무의 파일은 FILE_VIEW 가 없어도 포함한다
+    -- (get_initial_context / get_work_item_detail / add_work_item_file 와 동일한 담당자 기준).
+    IF (v_authority & v_file_view) = v_file_view
+       OR EXISTS (
+           SELECT 1 FROM work_items w
+           WHERE w.owner_node_id = p_node_id AND w.owner_user_id = v_requester_id
+       )
+    THEN
         RETURN QUERY
         SELECT jsonb_build_object(
             'type', 'FILE',

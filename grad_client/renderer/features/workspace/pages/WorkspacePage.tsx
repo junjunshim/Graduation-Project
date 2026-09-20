@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
@@ -191,8 +191,24 @@ export function WorkspacePage() {
     return subscribeToWorkspaceCache(redirectIfDeleted)
   }, [activeWorkspaceRootId, navigate])
 
-  if (!currentUser) {
-    return null
+  // 훅은 조건부 렌더링(조기 반환)보다 먼저 호출해 순서를 고정한다.
+  // 역할 회수 등으로 스냅샷이 갱신되며 currentUser 가 null 이 되어도 훅 개수가 달라지면 안 된다.
+  const currentUserId = currentUser?.userId
+  const overview = useMemo(
+    () =>
+      currentUserId
+        ? getWorkspaceOverview(currentUserId, snapshot, {
+            rootNodeId: activeWorkspaceRootId,
+            singleNodeOnly: true,
+          })
+        : null,
+    [currentUserId, snapshot, activeWorkspaceRootId],
+  )
+  const { workItemContextMenu } = useWorkItemContextMenu()
+
+  // 스코프 정보가 유실된 경우(역할 회수·내보내기 등) 진입점으로 돌려보낸다.
+  if (!currentUser || !overview) {
+    return <Navigate to="/workspace/select" replace />
   }
 
   // 1. 첫 진입 로딩 화면
@@ -263,14 +279,6 @@ export function WorkspacePage() {
     }
   }
 
-  const overview = useMemo(
-    () =>
-      getWorkspaceOverview(currentUser.userId, snapshot, {
-        rootNodeId: activeWorkspaceRootId,
-        singleNodeOnly: true,
-      }),
-    [currentUser.userId, snapshot, activeWorkspaceRootId],
-  )
   const displayRoleMembers = overview.rootRoleMembers.length > 0
     ? overview.rootRoleMembers
     : overview.allRoleMembers && overview.allRoleMembers.length > 0
@@ -279,7 +287,6 @@ export function WorkspacePage() {
   const visibleMembers = displayRoleMembers.slice(0, 4)
   const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : overview.rootRoleMembers.length
   const extraMemberCount = Math.max(0, totalMemberCount - visibleMembers.length)
-  const { workItemContextMenu } = useWorkItemContextMenu()
 
   return (
     <section
@@ -359,6 +366,7 @@ export function WorkspacePage() {
           workItems={overview.visibleWorkItems}
           nodes={overview.visibleNodes}
           members={overview.allRoleMembers && overview.allRoleMembers.length > 0 ? overview.allRoleMembers : overview.rootRoleMembers}
+          users={snapshot.users}
         />
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
@@ -388,6 +396,7 @@ export function WorkspacePage() {
       ) : activeView === 'members' ? (
         <WorkspaceMembersTab
           rootNode={overview.rootNode}
+          currentUserId={currentUser?.userId}
           nodes={overview.visibleNodes}
           roles={snapshot.roles}
           users={snapshot.users}

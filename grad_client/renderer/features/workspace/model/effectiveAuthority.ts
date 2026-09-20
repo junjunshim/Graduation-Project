@@ -92,6 +92,18 @@ export function canCreateSubNode(
 }
 
 /**
+ * 노드 정보 변경 권한(NODE_INFO_CHANGE, Bit 12) 보유 여부 검사.
+ * 워크스페이스 삭제/복구도 이 권한을 사용한다.
+ */
+export function canChangeNodeInfo(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 12, snapshot)
+}
+
+/**
  * 하위 노드 소유자 지정 가능 자격(WI_PERSONAL_CHANGE, Bit 8) 보유 여부 검사
  */
 export function isEligibleAsSubNodeOwner(

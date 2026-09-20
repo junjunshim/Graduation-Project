@@ -191,6 +191,7 @@ export function queryWorkspaceDirectory(
       isRoot,
       isFavorite: false,
       canEnter: enterableNodeIds.has(node.id),
+      isDeleted: Boolean(node.isDeleted),
       ...visualMetadata,
       children: childResults,
     }

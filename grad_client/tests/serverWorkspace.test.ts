@@ -6,7 +6,10 @@ import {
   getServerSessionEmail,
 } from '../renderer/features/workspace/data/server/apiClient.js'
 import { getServerContextSnapshot } from '../renderer/features/workspace/data/server/contextCache.js'
-import { signInServerUser } from '../renderer/features/workspace/data/server/serverWorkspace.js'
+import {
+  isWorkspaceStructureNotification,
+  signInServerUser,
+} from '../renderer/features/workspace/data/server/serverWorkspace.js'
 import { readWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
 
 type MemoryStorageOptions = {
@@ -353,4 +356,19 @@ test('server login does not initialize context and removes partial tokens when r
     globalThis.fetch = originalFetch
     restoreWindow()
   }
+})
+
+test('워크스페이스 구조 변경 알림(생성/수정/복구)만 노드 트리를 즉시 다시 그린다', () => {
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'inserted' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'created' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'updated' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'restored' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'node', action: 'INSERTED' }), true)
+
+  // 삭제는 로컬 캐시 연쇄 반영으로 처리하므로 이 경로가 아니다.
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'deleted' }), false)
+  // 워크스페이스가 아닌 다른 엔터티의 변경은 트리와 무관하다.
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'WORK_ITEM', action: 'created' }), false)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'ROLE', action: 'inserted' }), false)
+  assert.equal(isWorkspaceStructureNotification({}), false)
 })

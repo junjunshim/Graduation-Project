@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
@@ -19,6 +19,9 @@ import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
 } from '../data/workspaceDirectorySelection'
+import { readWorkspaceDb } from '../data/localStore'
+import { findDeletedAncestorNode } from '../model/nodeDeletion'
+import { showToast as showLiveToast } from '../../notification/data/toastEvents'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
 import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
@@ -44,6 +47,7 @@ const workspaceTabs: WorkspaceTab[] = [
 ]
 
 export function WorkspacePage() {
+  const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const currentUser = getCurrentUser(snapshot)
   const [searchParams] = useSearchParams()
@@ -157,6 +161,35 @@ export function WorkspacePage() {
       unsubscribeLive()
     }
   }, [activeWorkspaceRootId, reloadTrigger])
+
+  // 삭제된 워크스페이스(또는 삭제된 상위 워크스페이스의 하위)에는 진입할 수 없다.
+  // 캐시가 갱신될 때마다 판정하므로, 다른 사용자가 삭제하면 실시간 캐시 반영과 함께 진입점으로 내보낸다.
+  const hasRedirectedFromDeletedRef = useRef(false)
+  useEffect(() => {
+    hasRedirectedFromDeletedRef.current = false
+    if (!activeWorkspaceRootId) return
+
+    const redirectIfDeleted = () => {
+      if (hasRedirectedFromDeletedRef.current) return
+
+      // 화면용 스냅샷은 삭제된 노드를 제외하므로, 삭제 여부 판별은 원본 캐시에서 수행한다.
+      const deletedNode = findDeletedAncestorNode(activeWorkspaceRootId, readWorkspaceDb().nodes)
+      if (!deletedNode) return
+
+      hasRedirectedFromDeletedRef.current = true
+      showLiveToast({
+        entity_type: 'NODE',
+        node_id: deletedNode.id,
+        title: '워크스페이스 삭제',
+        content: `'${deletedNode.name}' 워크스페이스가 삭제되어 진입점으로 이동했습니다.`,
+        created_at: new Date().toISOString(),
+      })
+      navigate('/workspace/select', { replace: true })
+    }
+
+    redirectIfDeleted()
+    return subscribeToWorkspaceCache(redirectIfDeleted)
+  }, [activeWorkspaceRootId, navigate])
 
   if (!currentUser) {
     return null

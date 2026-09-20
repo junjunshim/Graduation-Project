@@ -105,6 +105,10 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0412") != std::string::npos) return DbErrorCode::RoleDefinitionAlreadyExists;
     else if (errMsg.find("P0413") != std::string::npos) return DbErrorCode::UpdateRoleAuthorityFailed;
     else if (errMsg.find("P0414") != std::string::npos) return DbErrorCode::RenameRoleDefinitionFailed;
+    else if (errMsg.find("P0415") != std::string::npos) return DbErrorCode::SelfRoleRemovalNotAllowed;
+    else if (errMsg.find("P0418") != std::string::npos) return DbErrorCode::RoleRemovalPreviewFailed;
+    else if (errMsg.find("P0416") != std::string::npos) return DbErrorCode::RoleRemovalTransferInvalid;
+    else if (errMsg.find("P0417") != std::string::npos) return DbErrorCode::RemoveRoleFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
@@ -281,6 +285,26 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::RenameRoleDefinitionFailed:{
             ret["message"] = "역할 이름 변경에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::SelfRoleRemovalNotAllowed:{
+            ret["message"] = "본인의 역할은 회수할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RoleRemovalTransferInvalid:{
+            ret["message"] = "업무를 이관할 수 없습니다. 이관 대상과 권한을 확인해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RemoveRoleFailed:{
+            ret["message"] = "사용자 역할 회수에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RoleRemovalPreviewFailed:{
+            ret["message"] = "역할 회수 정보를 불러오지 못했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

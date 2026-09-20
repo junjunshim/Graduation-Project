@@ -14,6 +14,7 @@ import {
 } from '../model/authorityDefinitions'
 import { getRoleBadgeStyle } from '../model/labels'
 import { getRolePriorityScore } from '../model/memberInheritance'
+import { canChangeRoleDefinitions } from '../model/effectiveAuthority'
 import type {
   AuthorityRecord,
   OrganizationNodeRecord,
@@ -170,15 +171,17 @@ export function WorkspaceRolesTab({
 
   const isCurrentUserAdmin = Boolean(currentUserRole && definitionById.get(currentUserRole)?.isTopRole)
 
-  // 현재 사용자가 권한 변경 권한(ROLE_CHANGE, Bit 15 또는 ADMIN)을 가졌는지 검사
-  const canManageRoles = useMemo(() => {
-    if (!currentUserId || !rootNode || !currentUserRole) return false
-    if (isCurrentUserAdmin) return true
-
-    const myBitmask = savedBitmaskMap.get(currentUserRole) || getDefaultAuthority(currentUserRole)
-    const myBitSet = parseAuthorityBitSet(myBitmask)
-    return !myBitSet.has(23) && myBitSet.has(15) // DENY takes precedence.
-  }, [currentUserId, currentUserRole, rootNode, savedBitmaskMap, isCurrentUserAdmin])
+  // 역할 정의(권한/이름) 변경은 해당 노드에 `직속`으로 ROLE_CHANGE(Bit 15)를 가진 사용자만 가능하다.
+  // 서버(create_role_definition/update_role_authority/rename_role_definition)와 동일한 기준을 사용한다.
+  const canManageRoles = useMemo(
+    () =>
+      Boolean(
+        currentUserId &&
+          rootNode &&
+          canChangeRoleDefinitions(currentUserId, rootNode.id, { roles, authorities }),
+      ),
+    [authorities, currentUserId, roles, rootNode],
+  )
 
   const isSelectedAdmin = !isCreatingRole && definitionById.get(selectedRole)?.isTopRole === true
   const isEditable = canManageRoles && !isSelectedAdmin
@@ -557,13 +560,10 @@ export function WorkspaceRolesTab({
       {/* 권한 수정 불가 시 안내 배너 */}
       {!canManageRoles ? (
         <div className={styles.readonlyBanner}>
-          <Icon name="lock" size={18} className={styles.readonlyIcon} />
-          <div>
-            <strong>읽기 전용 모드 (조회만 가능)</strong>
-            <p>
-              현재 워크스페이스에서 역할 권한 변경 권한(<code>ROLE_CHANGE</code> 또는 <code>ADMIN</code>)이 없어 권한을 수정할 수 없습니다.
-            </p>
-          </div>
+          <Icon name="lock" size={15} className={styles.readonlyIcon} />
+          <span className={styles.readonlyText}>
+            읽기 전용 모드 · 이 공간에 직접 부여된 <code>ROLE_CHANGE</code> 권한이 있어야 수정할 수 있습니다.
+          </span>
         </div>
       ) : null}
 

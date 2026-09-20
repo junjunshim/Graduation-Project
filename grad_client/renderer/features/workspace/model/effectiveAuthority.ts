@@ -68,6 +68,78 @@ export function getEffectiveAuthorityBitSet(
 }
 
 /**
+ * 해당 노드에 '직접' 부여된 역할만으로 계산한 권한 비트 집합.
+ * 서버의 get_direct_authority 와 동일하게 조상 노드로 상속하지 않는다.
+ * 역할 부여/변경/회수와 역할 정의 변경은 이 직속 권한만 인정한다.
+ */
+export type DirectAuthoritySource = Pick<WorkspaceSnapshot, 'roles' | 'authorities'>
+
+export function getDirectAuthorityBitSet(
+  userId: string,
+  nodeId: number,
+  snapshot: DirectAuthoritySource,
+): Set<number> {
+  const directRoles = snapshot.roles.filter(
+    (r) =>
+      !r.isDeleted &&
+      r.nodeId === nodeId &&
+      (r.userId === userId || r.userId.toLowerCase() === userId.toLowerCase()),
+  )
+
+  if (directRoles.length === 0) {
+    return new Set()
+  }
+
+  const combinedBitSet = new Set<number>()
+
+  directRoles.forEach((roleRecord) => {
+    const matchingAuth = snapshot.authorities?.find(
+      (a) => a.nodeId === roleRecord.nodeId && a.id === roleRecord.roleId,
+    )
+
+    const mask = matchingAuth?.authority
+    if (!mask) return
+
+    parseAuthorityBitSet(mask).forEach((bit) => combinedBitSet.add(bit))
+  })
+
+  // DENY 비트(bit 23)가 켜져 있으면 권한 없음으로 취급한다.
+  if (combinedBitSet.has(23)) {
+    return new Set()
+  }
+
+  return combinedBitSet
+}
+
+/** 특정 유저가 해당 노드에 '직속'으로 주어진 권한 비트를 가졌는지 검사 */
+export function hasDirectAuthorityBit(
+  userId: string,
+  nodeId: number,
+  bit: number,
+  snapshot: DirectAuthoritySource,
+): boolean {
+  return getDirectAuthorityBitSet(userId, nodeId, snapshot).has(bit)
+}
+
+/** 사용자 역할 추가/변경/회수에 필요한 직속 권한 (NODE_ADD_ROLE, Bit 14) */
+export function canManageNodeRoles(
+  userId: string,
+  nodeId: number,
+  snapshot: DirectAuthoritySource,
+): boolean {
+  return hasDirectAuthorityBit(userId, nodeId, 14, snapshot)
+}
+
+/** 역할 정의(권한/이름) 변경에 필요한 직속 권한 (ROLE_CHANGE, Bit 15) */
+export function canChangeRoleDefinitions(
+  userId: string,
+  nodeId: number,
+  snapshot: DirectAuthoritySource,
+): boolean {
+  return hasDirectAuthorityBit(userId, nodeId, 15, snapshot)
+}
+
+/**
  * 특정 유저가 특정 노드에 대해 주어진 권한 비트(bit)를 가지고 있는지 검사
  */
 export function hasEffectiveAuthorityBit(

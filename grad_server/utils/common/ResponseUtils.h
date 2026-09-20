@@ -32,6 +32,10 @@ enum class DbErrorCode {
     RoleDefinitionAlreadyExists,// P0412 노드에 이미 존재하는 역할 정의
     UpdateRoleAuthorityFailed,  // P0413 역할 권한 수정 실패
     RenameRoleDefinitionFailed, // P0414 역할 이름 변경 실패
+    SelfRoleRemovalNotAllowed,  // P0415 본인의 역할은 회수할 수 없음
+    RoleRemovalTransferInvalid, // P0416 업무 이관 대상이 없거나 자격 미달
+    RemoveRoleFailed,           // P0417 사용자 역할 회수 실패
+    RoleRemovalPreviewFailed,   // P0418 역할 회수 사전 확인 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     EmailNotFound,              // P0503 이메일 찾을 수 없음

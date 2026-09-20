@@ -4,6 +4,7 @@ import type {
   CreateSubNodeRequest,
   CreateTopNodeRequest,
   OrganizationNodeRecord,
+  RemoveRoleRequest,
   UpdateNodeRequest,
   UpdateRoleRequest,
   WorkspaceSnapshot,
@@ -17,7 +18,9 @@ import {
   createTopNodeOnServer,
   deleteNodeOnServer,
   fetchNodeDetailOnServer,
+  fetchRoleRemovalPreviewOnServer,
   loadWorkspaceDirectoryScopeOnServer,
+  removeRoleOnServer,
   restoreNodeOnServer,
   updateNodeOnServer,
   updateRoleOnServer,
@@ -158,6 +161,15 @@ export async function updateNode(payload: UpdateNodeRequest) {
 
 export async function updateRole(payload: UpdateRoleRequest) {
   return updateRoleOnServer(payload)
+}
+
+/** 역할 회수 전, 이관해야 할 업무와 이관 가능한 대상 목록을 조회한다. */
+export async function fetchRoleRemovalPreview(email: string, nodeId: number) {
+  return fetchRoleRemovalPreviewOnServer(email, nodeId)
+}
+
+export async function removeRole(payload: RemoveRoleRequest) {
+  return removeRoleOnServer(payload)
 }
 
 export async function deleteWorkspace(nodeId: number) {

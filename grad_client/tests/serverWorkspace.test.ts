@@ -7,7 +7,9 @@ import {
 } from '../renderer/features/workspace/data/server/apiClient.js'
 import { getServerContextSnapshot } from '../renderer/features/workspace/data/server/contextCache.js'
 import {
+  fetchRoleRemovalPreviewOnServer,
   isWorkspaceStructureNotification,
+  removeRoleOnServer,
   signInServerUser,
 } from '../renderer/features/workspace/data/server/serverWorkspace.js'
 import { readWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
@@ -383,4 +385,180 @@ test('워크스페이스 구조 변경 알림(생성/수정/복구)만 노드 �
   assert.equal(isWorkspaceStructureNotification({ entity_type: 'WORK_ITEM', action: 'created' }), false)
   assert.equal(isWorkspaceStructureNotification({ entity_type: 'ROLE', action: 'inserted' }), false)
   assert.equal(isWorkspaceStructureNotification({}), false)
+})
+
+
+/* ------------------------------------------------------------------ */
+/* 역할 회수 (remove_role / removal-preview)                            */
+/* ------------------------------------------------------------------ */
+
+type CapturedCall = {
+  pathname: string
+  search: string
+  method: string
+  body: Record<string, unknown> | undefined
+}
+
+function captureCall(
+  calls: CapturedCall[],
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+) {
+  const url = new URL(String(input instanceof Request ? input.url : input))
+  const rawBody = init?.body
+  calls.push({
+    pathname: url.pathname,
+    search: url.search,
+    method: String(init?.method ?? 'GET').toUpperCase(),
+    body: typeof rawBody === 'string' ? (JSON.parse(rawBody) as Record<string, unknown>) : undefined,
+  })
+}
+
+const roleRemovalPreviewPayload = {
+  type: 'ROLE_REMOVAL_PREVIEW',
+  can_remove: true,
+  blocked_reason: null,
+  node_id: 4,
+  target_user_id: 'U-12',
+  target_user_name: '이영희',
+  target_user_email: 'user@example.com',
+  role_id: 7,
+  role: 'MEMBER',
+  is_top_role: false,
+  work_items: [
+    {
+      work_item_id: 'WI-1101',
+      title: '로그인 기능 구현',
+      owner_node_id: 4,
+      owner_node_name: 'Development',
+      hidden: true,
+      status: 'in_progress',
+    },
+  ],
+  transfer_targets: [{ user_id: 'U-13', name: '박민수', email: 'park@example.com' }],
+}
+
+test('역할 회수 사전 확인은 이관 업무와 이관 대상 목록을 파싱한다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'success', data: [roleRemovalPreviewPayload] })
+  }
+
+  try {
+    const result = await fetchRoleRemovalPreviewOnServer('User@Example.com', 4)
+
+    assert.equal(result.status, 'success')
+    if (result.status !== 'success') return
+
+    assert.equal(result.preview.canRemove, true)
+    assert.equal(result.preview.roleName, 'MEMBER')
+    assert.equal(result.preview.targetUserName, '이영희')
+    assert.equal(result.preview.workItems.length, 1)
+    assert.equal(result.preview.workItems[0].workItemId, 'WI-1101')
+    assert.equal(result.preview.workItems[0].isHidden, true)
+    assert.deepEqual(result.preview.transferTargets, [
+      { userId: 'U-13', name: '박민수', email: 'park@example.com' },
+    ])
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].pathname, '/api/roles/removal-preview')
+    // 이메일은 소문자로 정규화해 쿼리에 담는다.
+    assert.equal(calls[0].search, '?email=user%40example.com&node_id=4')
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('역할 회수는 이관 대상이 있을 때만 new_owner_email 을 보낸다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+
+    if (calls[calls.length - 1].method === 'DELETE') {
+      return jsonResponse({
+        status: 'success',
+        data: [
+          {
+            type: 'ROLE',
+            action: 'removed',
+            transferred_work_item_count: 2,
+            cleared_schedule_count: 1,
+            transfer_target_name: '박민수',
+          },
+        ],
+      })
+    }
+
+    return jsonResponse(createDocumentedContextResponse())
+  }
+
+  try {
+    const withoutTransfer = await removeRoleOnServer({ nodeId: 4, email: 'User@Example.com' })
+    assert.equal(withoutTransfer.status, 'success')
+    assert.deepEqual(calls[0].body, { email: 'user@example.com', node_id: 4 })
+
+    const withTransfer = await removeRoleOnServer({
+      nodeId: 4,
+      email: 'User@Example.com',
+      newOwnerEmail: 'Park@Example.com',
+    })
+
+    assert.equal(withTransfer.status, 'success')
+    if (withTransfer.status !== 'success') return
+
+    assert.equal(withTransfer.result.transferredWorkItemCount, 2)
+    assert.equal(withTransfer.result.clearedScheduleCount, 1)
+    assert.equal(withTransfer.result.transferTargetName, '박민수')
+    const deleteCalls = calls.filter((call) => call.method === 'DELETE')
+    assert.deepEqual(deleteCalls[deleteCalls.length - 1].body, {
+      email: 'user@example.com',
+      node_id: 4,
+      new_owner_email: 'park@example.com',
+    })
+
+    // 성공했을 때만 노드 상세를 다시 조회한다. (DELETE 2회 + 노드 재조회 2회)
+    assert.equal(calls.filter((call) => call.method === 'GET').length, 2)
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('역할 회수가 서버에서 실패하면 로컬 캐시를 갱신하지 않는다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse(
+      { status: 'error', code: '400', message: '업무를 이관할 수 없습니다. 이관 대상과 권한을 확인해 주세요.' },
+      400,
+    )
+  }
+
+  try {
+    const result = await removeRoleOnServer({ nodeId: 4, email: 'user@example.com' })
+
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.equal(result.message, '업무를 이관할 수 없습니다. 이관 대상과 권한을 확인해 주세요.')
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].method, 'DELETE')
+    // 실패했으므로 재조회(노드 상세) 요청이 없어야 한다.
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
 })

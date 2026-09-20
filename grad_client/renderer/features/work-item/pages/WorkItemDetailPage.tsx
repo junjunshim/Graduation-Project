@@ -232,11 +232,9 @@ export function WorkItemDetailPage() {
     setViewerModal((prev) => ({ ...prev, isOpen: false, file: null, content: '', error: null }))
   }
 
-  if (!currentUser) {
-    return null
-  }
-
-  const detail = workItemId
+  // 아래 useMemo 3개가 훅이므로 이 지점에서 조기 반환하면 훅 순서가 깨진다.
+  // 조건부 반환은 훅 호출이 끝난 뒤(아래 detail 검사 지점)에서 처리한다.
+  const detail = workItemId && currentUser
     ? getSelectedWorkItemDetail(workItemId, currentUser.userId, snapshot)
     : null
 
@@ -339,7 +337,8 @@ export function WorkItemDetailPage() {
     )
   }
 
-  if (!detail) return null
+  // 훅 호출이 모두 끝난 지점이므로 여기서는 안전하게 조기 반환할 수 있다.
+  if (!detail || !currentUser) return null
 
   const { item, ownerUser, parentWorkItem, childWorkItems } = detail
   const priority = getWorkItemPriorityMeta(item.priority)

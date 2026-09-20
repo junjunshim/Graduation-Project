@@ -305,3 +305,111 @@ void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::functi
         requester_email, node_id, role_id, new_role_name
     );
 }
+
+// 사용자 역할 회수 사전 확인 api (GET /api/roles/removal-preview?email=...&node_id=...)
+void RoleController::getRoleRemovalPreview(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 쿼리 파라미터 파싱
+    std::string target_email = req->getParameter("email");
+    std::string node_id_str = req->getParameter("node_id");
+
+    int node_id = -1;
+    if (!node_id_str.empty()) {
+        try {
+            node_id = std::stoi(node_id_str);
+        } catch (...) {
+            node_id = -1;
+        }
+    }
+
+    if (target_email.empty() || node_id <= 0) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(email, node_id)가 누락되었거나 올바르지 않습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM get_role_removal_preview($1, $2, $3)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, target_email, node_id
+    );
+}
+
+// 사용자 역할 회수 api (DELETE /api/roles)
+// 완료 업무는 유지하고 미완료 업무는 new_owner_email 담당자에게 이관한 뒤 역할 할당을 삭제한다.
+void RoleController::removeRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!jsonPtr || !validateStrings(jsonPtr, "email") || !validateInts(jsonPtr, "node_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(email, node_id)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    std::string target_email = (*jsonPtr)["email"].asString();
+    int node_id = (*jsonPtr)["node_id"].asInt();
+
+    // 이관 대상은 필수가 아니다 (이관할 미완료 업무가 없을 때는 비어 있을 수 있다)
+    bool has_new_owner = jsonPtr->isMember("new_owner_email")
+        && !(*jsonPtr)["new_owner_email"].isNull()
+        && (*jsonPtr)["new_owner_email"].isString()
+        && !(*jsonPtr)["new_owner_email"].asString().empty();
+
+    std::string new_owner_email = has_new_owner ? (*jsonPtr)["new_owner_email"].asString() : "";
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM remove_role($1, $2, $3, $4)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, target_email, node_id, new_owner_email
+    );
+}

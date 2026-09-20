@@ -40,7 +40,7 @@ test('compact server work items survive context adapter and cache normalization 
   assert.equal(owner?.email, 'unknown-owner@local.invalid')
 })
 
-test('expanded ID-only owners survive server cache normalization without an invented email', () => {
+test('expanded ID-only owners keep a generated placeholder email through cache normalization', () => {
   const adapted = normalizeServerContext(
     [
       {
@@ -67,5 +67,5 @@ test('expanded ID-only owners survive server cache normalization without an inve
 
   assert.ok(item)
   assert.equal(item.ownerUserId, 'U-12')
-  assert.equal(owner?.email, '')
+  assert.equal(owner?.email, 'u-12@local.generated')
 })

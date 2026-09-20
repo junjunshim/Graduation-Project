@@ -32,6 +32,7 @@ import {
   type ServerContextResponse,
   type ServerLoginResponse,
 } from './apiTypes.js'
+import { collectNodeSubtreeIds } from '../../model/nodeDeletion.js'
 import { normalizeServerContext } from './contextAdapter.js'
 import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
@@ -101,6 +102,75 @@ async function refreshNodesAfterCommittedMutation(nodeIds: Array<number | string
       '변경은 서버에 반영되었지만 최신 데이터를 다시 불러오지 못했습니다. 같은 변경을 다시 제출하지 말고 “다시 시도”로 데이터를 새로고침해 주세요.',
     )
   }
+}
+
+/**
+ * 워크스페이스 삭제/복구는 서버 트리거가 하위 노드·업무·파일까지 연쇄 처리하므로,
+ * 응답을 기다리는 동안 화면이 흔들리지 않도록 로컬 캐시도 같은 범위로 즉시 맞춘다.
+ * (서버 응답이 오면 노드 단위 재조회로 권위 데이터를 덮어쓴다.)
+ */
+function applyNodeSubtreeDeletionLocally(nodeId: number, isDeleted: boolean) {
+  const current = readWorkspaceDb()
+  const targetNodeIds = new Set(collectNodeSubtreeIds(nodeId, current.nodes))
+  const targetWorkItemIds = new Set(
+    current.workItems.filter((item) => targetNodeIds.has(item.ownerNodeId)).map((item) => item.workItemId),
+  )
+  let isModified = false
+
+  current.nodes.forEach((node) => {
+    if (targetNodeIds.has(node.id) && Boolean(node.isDeleted) !== isDeleted) {
+      node.isDeleted = isDeleted
+      isModified = true
+    }
+  })
+
+  current.workItems.forEach((item) => {
+    if (targetNodeIds.has(item.ownerNodeId) && Boolean(item.isDeleted) !== isDeleted) {
+      item.isDeleted = isDeleted
+      isModified = true
+    }
+  })
+
+  ;(current.files ?? []).forEach((file) => {
+    if (targetWorkItemIds.has(file.workItemId) && Boolean(file.isDeleted) !== isDeleted) {
+      file.isDeleted = isDeleted
+      isModified = true
+    }
+  })
+
+  if (isModified) {
+    writeServerWorkspaceDb(current)
+  }
+}
+
+/**
+ * 다른 사용자가 워크스페이스(노드)를 생성/수정/복구하면 알림이 오는데,
+ * 새로 생긴 노드의 역할이나 하위 노드 범위는 로컬에서 추정할 수 없다.
+ * 진입점과 동일한 경량 스코프(/context/scope)를 다시 받아 노드 트리를 서버 기준으로 맞춘다.
+ */
+function refreshWorkspaceTreeFromServer() {
+  void loadWorkspaceDirectoryScopeOnServer().catch((err) => {
+    console.warn('[WebSocket] 워크스페이스 트리 동기화 실패:', err)
+  })
+}
+
+/**
+ * 워크스페이스 구조가 바뀌는 알림(생성/수정/복구)인지 판별한다.
+ * 서버는 생성 시 'inserted', 이름·종류 변경 시 'updated', 복구 시 'restored' 를 보낸다.
+ * (삭제는 'deleted' 로 별도 처리한다.)
+ */
+export function isWorkspaceStructureNotification(payload: {
+  entity_type?: string
+  action?: string
+}): boolean {
+  if ((payload.entity_type ?? '').toUpperCase() !== 'NODE') {
+    return false
+  }
+
+  const action = (payload.action ?? '').toLowerCase()
+  return (
+    action === 'inserted' || action === 'created' || action === 'updated' || action === 'restored'
+  )
 }
 
 function createServerSessionUser(email: string): UserRecord {
@@ -493,6 +563,55 @@ export function signOutServerUser() {
   clearServerSession()
   clearServerWorkspaceDb()
   setCurrentSessionUserId(null)
+}
+
+export async function deleteNodeOnServer(nodeId: number) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/org/nodes', {
+      method: 'DELETE',
+      body: { node_id: nodeId },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '워크스페이스를 삭제하지 못했습니다.' }
+    }
+
+    // 본인이 삭제한 워크스페이스는 웹소켓 알림이 오지 않으므로 로컬 캐시에 즉시 반영한다.
+    try {
+      applyNodeSubtreeDeletionLocally(nodeId, true)
+    } catch (err) {
+      console.warn('[serverWorkspace] 워크스페이스 삭제 로컬 캐시 반영 실패:', err)
+    }
+
+    await refreshNodesAfterCommittedMutation([nodeId])
+    return { status: 'success' as const }
+  }, '워크스페이스를 삭제하지 못했습니다.')
+}
+
+/** 복구는 서버가 하위 워크스페이스·업무·파일까지 함께 되돌리도록 cascade 를 기본으로 사용한다. */
+export async function restoreNodeOnServer(nodeId: number, cascade = true) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/org/nodes/restore', {
+      method: 'PATCH',
+      body: { node_id: nodeId, cascade },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '워크스페이스를 복구하지 못했습니다.' }
+    }
+
+    // 본인이 복구한 워크스페이스도 웹소켓 알림이 오지 않으므로 로컬 캐시에 즉시 반영한다.
+    try {
+      if (cascade) {
+        applyNodeSubtreeDeletionLocally(nodeId, false)
+      }
+    } catch (err) {
+      console.warn('[serverWorkspace] 워크스페이스 복구 로컬 캐시 반영 실패:', err)
+    }
+
+    await refreshNodesAfterCommittedMutation([nodeId])
+    return { status: 'success' as const }
+  }, '워크스페이스를 복구하지 못했습니다.')
 }
 
 export async function createTopNodeOnServer(payload: CreateTopNodeRequest) {
@@ -1261,11 +1380,33 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
                     isModified = true
                   }
                 } else if (data.entity_type === 'NODE') {
-                  const nodeIndex = currentDb.nodes.findIndex((n) => String(n.id) === targetId)
-                  if (nodeIndex >= 0 && !currentDb.nodes[nodeIndex].isDeleted) {
-                    currentDb.nodes[nodeIndex].isDeleted = true
-                    isModified = true
-                  }
+                  // 서버 트리거가 하위 노드·업무·파일까지 연쇄 삭제하므로 캐시도 같은 범위로 맞춘다.
+                  const deletedNodeId = Number.parseInt(targetId, 10)
+                  const targetNodeIds = Number.isFinite(deletedNodeId)
+                    ? new Set(collectNodeSubtreeIds(deletedNodeId, currentDb.nodes))
+                    : new Set<number>()
+
+                  currentDb.nodes.forEach((node) => {
+                    if (targetNodeIds.has(node.id) && !node.isDeleted) {
+                      node.isDeleted = true
+                      isModified = true
+                    }
+                  })
+
+                  currentDb.workItems.forEach((item) => {
+                    if (targetNodeIds.has(item.ownerNodeId) && !item.isDeleted) {
+                      item.isDeleted = true
+                      isModified = true
+                    }
+                  })
+
+                  ;(currentDb.files ?? []).forEach((file) => {
+                    const owner = currentDb.workItems.find((item) => item.workItemId === file.workItemId)
+                    if (owner && targetNodeIds.has(owner.ownerNodeId) && !file.isDeleted) {
+                      file.isDeleted = true
+                      isModified = true
+                    }
+                  })
                 } else if (data.entity_type === 'ROLE') {
                   const roleIndex = currentDb.roles.findIndex((r) => String(r.id) === targetId)
                   if (roleIndex >= 0 && !currentDb.roles[roleIndex].isDeleted) {
@@ -1288,6 +1429,10 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
               } catch (err) {
                 console.warn('[WebSocket] 로컬 캐시 삭제 반영 실패:', err)
               }
+            } else if (isWorkspaceStructureNotification(data)) {
+              // 다른 사용자가 워크스페이스를 생성/수정/복구하면 알림을 받은 화면(진입점 등)에서
+              // 다시 들어가지 않아도 바로 보이도록 노드 트리를 즉시 서버 기준으로 갱신한다.
+              refreshWorkspaceTreeFromServer()
             }
           }
         } catch {

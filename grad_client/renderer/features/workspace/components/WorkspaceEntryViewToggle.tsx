@@ -10,6 +10,13 @@ type WorkspaceEntryViewToggleProps = {
   onOpenChooser?: () => void
   isAllExpanded?: boolean
   onToggleExpandAll?: () => void
+  /** 휴지통 모드(삭제된 워크스페이스를 같은 화면에 흐릿하게 함께 보기) 여부 */
+  isTrashMode?: boolean
+  /** 휴지통에 담긴 워크스페이스 수 */
+  deletedCount?: number
+  /** 살아있는 워크스페이스가 없어 휴지통 모드를 끌 수 없는 상태 */
+  isTrashModeLocked?: boolean
+  onToggleTrash?: () => void
 }
 
 export function WorkspaceEntryViewToggle({
@@ -18,6 +25,10 @@ export function WorkspaceEntryViewToggle({
   onOpenChooser,
   isAllExpanded = false,
   onToggleExpandAll,
+  isTrashMode = false,
+  deletedCount = 0,
+  isTrashModeLocked = false,
+  onToggleTrash,
 }: WorkspaceEntryViewToggleProps) {
   return (
     <div className={styles.viewToggleBar} aria-label="워크스페이스 진입점 도구 모음">
@@ -58,6 +69,29 @@ export function WorkspaceEntryViewToggle({
       </div>
 
       <div className={styles.actionGroup}>
+        {onToggleTrash ? (
+          <Button
+            variant={isTrashMode ? 'primary' : 'secondary'}
+            className={styles.chooserButton}
+            aria-pressed={isTrashMode}
+            disabled={isTrashModeLocked}
+            title={
+              isTrashModeLocked
+                ? '모든 워크스페이스가 삭제되어 휴지통 모드로 고정되었습니다.'
+                : isTrashMode
+                  ? '삭제된 워크스페이스를 숨깁니다.'
+                  : '삭제된 워크스페이스를 같은 화면에 흐릿하게 표시합니다. (우클릭으로 복구)'
+            }
+            onClick={onToggleTrash}
+          >
+            <Icon name="trash" size={17} />
+            {isTrashModeLocked
+              ? `휴지통 고정 (${deletedCount})`
+              : isTrashMode
+                ? '휴지통 닫기'
+                : `휴지통${deletedCount > 0 ? ` (${deletedCount})` : ''}`}
+          </Button>
+        ) : null}
         {onOpenChooser ? (
           <Button
             variant="secondary"

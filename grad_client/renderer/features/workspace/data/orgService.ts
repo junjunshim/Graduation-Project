@@ -15,8 +15,10 @@ import {
   assignRoleOnServer,
   createSubNodeOnServer,
   createTopNodeOnServer,
+  deleteNodeOnServer,
   fetchNodeDetailOnServer,
   loadWorkspaceDirectoryScopeOnServer,
+  restoreNodeOnServer,
   updateNodeOnServer,
   updateRoleOnServer,
 } from './serverWorkspace'
@@ -48,9 +50,15 @@ export function getNodePathLabel(nodeId: number, nodes?: OrganizationNodeRecord[
     .join(' / ')
 }
 
-export function getOrgSnapshot(): WorkspaceSnapshot {
+/**
+ * 진입점/워크스페이스 화면용 스냅샷.
+ * 기본값은 살아있는 노드만 담고, 휴지통(삭제된 워크스페이스 목록)을 그릴 때만 includeDeleted 를 켠다.
+ */
+export function getOrgSnapshot(options?: { includeDeleted?: boolean }): WorkspaceSnapshot {
   const db = readWorkspaceDb()
-  const activeNodes = db.nodes.filter((node) => !node.isDeleted)
+  const activeNodes = options?.includeDeleted
+    ? db.nodes
+    : db.nodes.filter((node) => !node.isDeleted)
   const activeNodeIds = new Set(activeNodes.map((node) => node.id))
 
   return {
@@ -74,9 +82,11 @@ export async function fetchNodeDetail(nodeId: number | string): Promise<Workspac
   return getOrgSnapshot()
 }
 
-export async function fetchWorkspaceDirectoryScope(): Promise<WorkspaceSnapshot> {
+export async function fetchWorkspaceDirectoryScope(options?: {
+  includeDeleted?: boolean
+}): Promise<WorkspaceSnapshot> {
   await loadWorkspaceDirectoryScopeOnServer()
-  return getOrgSnapshot()
+  return getOrgSnapshot(options)
 }
 
 export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapshot): WorkspaceSummary {
@@ -148,4 +158,12 @@ export async function updateNode(payload: UpdateNodeRequest) {
 
 export async function updateRole(payload: UpdateRoleRequest) {
   return updateRoleOnServer(payload)
+}
+
+export async function deleteWorkspace(nodeId: number) {
+  return deleteNodeOnServer(nodeId)
+}
+
+export async function restoreWorkspace(nodeId: number, cascade = true) {
+  return restoreNodeOnServer(nodeId, cascade)
 }

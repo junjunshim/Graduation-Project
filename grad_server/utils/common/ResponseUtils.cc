@@ -107,6 +107,9 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0414") != std::string::npos) return DbErrorCode::RenameRoleDefinitionFailed;
     else if (errMsg.find("P0415") != std::string::npos) return DbErrorCode::SelfRoleRemovalNotAllowed;
     else if (errMsg.find("P0418") != std::string::npos) return DbErrorCode::RoleRemovalPreviewFailed;
+    else if (errMsg.find("P0419") != std::string::npos) return DbErrorCode::RoleDefinitionInUse;
+    else if (errMsg.find("P0420") != std::string::npos) return DbErrorCode::RoleDeletionPreviewFailed;
+    else if (errMsg.find("P0421") != std::string::npos) return DbErrorCode::DeleteRoleDefinitionFailed;
     else if (errMsg.find("P0416") != std::string::npos) return DbErrorCode::RoleRemovalTransferInvalid;
     else if (errMsg.find("P0417") != std::string::npos) return DbErrorCode::RemoveRoleFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
@@ -305,6 +308,21 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         }
         case DbErrorCode::RoleRemovalPreviewFailed:{
             ret["message"] = "역할 회수 정보를 불러오지 못했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RoleDefinitionInUse:{
+            ret["message"] = "이 역할을 배정받은 사용자가 남아 있어 삭제할 수 없습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::RoleDeletionPreviewFailed:{
+            ret["message"] = "역할 삭제 정보를 불러오지 못했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::DeleteRoleDefinitionFailed:{
+            ret["message"] = "역할 삭제에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }

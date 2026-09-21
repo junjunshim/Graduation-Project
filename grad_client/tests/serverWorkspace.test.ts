@@ -7,6 +7,8 @@ import {
 } from '../renderer/features/workspace/data/server/apiClient.js'
 import { getServerContextSnapshot } from '../renderer/features/workspace/data/server/contextCache.js'
 import {
+  deleteRoleDefinitionOnServer,
+  fetchRoleDefinitionDeletionPreviewOnServer,
   fetchRoleRemovalPreviewOnServer,
   isWorkspaceStructureNotification,
   removeRoleOnServer,
@@ -552,6 +554,134 @@ test('역할 회수가 서버에서 실패하면 로컬 캐시를 갱신하지 �
     assert.equal(result.status, 'error')
     if (result.status !== 'error') return
     assert.equal(result.message, '업무를 이관할 수 없습니다. 이관 대상과 권한을 확인해 주세요.')
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].method, 'DELETE')
+    // 실패했으므로 재조회(노드 상세) 요청이 없어야 한다.
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+/* ------------------------------------------------------------------ */
+/* 역할 정의 삭제 (delete_role_definition / deletion-preview)            */
+/* ------------------------------------------------------------------ */
+
+const roleDefinitionDeletionPreviewPayload = {
+  type: 'ROLE_DEFINITION_DELETION_PREVIEW',
+  can_delete: false,
+  blocked_reason: '이 역할을 배정받은 사용자가 2명 있습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.',
+  node_id: 4,
+  role_id: 7,
+  role: 'MEMBER',
+  is_top_role: false,
+  assignee_count: 2,
+  inactive_assignee_count: 1,
+  assignees: [
+    { user_id: 'U-12', name: '이영희', email: 'user@example.com' },
+    { user_id: 'U-13', name: '박민수', email: 'park@example.com' },
+  ],
+}
+
+test('역할 삭제 사전 확인은 배정된 사용자 목록을 파싱한다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'success', data: [roleDefinitionDeletionPreviewPayload] })
+  }
+
+  try {
+    const result = await fetchRoleDefinitionDeletionPreviewOnServer(4, 7)
+
+    assert.equal(result.status, 'success')
+    if (result.status !== 'success') return
+
+    assert.equal(result.preview.canDelete, false)
+    assert.equal(result.preview.assigneeCount, 2)
+    assert.equal(result.preview.roleName, 'MEMBER')
+    assert.equal(result.preview.isTopRole, false)
+    assert.equal(result.preview.inactiveAssigneeCount, 1)
+    assert.deepEqual(result.preview.assignees, [
+      { userId: 'U-12', name: '이영희', email: 'user@example.com' },
+      { userId: 'U-13', name: '박민수', email: 'park@example.com' },
+    ])
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].pathname, '/api/roles/definition/deletion-preview')
+    assert.equal(calls[0].search, '?node_id=4&role_id=7')
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('역할 정의 삭제는 성공했을 때만 노드 상세를 다시 조회한다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+
+    if (calls[calls.length - 1].method === 'DELETE') {
+      return jsonResponse({
+        status: 'success',
+        data: [{ type: 'AUTHORITY', action: 'deleted', role_id: 7, role: 'MEMBER' }],
+      })
+    }
+
+    return jsonResponse(createDocumentedContextResponse())
+  }
+
+  try {
+    const result = await deleteRoleDefinitionOnServer({ nodeId: 4, roleId: 7, roleName: 'MEMBER' })
+
+    assert.equal(result.status, 'success')
+
+    assert.equal(calls[0].method, 'DELETE')
+    assert.equal(calls[0].pathname, '/api/roles/definition')
+    assert.deepEqual(calls[0].body, { node_id: 4, role_id: 7 })
+
+    // 배정된 사용자가 없어 삭제가 커밋되면 변경 대상 노드만 다시 조회한다.
+    assert.equal(calls.filter((call) => call.method === 'GET').length, 1)
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('배정된 사용자가 남아 역할 삭제가 거부되면 로컬 캐시를 갱신하지 않는다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse(
+      {
+        status: 'error',
+        code: '409',
+        message: '이 역할을 배정받은 사용자가 남아 있어 삭제할 수 없습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.',
+      },
+      409,
+    )
+  }
+
+  try {
+    const result = await deleteRoleDefinitionOnServer({ nodeId: 4, roleId: 7, roleName: 'MEMBER' })
+
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.equal(
+      result.message,
+      '이 역할을 배정받은 사용자가 남아 있어 삭제할 수 없습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.',
+    )
 
     assert.equal(calls.length, 1)
     assert.equal(calls[0].method, 'DELETE')

@@ -10,8 +10,11 @@ import type {
   UpdateNodeRequest,
   UpdateRoleRequest,
   UpdateWorkItemRequest,
+  DeleteRoleDefinitionRequest,
   RemoveRoleRequest,
   RemoveRoleResult,
+  RoleDefinitionAssignee,
+  RoleDefinitionDeletionPreview,
   RoleRemovalPreview,
   RoleRemovalTransferTarget,
   RoleRemovalWorkItem,
@@ -846,6 +849,96 @@ export async function removeRoleOnServer(
       },
     }
   }, '역할을 회수하지 못했습니다.')
+}
+
+/** 서버가 내려준 역할 삭제 미리보기 원시 데이터를 클라이언트 모델로 변환한다. */
+function readRoleDefinitionDeletionPreview(
+  item: Record<string, unknown> | undefined,
+): RoleDefinitionDeletionPreview | null {
+  if (!item) return null
+
+  const rawAssignees = Array.isArray(item.assignees) ? (item.assignees as Array<Record<string, unknown>>) : []
+
+  const assignees: RoleDefinitionAssignee[] = rawAssignees.map((raw) => ({
+    userId: String(raw.user_id ?? ''),
+    name: String(raw.name ?? raw.email ?? '이름 없음'),
+    email: String(raw.email ?? ''),
+  }))
+
+  return {
+    canDelete: Boolean(item.can_delete),
+    blockedReason: item.blocked_reason ? String(item.blocked_reason) : null,
+    nodeId: Number(item.node_id ?? 0),
+    roleId: Number(item.role_id ?? 0),
+    roleName: String(item.role ?? ''),
+    isTopRole: Boolean(item.is_top_role),
+    assigneeCount: Number(item.assignee_count ?? assignees.length),
+    assignees,
+    inactiveAssigneeCount: Number(item.inactive_assignee_count ?? 0),
+  }
+}
+
+/**
+ * 역할 정의 삭제 사전 확인.
+ * 이 역할을 배정받은 사용자가 남아 있는지 서버에서 확인한다.
+ */
+export async function fetchRoleDefinitionDeletionPreviewOnServer(
+  nodeId: number,
+  roleId: number,
+): Promise<{ status: 'success'; preview: RoleDefinitionDeletionPreview } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await apiRequest<unknown>(
+      `/roles/definition/deletion-preview?node_id=${nodeId}&role_id=${roleId}`,
+    )
+
+    if (!isServerStatusResponse(response)) {
+      return { status: 'error' as const, message: '역할 삭제 정보 응답 형식이 올바르지 않습니다.' }
+    }
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할 삭제 정보를 불러오지 못했습니다.' }
+    }
+
+    let items: Array<Record<string, unknown>> = []
+    try {
+      items = parseServerContextItems((response as ServerContextResponse).data) as Array<Record<string, unknown>>
+    } catch {
+      return { status: 'error' as const, message: '역할 삭제 정보 형식이 올바르지 않습니다.' }
+    }
+
+    const preview = readRoleDefinitionDeletionPreview(items[0])
+
+    if (!preview) {
+      return { status: 'error' as const, message: '역할 삭제 정보를 찾을 수 없습니다.' }
+    }
+
+    return { status: 'success' as const, preview }
+  }, '역할 삭제 정보를 불러오지 못했습니다.')
+}
+
+/**
+ * 역할 정의 삭제.
+ * 배정된 사용자가 남아 있으면 서버가 거부하며, 실패 시 로컬 캐시를 건드리지 않는다.
+ */
+export async function deleteRoleDefinitionOnServer(
+  payload: DeleteRoleDefinitionRequest,
+): Promise<{ status: 'success' } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/roles/definition', {
+      method: 'DELETE',
+      body: {
+        node_id: payload.nodeId,
+        role_id: payload.roleId,
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할을 삭제하지 못했습니다.' }
+    }
+
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
+    return { status: 'success' as const }
+  }, '역할을 삭제하지 못했습니다.')
 }
 
 export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {

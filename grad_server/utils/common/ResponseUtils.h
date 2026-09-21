@@ -36,6 +36,9 @@ enum class DbErrorCode {
     RoleRemovalTransferInvalid, // P0416 업무 이관 대상이 없거나 자격 미달
     RemoveRoleFailed,           // P0417 사용자 역할 회수 실패
     RoleRemovalPreviewFailed,   // P0418 역할 회수 사전 확인 실패
+    RoleDefinitionInUse,        // P0419 역할 정의에 배정된 사용자가 남아 있음
+    RoleDeletionPreviewFailed,  // P0420 역할 삭제 사전 확인 실패
+    DeleteRoleDefinitionFailed, // P0421 역할 정의 삭제 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     EmailNotFound,              // P0503 이메일 찾을 수 없음

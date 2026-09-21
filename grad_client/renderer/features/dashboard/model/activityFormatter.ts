@@ -474,6 +474,11 @@ function formatAuthorityMessage(
     return `${actor}님이 ${role}에 권한을 설정했습니다.`
   }
   if (action === 'deleted') {
+    // 역할 정의 삭제(AUTHORITY + field 'role')는 역할 자체가 사라진 것이므로 삭제로 표현한다.
+    if (text(activity.fieldName).toLowerCase() === 'role') {
+      const subject = targetName ? `역할 ${quoted(targetName)}` : '역할'
+      return `${actor}님이 ${withJosa(subject, '을/를')} 삭제했습니다.`
+    }
     return `${actor}님이 ${role}의 권한을 회수했습니다.`
   }
   if (action === 'updated') {

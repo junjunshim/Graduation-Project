@@ -854,3 +854,199 @@ BEGIN
             USING ERRCODE = 'P0417';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ============================================================================
+-- 역할 정의 삭제 지원
+-- ============================================================================
+
+-- RoleController::get_role_definition_deletion_preview (역할 삭제 사전 확인)
+-- 이 역할을 배정받은 사용자가 남아 있으면 삭제할 수 없다.
+-- (사용자 탭에서 먼저 다른 역할로 변경해야 한다)
+CREATE OR REPLACE FUNCTION get_role_definition_deletion_preview(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_role_id INTEGER
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_role_name role_authorities.role%TYPE;
+    v_is_top_role BOOLEAN;
+    v_assignees JSONB;
+    v_assignee_count INTEGER;
+    v_inactive_assignee_count INTEGER;
+    v_can_delete BOOLEAN;
+    v_blocked_reason TEXT;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 역할 정의 확인
+    SELECT role, is_top_role INTO v_role_name, v_is_top_role
+    FROM role_authorities
+    WHERE node_id = p_node_id AND authority_id = p_role_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0407]Role is not defined on this node : %', p_role_id
+        USING ERRCODE = 'P0407';
+    END IF;
+
+    -- 3. 요청자 권한 체크 (해당 노드에 직접 부여된 ROLE_CHANGE: bit 15 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have ROLE_CHANGE authority on node : %', p_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 이 역할을 배정받은 사용자 (삭제를 막는 근거)
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+               'user_id', a.user_id,
+               'name', a.name,
+               'email', a.email
+           ) ORDER BY a.name, a.user_id), '[]'::jsonb),
+           COUNT(*)
+    INTO v_assignees, v_assignee_count
+    FROM (
+        SELECT u.user_id, u.name, u.email
+        FROM role_assignments r
+        JOIN users u ON u.user_id = r.user_id
+        WHERE r.node_id = p_node_id AND r.role_id = p_role_id AND u.is_deleted = FALSE
+    ) a;
+
+    -- 4-1. 탈퇴한 사용자의 잔여 배정 (삭제를 막지는 않고, 역할과 함께 정리된다)
+    SELECT COUNT(*)
+    INTO v_inactive_assignee_count
+    FROM role_assignments r
+    JOIN users u ON u.user_id = r.user_id
+    WHERE r.node_id = p_node_id AND r.role_id = p_role_id AND u.is_deleted = TRUE;
+
+    -- 5. 삭제 가능 여부 (배정된 사용자가 남아 있으면 사용자 탭에서 먼저 변경해야 한다)
+    v_can_delete := TRUE;
+    v_blocked_reason := NULL;
+
+    IF v_is_top_role THEN
+        v_can_delete := FALSE;
+        v_blocked_reason := '최상위 담당자(ADMIN) 역할은 삭제할 수 없습니다.';
+    ELSIF v_assignee_count > 0 THEN
+        v_can_delete := FALSE;
+        v_blocked_reason := format('이 역할을 배정받은 사용자가 %s명 있습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.', v_assignee_count);
+    END IF;
+
+    RETURN QUERY SELECT jsonb_build_object(
+        'type', 'ROLE_DEFINITION_DELETION_PREVIEW',
+        'can_delete', v_can_delete,
+        'blocked_reason', v_blocked_reason,
+        'node_id', p_node_id,
+        'role_id', p_role_id,
+        'role', v_role_name,
+        'is_top_role', COALESCE(v_is_top_role, FALSE),
+        'assignee_count', v_assignee_count,
+        'inactive_assignee_count', v_inactive_assignee_count,
+        'assignees', v_assignees
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0102' OR SQLSTATE 'P0103' OR SQLSTATE 'P0407' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0420]Failed to load role definition deletion preview : %, (REASON: %)', p_role_id, SQLERRM
+            USING ERRCODE = 'P0420';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- RoleController::delete_role_definition (역할 정의 삭제)
+-- 이 역할을 배정받은 사용자가 한 명이라도 남아 있으면 삭제하지 않는다.
+-- (사용자 탭에서 해당 사용자들의 역할을 먼저 다른 역할로 변경해야 한다)
+CREATE OR REPLACE FUNCTION delete_role_definition(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_role_id INTEGER
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_role_name role_authorities.role%TYPE;
+    v_authority_bit BIT(24);
+    v_is_top_role BOOLEAN;
+    v_assignee_count INTEGER;
+    v_assignee_names TEXT;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist : %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 역할 정의 조회
+    SELECT role, authority, is_top_role
+    INTO v_role_name, v_authority_bit, v_is_top_role
+    FROM role_authorities
+    WHERE node_id = p_node_id AND authority_id = p_role_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0407]Role is not defined on this node : %', p_role_id
+        USING ERRCODE = 'P0407';
+    END IF;
+
+    -- 3. 요청자 권한 체크 (해당 노드에 직접 부여된 ROLE_CHANGE: bit 15 필요)
+    IF NOT check_direct_authority(v_requester_id, p_node_id, 'ROLE_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have ROLE_CHANGE authority on node : %', p_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 최상위 담당자(ADMIN) 역할은 삭제할 수 없다
+    IF v_is_top_role THEN
+        RAISE EXCEPTION '[P0409]Cannot delete the top role definition of a node : %', v_role_name
+        USING ERRCODE = 'P0409';
+    END IF;
+
+    -- 5. 이 역할을 배정받은 사용자가 남아 있으면 삭제할 수 없다
+    SELECT COUNT(*), STRING_AGG(u.name, ', ' ORDER BY u.name)
+    INTO v_assignee_count, v_assignee_names
+    FROM role_assignments r
+    JOIN users u ON u.user_id = r.user_id
+    WHERE r.node_id = p_node_id AND r.role_id = p_role_id AND u.is_deleted = FALSE;
+
+    IF v_assignee_count > 0 THEN
+        RAISE EXCEPTION '[P0419]Role definition is still assigned to % user(s) : % (%)',
+            v_assignee_count, v_role_name, v_assignee_names
+        USING ERRCODE = 'P0419';
+    END IF;
+
+    -- 6. 탈퇴한 사용자의 잔여 배정 정리
+    -- (활성 사용자가 보유하지 않는 것은 5단계에서 확인했으므로, 남은 행은 탈퇴 사용자의 잔여 배정뿐이다)
+    DELETE FROM role_assignments
+    WHERE node_id = p_node_id AND role_id = p_role_id;
+
+    -- 7. 역할 정의 삭제
+    DELETE FROM role_authorities
+    WHERE node_id = p_node_id AND authority_id = p_role_id;
+
+    -- 8. 최근 활동 피드 로깅
+    PERFORM log_activity(p_node_id, p_requester_email, 'AUTHORITY', p_role_id::VARCHAR, v_role_name, 'deleted', 'role', v_role_name, NULL);
+
+    -- 9. 삭제 결과 반환
+    RETURN QUERY SELECT jsonb_build_object(
+        'type', 'AUTHORITY',
+        'action', 'deleted',
+        'id', p_role_id,
+        'role_id', p_role_id,
+        'node_id', p_node_id,
+        'role', v_role_name,
+        'authority', v_authority_bit::TEXT,
+        'is_top_role', COALESCE(v_is_top_role, FALSE)
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0102' OR SQLSTATE 'P0103' OR SQLSTATE 'P0407'
+          OR SQLSTATE 'P0409' OR SQLSTATE 'P0419' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0421]Failed to delete role definition : % (%), (REASON: %)', v_role_name, p_role_id, SQLERRM
+            USING ERRCODE = 'P0421';
+END;
+$$ LANGUAGE plpgsql;

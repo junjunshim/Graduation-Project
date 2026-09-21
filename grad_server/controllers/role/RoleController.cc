@@ -306,6 +306,108 @@ void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::functi
     );
 }
 
+// 역할 정의 삭제 사전 확인 api (GET /api/roles/definition/deletion-preview?node_id=...&role_id=...)
+// 이 역할을 배정받은 사용자가 남아 있으면 삭제할 수 없다.
+void RoleController::getRoleDefinitionDeletionPreview(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 쿼리 파라미터 파싱
+    std::string node_id_str = req->getParameter("node_id");
+    std::string role_id_str = req->getParameter("role_id");
+
+    int node_id = -1;
+    int role_id = -1;
+    try {
+        if (!node_id_str.empty()) node_id = std::stoi(node_id_str);
+        if (!role_id_str.empty()) role_id = std::stoi(role_id_str);
+    } catch (...) {
+        node_id = -1;
+        role_id = -1;
+    }
+
+    if (node_id <= 0 || role_id <= 0) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(node_id, role_id)가 누락되었거나 올바르지 않습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM get_role_definition_deletion_preview($1, $2, $3)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, node_id, role_id
+    );
+}
+
+// 역할 정의 삭제 api (DELETE /api/roles/definition)
+// 배정된 사용자가 한 명이라도 남아 있으면 DB 가 거부한다.
+void RoleController::deleteRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
+    // 1. 데이터 파싱 및 유효성 검사
+    auto jsonPtr = req->getJsonObject();
+    if(!jsonPtr || !validateInts(jsonPtr, "node_id", "role_id")){
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "필수 파라미터(node_id, role_id)가 누락되었습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    std::string requester_email = req->attributes()->get<std::string>("user_email");
+    int node_id = (*jsonPtr)["node_id"].asInt();
+    int role_id = (*jsonPtr)["role_id"].asInt();
+
+    // 2. 비즈니스 로직 실행
+    auto dbClient = drogon::app().getDbClient();
+    std::string sql = "SELECT * FROM delete_role_definition($1, $2, $3)";
+
+    dbClient->execSqlAsync(
+        sql,
+        [callback](const orm::Result &result) {
+            Json::Value ret = parseIntegratedDataResult(result);
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(k200OK);
+            callback(resp);
+        },
+        [callback](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e);
+            auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
+            ret.removeMember("http_code");
+
+            auto resp = HttpResponse::newHttpJsonResponse(ret);
+            resp->setStatusCode(statusCode);
+            callback(resp);
+        },
+        requester_email, node_id, role_id
+    );
+}
+
 // 사용자 역할 회수 사전 확인 api (GET /api/roles/removal-preview?email=...&node_id=...)
 void RoleController::getRoleRemovalPreview(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback){
     // 1. 쿼리 파라미터 파싱

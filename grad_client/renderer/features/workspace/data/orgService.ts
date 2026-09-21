@@ -2,6 +2,7 @@ import { resolveRoleAssignments } from '../model/roleDefinitions'
 import type {
   AssignRoleRequest,
   CreateSubNodeRequest,
+  DeleteRoleDefinitionRequest,
   CreateTopNodeRequest,
   OrganizationNodeRecord,
   RemoveRoleRequest,
@@ -17,7 +18,9 @@ import {
   createSubNodeOnServer,
   createTopNodeOnServer,
   deleteNodeOnServer,
+  deleteRoleDefinitionOnServer,
   fetchNodeDetailOnServer,
+  fetchRoleDefinitionDeletionPreviewOnServer,
   fetchRoleRemovalPreviewOnServer,
   loadWorkspaceDirectoryScopeOnServer,
   removeRoleOnServer,
@@ -170,6 +173,15 @@ export async function fetchRoleRemovalPreview(email: string, nodeId: number) {
 
 export async function removeRole(payload: RemoveRoleRequest) {
   return removeRoleOnServer(payload)
+}
+
+/** 역할 정의 삭제 전, 이 역할을 배정받은 사용자가 남아 있는지 조회한다. */
+export async function fetchRoleDefinitionDeletionPreview(nodeId: number, roleId: number) {
+  return fetchRoleDefinitionDeletionPreviewOnServer(nodeId, roleId)
+}
+
+export async function deleteRoleDefinition(payload: DeleteRoleDefinitionRequest) {
+  return deleteRoleDefinitionOnServer(payload)
 }
 
 export async function deleteWorkspace(nodeId: number) {

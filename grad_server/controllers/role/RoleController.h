@@ -20,6 +20,8 @@ class RoleController : public drogon::HttpController<RoleController>
     ADD_METHOD_TO(RoleController::createRoleDefinition, "/api/roles/definition", Post, "JwtFilter");
     ADD_METHOD_TO(RoleController::updateRoleAuthority, "/api/roles/definition", Patch, "JwtFilter");
     ADD_METHOD_TO(RoleController::renameRoleDefinition, "/api/roles/rename", Patch, "JwtFilter");
+    ADD_METHOD_TO(RoleController::getRoleDefinitionDeletionPreview, "/api/roles/definition/deletion-preview", Get, "JwtFilter");
+    ADD_METHOD_TO(RoleController::deleteRoleDefinition, "/api/roles/definition", Delete, "JwtFilter");
     ADD_METHOD_TO(RoleController::getRoleRemovalPreview, "/api/roles/removal-preview", Get, "JwtFilter");
     ADD_METHOD_TO(RoleController::removeRole, "/api/roles", Delete, "JwtFilter");
 
@@ -30,6 +32,8 @@ class RoleController : public drogon::HttpController<RoleController>
     void createRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void updateRoleAuthority(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void renameRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void getRoleDefinitionDeletionPreview(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void deleteRoleDefinition(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRoleRemovalPreview(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void removeRole(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };

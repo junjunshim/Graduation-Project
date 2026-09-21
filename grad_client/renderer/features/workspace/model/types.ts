@@ -246,6 +246,33 @@ export type RemoveRoleResult = {
   transferTargetName?: string
 }
 
+/** 역할 정의 삭제 시 이 역할을 배정받은 사용자 */
+export type RoleDefinitionAssignee = {
+  userId: string
+  name: string
+  email: string
+}
+
+/** 역할 정의 삭제 사전 확인 결과 */
+export type RoleDefinitionDeletionPreview = {
+  canDelete: boolean
+  blockedReason: string | null
+  nodeId: number
+  roleId: number
+  roleName: RoleName
+  isTopRole: boolean
+  assigneeCount: number
+  assignees: RoleDefinitionAssignee[]
+  /** 탈퇴한 사용자의 잔여 배정 수 (삭제를 막지 않고 역할과 함께 정리된다) */
+  inactiveAssigneeCount: number
+}
+
+export type DeleteRoleDefinitionRequest = {
+  nodeId: number
+  roleId: number
+  roleName: RoleName
+}
+
 export type CreateWorkItemRequest = {
   workItemId: string
   ownerNodeId: number

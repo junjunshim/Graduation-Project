@@ -17,6 +17,7 @@ import { getRolePriorityScore } from '../model/memberInheritance'
 import { canChangeRoleDefinitions } from '../model/effectiveAuthority'
 import type {
   AuthorityRecord,
+  RoleDefinitionDeletionPreview,
   OrganizationNodeRecord,
   RoleAssignmentRecord,
   RoleName,
@@ -24,9 +25,12 @@ import type {
 } from '../model/types'
 import {
   createRoleDefinitionOnServer,
+  deleteRoleDefinitionOnServer,
+  fetchRoleDefinitionDeletionPreviewOnServer,
   renameRoleDefinitionOnServer,
   updateRoleAuthorityOnServer,
 } from '../data/server/serverWorkspace'
+import { RoleDefinitionDeleteModal } from './RoleDefinitionDeleteModal'
 import { RoleSaveConfirmModal } from './RoleSaveConfirmModal'
 import { ToastAlertModal, type AlertType } from '../../../design-system/primitives/ToastAlertModal'
 import styles from './WorkspaceRolesTab.module.css'
@@ -101,6 +105,12 @@ export function WorkspaceRolesTab({
   // 역할 이름 변경 모드 상태
   const [isRenamingRole, setIsRenamingRole] = useState(false)
   const [editRoleName, setEditRoleName] = useState('')
+
+  // 역할 정의 삭제 상태
+  const [deleteTarget, setDeleteTarget] = useState<{ roleId: string; roleName: string } | null>(null)
+  const [deletePreview, setDeletePreview] = useState<RoleDefinitionDeletionPreview | null>(null)
+  const [isLoadingDeletePreview, setIsLoadingDeletePreview] = useState(false)
+  const [isDeletingRole, setIsDeletingRole] = useState(false)
 
   // 외부 클릭 시 프리셋 메뉴 닫기
   useEffect(() => {
@@ -396,6 +406,89 @@ export function WorkspaceRolesTab({
     }
   }
 
+  // 역할 정의 삭제 사전 확인: 이 역할을 배정받은 사용자가 남아 있으면 삭제할 수 없다.
+  const loadDeletePreview = async (roleId: string) => {
+    if (!rootNode) return
+    setIsLoadingDeletePreview(true)
+    try {
+      const result = await fetchRoleDefinitionDeletionPreviewOnServer(rootNode.id, Number(roleId))
+
+      if (result.status === 'error') {
+        showAlert(result.message || '역할 삭제 정보를 불러오지 못했습니다.', '역할 삭제 확인 실패', 'error')
+        setDeleteTarget(null)
+        setDeletePreview(null)
+        return
+      }
+
+      setDeletePreview(result.preview)
+    } catch (err) {
+      console.error('[WorkspaceRolesTab] 역할 삭제 정보 조회 실패:', err)
+      showAlert('서버 통신 중 오류가 발생했습니다.', '통신 오류', 'error')
+      setDeleteTarget(null)
+      setDeletePreview(null)
+    } finally {
+      setIsLoadingDeletePreview(false)
+    }
+  }
+
+  const startDeletingRole = (roleId: string) => {
+    if (!canManageRoles || isSaving || isDeletingRole) return
+    const roleName = roleLabel(roleId)
+    setRoleMenu(null)
+    setIsRenamingRole(false)
+    setEditRoleName('')
+    setDeleteTarget({ roleId, roleName })
+    setDeletePreview(null)
+    void loadDeletePreview(roleId)
+  }
+
+  const handleReloadDeletePreview = () => {
+    if (!deleteTarget || isDeletingRole) return
+    void loadDeletePreview(deleteTarget.roleId)
+  }
+
+  const closeDeleteModal = () => {
+    if (isDeletingRole) return
+    setDeleteTarget(null)
+    setDeletePreview(null)
+    setIsLoadingDeletePreview(false)
+  }
+
+  // 역할 정의 삭제 (서버가 실패하면 로컬 캐시를 건드리지 않는다)
+  const handleConfirmDeleteRole = async () => {
+    if (!rootNode || !deleteTarget) {
+      return { ok: false as const, message: '삭제할 역할 정보를 찾을 수 없습니다.' }
+    }
+    if (deletePreview && !deletePreview.canDelete) {
+      return { ok: false as const, message: deletePreview.blockedReason ?? '이 역할은 삭제할 수 없습니다.' }
+    }
+
+    setIsDeletingRole(true)
+    try {
+      const result = await deleteRoleDefinitionOnServer({
+        nodeId: rootNode.id,
+        roleId: Number(deleteTarget.roleId),
+        roleName: deleteTarget.roleName,
+      })
+
+      if (result.status === 'error') {
+        return { ok: false as const, message: result.message || '역할을 삭제하지 못했습니다.' }
+      }
+
+      const deletedName = deleteTarget.roleName
+      setDeleteTarget(null)
+      setDeletePreview(null)
+      setSaveSuccess(false)
+      showAlert(`'${deletedName}' 역할을 삭제했습니다.`, '역할 삭제 완료', 'success')
+      return { ok: true as const }
+    } catch (err) {
+      console.error('[WorkspaceRolesTab] 역할 삭제 실패:', err)
+      return { ok: false as const, message: '서버 통신 중 오류가 발생했습니다.' }
+    } finally {
+      setIsDeletingRole(false)
+    }
+  }
+
   // 좌측 열과 우측 열 도메인 분할
   // 좌측: 공간 및 노드 (4개) + 공간 관리 (2개) + 역할 및 인원 관리 (2개) + 활동 히스토리 (2개) = 총 10개
   // 우측: 업무 (WorkItem) (7개) + 파일 및 산출물 (2개) + 특수 제어 (1개) = 총 10개
@@ -677,6 +770,21 @@ export function WorkspaceRolesTab({
               <Icon name="plus" size={15} />
               <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{roleLabel(roleMenu.role)}의 권한으로 새로 만들기</span>
             </button>
+            <button
+              type="button"
+              className={menuStyles.deleteItem}
+              role="menuitem"
+              disabled={isSaving || isDeletingRole || definitionById.get(roleMenu.role)?.isTopRole === true}
+              title={
+                definitionById.get(roleMenu.role)?.isTopRole
+                  ? '최상위 담당자(ADMIN) 역할은 삭제할 수 없습니다.'
+                  : '이 역할을 삭제합니다.'
+              }
+              onClick={() => startDeletingRole(roleMenu.role)}
+            >
+              <Icon name="trash" size={15} />
+              <span style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>역할 삭제</span>
+            </button>
           </div>,
           document.body,
         ) : null}
@@ -751,6 +859,18 @@ export function WorkspaceRolesTab({
                         >
                           <Icon name="gear" size={13} />
                           <span>이름 변경</span>
+                        </button>
+                      ) : null}
+                      {canManageRoles && !isSelectedAdmin && !isCreatingRole ? (
+                        <button
+                          type="button"
+                          className={styles.deleteRoleBtn}
+                          onClick={() => startDeletingRole(selectedRole)}
+                          disabled={isSaving || isDeletingRole}
+                          title="이 역할을 삭제합니다. 배정된 사용자가 남아 있으면 삭제할 수 없습니다."
+                        >
+                          <Icon name="trash" size={13} />
+                          <span>역할 삭제</span>
                         </button>
                       ) : null}
                     </div>
@@ -867,6 +987,19 @@ export function WorkspaceRolesTab({
         isSaving={isSaving}
         isDisablingOwnRoleChange={!isCreatingRole && isDisablingOwnRoleChange}
         isCreating={isCreatingRole}
+      />
+
+      {/* 역할 정의 삭제 확인 모달 */}
+      <RoleDefinitionDeleteModal
+        isOpen={Boolean(deleteTarget)}
+        onClose={closeDeleteModal}
+        nodeName={rootNode?.name ?? ''}
+        roleName={deleteTarget?.roleName ?? ''}
+        preview={deletePreview}
+        isLoadingPreview={isLoadingDeletePreview}
+        isSubmitting={isDeletingRole}
+        onReloadPreview={handleReloadDeletePreview}
+        onConfirmDelete={handleConfirmDeleteRole}
       />
 
       {/* 모던 알림/에러 모달 */}

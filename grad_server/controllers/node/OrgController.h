@@ -19,6 +19,8 @@ class OrgController : public drogon::HttpController<OrgController>
     ADD_METHOD_TO(OrgController::createSubNode, "/api/org/subNodes", Post, "JwtFilter");
     ADD_METHOD_TO(OrgController::getNodeDetail, "/api/org/nodes", Get, "JwtFilter");
     ADD_METHOD_TO(OrgController::updateNode, "/api/org/nodes", Patch, "JwtFilter");
+    ADD_METHOD_TO(OrgController::previewNodeMove, "/api/org/nodes/move-preview", Post, "JwtFilter");
+    ADD_METHOD_TO(OrgController::moveNode, "/api/org/nodes/move", Patch, "JwtFilter");
     ADD_METHOD_TO(OrgController::deleteNode, "/api/org/nodes", Delete, "JwtFilter");
     ADD_METHOD_TO(OrgController::restoreNode, "/api/org/nodes/restore", Patch, "JwtFilter");
     ADD_METHOD_TO(OrgController::getActivities, "/api/org/activities", Get, "JwtFilter");
@@ -32,6 +34,8 @@ class OrgController : public drogon::HttpController<OrgController>
     void createSubNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getNodeDetail(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void updateNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void previewNodeMove(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void moveNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void deleteNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void restoreNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getActivities(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);

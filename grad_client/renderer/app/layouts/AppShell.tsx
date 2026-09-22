@@ -79,6 +79,14 @@ export function AppShell() {
   const workspaceSelectView = searchParams.get('view') === 'list' ? 'list' : 'hierarchy'
   const isWorkspaceSelectListView = workspaceSelectView === 'list'
   const isWorkspaceRoute = location.pathname === '/workspace'
+  const isWorkspaceMoveRoute = location.pathname === '/workspace/move'
+  const movingWorkspace = isWorkspaceMoveRoute
+    ? snapshot.nodes.find((node) => node.id === Number(searchParams.get('nodeId')))
+    : undefined
+  const isWorkspaceEditRoute = location.pathname === '/setup/top-node' && searchParams.has('editNodeId')
+  const editingWorkspace = isWorkspaceEditRoute
+    ? snapshot.nodes.find((node) => node.id === Number(searchParams.get('editNodeId')))
+    : undefined
   const isWorkspaceTimelineRoute =
     isWorkspaceRoute && searchParams.get('view') === 'timeline'
   const isWorkspacePanelRoute =
@@ -111,8 +119,9 @@ export function AppShell() {
     ? {
         type: 'breadcrumb',
         label: '워크스페이스',
-        title: '루트 워크스페이스 생성',
-        subtitle: '회사, 본부, 프로젝트 등 전체 조직 계층 트리의 기준이 될 최상위 루트 워크스페이스를 등록합니다.',
+        title: isWorkspaceEditRoute ? editingWorkspace?.name ?? '워크스페이스' : '루트 워크스페이스 생성',
+        titleSuffix: isWorkspaceEditRoute ? '(수정)' : undefined,
+        subtitle: isWorkspaceEditRoute ? '워크스페이스의 이름과 유형을 변경하고, 미리보기에서 수정할 내용을 확인하세요.' : '회사, 본부, 프로젝트 등 전체 조직 계층 트리의 기준이 될 최상위 루트 워크스페이스를 등록합니다.',
       }
     : isWorkspaceSelectRoute
     ? {
@@ -123,6 +132,14 @@ export function AppShell() {
           ? '조직의 모든 워크스페이스를 목록으로 확인하고 이동할 수 있습니다.'
           : '조직의 모든 워크스페이스를 계층 구조로 확인하고 이동할 수 있습니다.',
       }
+    : isWorkspaceMoveRoute
+      ? {
+          type: 'breadcrumb',
+          label: '워크스페이스',
+          title: movingWorkspace?.name ?? '워크스페이스',
+          titleSuffix: '(이전)',
+          subtitle: '트리에서 이전할 위치를 선택하고, 변경될 구조와 업무·일정 이관 내용을 확인하세요.',
+        }
     : isWorkspaceRoute
       ? {
           type: 'breadcrumb',
@@ -157,6 +174,7 @@ export function AppShell() {
   const isDashboardRoute = location.pathname === '/dashboard'
   const isCalendarRoute = location.pathname === '/calendar'
   const hasInternalScroll =
+    isWorkspaceMoveRoute ||
     isWorkspaceTimelineRoute ||
     isWorkspacePanelRoute ||
     isWorkspaceSelectRoute ||
@@ -199,14 +217,14 @@ export function AppShell() {
       <div
         className={[
           styles.workspace,
-          hasCustomTitleBar || isWorkspaceSelectRoute || location.pathname === '/setup/top-node' || location.pathname === '/setup/sub-node'
+          hasCustomTitleBar || isWorkspaceSelectRoute || isWorkspaceMoveRoute || location.pathname === '/setup/top-node' || location.pathname === '/setup/sub-node'
             ? styles.workspaceWithoutPageBar
             : '',
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {!hasCustomTitleBar && !isWorkspaceSelectRoute && location.pathname !== '/setup/top-node' && location.pathname !== '/setup/sub-node' ? (
+        {!hasCustomTitleBar && !isWorkspaceSelectRoute && !isWorkspaceMoveRoute && location.pathname !== '/setup/top-node' && location.pathname !== '/setup/sub-node' ? (
           <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} />
         ) : null}
 

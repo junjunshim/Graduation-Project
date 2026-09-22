@@ -2,7 +2,7 @@ import { getAccessibleNodeIdsForUser } from '../data/orgService'
 import { getNodeTypeLabel } from '../model/labels'
 import { sortWorkspaceNodes } from '../model/sorters'
 import type { IconName } from '../../../design-system/primitives/Icon'
-import type { OrganizationNodeRecord, WorkspaceSnapshot } from '../model/types'
+import type { NodeType, OrganizationNodeRecord, WorkspaceSnapshot } from '../model/types'
 import type {
   WorkspaceDirectoryItem,
   WorkspaceDirectoryTone,
@@ -59,11 +59,16 @@ function getCreatedDate(createdAt: string) {
   return createdAt.split('T', 1)[0] ?? createdAt
 }
 
-function getDescription(node: OrganizationNodeRecord, isRoot: boolean) {
-  if (node.nodeType === 'USER') {
+/** 진입점 카드와 같은 설명 문구를 다른 화면에서도 그대로 쓴다. */
+export function getWorkspaceNodeDescription(nodeType: NodeType, isRoot: boolean) {
+  if (nodeType === 'USER') {
     return '개인 워크스페이스'
   }
-  return isRoot ? '전체 조직 최상위 워크스페이스' : `${getNodeTypeLabel(node.nodeType)} 워크스페이스`
+  return isRoot ? '전체 조직 최상위 워크스페이스' : `${getNodeTypeLabel(nodeType)} 워크스페이스`
+}
+
+function getDescription(node: OrganizationNodeRecord, isRoot: boolean) {
+  return getWorkspaceNodeDescription(node.nodeType, isRoot)
 }
 
 export function getWorkspaceDirectory(

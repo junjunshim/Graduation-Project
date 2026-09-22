@@ -36,6 +36,7 @@ const FIELD_NAME_LABELS: Record<string, string> = {
   owner: '담당자',
   assignee: '담당자',
   node_type: '유형',
+  workspace_location: '위치',
   category: '카테고리',
   status: '상태',
   progress: '진행률',

@@ -1609,6 +1609,8 @@
 
 /* 우클릭 / 더보기 컨텍스트 메뉴 */
 .contextMenu {
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
   position: fixed;
   z-index: 1000;
   min-width: 13rem;
@@ -1662,6 +1664,7 @@
 }
 
 .contextMenuDivider {
+  flex-shrink: 0;
   height: 1px;
   margin: 0.25rem 0.35rem;
   background: var(--axis-line-default, #dce2ed);

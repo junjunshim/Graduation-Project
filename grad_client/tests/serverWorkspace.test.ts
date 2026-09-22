@@ -15,6 +15,7 @@ import {
   signInServerUser,
 } from '../renderer/features/workspace/data/server/serverWorkspace.js'
 import { readWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
+import { fetchNodeMovePreview, moveNode } from '../renderer/features/workspace/data/nodeMoveService.js'
 
 type MemoryStorageOptions = {
   failSetKey?: string
@@ -90,6 +91,64 @@ function jsonResponse(body: unknown, status = 200) {
     headers: { 'Content-Type': 'application/json' },
   })
 }
+
+test('워크스페이스 이전 사전 검사는 루트 목적지를 null로 보내고 업무 이관 그룹을 보존한다', async () => {
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+  const preview = {
+    type: 'NODE_MOVE_PREVIEW', node_id: 4, parent_node_id: null, old_parent_node_id: 1,
+    preview_token: 'revision', can_move: true,
+    nodes: [{ node_id: 4, name: 'Moving', path: [1, 4], new_path: [4], is_deleted: false }],
+    owner_groups: [{ user_id: 'old', name: 'Old', email: 'old@example.com', work_items: [], transfer_targets: [] }],
+    all_transfer_targets: [], cleared_schedules: [], detached_work_item_ids: ['WI-1'],
+  }
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'success', data: [preview] })
+  }
+  try {
+    assert.deepEqual(await fetchNodeMovePreview(4, null), preview)
+    assert.equal(calls[0].method, 'POST')
+    assert.equal(calls[0].pathname, '/api/org/nodes/move-preview')
+    assert.deepEqual(calls[0].body, { node_id: 4, parent_node_id: null })
+    assert.equal(calls.length, 1)
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('워크스페이스 이전은 담당자별 또는 전체 이관을 보내고 성공 후 전체 접근 범위를 갱신한다', async () => {
+  const storage = createMemoryStorage()
+  storage.setItem('grad-client-server-email', 'user@example.com')
+  const restoreWindow = installWindow(storage)
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse(createDocumentedContextResponse())
+  }
+  try {
+    await moveNode({ nodeId: 4, parentNodeId: null, previewToken: 'r1', transfers: { old: 'new@example.com' } })
+    assert.deepEqual(calls[0].body, { node_id: 4, parent_node_id: null, preview_token: 'r1', transfers: { old: 'new@example.com' } })
+    assert.equal(calls[0].method, 'PATCH')
+    assert.equal(calls[0].pathname, '/api/org/nodes/move')
+    assert.ok(calls.some((call) => call.pathname === '/api/context/init'))
+    calls.length = 0
+    await moveNode({ nodeId: 4, parentNodeId: 9, previewToken: 'r2', newOwnerEmail: 'all@example.com' })
+    assert.deepEqual(calls[0].body, { node_id: 4, parent_node_id: 9, preview_token: 'r2', new_owner_email: 'all@example.com' })
+  } finally { globalThis.fetch = originalFetch; restoreWindow() }
+})
+
+test('오래된 이전 사전 검사가 거부되면 캐시를 갱신하거나 재실행하지 않는다', async () => {
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'error', message: '이전 정보를 다시 확인해 주세요.' }, 409)
+  }
+  try {
+    await assert.rejects(moveNode({ nodeId: 4, parentNodeId: null, previewToken: 'old' }), /다시 확인/)
+    assert.equal(calls.length, 1)
+  } finally { globalThis.fetch = originalFetch }
+})
 
 function createDocumentedContextResponse() {
   const timestamp = '2026-03-19 12:29:24.745634+00'

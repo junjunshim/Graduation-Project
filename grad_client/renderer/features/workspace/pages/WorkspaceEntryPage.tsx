@@ -22,7 +22,7 @@ import {
 } from '../data/workspaceDirectorySelection'
 import type { WorkspaceDirectoryItem, WorkspaceDirectoryTone } from '../model/workspaceDirectory'
 import { getWorkspaceDirectory } from '../queries/workspaceDirectory'
-import { canChangeNodeInfo, canCreateSubNode } from '../model/effectiveAuthority'
+import { canChangeNodeInfo, canCreateSubNode, hasDirectAuthorityBit } from '../model/effectiveAuthority'
 import {
   collectNodeSubtreeIds,
   excludeDeletedNodes,
@@ -1119,9 +1119,9 @@ export function WorkspaceEntryPage() {
   // 표시할 루트는 살아있는 워크스페이스를 우선하고, 전부 삭제된 경우에만 삭제된 루트를 사용한다.
   const rootCandidateDirectory =
     liveDirectory.rootOptions.length > 0 ? liveDirectory : visibleDirectory
-  const activeRoot = rootCandidateDirectory.rootOptions.find(
-    (root) => root.id === (paramRootId || activeRootId),
-  )
+  // 주소의 rootId 쿼리는 진입 시 1회만 시드로 사용하고, 이후 루트 변경은 activeRootId 상태가 기준이 된다.
+  // (쿼리가 계속 우선하면 이전 화면에서 돌아온 뒤 루트를 바꿔도 화면이 따라오지 않는다.)
+  const activeRoot = rootCandidateDirectory.rootOptions.find((root) => root.id === activeRootId)
   const defaultRoot = rootCandidateDirectory.rootOptions.find((root) => root.id === defaultRootId)
   const hierarchyRootId = (activeRoot ?? defaultRoot ?? rootCandidateDirectory.hierarchyRoot)?.id
   const hierarchyRoot = hierarchyRootId
@@ -1368,6 +1368,8 @@ export function WorkspaceEntryPage() {
     y: number
     item: WorkspaceDirectoryItem
     canCreateSub: boolean
+    canEdit: boolean
+    canMove: boolean
     canDelete: boolean
     canRestore: boolean
     restoreBlockedByParent: boolean
@@ -1418,15 +1420,24 @@ export function WorkspaceEntryPage() {
 
     // 권한이 있는 경우 컨텍스트 메뉴 표시 (화면 벗어남 방지)
     const menuWidth = 220
-    const menuHeight = 230
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    const canEdit = Boolean(canDelete && targetNode?.nodeType !== 'USER')
+    const canMove = Boolean(currentUser && !isItemDeleted && targetNode?.nodeType !== 'USER'
+      && hasDirectAuthorityBit(currentUser.userId, parsedNodeId, 12, snapshot))
+    const rowCount = isItemDeleted ? 1 : 2 + (item.children?.length ? 2 : 0)
+      + Number(canCreateSub) + Number(canEdit) + Number(canMove) + Number(canDelete)
+    const separatorCount = isItemDeleted ? 0 : Number(Boolean(item.children?.length))
+      + Number(canCreateSub || canEdit || canMove) + Number(canDelete)
+    const menuHeight = rowCount * 42 + separatorCount * 12 + 16
+    const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 10))
+    const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 10))
 
     setContextMenu({
       x,
       y,
       item,
       canCreateSub,
+      canEdit,
+      canMove,
       canDelete,
       canRestore,
       restoreBlockedByParent,
@@ -1443,6 +1454,11 @@ export function WorkspaceEntryPage() {
     selectWorkspaceRoot(selectedRootId, false, currentUser?.userId)
     setActiveRootId(selectedRootId)
     setIsChooserOpen(false)
+
+    // 상단 셸(AppShell)도 같은 루트를 바라보도록 주소의 rootId 쿼리를 함께 맞춘다.
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.set('rootId', selectedRootId)
+    setSearchParams(nextSearchParams, { replace: true })
   }
 
   const closeChooser = useCallback(() => {
@@ -1642,7 +1658,21 @@ export function WorkspaceEntryPage() {
                 <span>{contextMenu.item.canEnter === false ? '워크스페이스 열기 (권한 없음)' : '워크스페이스 열기'}</span>
               </button>
 
-              {/* 하위 노드가 있는 경우: 숨기기 / 펼치기 메뉴 */}
+              <button
+                type="button"
+                className={styles.contextMenuItem}
+                onClick={() => {
+                  const item = contextMenu.item
+                  setContextMenu(null)
+                  toggleFavorite(item.id)
+                }}
+              >
+                <Icon name="star" size={15} />
+                <span>{favoriteIds.has(contextMenu.item.id) ? '즐겨찾기 해제' : '즐겨찾기 추가'}</span>
+              </button>
+
+              {/* 트리 보기 작업 */}
+              {contextMenu.item.children?.length ? <div className={styles.contextMenuDivider} role="separator" /> : null}
               {contextMenu.item.children && contextMenu.item.children.length > 0 ? (
                 <button
                   type="button"
@@ -1654,7 +1684,7 @@ export function WorkspaceEntryPage() {
                   }}
                 >
                   <Icon name={collapsedIds.has(contextMenu.item.id) ? 'chevronDown' : 'chevronUp'} size={15} />
-                  <span>{collapsedIds.has(contextMenu.item.id) ? '하위 노드 펼치기' : '하위 노드 숨기기'}</span>
+                  <span>{collapsedIds.has(contextMenu.item.id) ? '하위 워크스페이스 펼치기' : '하위 워크스페이스 접기'}</span>
                 </button>
               ) : null}
 
@@ -1674,6 +1704,10 @@ export function WorkspaceEntryPage() {
                 </button>
               ) : null}
 
+              {/* 워크스페이스 관리 작업 */}
+              {contextMenu.canCreateSub || contextMenu.canEdit || contextMenu.canMove ? (
+                <div className={styles.contextMenuDivider} role="separator" />
+              ) : null}
               {contextMenu.canCreateSub ? (
                 <button
                   type="button"
@@ -1689,24 +1723,23 @@ export function WorkspaceEntryPage() {
                 </button>
               ) : null}
 
-              <div className={styles.contextMenuDivider} />
-
-              <button
-                type="button"
-                className={styles.contextMenuItem}
-                onClick={() => {
-                  const item = contextMenu.item
+              {contextMenu.canEdit ? (
+                <button type="button" className={styles.contextMenuItem} onClick={() => {
+                  navigate(`/setup/top-node?editNodeId=${encodeURIComponent(contextMenu.item.id)}`)
                   setContextMenu(null)
-                  toggleFavorite(item.id)
-                }}
-              >
-                <Icon name="star" size={15} />
-                <span>{favoriteIds.has(contextMenu.item.id) ? '즐겨찾기 해제' : '즐겨찾기 추가'}</span>
-              </button>
+                }}><Icon name="pencil" size={15} /><span>워크스페이스 수정</span></button>
+              ) : null}
+              {contextMenu.canMove ? (
+                <button type="button" className={styles.contextMenuItem} onClick={() => {
+                  navigate(`/workspace/move?nodeId=${encodeURIComponent(contextMenu.item.id)}`)
+                  setContextMenu(null)
+                }}><Icon name="orgChart" size={15} /><span>워크스페이스 이전</span></button>
+              ) : null}
+
             </>
           )}
 
-          {contextMenu.canDelete ? <div className={styles.contextMenuDivider} /> : null}
+          {contextMenu.canDelete ? <div className={styles.contextMenuDivider} role="separator" /> : null}
 
           {contextMenu.canDelete ? (
             <button

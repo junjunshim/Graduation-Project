@@ -91,6 +91,9 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0305") != std::string::npos) return DbErrorCode::GetNodeDetailFailed;
     else if (errMsg.find("P0306") != std::string::npos) return DbErrorCode::ParentNodeIsDeleted;
     else if (errMsg.find("P0307") != std::string::npos) return DbErrorCode::RestoreNodeFailed;
+    else if (errMsg.find("P0320") != std::string::npos) return DbErrorCode::MoveNodeInvalidDestination;
+    else if (errMsg.find("P0321") != std::string::npos) return DbErrorCode::MoveNodePreviewStale;
+    else if (errMsg.find("P0322") != std::string::npos) return DbErrorCode::MoveNodeTransferInvalid;
     else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
     else if (errMsg.find("P0403") != std::string::npos) return DbErrorCode::TargetHasNoRole;
@@ -459,6 +462,21 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::RestoreNodeFailed:{
             ret["message"] = "노드 복구에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::MoveNodeInvalidDestination:{
+            ret["message"] = "이전할 수 없는 목적지이거나 업무 이관 대상을 지정할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::MoveNodePreviewStale:{
+            ret["message"] = "이전 대상 정보가 변경되었습니다. 이전 영향을 다시 확인해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::MoveNodeTransferInvalid:{
+            ret["message"] = "모든 이관 대상에 이전 후 업무 수행 권한이 있는 담당자를 지정해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
             break;
         }
         case DbErrorCode::OwnerNodeIsDeleted:{

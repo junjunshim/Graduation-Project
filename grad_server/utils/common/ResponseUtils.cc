@@ -91,6 +91,9 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0305") != std::string::npos) return DbErrorCode::GetNodeDetailFailed;
     else if (errMsg.find("P0306") != std::string::npos) return DbErrorCode::ParentNodeIsDeleted;
     else if (errMsg.find("P0307") != std::string::npos) return DbErrorCode::RestoreNodeFailed;
+    else if (errMsg.find("P0320") != std::string::npos) return DbErrorCode::MoveNodeInvalidDestination;
+    else if (errMsg.find("P0321") != std::string::npos) return DbErrorCode::MoveNodePreviewStale;
+    else if (errMsg.find("P0322") != std::string::npos) return DbErrorCode::MoveNodeTransferInvalid;
     else if (errMsg.find("P0401") != std::string::npos) return DbErrorCode::AddRoleFailed;
     else if (errMsg.find("P0402") != std::string::npos) return DbErrorCode::RoleAlreadyExists;
     else if (errMsg.find("P0403") != std::string::npos) return DbErrorCode::TargetHasNoRole;
@@ -105,6 +108,13 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0412") != std::string::npos) return DbErrorCode::RoleDefinitionAlreadyExists;
     else if (errMsg.find("P0413") != std::string::npos) return DbErrorCode::UpdateRoleAuthorityFailed;
     else if (errMsg.find("P0414") != std::string::npos) return DbErrorCode::RenameRoleDefinitionFailed;
+    else if (errMsg.find("P0415") != std::string::npos) return DbErrorCode::SelfRoleRemovalNotAllowed;
+    else if (errMsg.find("P0418") != std::string::npos) return DbErrorCode::RoleRemovalPreviewFailed;
+    else if (errMsg.find("P0419") != std::string::npos) return DbErrorCode::RoleDefinitionInUse;
+    else if (errMsg.find("P0420") != std::string::npos) return DbErrorCode::RoleDeletionPreviewFailed;
+    else if (errMsg.find("P0421") != std::string::npos) return DbErrorCode::DeleteRoleDefinitionFailed;
+    else if (errMsg.find("P0416") != std::string::npos) return DbErrorCode::RoleRemovalTransferInvalid;
+    else if (errMsg.find("P0417") != std::string::npos) return DbErrorCode::RemoveRoleFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
     else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
@@ -284,6 +294,41 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
+        case DbErrorCode::SelfRoleRemovalNotAllowed:{
+            ret["message"] = "본인의 역할은 회수할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RoleRemovalTransferInvalid:{
+            ret["message"] = "업무를 이관할 수 없습니다. 이관 대상과 권한을 확인해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::RemoveRoleFailed:{
+            ret["message"] = "사용자 역할 회수에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RoleRemovalPreviewFailed:{
+            ret["message"] = "역할 회수 정보를 불러오지 못했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RoleDefinitionInUse:{
+            ret["message"] = "이 역할을 배정받은 사용자가 남아 있어 삭제할 수 없습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::RoleDeletionPreviewFailed:{
+            ret["message"] = "역할 삭제 정보를 불러오지 못했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::DeleteRoleDefinitionFailed:{
+            ret["message"] = "역할 삭제에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
         case DbErrorCode::EmailAlreadyExists:{
             ret["message"] = "이미 존재하는 이메일입니다.";
             ret["http_code"] = drogon::k400BadRequest;
@@ -417,6 +462,21 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::RestoreNodeFailed:{
             ret["message"] = "노드 복구에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::MoveNodeInvalidDestination:{
+            ret["message"] = "이전할 수 없는 목적지이거나 업무 이관 대상을 지정할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::MoveNodePreviewStale:{
+            ret["message"] = "이전 대상 정보가 변경되었습니다. 이전 영향을 다시 확인해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::MoveNodeTransferInvalid:{
+            ret["message"] = "모든 이관 대상에 이전 후 업무 수행 권한이 있는 담당자를 지정해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
             break;
         }
         case DbErrorCode::OwnerNodeIsDeleted:{

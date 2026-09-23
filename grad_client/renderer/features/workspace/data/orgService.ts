@@ -2,8 +2,10 @@ import { resolveRoleAssignments } from '../model/roleDefinitions'
 import type {
   AssignRoleRequest,
   CreateSubNodeRequest,
+  DeleteRoleDefinitionRequest,
   CreateTopNodeRequest,
   OrganizationNodeRecord,
+  RemoveRoleRequest,
   UpdateNodeRequest,
   UpdateRoleRequest,
   WorkspaceSnapshot,
@@ -15,8 +17,14 @@ import {
   assignRoleOnServer,
   createSubNodeOnServer,
   createTopNodeOnServer,
+  deleteNodeOnServer,
+  deleteRoleDefinitionOnServer,
   fetchNodeDetailOnServer,
+  fetchRoleDefinitionDeletionPreviewOnServer,
+  fetchRoleRemovalPreviewOnServer,
   loadWorkspaceDirectoryScopeOnServer,
+  removeRoleOnServer,
+  restoreNodeOnServer,
   updateNodeOnServer,
   updateRoleOnServer,
 } from './serverWorkspace'
@@ -48,9 +56,15 @@ export function getNodePathLabel(nodeId: number, nodes?: OrganizationNodeRecord[
     .join(' / ')
 }
 
-export function getOrgSnapshot(): WorkspaceSnapshot {
+/**
+ * 진입점/워크스페이스 화면용 스냅샷.
+ * 기본값은 살아있는 노드만 담고, 휴지통(삭제된 워크스페이스 목록)을 그릴 때만 includeDeleted 를 켠다.
+ */
+export function getOrgSnapshot(options?: { includeDeleted?: boolean }): WorkspaceSnapshot {
   const db = readWorkspaceDb()
-  const activeNodes = db.nodes.filter((node) => !node.isDeleted)
+  const activeNodes = options?.includeDeleted
+    ? db.nodes
+    : db.nodes.filter((node) => !node.isDeleted)
   const activeNodeIds = new Set(activeNodes.map((node) => node.id))
 
   return {
@@ -74,9 +88,11 @@ export async function fetchNodeDetail(nodeId: number | string): Promise<Workspac
   return getOrgSnapshot()
 }
 
-export async function fetchWorkspaceDirectoryScope(): Promise<WorkspaceSnapshot> {
+export async function fetchWorkspaceDirectoryScope(options?: {
+  includeDeleted?: boolean
+}): Promise<WorkspaceSnapshot> {
   await loadWorkspaceDirectoryScopeOnServer()
-  return getOrgSnapshot()
+  return getOrgSnapshot(options)
 }
 
 export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapshot): WorkspaceSummary {
@@ -148,4 +164,30 @@ export async function updateNode(payload: UpdateNodeRequest) {
 
 export async function updateRole(payload: UpdateRoleRequest) {
   return updateRoleOnServer(payload)
+}
+
+/** 역할 회수 전, 이관해야 할 업무와 이관 가능한 대상 목록을 조회한다. */
+export async function fetchRoleRemovalPreview(email: string, nodeId: number) {
+  return fetchRoleRemovalPreviewOnServer(email, nodeId)
+}
+
+export async function removeRole(payload: RemoveRoleRequest) {
+  return removeRoleOnServer(payload)
+}
+
+/** 역할 정의 삭제 전, 이 역할을 배정받은 사용자가 남아 있는지 조회한다. */
+export async function fetchRoleDefinitionDeletionPreview(nodeId: number, roleId: number) {
+  return fetchRoleDefinitionDeletionPreviewOnServer(nodeId, roleId)
+}
+
+export async function deleteRoleDefinition(payload: DeleteRoleDefinitionRequest) {
+  return deleteRoleDefinitionOnServer(payload)
+}
+
+export async function deleteWorkspace(nodeId: number) {
+  return deleteNodeOnServer(nodeId)
+}
+
+export async function restoreWorkspace(nodeId: number, cascade = true) {
+  return restoreNodeOnServer(nodeId, cascade)
 }

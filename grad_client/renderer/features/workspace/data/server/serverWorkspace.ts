@@ -10,6 +10,14 @@ import type {
   UpdateNodeRequest,
   UpdateRoleRequest,
   UpdateWorkItemRequest,
+  DeleteRoleDefinitionRequest,
+  RemoveRoleRequest,
+  RemoveRoleResult,
+  RoleDefinitionAssignee,
+  RoleDefinitionDeletionPreview,
+  RoleRemovalPreview,
+  RoleRemovalTransferTarget,
+  RoleRemovalWorkItem,
   UserRecord,
   WorkItemCommentRecord,
   WorkItemFileRecord,
@@ -32,6 +40,7 @@ import {
   type ServerContextResponse,
   type ServerLoginResponse,
 } from './apiTypes.js'
+import { collectNodeSubtreeIds } from '../../model/nodeDeletion.js'
 import { normalizeServerContext } from './contextAdapter.js'
 import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
@@ -101,6 +110,75 @@ async function refreshNodesAfterCommittedMutation(nodeIds: Array<number | string
       '변경은 서버에 반영되었지만 최신 데이터를 다시 불러오지 못했습니다. 같은 변경을 다시 제출하지 말고 “다시 시도”로 데이터를 새로고침해 주세요.',
     )
   }
+}
+
+/**
+ * 워크스페이스 삭제/복구는 서버 트리거가 하위 노드·업무·파일까지 연쇄 처리하므로,
+ * 응답을 기다리는 동안 화면이 흔들리지 않도록 로컬 캐시도 같은 범위로 즉시 맞춘다.
+ * (서버 응답이 오면 노드 단위 재조회로 권위 데이터를 덮어쓴다.)
+ */
+function applyNodeSubtreeDeletionLocally(nodeId: number, isDeleted: boolean) {
+  const current = readWorkspaceDb()
+  const targetNodeIds = new Set(collectNodeSubtreeIds(nodeId, current.nodes))
+  const targetWorkItemIds = new Set(
+    current.workItems.filter((item) => targetNodeIds.has(item.ownerNodeId)).map((item) => item.workItemId),
+  )
+  let isModified = false
+
+  current.nodes.forEach((node) => {
+    if (targetNodeIds.has(node.id) && Boolean(node.isDeleted) !== isDeleted) {
+      node.isDeleted = isDeleted
+      isModified = true
+    }
+  })
+
+  current.workItems.forEach((item) => {
+    if (targetNodeIds.has(item.ownerNodeId) && Boolean(item.isDeleted) !== isDeleted) {
+      item.isDeleted = isDeleted
+      isModified = true
+    }
+  })
+
+  ;(current.files ?? []).forEach((file) => {
+    if (targetWorkItemIds.has(file.workItemId) && Boolean(file.isDeleted) !== isDeleted) {
+      file.isDeleted = isDeleted
+      isModified = true
+    }
+  })
+
+  if (isModified) {
+    writeServerWorkspaceDb(current)
+  }
+}
+
+/**
+ * 다른 사용자가 워크스페이스(노드)를 생성/수정/복구하면 알림이 오는데,
+ * 새로 생긴 노드의 역할이나 하위 노드 범위는 로컬에서 추정할 수 없다.
+ * 진입점과 동일한 경량 스코프(/context/scope)를 다시 받아 노드 트리를 서버 기준으로 맞춘다.
+ */
+function refreshWorkspaceTreeFromServer() {
+  void loadWorkspaceDirectoryScopeOnServer().catch((err) => {
+    console.warn('[WebSocket] 워크스페이스 트리 동기화 실패:', err)
+  })
+}
+
+/**
+ * 워크스페이스 구조가 바뀌는 알림(생성/수정/복구)인지 판별한다.
+ * 서버는 생성 시 'inserted', 이름·종류 변경 시 'updated', 복구 시 'restored' 를 보낸다.
+ * (삭제는 'deleted' 로 별도 처리한다.)
+ */
+export function isWorkspaceStructureNotification(payload: {
+  entity_type?: string
+  action?: string
+}): boolean {
+  if ((payload.entity_type ?? '').toUpperCase() !== 'NODE') {
+    return false
+  }
+
+  const action = (payload.action ?? '').toLowerCase()
+  return (
+    action === 'inserted' || action === 'created' || action === 'updated' || action === 'restored'
+  )
 }
 
 function createServerSessionUser(email: string): UserRecord {
@@ -495,6 +573,55 @@ export function signOutServerUser() {
   setCurrentSessionUserId(null)
 }
 
+export async function deleteNodeOnServer(nodeId: number) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/org/nodes', {
+      method: 'DELETE',
+      body: { node_id: nodeId },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '워크스페이스를 삭제하지 못했습니다.' }
+    }
+
+    // 본인이 삭제한 워크스페이스는 웹소켓 알림이 오지 않으므로 로컬 캐시에 즉시 반영한다.
+    try {
+      applyNodeSubtreeDeletionLocally(nodeId, true)
+    } catch (err) {
+      console.warn('[serverWorkspace] 워크스페이스 삭제 로컬 캐시 반영 실패:', err)
+    }
+
+    await refreshNodesAfterCommittedMutation([nodeId])
+    return { status: 'success' as const }
+  }, '워크스페이스를 삭제하지 못했습니다.')
+}
+
+/** 복구는 서버가 하위 워크스페이스·업무·파일까지 함께 되돌리도록 cascade 를 기본으로 사용한다. */
+export async function restoreNodeOnServer(nodeId: number, cascade = true) {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/org/nodes/restore', {
+      method: 'PATCH',
+      body: { node_id: nodeId, cascade },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '워크스페이스를 복구하지 못했습니다.' }
+    }
+
+    // 본인이 복구한 워크스페이스도 웹소켓 알림이 오지 않으므로 로컬 캐시에 즉시 반영한다.
+    try {
+      if (cascade) {
+        applyNodeSubtreeDeletionLocally(nodeId, false)
+      }
+    } catch (err) {
+      console.warn('[serverWorkspace] 워크스페이스 복구 로컬 캐시 반영 실패:', err)
+    }
+
+    await refreshNodesAfterCommittedMutation([nodeId])
+    return { status: 'success' as const }
+  }, '워크스페이스를 복구하지 못했습니다.')
+}
+
 export async function createTopNodeOnServer(payload: CreateTopNodeRequest) {
   return withServerOperationError(async () => {
     const response = await requestServerStatus('/org/topNodes', {
@@ -603,6 +730,215 @@ export async function updateRoleOnServer(payload: UpdateRoleRequest) {
     await refreshNodesAfterCommittedMutation([payload.nodeId])
     return { status: 'success' as const }
   }, '권한을 변경하지 못했습니다.')
+}
+
+/** 서버가 내려준 역할 회수 미리보기 원시 데이터를 클라이언트 모델로 변환한다. */
+function readRoleRemovalPreview(item: Record<string, unknown> | undefined): RoleRemovalPreview | null {
+  if (!item) return null
+
+  const rawWorkItems = Array.isArray(item.work_items) ? (item.work_items as Array<Record<string, unknown>>) : []
+  const rawTargets = Array.isArray(item.transfer_targets)
+    ? (item.transfer_targets as Array<Record<string, unknown>>)
+    : []
+
+  const workItems: RoleRemovalWorkItem[] = rawWorkItems.map((raw) => ({
+    workItemId: String(raw.work_item_id ?? ''),
+    title: String(raw.title ?? ''),
+    ownerNodeId: Number(raw.owner_node_id ?? 0),
+    ownerNodeName: String(raw.owner_node_name ?? ''),
+    isHidden: Boolean(raw.hidden),
+    status: String(raw.status ?? ''),
+  }))
+
+  const transferTargets: RoleRemovalTransferTarget[] = rawTargets.map((raw) => ({
+    userId: String(raw.user_id ?? ''),
+    name: String(raw.name ?? raw.email ?? '이름 없음'),
+    email: String(raw.email ?? ''),
+  }))
+
+  return {
+    canRemove: Boolean(item.can_remove),
+    blockedReason: item.blocked_reason ? String(item.blocked_reason) : null,
+    nodeId: Number(item.node_id ?? 0),
+    targetUserId: String(item.target_user_id ?? ''),
+    targetUserName: String(item.target_user_name ?? ''),
+    targetUserEmail: String(item.target_user_email ?? ''),
+    roleId: item.role_id !== undefined && item.role_id !== null ? Number(item.role_id) : undefined,
+    roleName: String(item.role ?? ''),
+    isTopRole: Boolean(item.is_top_role),
+    workItems,
+    transferTargets,
+  }
+}
+
+/**
+ * 역할 회수 사전 확인.
+ * 회수 시 이관해야 할 미완료 업무와 이관 가능한 대상 목록을 서버에서 받아온다.
+ */
+export async function fetchRoleRemovalPreviewOnServer(
+  email: string,
+  nodeId: number,
+): Promise<{ status: 'success'; preview: RoleRemovalPreview } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await apiRequest<unknown>(
+      `/roles/removal-preview?email=${encodeURIComponent(normalizeEmail(email))}&node_id=${nodeId}`,
+    )
+
+    if (!isServerStatusResponse(response)) {
+      return { status: 'error' as const, message: '역할 회수 정보 응답 형식이 올바르지 않습니다.' }
+    }
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할 회수 정보를 불러오지 못했습니다.' }
+    }
+
+    let items: Array<Record<string, unknown>> = []
+    try {
+      items = parseServerContextItems((response as ServerContextResponse).data) as Array<Record<string, unknown>>
+    } catch {
+      return { status: 'error' as const, message: '역할 회수 정보 형식이 올바르지 않습니다.' }
+    }
+
+    const preview = readRoleRemovalPreview(items[0])
+
+    if (!preview) {
+      return { status: 'error' as const, message: '역할 회수 정보를 찾을 수 없습니다.' }
+    }
+
+    return { status: 'success' as const, preview }
+  }, '역할 회수 정보를 불러오지 못했습니다.')
+}
+
+/**
+ * 사용자 역할 회수.
+ * 서버가 실패를 반환하면 로컬 캐시를 건드리지 않는다.
+ */
+export async function removeRoleOnServer(
+  payload: RemoveRoleRequest,
+): Promise<{ status: 'success'; result: RemoveRoleResult } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/roles', {
+      method: 'DELETE',
+      body: {
+        email: normalizeEmail(payload.email),
+        node_id: payload.nodeId,
+        ...(payload.newOwnerEmail ? { new_owner_email: normalizeEmail(payload.newOwnerEmail) } : {}),
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할을 회수하지 못했습니다.' }
+    }
+
+    let summary: Record<string, unknown> | undefined
+    try {
+      const items = parseServerContextItems((response as ServerContextResponse).data) as Array<Record<string, unknown>>
+      summary = items[0]
+    } catch {
+      summary = undefined
+    }
+
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
+
+    return {
+      status: 'success' as const,
+      result: {
+        transferredWorkItemCount: Number(summary?.transferred_work_item_count ?? 0),
+        clearedScheduleCount: Number(summary?.cleared_schedule_count ?? 0),
+        transferTargetName: summary?.transfer_target_name ? String(summary.transfer_target_name) : undefined,
+      },
+    }
+  }, '역할을 회수하지 못했습니다.')
+}
+
+/** 서버가 내려준 역할 삭제 미리보기 원시 데이터를 클라이언트 모델로 변환한다. */
+function readRoleDefinitionDeletionPreview(
+  item: Record<string, unknown> | undefined,
+): RoleDefinitionDeletionPreview | null {
+  if (!item) return null
+
+  const rawAssignees = Array.isArray(item.assignees) ? (item.assignees as Array<Record<string, unknown>>) : []
+
+  const assignees: RoleDefinitionAssignee[] = rawAssignees.map((raw) => ({
+    userId: String(raw.user_id ?? ''),
+    name: String(raw.name ?? raw.email ?? '이름 없음'),
+    email: String(raw.email ?? ''),
+  }))
+
+  return {
+    canDelete: Boolean(item.can_delete),
+    blockedReason: item.blocked_reason ? String(item.blocked_reason) : null,
+    nodeId: Number(item.node_id ?? 0),
+    roleId: Number(item.role_id ?? 0),
+    roleName: String(item.role ?? ''),
+    isTopRole: Boolean(item.is_top_role),
+    assigneeCount: Number(item.assignee_count ?? assignees.length),
+    assignees,
+    inactiveAssigneeCount: Number(item.inactive_assignee_count ?? 0),
+  }
+}
+
+/**
+ * 역할 정의 삭제 사전 확인.
+ * 이 역할을 배정받은 사용자가 남아 있는지 서버에서 확인한다.
+ */
+export async function fetchRoleDefinitionDeletionPreviewOnServer(
+  nodeId: number,
+  roleId: number,
+): Promise<{ status: 'success'; preview: RoleDefinitionDeletionPreview } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await apiRequest<unknown>(
+      `/roles/definition/deletion-preview?node_id=${nodeId}&role_id=${roleId}`,
+    )
+
+    if (!isServerStatusResponse(response)) {
+      return { status: 'error' as const, message: '역할 삭제 정보 응답 형식이 올바르지 않습니다.' }
+    }
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할 삭제 정보를 불러오지 못했습니다.' }
+    }
+
+    let items: Array<Record<string, unknown>> = []
+    try {
+      items = parseServerContextItems((response as ServerContextResponse).data) as Array<Record<string, unknown>>
+    } catch {
+      return { status: 'error' as const, message: '역할 삭제 정보 형식이 올바르지 않습니다.' }
+    }
+
+    const preview = readRoleDefinitionDeletionPreview(items[0])
+
+    if (!preview) {
+      return { status: 'error' as const, message: '역할 삭제 정보를 찾을 수 없습니다.' }
+    }
+
+    return { status: 'success' as const, preview }
+  }, '역할 삭제 정보를 불러오지 못했습니다.')
+}
+
+/**
+ * 역할 정의 삭제.
+ * 배정된 사용자가 남아 있으면 서버가 거부하며, 실패 시 로컬 캐시를 건드리지 않는다.
+ */
+export async function deleteRoleDefinitionOnServer(
+  payload: DeleteRoleDefinitionRequest,
+): Promise<{ status: 'success' } | ServerOperationError> {
+  return withServerOperationError(async () => {
+    const response = await requestServerStatus('/roles/definition', {
+      method: 'DELETE',
+      body: {
+        node_id: payload.nodeId,
+        role_id: payload.roleId,
+      },
+    })
+
+    if (response.status === 'error') {
+      return { status: 'error' as const, message: response.message ?? '역할을 삭제하지 못했습니다.' }
+    }
+
+    await refreshNodesAfterCommittedMutation([payload.nodeId])
+    return { status: 'success' as const }
+  }, '역할을 삭제하지 못했습니다.')
 }
 
 export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
@@ -1261,11 +1597,33 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
                     isModified = true
                   }
                 } else if (data.entity_type === 'NODE') {
-                  const nodeIndex = currentDb.nodes.findIndex((n) => String(n.id) === targetId)
-                  if (nodeIndex >= 0 && !currentDb.nodes[nodeIndex].isDeleted) {
-                    currentDb.nodes[nodeIndex].isDeleted = true
-                    isModified = true
-                  }
+                  // 서버 트리거가 하위 노드·업무·파일까지 연쇄 삭제하므로 캐시도 같은 범위로 맞춘다.
+                  const deletedNodeId = Number.parseInt(targetId, 10)
+                  const targetNodeIds = Number.isFinite(deletedNodeId)
+                    ? new Set(collectNodeSubtreeIds(deletedNodeId, currentDb.nodes))
+                    : new Set<number>()
+
+                  currentDb.nodes.forEach((node) => {
+                    if (targetNodeIds.has(node.id) && !node.isDeleted) {
+                      node.isDeleted = true
+                      isModified = true
+                    }
+                  })
+
+                  currentDb.workItems.forEach((item) => {
+                    if (targetNodeIds.has(item.ownerNodeId) && !item.isDeleted) {
+                      item.isDeleted = true
+                      isModified = true
+                    }
+                  })
+
+                  ;(currentDb.files ?? []).forEach((file) => {
+                    const owner = currentDb.workItems.find((item) => item.workItemId === file.workItemId)
+                    if (owner && targetNodeIds.has(owner.ownerNodeId) && !file.isDeleted) {
+                      file.isDeleted = true
+                      isModified = true
+                    }
+                  })
                 } else if (data.entity_type === 'ROLE') {
                   const roleIndex = currentDb.roles.findIndex((r) => String(r.id) === targetId)
                   if (roleIndex >= 0 && !currentDb.roles[roleIndex].isDeleted) {
@@ -1288,6 +1646,10 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
               } catch (err) {
                 console.warn('[WebSocket] 로컬 캐시 삭제 반영 실패:', err)
               }
+            } else if (isWorkspaceStructureNotification(data)) {
+              // 다른 사용자가 워크스페이스를 생성/수정/복구하면 알림을 받은 화면(진입점 등)에서
+              // 다시 들어가지 않아도 바로 보이도록 노드 트리를 즉시 서버 기준으로 갱신한다.
+              refreshWorkspaceTreeFromServer()
             }
           }
         } catch {

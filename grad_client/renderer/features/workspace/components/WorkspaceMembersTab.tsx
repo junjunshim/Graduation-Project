@@ -4,7 +4,13 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getRoleBadgeStyle } from '../model/labels'
-import { assignRoleOnServer } from '../data/server/serverWorkspace'
+import {
+  assignRoleOnServer,
+  fetchRoleRemovalPreviewOnServer,
+  removeRoleOnServer,
+  updateRoleOnServer,
+} from '../data/server/serverWorkspace'
+import { canManageNodeRoles } from '../model/effectiveAuthority'
 import {
   analyzeWorkspaceMembers,
   buildRoleBitmaskMap,
@@ -17,9 +23,14 @@ import type {
   RoleAssignmentRecord,
   RoleMember,
   RoleName,
+  RoleRemovalPreview,
   UserRecord,
 } from '../model/types'
 import { AddMemberModal } from './AddMemberModal'
+import {
+  MemberRoleSettingsModal,
+  type MemberRoleSettingsSubmitResult,
+} from './MemberRoleSettingsModal'
 import { ToastAlertModal, type AlertType } from '../../../design-system/primitives/ToastAlertModal'
 import styles from './WorkspaceMembersTab.module.css'
 
@@ -28,6 +39,7 @@ export type { WorkspaceMemberDetail }
 
 type WorkspaceMembersTabProps = {
   rootNode?: OrganizationNodeRecord | null
+  currentUserId?: string
   nodes?: OrganizationNodeRecord[]
   roles?: RoleAssignmentRecord[]
   users?: UserRecord[]
@@ -38,6 +50,7 @@ type WorkspaceMembersTabProps = {
 
 export function WorkspaceMembersTab({
   rootNode,
+  currentUserId,
   nodes = [],
   roles = [],
   users = [],
@@ -57,6 +70,13 @@ export function WorkspaceMembersTab({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isAddingMember, setIsAddingMember] = useState(false)
 
+  // 역할 설정(변경/회수) 모달 상태
+  const [settingsMember, setSettingsMember] = useState<WorkspaceMemberDetail | null>(null)
+  const [isSubmittingSettings, setIsSubmittingSettings] = useState(false)
+
+  // 상속 멤버 권한 오버라이드 모달 상태
+  const [overrideMember, setOverrideMember] = useState<WorkspaceMemberDetail | null>(null)
+
   // 모던 알림/에러 모달 상태
   const [alertInfo, setAlertInfo] = useState<{ isOpen: boolean; message: string; title?: string; type?: AlertType }>({
     isOpen: false,
@@ -66,16 +86,36 @@ export function WorkspaceMembersTab({
     setAlertInfo({ isOpen: true, message, title, type })
   }
 
-  // 사용자 추가 확정 핸들러
+  const roleNameOf = (roleId: number) => authorities.find((a) => a.id === roleId)?.roleName ?? ''
+
+  // 서버가 실패를 반환하면 로컬 캐시를 건드리지 않는다. (성공 시에만 재조회가 일어난다)
+  const runMemberMutation = async (
+    operation: () => Promise<{ status: 'success' } | { status: 'error'; message: string }>,
+    fallbackMessage: string,
+  ): Promise<MemberRoleSettingsSubmitResult> => {
+    try {
+      const result = await operation()
+      if (result.status === 'error') {
+        return { ok: false, message: result.message || fallbackMessage }
+      }
+      return { ok: true }
+    } catch (err) {
+      console.error('[WorkspaceMembersTab] 멤버 역할 변경 실패:', err)
+      return { ok: false, message: '서버 통신 중 오류가 발생했습니다.' }
+    }
+  }
+
+  // 사용자 추가 확정 핸들러 (상속 멤버 권한 오버라이드도 동일하게 동작한다)
   const handleAddMember = async (targetEmail: string, targetRole: number) => {
     if (!rootNode) return
+    const isOverride = Boolean(overrideMember)
     setIsAddingMember(true)
     try {
       const result = await assignRoleOnServer({
         nodeId: rootNode.id,
         email: targetEmail,
         roleId: targetRole,
-        roleName: authorities.find((a) => a.id === targetRole)?.roleName ?? '',
+        roleName: roleNameOf(targetRole),
       })
 
       if (result.status === 'error') {
@@ -84,13 +124,98 @@ export function WorkspaceMembersTab({
       }
 
       setIsAddModalOpen(false)
-      showAlert(`${targetEmail} 사용자를 ${authorities.find((a) => a.id === targetRole)?.roleName ?? ''} 역할로 추가했습니다.`, '추가 완료', 'success')
+      setOverrideMember(null)
+      showAlert(
+        isOverride
+          ? `${overrideMember?.name ?? targetEmail}님에게 ${roleNameOf(targetRole)} 역할을 이 공간에서 직접 지정했습니다.`
+          : `${targetEmail} 사용자를 ${roleNameOf(targetRole)} 역할로 추가했습니다.`,
+        isOverride ? '권한 오버라이드 완료' : '추가 완료',
+        'success',
+      )
     } catch (err) {
       console.error('[WorkspaceMembersTab] 사용자 추가 실패:', err)
       showAlert('서버 통신 중 오류가 발생했습니다.', '통신 오류', 'error')
     } finally {
       setIsAddingMember(false)
     }
+  }
+
+  // 역할 변경
+  const handleUpdateMemberRole = async (roleId: number): Promise<MemberRoleSettingsSubmitResult> => {
+    const member = settingsMember
+    if (!rootNode || !member || !member.email) {
+      return { ok: false, message: '역할을 변경할 사용자 정보를 찾을 수 없습니다.' }
+    }
+
+    setIsSubmittingSettings(true)
+    const result = await runMemberMutation(
+      () =>
+        updateRoleOnServer({
+          nodeId: rootNode.id,
+          email: member.email,
+          roleId,
+          roleName: roleNameOf(roleId),
+        }),
+      '역할 변경에 실패했습니다.',
+    )
+    setIsSubmittingSettings(false)
+
+    if (result.ok) {
+      showAlert(`${member.name}님의 역할을 ${roleNameOf(roleId)}(으)로 변경했습니다.`, '역할 변경 완료', 'success')
+    }
+    return result
+  }
+
+  // 역할 회수 전 이관 정보 조회
+  const loadMemberRemovalPreview = async (): Promise<
+    MemberRoleSettingsSubmitResult & { preview?: RoleRemovalPreview }
+  > => {
+    const member = settingsMember
+    if (!rootNode || !member || !member.email) {
+      return { ok: false, message: '역할을 회수할 사용자 정보를 찾을 수 없습니다.' }
+    }
+
+    const result = await fetchRoleRemovalPreviewOnServer(member.email, rootNode.id)
+    return result.status === 'error'
+      ? { ok: false, message: result.message || '역할 회수 정보를 불러오지 못했습니다.' }
+      : { ok: true, preview: result.preview }
+  }
+
+  // 역할 회수 (미완료 업무는 지정한 담당자에게 이관)
+  const handleRemoveMemberRole = async (
+    newOwnerEmail?: string,
+  ): Promise<MemberRoleSettingsSubmitResult> => {
+    const member = settingsMember
+    if (!rootNode || !member || !member.email) {
+      return { ok: false, message: '역할을 회수할 사용자 정보를 찾을 수 없습니다.' }
+    }
+
+    setIsSubmittingSettings(true)
+    let transferSummary = ''
+    const result = await runMemberMutation(async () => {
+      const response = await removeRoleOnServer({
+        nodeId: rootNode.id,
+        email: member.email,
+        newOwnerEmail,
+      })
+
+      if (response.status === 'success' && response.result.transferredWorkItemCount > 0) {
+        transferSummary = `미완료 업무 ${response.result.transferredWorkItemCount}건을 ${
+          response.result.transferTargetName ?? '새 담당자'
+        }님에게 이관했습니다.`
+      }
+      return response
+    }, '역할 회수에 실패했습니다.')
+    setIsSubmittingSettings(false)
+
+    if (result.ok) {
+      showAlert(
+        `${member.name}님의 역할을 회수했습니다.${transferSummary ? ' ' + transferSummary : ''}`,
+        '역할 회수 완료',
+        'success',
+      )
+    }
+    return result
   }
 
   // 필터나 검색어, 세그먼트가 변경되면 1페이지로 리셋
@@ -126,7 +251,17 @@ export function WorkspaceMembersTab({
   const availableRoles = useMemo(() => authorities.filter((a) => !rootNode || a.nodeId === rootNode.id)
     .sort((a, b) => Number(Boolean(b.isTopRole)) - Number(Boolean(a.isTopRole)) || getRolePriority(String(b.id)) - getRolePriority(String(a.id))), [authorities, rootNode, getRolePriority])
   const assignableRoles = useMemo(() => availableRoles.filter((a) => !a.isTopRole), [availableRoles])
+  const changeableRoles = useMemo(
+    () => assignableRoles.filter((a) => String(a.id) !== String(settingsMember?.effectiveRoleId ?? '')),
+    [assignableRoles, settingsMember],
+  )
   const roleLabel = (id: string) => authorities.find((a) => String(a.id) === id)?.roleName ?? '역할 정보 없음'
+
+  // 멤버 역할 부여/변경/회수는 해당 노드에 `직속`으로 NODE_ADD_ROLE 을 가진 사용자만 가능하다.
+  const canManageMembers = useMemo(
+    () => Boolean(rootNode && currentUserId && canManageNodeRoles(currentUserId, rootNode.id, { roles, authorities })),
+    [authorities, currentUserId, roles, rootNode],
+  )
 
   // 전체 멤버들의 상속 및 오버라이드 상태 분석
   const {
@@ -322,15 +457,17 @@ export function WorkspaceMembersTab({
             ) : null}
           </div>
 
-          {/* 사용자 추가 버튼 */}
-          <button
-            type="button"
-            className={styles.addMemberBtn}
-            onClick={() => setIsAddModalOpen(true)}
-          >
-            <Icon name="plus" size={14} />
-            <span>사용자 추가</span>
-          </button>
+          {/* 사용자 추가 버튼 (직속 관리 권한 보유 시에만 노출) */}
+          {canManageMembers ? (
+            <button
+              type="button"
+              className={styles.addMemberBtn}
+              onClick={() => setIsAddModalOpen(true)}
+            >
+              <Icon name="plus" size={14} />
+              <span>사용자 추가</span>
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -417,9 +554,34 @@ export function WorkspaceMembersTab({
 
                     {/* 액션 */}
                     <td className={styles.tdAction}>
-                      <Button variant="secondary" className={styles.actionBtn}>
-                        권한 확인
-                      </Button>
+                      {!canManageMembers ? (
+                        <span className={styles.actionHint}>-</span>
+                      ) : member.isTopRole ? (
+                        <span className={styles.actionHint}>최상위 담당자</span>
+                      ) : member.isDirect ? (
+                        member.userId === currentUserId ? (
+                          <span className={styles.actionHint}>본인</span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            className={styles.actionBtn}
+                            onClick={() => setSettingsMember(member)}
+                          >
+                            <Icon name="gear" size={13} />
+                            <span>설정</span>
+                          </Button>
+                        )
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          className={styles.actionBtn}
+                          onClick={() => setOverrideMember(member)}
+                          title="상위 공간의 역할 대신 이 공간에 직접 역할을 지정합니다."
+                        >
+                          <Icon name="sparkles" size={13} />
+                          <span>권한 오버라이드</span>
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -518,6 +680,35 @@ export function WorkspaceMembersTab({
         onConfirm={handleAddMember}
         availableRoles={assignableRoles}
         isSubmitting={isAddingMember}
+      />
+
+      {/* 상속 멤버 권한 오버라이드 모달 (사용자 역할 추가와 동일한 동작) */}
+      <AddMemberModal
+        isOpen={Boolean(overrideMember)}
+        onClose={() => setOverrideMember(null)}
+        onConfirm={handleAddMember}
+        availableRoles={assignableRoles}
+        isSubmitting={isAddingMember}
+        presetEmail={overrideMember?.email}
+        title="권한 오버라이드"
+        submitLabel="오버라이드 적용"
+        hint={`${overrideMember?.name ?? ''}님은 상위 공간에서 ${overrideMember?.effectiveRoleName ?? '역할'} 권한을 상속받고 있습니다. 이 공간에 직접 역할을 지정하면 상속 대신 새 역할이 적용됩니다.`}
+      />
+
+      {/* 멤버 역할 설정(변경/회수) 모달 */}
+      <MemberRoleSettingsModal
+        isOpen={Boolean(settingsMember)}
+        onClose={() => setSettingsMember(null)}
+        userId={settingsMember?.userId ?? ''}
+        userName={settingsMember?.name ?? ''}
+        userEmail={settingsMember?.email ?? ''}
+        nodeName={rootNode?.name ?? ''}
+        currentRoleName={settingsMember?.effectiveRoleName ?? ''}
+        assignableRoles={changeableRoles}
+        isSubmitting={isSubmittingSettings}
+        loadRemovalPreview={loadMemberRemovalPreview}
+        onSubmitRoleChange={handleUpdateMemberRole}
+        onSubmitRemoval={handleRemoveMemberRole}
       />
 
       {/* 모던 알림/에러 모달 */}

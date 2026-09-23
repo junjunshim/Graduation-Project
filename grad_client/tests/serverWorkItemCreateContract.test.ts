@@ -18,11 +18,18 @@ const snapshot: WorkspaceSnapshot = {
     { id: 20, parentNodeId: 10, nodeType: 'PROJECT', name: 'Child', path: [10, 20], createdAt: '2026-08-29' },
   ],
   roles: [
-    { id: 1, userId: 'requester', nodeId: 10, roleName: 'ADMIN', createdAt: '2026-08-29' },
-    { id: 2, userId: 'requester', nodeId: 20, roleName: 'VIEWER', createdAt: '2026-08-29' },
-    { id: 3, userId: 'member', nodeId: 10, roleName: 'MEMBER', createdAt: '2026-08-29' },
-    { id: 4, userId: 'viewer', nodeId: 10, roleName: 'VIEWER', createdAt: '2026-08-29' },
-    { id: 5, userId: 'member', nodeId: 20, roleName: 'MEMBER', createdAt: '2026-08-29' },
+    { id: 1, userId: 'requester', nodeId: 10, roleName: 'ADMIN', roleId: 101, createdAt: '2026-08-29' },
+    { id: 2, userId: 'requester', nodeId: 20, roleName: 'VIEWER', roleId: 104, createdAt: '2026-08-29' },
+    { id: 3, userId: 'member', nodeId: 10, roleName: 'MEMBER', roleId: 102, createdAt: '2026-08-29' },
+    { id: 4, userId: 'viewer', nodeId: 10, roleName: 'VIEWER', roleId: 103, createdAt: '2026-08-29' },
+    { id: 5, userId: 'member', nodeId: 20, roleName: 'MEMBER', roleId: 105, createdAt: '2026-08-29' },
+  ],
+  authorities: [
+    { id: 101, nodeId: 10, roleName: 'ADMIN', authority: '011111111111111111111111', isTopRole: true },
+    { id: 102, nodeId: 10, roleName: 'MEMBER', authority: '001100110000001101110111' },
+    { id: 103, nodeId: 10, roleName: 'VIEWER', authority: '001100010000000000110011' },
+    { id: 104, nodeId: 20, roleName: 'VIEWER', authority: '001100010000000000110011' },
+    { id: 105, nodeId: 20, roleName: 'MEMBER', authority: '001100110000001101110111' },
   ],
   workItems: [
     {

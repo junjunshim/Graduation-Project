@@ -327,6 +327,22 @@
   line-height: 1;
 }
 
+/* 휴지통으로 이동한 워크스페이스 표시 배지 */
+.deletedBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  flex: 0 0 auto;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--entry-line-strong);
+  border-radius: 0.3rem;
+  background: var(--entry-panel);
+  color: var(--entry-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 /* 수형 덴드로그램 (Top-Down Dendrogram Tree) 레이아웃 */
 .dendroTopDownRoot {
   display: flex;
@@ -1593,6 +1609,8 @@
 
 /* 우클릭 / 더보기 컨텍스트 메뉴 */
 .contextMenu {
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
   position: fixed;
   z-index: 1000;
   min-width: 13rem;
@@ -1646,6 +1664,7 @@
 }
 
 .contextMenuDivider {
+  flex-shrink: 0;
   height: 1px;
   margin: 0.25rem 0.35rem;
   background: var(--axis-line-default, #dce2ed);
@@ -1703,4 +1722,32 @@
   }
 }
 
+/* ------------------------------------------------------------------
+   휴지통으로 이동한 워크스페이스 (진입점 화면에 흐릿하게 함께 표시)
+   hover/선택 규칙보다 뒤에 두어야 밝은 강조가 덮이지 않는다.
+------------------------------------------------------------------ */
+.rootCardDeleted,
+.dendroCardDeleted,
+.rowDeleted,
+.rootOptionDeleted {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  cursor: default;
+}
 
+.rootCardDeleted:hover,
+.rowDeleted:hover,
+.rootOptionDeleted:hover {
+  border-color: var(--entry-line);
+  box-shadow: none;
+}
+
+.dendroCardDeleted:hover {
+  transform: none;
+  border-color: var(--axis-line-default);
+  box-shadow: none;
+}
+
+.rootOptionDeleted .radioMark {
+  border-color: var(--entry-line);
+}

@@ -36,6 +36,7 @@ const FIELD_NAME_LABELS: Record<string, string> = {
   owner: '담당자',
   assignee: '담당자',
   node_type: '유형',
+  workspace_location: '위치',
   category: '카테고리',
   status: '상태',
   progress: '진행률',
@@ -417,7 +418,8 @@ function formatRoleMessage(
   // 레거시 로그는 대상 이름 자리에 사용자 ID가 들어 있을 수 있다.
   const personName = targetName ? text(options.resolveUserName?.(targetName)) || targetName : ''
   const person = personName ? `${quoted(personName)}님` : '대상 사용자'
-  const roleName = text(activity.newValue)
+  // 회수(deleted) 로그는 회수된 역할명이 oldValue 에 담긴다. (기존 로그는 newValue 를 사용)
+  const roleName = action === 'deleted' ? text(activity.oldValue ?? activity.newValue) : text(activity.newValue)
 
   if (action === 'inserted' || action === 'created') {
     return roleName
@@ -473,6 +475,11 @@ function formatAuthorityMessage(
     return `${actor}님이 ${role}에 권한을 설정했습니다.`
   }
   if (action === 'deleted') {
+    // 역할 정의 삭제(AUTHORITY + field 'role')는 역할 자체가 사라진 것이므로 삭제로 표현한다.
+    if (text(activity.fieldName).toLowerCase() === 'role') {
+      const subject = targetName ? `역할 ${quoted(targetName)}` : '역할'
+      return `${actor}님이 ${withJosa(subject, '을/를')} 삭제했습니다.`
+    }
     return `${actor}님이 ${role}의 권한을 회수했습니다.`
   }
   if (action === 'updated') {

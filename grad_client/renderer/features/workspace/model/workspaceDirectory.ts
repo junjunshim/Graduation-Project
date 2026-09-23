@@ -28,4 +28,6 @@ export type WorkspaceDirectoryItem = {
   iconName: IconName
   children: WorkspaceDirectoryItem[]
   canEnter?: boolean
+  /** 휴지통으로 이동한(삭제된) 워크스페이스인지. 진입 화면에서 흐릿하게 표시하고 복구 대상으로 쓴다. */
+  isDeleted?: boolean
 }

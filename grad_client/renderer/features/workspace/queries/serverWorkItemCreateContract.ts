@@ -72,10 +72,18 @@ export function getServerAvailableParentItems(
     if (!allowedNodeIds.has(item.ownerNodeId)) return false
 
     // 숨김 업무인 경우, 현재 유저가 해당 노드에 대해 WI_HIDDEN_VIEW(Bit 6) 권한이 있는지 확인
+    // 단, 담당자 본인 업무는 권한이 줄어도 후보에 남는다 (filePermission.ts 와 동일한 담당자 기준).
     if (item.hidden) {
-      const authBits = getEffectiveAuthorityBitSet(userId, item.ownerNodeId, snapshot)
-      if (!authBits.has(6)) {
-        return false
+      const ownerEmail = snapshot.users.find((user) => user.userId === userId)?.email?.toLowerCase()
+      const isMine =
+        item.ownerUserId === userId ||
+        (Boolean(ownerEmail) && item.ownerUserId.toLowerCase() === ownerEmail)
+
+      if (!isMine) {
+        const authBits = getEffectiveAuthorityBitSet(userId, item.ownerNodeId, snapshot)
+        if (!authBits.has(6)) {
+          return false
+        }
       }
     }
 

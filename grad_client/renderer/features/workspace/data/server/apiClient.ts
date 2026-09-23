@@ -156,6 +156,12 @@ export function setServerSession({
   writeStorageValue(ACCESS_TOKEN_STORAGE_KEY, accessToken)
   writeStorageValue(REFRESH_TOKEN_STORAGE_KEY, refreshToken)
   writeStorageValue(SERVER_EMAIL_STORAGE_KEY, email)
+
+  // 저장 실패(스토리지 차단·용량 초과 등)를 조용히 넘기면 refresh 토큰이 없는
+  // 반쪽 세션으로 남아 이후 모든 요청이 401로 실패한다. 즉시 알리고 되돌린다.
+  if (!hasServerSession()) {
+    throw new Error('세션 토큰을 브라우저 저장소에 저장하지 못했습니다.')
+  }
 }
 
 export function clearServerSession() {

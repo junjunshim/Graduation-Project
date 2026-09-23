@@ -32,6 +32,13 @@ enum class DbErrorCode {
     RoleDefinitionAlreadyExists,// P0412 노드에 이미 존재하는 역할 정의
     UpdateRoleAuthorityFailed,  // P0413 역할 권한 수정 실패
     RenameRoleDefinitionFailed, // P0414 역할 이름 변경 실패
+    SelfRoleRemovalNotAllowed,  // P0415 본인의 역할은 회수할 수 없음
+    RoleRemovalTransferInvalid, // P0416 업무 이관 대상이 없거나 자격 미달
+    RemoveRoleFailed,           // P0417 사용자 역할 회수 실패
+    RoleRemovalPreviewFailed,   // P0418 역할 회수 사전 확인 실패
+    RoleDefinitionInUse,        // P0419 역할 정의에 배정된 사용자가 남아 있음
+    RoleDeletionPreviewFailed,  // P0420 역할 삭제 사전 확인 실패
+    DeleteRoleDefinitionFailed, // P0421 역할 정의 삭제 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     EmailNotFound,              // P0503 이메일 찾을 수 없음
@@ -50,6 +57,9 @@ enum class DbErrorCode {
     GetNodeDetailFailed,        // P0305 노드 상세 조회 실패
     ParentNodeIsDeleted,        // P0306 상위 노드가 삭제되어 복구 불가
     RestoreNodeFailed,          // P0307 노드 복구 실패
+    MoveNodeInvalidDestination, // P0320 이전할 수 없는 목적지이거나 이관 대상 지정 불가
+    MoveNodePreviewStale,       // P0321 사전 검사 이후 이전 대상 정보 변경
+    MoveNodeTransferInvalid,    // P0322 이관 대상 업무를 맡을 담당자 지정 필요
     InvalidActivityFilter,      // P0701 활동 조회 필터 부적절
     FetchActivitiesFailed,      // P0702 활동 조회 실패
     UpdateUserFailed,           // P0508 사용자 정보 수정 실패

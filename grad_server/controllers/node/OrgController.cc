@@ -11,6 +11,112 @@ using namespace app_utils;
 // 모델 사용을 위한 네임스페이스
 using namespace drogon_model::grad_project;
 
+// 워크스페이스 이전 사전 검사 / 실행 처리를 공유하는 함수
+// preview가 true면 데이터를 변경하지 않고 이전 영향만 조회하고,
+// false면 preview_token을 검증한 뒤 실제로 이전한다.
+// (OrgController::previewNodeMove, OrgController::moveNode 에서 호출)
+static void handleNodeMove(const HttpRequestPtr &req,
+                           std::function<void(const HttpResponsePtr &)> callback, bool preview) {
+    // 1. 데이터 파싱 및 유효성 검사
+    // 요청 바디에서 JSON 데이터 파싱
+    const auto body = req->getJsonObject();
+
+    // 필수 파라미터 (이전 대상 node_id, 목적지 parent_node_id)
+    // parent_node_id는 필수이며, null이면 루트로 분리한다.
+    bool valid = body && body->isObject()
+        && (*body)["node_id"].isInt()
+        && (*body)["node_id"].asInt() > 0
+        && body->isMember("parent_node_id")
+        && ((*body)["parent_node_id"].isNull()
+            || ((*body)["parent_node_id"].isInt() && (*body)["parent_node_id"].asInt() > 0));
+
+    // 실행 요청은 사전 검사 토큰과 이관 방식이 추가로 필요하다.
+    if (valid && !preview) {
+        // 필수 파라미터 (preview_token)와 선택 파라미터 (transfers, new_owner_email) 형식 검사
+        valid = (*body)["preview_token"].isString()
+            && !(*body)["preview_token"].asString().empty()
+            && (!body->isMember("transfers") || (*body)["transfers"].isObject())
+            && (!body->isMember("new_owner_email") || (*body)["new_owner_email"].isString());
+
+        // 담당자별 이관은 기존 담당자 user id를 키로, 새 담당자 email을 값으로 갖는 객체여야 한다.
+        if (valid && body->isMember("transfers")) {
+            for (const auto &key : (*body)["transfers"].getMemberNames()) {
+                if (!(*body)["transfers"][key].isString()) {
+                    valid = false;
+                }
+            }
+        }
+    }
+
+    // 요청 형식이 올바르지 않으면 400 응답 반환
+    if (!valid) {
+        Json::Value ret;
+        ret["status"] = "error";
+        ret["code"] = "400";
+        ret["message"] = "워크스페이스 이전 요청 형식이 올바르지 않습니다.";
+
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(k400BadRequest);
+        callback(resp);
+        return;
+    }
+
+    // 2. 비즈니스 로직 - DB 함수 호출
+
+    // [성공 콜백] DB 결과를 프론트엔드 응답용 JSON으로 변환
+    auto success = [callback](const orm::Result &result) {
+        callback(HttpResponse::newHttpJsonResponse(parseIntegratedDataResult(result)));
+    };
+
+    // [실패 콜백] DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
+    auto failure = [callback](const orm::DrogonDbException &e) {
+        Json::Value ret = parseDbError(e);
+        // HTTP 상태 코드 추출
+        auto status = static_cast<HttpStatusCode>(ret["http_code"].asInt());
+        // JSON 응답에서 http_code 필드를 제거
+        ret.removeMember("http_code");
+
+        // HTTP 응답 생성 및 반환
+        auto resp = HttpResponse::newHttpJsonResponse(ret);
+        resp->setStatusCode(status);
+        callback(resp);
+    };
+
+    // JWT 필터에서 설정한 사용자 이메일을 가져오기
+    const auto email = req->attributes()->get<std::string>("user_email");
+    // 빈 문자열은 목적지를 루트로 분리할 때만 SQL NULL로 바인딩된다.
+    const auto parent = (*body)["parent_node_id"].isNull()
+        ? std::string()
+        : std::to_string((*body)["parent_node_id"].asInt());
+    // 데이터베이스 클라이언트 객체를 가져오기
+    auto db = app().getDbClient();
+
+    if (preview) {
+        // 사전 검사: 데이터를 변경하지 않고 이전 영향만 조회한다.
+        db->execSqlAsync("SELECT * FROM get_node_move_preview($1, $2, NULLIF($3, '')::INTEGER)",
+            success, failure, email, (*body)["node_id"].asInt(), parent);
+    } else {
+        // 실행: 트리 경로 갱신, 업무 이관, 일정 담당자 해제, 부모 연결 해제를 한 트랜잭션으로 처리한다.
+        Json::StreamWriterBuilder writer;
+        const auto transfers = body->isMember("transfers")
+            ? (*body)["transfers"]
+            : Json::Value(Json::objectValue);
+
+        db->execSqlAsync("SELECT * FROM move_node($1, $2, NULLIF($3, '')::INTEGER, $4, $5::JSONB, NULLIF($6, ''))",
+            success, failure, email, (*body)["node_id"].asInt(), parent,
+            (*body)["preview_token"].asString(), Json::writeString(writer, transfers),
+            body->get("new_owner_email", "").asString());
+    }
+}
+
+void OrgController::previewNodeMove(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    handleNodeMove(req, std::move(callback), true);
+}
+
+void OrgController::moveNode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    handleNodeMove(req, std::move(callback), false);
+}
+
 // Add definition of your processing function here
 
 // 최상위 노드 생성 api
@@ -470,6 +576,3 @@ void OrgController::restoreNode(const HttpRequestPtr &req, std::function<void(co
         cascade
     );
 }
-
-
-

@@ -201,6 +201,78 @@ export type UpdateRoleRequest = {
   roleName: RoleName
 }
 
+/** 역할 회수 시 이관해야 하는 미완료 업무 */
+export type RoleRemovalWorkItem = {
+  workItemId: string
+  title: string
+  ownerNodeId: number
+  ownerNodeName: string
+  isHidden: boolean
+  status: string
+}
+
+/** 역할 회수 시 업무를 넘겨받을 수 있는 후보 사용자 */
+export type RoleRemovalTransferTarget = {
+  userId: string
+  name: string
+  email: string
+}
+
+/** 역할 회수 사전 확인 결과 */
+export type RoleRemovalPreview = {
+  canRemove: boolean
+  blockedReason: string | null
+  nodeId: number
+  targetUserId: string
+  targetUserName: string
+  targetUserEmail: string
+  roleId?: number
+  roleName: RoleName
+  isTopRole: boolean
+  workItems: RoleRemovalWorkItem[]
+  transferTargets: RoleRemovalTransferTarget[]
+}
+
+export type RemoveRoleRequest = {
+  email: string
+  nodeId: number
+  /** 이관할 미완료 업무가 없으면 생략할 수 있다. */
+  newOwnerEmail?: string
+}
+
+export type RemoveRoleResult = {
+  transferredWorkItemCount: number
+  clearedScheduleCount: number
+  transferTargetName?: string
+}
+
+/** 역할 정의 삭제 시 이 역할을 배정받은 사용자 */
+export type RoleDefinitionAssignee = {
+  userId: string
+  name: string
+  email: string
+}
+
+/** 역할 정의 삭제 사전 확인 결과 */
+export type RoleDefinitionDeletionPreview = {
+  canDelete: boolean
+  blockedReason: string | null
+  nodeId: number
+  roleId: number
+  roleName: RoleName
+  isTopRole: boolean
+  assigneeCount: number
+  assignees: RoleDefinitionAssignee[]
+  /** 탈퇴한 사용자의 잔여 배정 수 (삭제를 막지 않고 역할과 함께 정리된다) */
+  inactiveAssigneeCount: number
+}
+
+export type DeleteRoleDefinitionRequest = {
+  nodeId: number
+  roleId: number
+  roleName: RoleName
+}
+
 export type CreateWorkItemRequest = {
   workItemId: string
   ownerNodeId: number

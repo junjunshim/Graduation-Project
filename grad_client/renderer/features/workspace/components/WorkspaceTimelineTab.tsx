@@ -13,7 +13,7 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
-import type { OrganizationNodeRecord, RoleMember, WorkItemRecord } from '../model/types'
+import type { OrganizationNodeRecord, RoleMember, UserRecord, WorkItemRecord } from '../model/types'
 import styles from './WorkspaceTimelineTab.module.css'
 import { useWorkItemContextMenu } from './useWorkItemContextMenu'
 
@@ -21,6 +21,8 @@ type WorkspaceTimelineTabProps = {
   workItems: WorkItemRecord[]
   nodes: OrganizationNodeRecord[]
   members: RoleMember[]
+  /** 역할 목록에 없는 담당자(퇴장·스코프 밖)의 이름까지 표시하기 위한 사용자 목록 */
+  users?: Array<Pick<UserRecord, 'userId' | 'name'> & Partial<Pick<UserRecord, 'email'>>>
 }
 
 type TimelineTone = 'purple' | 'blue' | 'green' | 'yellow'
@@ -176,8 +178,19 @@ function getTimelineEntries(workItems: WorkItemRecord[]) {
     )
 }
 
-function getMemberName(userId: string, members: RoleMember[]) {
-  return members.find((member) => member.userId === userId)?.name ?? '담당자 미정'
+function getMemberName(
+  userId: string,
+  members: RoleMember[],
+  users: WorkspaceTimelineTabProps['users'] = [],
+) {
+  const fromMembers = members.find((member) => member.userId === userId)
+  if (fromMembers) return fromMembers.name
+
+  // 역할이 제거되어 멤버 목록에 없는 담당자도 실제 이름으로 표시한다.
+  const fromUsers = users.find(
+    (user) => user.userId === userId || Boolean(user.email && user.email === userId),
+  )
+  return fromUsers?.name ?? '담당자 미정'
 }
 
 function getTimelineRange(entries: TimelineEntry[], today: number) {
@@ -192,7 +205,7 @@ function getTimelineRange(entries: TimelineEntry[], today: number) {
   }
 }
 
-export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTabProps) {
+export function WorkspaceTimelineTab({ workItems, members, users = [] }: WorkspaceTimelineTabProps) {
   const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
   const viewportRef = useRef<HTMLDivElement>(null)
   const labelColumnRef = useRef<HTMLDivElement>(null)
@@ -1074,7 +1087,7 @@ export function WorkspaceTimelineTab({ workItems, members }: WorkspaceTimelineTa
                             18,
                             ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
                           )
-                          const memberName = getMemberName(entry.item.ownerUserId, members)
+                          const memberName = getMemberName(entry.item.ownerUserId, members, users)
                           const barStyle = group.style
 
                           return (

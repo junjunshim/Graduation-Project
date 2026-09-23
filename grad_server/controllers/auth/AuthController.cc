@@ -14,7 +14,7 @@ using namespace app_utils;
 // 토큰 생성 함수(access token, refresh token)
 Json::Value AuthController::generateToken(const std::string &user_email){
     // JWT 토큰 생성을 위한 시크릿 키와 만료 시간 설정
-    auto secret = drogon::app().getCustomConfig()["app"]["jwt_secret"].asString();
+    auto secret = drogon::app().getCustomConfig()["jwt_secret"].asString();
     auto access_exp = drogon::app().getCustomConfig()["access_token_expiry"].asInt();
     auto refresh_exp = drogon::app().getCustomConfig()["refresh_token_expiry"].asInt();
 
@@ -163,7 +163,7 @@ void AuthController::refreshUserToken(const HttpRequestPtr &req, std::function<v
     std::string refreshToken = (*jsonPtr)["refresh_token"].asString();
 
     // 2. JWT 리프레시 토큰 검증
-    auto secret = drogon::app().getCustomConfig()["app"]["jwt_secret"].asString();
+    auto secret = drogon::app().getCustomConfig()["jwt_secret"].asString();
     std::string user_email;
     try {
         auto verifier = jwt::verify()

@@ -44,7 +44,7 @@ void JwtFilter::doFilter(const HttpRequestPtr &req,
 
     // 3. 토큰 추출 및 검증 로직
     std::string token = authHeader.substr(7);
-    auto secret = app().getCustomConfig()["app"]["jwt_secret"].asString();
+    auto secret = app().getCustomConfig()["jwt_secret"].asString();
 
     try {
         auto verifier = jwt::verify()

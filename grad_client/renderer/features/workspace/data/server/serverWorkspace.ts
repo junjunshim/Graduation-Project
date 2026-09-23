@@ -1402,15 +1402,17 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempts = 0
 let isIntentionalDisconnect = false
 const MAX_RECONNECT_DELAY_MS = 30_000
+
+// 앱 실행 단위로 고유한 연결 식별자. 재연결 시 서버가 같은 클라이언트의 이전 연결만 교체할 수 있게 한다.
+const WS_CLIENT_ID = 'client-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 const INITIAL_RECONNECT_DELAY_MS = 1_000
 
-export function getNotificationWebSocketUrl(token: string): string {
+export function getNotificationWebSocketUrl(): string {
   const apiBaseUrl = getWorkspaceApiBaseUrl()
   const wsProtocol = apiBaseUrl.startsWith('https') ? 'wss:' : 'ws:'
   const urlObj = new URL(apiBaseUrl)
   urlObj.protocol = wsProtocol
   urlObj.pathname = `${urlObj.pathname.replace(/\/+$/, '')}/notification/ws`
-  urlObj.searchParams.set('token', token)
   return urlObj.toString()
 }
 
@@ -1461,6 +1463,10 @@ function scheduleWebSocketReconnect() {
 }
 
 let pingIntervalTimer: ReturnType<typeof setInterval> | null = null
+let lastPongAt = 0
+
+const HEARTBEAT_INTERVAL_MS = 15_000
+const HEARTBEAT_TIMEOUT_MS = 45_000
 
 function stopHeartbeat() {
   if (pingIntervalTimer) {
@@ -1471,18 +1477,34 @@ function stopHeartbeat() {
 
 function startHeartbeat(socket: WebSocket) {
   stopHeartbeat()
+  lastPongAt = Date.now()
   // 15초마다 가벼운 핑 전송 (연결 활성 유지)
   pingIntervalTimer = setInterval(() => {
+    if (socket.readyState !== WebSocket.OPEN) {
+      stopHeartbeat()
+      return
+    }
+
+    // PONG 응답이 끊겼다면 half-open 연결로 판단하고 재연결을 유도한다.
+    if (Date.now() - lastPongAt > HEARTBEAT_TIMEOUT_MS) {
+      console.warn('[WebSocket] PONG 응답이 없어 연결이 끊긴 것으로 판단하고 재연결합니다.')
+      stopHeartbeat()
+      try {
+        socket.close()
+      } catch {
+        // ignore
+      }
+      return
+    }
+
     if (socket.readyState === WebSocket.OPEN) {
       try {
         socket.send(JSON.stringify({ type: 'PING' }))
       } catch {
         // ignore
       }
-    } else {
-      stopHeartbeat()
     }
-  }, 15000)
+  }, HEARTBEAT_INTERVAL_MS)
 }
 
 let connectPromise: Promise<WebSocket> | null = null
@@ -1517,12 +1539,12 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
     let isHandshakeComplete = false
 
     try {
-      const wsUrl = getNotificationWebSocketUrl(accessToken)
+      const wsUrl = getNotificationWebSocketUrl()
       const socket = new WebSocket(wsUrl)
       notificationSocket = socket
 
       const timeoutId = setTimeout(() => {
-        if (!isHandshakeComplete && socket.readyState !== WebSocket.OPEN) {
+        if (!isHandshakeComplete) {
           try {
             socket.close()
           } catch {
@@ -1538,7 +1560,10 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         }
       }, 5000)
 
-      socket.onopen = () => {
+      const finishHandshake = () => {
+        if (isHandshakeComplete) {
+          return
+        }
         isHandshakeComplete = true
         clearTimeout(timeoutId)
         reconnectAttempts = 0
@@ -1551,10 +1576,42 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         resolve(socket)
       }
 
+      socket.onopen = () => {
+        // 인증 토큰은 URL 이 아니라 첫 프레임으로 보낸다. (접속/프록시 로그 노출 방지)
+        try {
+          socket.send(JSON.stringify({ type: 'AUTH', token: accessToken, client_id: WS_CLIENT_ID }))
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error('실시간 알림 서버 인증 프레임 전송에 실패했습니다.'))
+          try {
+            socket.close()
+          } catch {
+            // ignore
+          }
+        }
+      }
+
       socket.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data)
           console.debug('[WebSocket] 수신 알림:', payload)
+
+          if (payload && payload.type === 'PONG') {
+            lastPongAt = Date.now()
+            return
+          }
+
+          if (payload && payload.type === 'AUTH_FAILED') {
+            if (!isHandshakeComplete) {
+              clearTimeout(timeoutId)
+              reject(new Error('실시간 알림 서버 인증에 실패했습니다.'))
+            }
+            return
+          }
+
+          if (payload && payload.type === 'AUTH_OK') {
+            finishHandshake()
+            return
+          }
 
           if (payload && payload.type === 'NOTIFICATION') {
             const data = payload.data || payload

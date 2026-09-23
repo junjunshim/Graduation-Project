@@ -28,7 +28,7 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
     }
 
     // 2. JWT 토큰 검증 및 유저 이메일 획득
-    auto secret = drogon::app().getCustomConfig()["app"]["jwt_secret"].asString();
+    auto secret = drogon::app().getCustomConfig()["jwt_secret"].asString();
     std::string user_email;
     try
     {

@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS work_items (
     hidden BOOLEAN NOT NULL DEFAULT FALSE,
     status  VARCHAR(20) NOT NULL DEFAULT 'todo',
     priority INTEGER NOT NULL DEFAULT 3 CHECK (priority BETWEEN 1 AND 5),
-    weight INTEGER NOT NULL DEFAULT 1 CHECK (weight >= 0),
+    weight INTEGER NOT NULL DEFAULT 0 CHECK (weight >= 0 AND weight <= 100), -- 하위 업무가 차지하는 비중(%)
     progress INTEGER NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     start_date DATE,
@@ -104,6 +104,8 @@ CREATE TABLE IF NOT EXISTS work_items (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT check_dates CHECK (due_date >= start_date),
+    -- 완료 상태는 항상 자체 진행률 100%를 가진다(진행률 100%인 미완료 업무는 허용).
+    CONSTRAINT check_done_progress CHECK (status <> 'done' OR progress = 100),
     CONSTRAINT uq_work_items_node_display UNIQUE (owner_node_id, display_id)
 );
 CREATE INDEX idx_work_items_node_id ON work_items(owner_node_id);

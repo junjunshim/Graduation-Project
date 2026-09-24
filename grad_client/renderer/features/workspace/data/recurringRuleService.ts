@@ -5,6 +5,8 @@ import type {
   UpdateRecurringRuleRequest,
 } from '../model/recurringRuleTypes'
 import { apiRequest } from './server/apiClient'
+import { optionalRecurringNumber } from '../model/recurringRuleValues'
+import { waitForDownloadCompletion } from './downloadCompletion'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
 
@@ -13,6 +15,14 @@ type ServerResponse<T> = {
   data?: T
   message?: string
   code?: string
+}
+
+/**
+ * 서버 요청이 실패했을 때 보여줄 메시지.
+ * 서버가 내려준 사유(예: '권한이 부족합니다.')를 우선 사용한다.
+ */
+function toMutationErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback
 }
 
 function getLocalRecurringRules(nodeId?: number, includeDeleted: boolean = false): RecurringRuleRecord[] {
@@ -28,6 +38,11 @@ function getLocalRecurringRules(nodeId?: number, includeDeleted: boolean = false
   } catch {
     return []
   }
+}
+
+/** 서버 조회 없이 캐시된 정기 일정만 필요한 화면(대시보드 등)에서 사용 */
+export function readCachedRecurringRules(): RecurringRuleRecord[] {
+  return getLocalRecurringRules()
 }
 
 function saveLocalRecurringRules(rules: RecurringRuleRecord[]) {
@@ -51,13 +66,13 @@ function snakeToCamelRule(item: any): RecurringRuleRecord {
     frequency: item.frequency ?? 'DAILY',
     intervalValue: Number(item.interval_value ?? item.intervalValue ?? 1),
     byDay: item.by_day ?? item.byDay ?? null,
-    byMonthDay: item.by_month_day !== undefined ? Number(item.by_month_day) : (item.byMonthDay ?? null),
-    bySetPos: item.by_set_pos !== undefined ? Number(item.by_set_pos) : (item.bySetPos ?? null),
+    byMonthDay: optionalRecurringNumber(item.by_month_day ?? item.byMonthDay),
+    bySetPos: optionalRecurringNumber(item.by_set_pos ?? item.bySetPos),
     startTime: item.start_time ?? item.startTime ?? null,
     durationMinutes: item.duration_minutes !== undefined ? Number(item.duration_minutes) : (item.durationMinutes ?? 60),
     repeatStartDate: item.repeat_start_date ?? item.repeatStartDate ?? '',
     repeatEndDate: item.repeat_end_date ?? item.repeatEndDate ?? null,
-    maxOccurrences: item.max_occurrences !== undefined ? Number(item.max_occurrences) : (item.maxOccurrences ?? null),
+    maxOccurrences: optionalRecurringNumber(item.max_occurrences ?? item.maxOccurrences),
     excludeHolidays: Boolean(item.exclude_holidays ?? item.excludeHolidays ?? true),
     holidayAction: item.holiday_action ?? item.holidayAction ?? 'SKIP',
     autoCreateTask: Boolean(item.auto_create_task ?? item.autoCreateTask ?? false),
@@ -175,54 +190,7 @@ export async function createRecurringRule(
     }
     return { status: 'error', message: res.message || '정기 일정을 생성하지 못했습니다.' }
   } catch (error) {
-    console.warn('[recurringRuleService] createRecurringRule error, using local fallback:', error)
-    // 로컬 폴백 (오프라인/테스트용)
-    const newId = Date.now()
-    const newRule: RecurringRuleRecord = {
-      ruleId: newId,
-      ownerNodeId: req.ownerNodeId,
-      creatorUserId: 'me',
-      assigneeUserId: req.assigneeUserId,
-      title: req.title,
-      description: req.description,
-      category: req.category,
-      frequency: req.frequency,
-      intervalValue: req.intervalValue,
-      byDay: req.byDay,
-      byMonthDay: req.byMonthDay,
-      bySetPos: req.bySetPos,
-      startTime: req.startTime,
-      durationMinutes: req.durationMinutes,
-      repeatStartDate: req.repeatStartDate,
-      repeatEndDate: req.repeatEndDate,
-      maxOccurrences: req.maxOccurrences,
-      excludeHolidays: req.excludeHolidays,
-      holidayAction: req.holidayAction,
-      autoCreateTask: req.autoCreateTask ?? false,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      checklists: (req.checklists ?? []).map((c, i) => ({
-        checklistId: newId * 10 + i,
-        ruleId: newId,
-        content: c.content,
-        sortOrder: c.sortOrder,
-      })),
-      files: (files ?? []).map((f, i) => ({
-        fileId: newId * 100 + i,
-        ruleId: newId,
-        uploaderUserId: 'me',
-        originalFileName: f.name,
-        storedFileName: f.name,
-        filePath: `/uploads/${f.name}`,
-        fileSize: f.size,
-        mimeType: f.type,
-        createdAt: new Date().toISOString(),
-      })),
-    }
-    const current = getLocalRecurringRules()
-    saveLocalRecurringRules([newRule, ...current])
-    return { status: 'success', rule: newRule }
+    return { status: 'error', message: toMutationErrorMessage(error, '정기 일정을 생성하지 못했습니다.') }
   }
 }
 
@@ -282,46 +250,7 @@ export async function updateRecurringRule(
     }
     return { status: 'error', message: res.message || '정기 일정을 수정하지 못했습니다.' }
   } catch (error) {
-    console.warn('[recurringRuleService] updateRecurringRule error, using local fallback:', error)
-    const current = getLocalRecurringRules()
-    const target = current.find((r) => r.ruleId === req.ruleId)
-    if (target) {
-      const updated: RecurringRuleRecord = {
-        ...target,
-        ...(req.title !== undefined ? { title: req.title } : {}),
-        ...(req.description !== undefined ? { description: req.description } : {}),
-        ...(req.category !== undefined ? { category: req.category } : {}),
-        ...(req.assigneeUserId !== undefined ? { assigneeUserId: req.assigneeUserId } : {}),
-        ...(req.frequency !== undefined ? { frequency: req.frequency } : {}),
-        ...(req.intervalValue !== undefined ? { intervalValue: req.intervalValue } : {}),
-        ...(req.byDay !== undefined ? { byDay: req.byDay } : {}),
-        ...(req.byMonthDay !== undefined ? { byMonthDay: req.byMonthDay } : {}),
-        ...(req.bySetPos !== undefined ? { bySetPos: req.bySetPos } : {}),
-        ...(req.startTime !== undefined ? { startTime: req.startTime } : {}),
-        ...(req.durationMinutes !== undefined ? { durationMinutes: req.durationMinutes } : {}),
-        ...(req.repeatStartDate !== undefined ? { repeatStartDate: req.repeatStartDate } : {}),
-        ...(req.repeatEndDate !== undefined ? { repeatEndDate: req.repeatEndDate } : {}),
-        ...(req.maxOccurrences !== undefined ? { maxOccurrences: req.maxOccurrences } : {}),
-        ...(req.excludeHolidays !== undefined ? { excludeHolidays: req.excludeHolidays } : {}),
-        ...(req.holidayAction !== undefined ? { holidayAction: req.holidayAction } : {}),
-        ...(req.autoCreateTask !== undefined ? { autoCreateTask: req.autoCreateTask } : {}),
-        ...(req.isActive !== undefined ? { isActive: req.isActive } : {}),
-        ...(req.checklists !== undefined
-          ? {
-              checklists: req.checklists.map((c, i) => ({
-                checklistId: req.ruleId * 10 + i,
-                ruleId: req.ruleId,
-                content: c.content,
-                sortOrder: c.sortOrder,
-              })),
-            }
-          : {}),
-        updatedAt: new Date().toISOString(),
-      }
-      saveLocalRecurringRules(current.map((r) => (r.ruleId === req.ruleId ? updated : r)))
-      return { status: 'success', rule: updated }
-    }
-    return { status: 'error', message: '일정을 찾을 수 없습니다.' }
+    return { status: 'error', message: toMutationErrorMessage(error, '정기 일정을 수정하지 못했습니다.') }
   }
 }
 
@@ -342,12 +271,7 @@ export async function deleteRecurringRule(ruleId: number): Promise<{ status: 'su
     }
     return { status: 'error', message: res.message || '삭제에 실패했습니다.' }
   } catch (error) {
-    console.warn('[recurringRuleService] deleteRecurringRule local fallback:', error)
-    const current = getLocalRecurringRules(undefined, true)
-    saveLocalRecurringRules(
-      current.map((r) => (r.ruleId === ruleId ? { ...r, isDeleted: true } : r)),
-    )
-    return { status: 'success' }
+    return { status: 'error', message: toMutationErrorMessage(error, '삭제에 실패했습니다.') }
   }
 }
 
@@ -359,6 +283,9 @@ export async function downloadRecurringRuleFile(fileId: number, fileName: string
     responseType: 'blob',
     timeoutMs: 120_000,
   })
+  // 다운로드 시작 전에 완료 추적을 등록해 실제 저장 완료 시점까지 기다린다.
+  const completion = waitForDownloadCompletion(fileName)
+
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -371,6 +298,8 @@ export async function downloadRecurringRuleFile(fileId: number, fileName: string
     anchor.remove()
     globalThis.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
+
+  await completion
 }
 
 /**
@@ -405,19 +334,7 @@ export async function uploadRecurringRuleFile(
     }
     return { status: 'error', message: res.message || '파일 업로드에 실패했습니다.' }
   } catch (error) {
-    console.warn('[recurringRuleService] uploadRecurringRuleFile fallback:', error)
-    const mockFile: RecurringRuleFileRecord = {
-      fileId: Date.now(),
-      ruleId,
-      uploaderUserId: 'me',
-      originalFileName: file.name,
-      storedFileName: file.name,
-      filePath: `/uploads/${file.name}`,
-      fileSize: file.size,
-      mimeType: file.type,
-      createdAt: new Date().toISOString(),
-    }
-    return { status: 'success', file: mockFile }
+    return { status: 'error', message: toMutationErrorMessage(error, '파일 업로드에 실패했습니다.') }
   }
 }
 
@@ -436,7 +353,7 @@ export async function deleteRecurringRuleFile(
     }
     return { status: 'error', message: res.message || '파일 삭제에 실패했습니다.' }
   } catch (error) {
-    return { status: 'success' }
+    return { status: 'error', message: toMutationErrorMessage(error, '파일 삭제에 실패했습니다.') }
   }
 }
 
@@ -456,8 +373,7 @@ export async function restoreRecurringRule(
     }
     return { status: 'error', message: res.message || '정기 일정 복구에 실패했습니다.' }
   } catch (error) {
-    console.warn('[recurringRuleService] restoreRecurringRule error:', error)
-    return { status: 'success' }
+    return { status: 'error', message: toMutationErrorMessage(error, '정기 일정 복구에 실패했습니다.') }
   }
 }
 
@@ -476,8 +392,7 @@ export async function restoreRecurringRuleFile(
     }
     return { status: 'error', message: res.message || '정기 일정 파일 복구에 실패했습니다.' }
   } catch (error) {
-    console.warn('[recurringRuleService] restoreRecurringRuleFile error:', error)
-    return { status: 'success' }
+    return { status: 'error', message: toMutationErrorMessage(error, '정기 일정 파일 복구에 실패했습니다.') }
   }
 }
 
@@ -486,7 +401,6 @@ export async function restoreRecurringRuleFile(
  */
 export async function fetchRecurringRuleFileContent(
   fileId: number,
-  fallbackSampleText?: string,
 ): Promise<{ content: string; fromCache: boolean; lastModified?: string }> {
   const cacheKey = `grad-recurring-file-cache-${fileId}`
   let cached: { content: string; lastModified?: string } | null = null
@@ -495,20 +409,6 @@ export async function fetchRecurringRuleFileContent(
     if (raw) cached = JSON.parse(raw)
   } catch {
     // ignore
-  }
-
-  const { isServerDataSource } = await import('./workspaceMode')
-  if (!isServerDataSource()) {
-    if (cached) {
-      return { content: cached.content, fromCache: true, lastModified: cached.lastModified }
-    }
-    const sample = fallbackSampleText || '# 정기 일정 서식 파일\n\n해당 파일은 데모 파일입니다.'
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify({ content: sample, lastModified: new Date().toISOString() }))
-    } catch {
-      // ignore
-    }
-    return { content: sample, fromCache: false }
   }
 
   const { getServerAccessToken } = await import('./server/apiClient')

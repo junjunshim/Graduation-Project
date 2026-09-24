@@ -31,20 +31,39 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
     static void startNotificationListener(const std::string &conninfo);
 
   private:
-    // 샤드 1개를 구성하는 구조체 (독립된 Mutex와 Multi-Connection Map)
+    // 연결 1개당 유지하는 세션 상태. 인증 전에는 user_email 이 비어 있고 authenticated 가 false 다.
+    struct WsSession {
+        std::string user_email;
+        std::string client_id;
+        bool authenticated = false;
+    };
+
+    // 샤드 1개를 구성하는 구조체 (읽기/쓰기 Mutex 와 Multi-Connection Map)
     struct ConnectionShard {
         mutable std::shared_mutex mutex;
         std::unordered_map<std::string, std::vector<WebSocketConnectionPtr>> connections;
     };
 
-    // 32개의 독립된 샤드로 분할 관리
+    // 32개의 샤드로 분할 관리
     static constexpr size_t SHARD_COUNT = 32;
     static std::array<ConnectionShard, SHARD_COUNT> shards_;
 
-    // 유저 이메일의 해시값을 통해 O(1)로 담당 샤드를 반환하는 헬퍼 함수
+    // AUTH 프레임을 기다리는 최대 시간(초). 초과하면 연결을 닫는다.
+    static constexpr double AUTH_DEADLINE_SECONDS = 10.0;
+
+    // 유저 이메일의 해시값을 통해 O(1)로 해당 샤드를 반환하는 헬퍼 함수
     static ConnectionShard& getShard(const std::string &user_email) {
         size_t index = std::hash<std::string>{}(user_email) % SHARD_COUNT;
         return shards_[index];
     }
+
+    // JWT Access Token 을 검증하고 user_email 을 반환한다. 검증에 실패하면 빈 문자열.
+    static std::string verifyAccessToken(const std::string &token);
+
+    // 인증된 연결을 샤드에 등록한다. 같은 client_id 의 기존 연결은 교체한다.
+    static void registerConnection(const WebSocketConnectionPtr &wsConnPtr,
+                                   const std::string &user_email,
+                                   const std::string &client_id,
+                                   const std::shared_ptr<WsSession> &session);
 };
 }

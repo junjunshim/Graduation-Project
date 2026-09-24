@@ -80,6 +80,7 @@ export type ServerContextItem = {
   category?: string | null
   weight?: string | number
   progress?: string | number
+  computed_progress?: string | number
   comment_count?: string | number
   start_date?: string | null
   due_date?: string | null
@@ -93,6 +94,8 @@ export type ServerContextItem = {
   work_item_id?: string
   message?: string
   is_read?: boolean
+  author_user_id?: string
+  author_name?: string
 
   actor_user_id?: string
   actor_name?: string

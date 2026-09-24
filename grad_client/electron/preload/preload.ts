@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { WINDOW_CONTROL_CHANNELS } from '../../shared/ipc/windowControls'
+import { DOWNLOAD_CHANNELS, type DownloadCompletionPayload } from '../../shared/ipc/downloads'
 
 if (process.platform === 'win32') {
   contextBridge.exposeInMainWorld('windowControls', {
@@ -28,3 +29,20 @@ if (process.platform === 'win32') {
     },
   })
 }
+
+contextBridge.exposeInMainWorld('downloads', {
+  onComplete(listener: (payload: DownloadCompletionPayload) => void) {
+    const wrappedListener = (
+      _event: Electron.IpcRendererEvent,
+      payload: DownloadCompletionPayload,
+    ) => {
+      listener(payload)
+    }
+
+    ipcRenderer.on(DOWNLOAD_CHANNELS.completed, wrappedListener)
+
+    return () => {
+      ipcRenderer.off(DOWNLOAD_CHANNELS.completed, wrappedListener)
+    }
+  },
+})

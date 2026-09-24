@@ -14,7 +14,9 @@
     "weight" : 1,
     "progress" : 0,
     "start_date" : "2026-03-01",
-    "due_date" : "2026-03-31"
+    "due_date" : "2026-03-31",
+    "parent_work_item_id" : "WI-110",
+    "owner_user_email" : "owner@example.com"
 }
 ```
 
@@ -46,6 +48,8 @@
 | progress | Integer | 선택 | 진행도 |
 | start_date | DATE | 선택 | 시작 날짜 |
 | due_date | DATE | 선택 | 마감 날짜 |
+| parent_work_item_id | String | 선택 | 상위 업무 id. 빈 문자열이면 최상위 업무로 이동. 키 자체를 생략하면 부모를 변경하지 않음 |
+| owner_user_email | String | 선택 | 변경할 담당자 이메일. 키 자체를 생략하면 담당자를 변경하지 않음 |
 
 ---
 

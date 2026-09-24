@@ -13,7 +13,7 @@ const activity: ActivityRecord = {
 
 test('schedule lifecycle activity uses schedule wording', () => {
   for (const [actionType, action] of Object.entries({ inserted: '생성', created: '생성', updated: '수정', deleted: '삭제', restored: '복구' })) {
-    assert.equal(formatActivityMessage({ ...activity, actionType }), `홍길동님이 ‘주간 회의’ 일정을 ${action}했습니다.`)
+    assert.equal(formatActivityMessage({ ...activity, actionType }), `홍길동님이 일정 ‘주간 회의’를 ${action}했습니다.`)
   }
 })
 
@@ -36,7 +36,7 @@ test('legacy schedule lifecycle logs resolve both wording and route against real
     const legacy = { ...activity, entityType: 'WORK_ITEM', actionType }
     const resolved = resolveActivityEntity(legacy, rules, [])
     assert.equal(resolved.entityType, 'RECURRING_RULE')
-    assert.match(formatActivityMessage(resolved), /일정을/)
+    assert.match(formatActivityMessage(resolved), /일정 ‘주간 회의’를/)
     assert.equal(getActivityLink(resolved), '/workspace?view=schedules&nodeId=42&ruleId=17')
     assert.equal(legacy.entityType, 'WORK_ITEM')
   }

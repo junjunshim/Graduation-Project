@@ -23,4 +23,5 @@ declare namespace NodeJS {
 
 interface Window {
   windowControls?: import('../shared/ipc/windowControls').WindowControlsApi
+  downloads?: import('../shared/ipc/downloads').DownloadsApi
 }

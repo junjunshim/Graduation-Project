@@ -7,9 +7,8 @@ import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
 import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
-import { isMockDataSource } from '../../workspace/data/workspaceMode'
 import signupHeroUrl from '../assets/signup-collaboration-hero.png'
-import { enterDemoWorkspace, getCurrentUser, signUp } from '../api'
+import { getCurrentUser, signUp } from '../api'
 import styles from './SignupPage.module.css'
 
 const initialForm = {
@@ -28,7 +27,6 @@ type ErrorField = 'userId' | 'email' | 'name' | 'password' | 'all' | null
 export function SignupPage() {
   const navigate = useNavigate()
   const currentUser = getCurrentUser()
-  const isMockMode = isMockDataSource()
   const hasCustomTitleBar = hasCustomWindowControls()
   const [form, setForm] = useState(initialForm)
   const [showPassword, setShowPassword] = useState(false)
@@ -188,22 +186,6 @@ export function SignupPage() {
         setSubmitting(false)
       }
     }
-  }
-
-  function handleDemoEnter() {
-    if (submitting) {
-      return
-    }
-
-    setFeedback(null)
-    const response = enterDemoWorkspace()
-
-    if (response.status === 'error') {
-      setFeedback({ message: response.message || '데모 환경에 접속하지 못했습니다.' })
-      return
-    }
-
-    navigate('/dashboard', { replace: true })
   }
 
   return (
@@ -482,21 +464,6 @@ export function SignupPage() {
               >
                 로그인
               </Link>
-              {isMockMode ? (
-                <>
-                  <span className={styles.actionDivider} aria-hidden="true">
-                    ·
-                  </span>
-                  <button
-                    type="button"
-                    className={styles.demoButton}
-                    onClick={handleDemoEnter}
-                    disabled={submitting}
-                  >
-                    데모로 둘러보기
-                  </button>
-                </>
-              ) : null}
             </div>
           </section>
         </div>

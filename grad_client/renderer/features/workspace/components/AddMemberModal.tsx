@@ -13,6 +13,11 @@ export type AddMemberModalProps = {
   onConfirm: (email: string, roleId: number) => Promise<void>
   availableRoles: AuthorityRecord[]
   isSubmitting?: boolean
+  /** 상속 멤버 권한 오버라이드처럼 대상이 이미 정해진 경우 이메일을 미리 채우고 잠근다. */
+  presetEmail?: string
+  title?: string
+  submitLabel?: string
+  hint?: string
 }
 
 export function AddMemberModal({
@@ -21,6 +26,10 @@ export function AddMemberModal({
   onConfirm,
   availableRoles,
   isSubmitting = false,
+  presetEmail,
+  title = '공간에 사용자 추가',
+  submitLabel = '사용자 추가',
+  hint,
 }: AddMemberModalProps) {
   const [email, setEmail] = useState('')
   const [selectedRole, setSelectedRole] = useState<number>(0)
@@ -33,12 +42,12 @@ export function AddMemberModal({
   // 기본 선택 역할 설정 (availableRoles에 있는 역할 중 우선순위)
   useEffect(() => {
     if (isOpen) {
-      setEmail('')
+      setEmail(presetEmail ?? '')
       setSelectedRole(availableRoles[0]?.id ?? 0)
       setIsDropdownOpen(false)
       setWarnMessage('')
     }
-  }, [isOpen, availableRoles])
+  }, [isOpen, availableRoles, presetEmail])
 
   // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
@@ -74,7 +83,7 @@ export function AddMemberModal({
         <header className={styles.header}>
           <div className={styles.titleGroup}>
             <Icon name="users" size={20} className={styles.headerIcon} />
-            <h2 className={styles.title}>공간에 사용자 추가</h2>
+            <h2 className={styles.title}>{title}</h2>
           </div>
           <button
             type="button"
@@ -101,12 +110,12 @@ export function AddMemberModal({
                 placeholder="예: user@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isSubmitting}
-                autoFocus
+                disabled={isSubmitting || Boolean(presetEmail)}
+                autoFocus={!presetEmail}
                 required
               />
               <span className={styles.hint}>
-                시스템에 등록된 사용자의 이메일 주소를 입력해 주세요.
+                {hint ?? '시스템에 등록된 사용자의 이메일 주소를 입력해 주세요.'}
               </span>
             </div>
 
@@ -180,7 +189,7 @@ export function AddMemberModal({
               variant="primary"
               disabled={isSubmitting || !email.trim()}
             >
-              {isSubmitting ? '추가 중...' : '사용자 추가'}
+              {isSubmitting ? '저장 중...' : submitLabel}
             </Button>
           </footer>
         </form>

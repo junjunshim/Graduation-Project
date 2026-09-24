@@ -122,7 +122,7 @@ export function OrgDetailPanel({ selectedDetail }: OrgDetailPanelProps) {
                 <div className={styles.rowCopy}>
                   <strong>{item.title}</strong>
                   <p className={styles.rowMeta}>
-                    {getWorkItemDisplayCode(item)} · 진행률 {item.progress}% · 우선순위 {item.priority} · 마감{' '}
+                    {getWorkItemDisplayCode(item)} · 진행률 {item.computedProgress ?? item.progress}% · 우선순위 {item.priority} · 마감{' '}
                     {formatWorkspaceDate(item.dueDate)}
                   </p>
                 </div>

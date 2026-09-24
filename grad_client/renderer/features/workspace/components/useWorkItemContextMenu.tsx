@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import { getOrgSnapshot } from '../data/orgService'
+import { getCurrentUser } from '../../auth/api'
 import { getCascadeWorkItemSummary } from '../data/cascadeWorkItemHelper'
+import { getOrgSnapshot } from '../data/orgService'
+import { getWorkItemPermissions } from '../model/workItemPermission'
 import { WorkItemFavoriteButton } from './WorkItemFavoriteButton'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
 import styles from './FileContextMenu.module.css'
@@ -37,6 +39,22 @@ export function useWorkItemContextMenu() {
     window.addEventListener('resize', close)
     return () => { window.removeEventListener('pointerdown', pointer); window.removeEventListener('keydown', key); window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close) }
   }, [menu])
+  const menuPermissions = useMemo(() => {
+    if (!menu) {
+      return { canEdit: false, canDelete: false, canRestore: false }
+    }
+
+    const snapshot = getOrgSnapshot()
+    const currentUserId = getCurrentUser(snapshot)?.userId ?? null
+    const targetItem = snapshot.workItems.find((candidate) => candidate.workItemId === menu.id)
+
+    if (!targetItem) {
+      return { canEdit: false, canDelete: false, canRestore: false }
+    }
+
+    return getWorkItemPermissions(targetItem, currentUserId, snapshot)
+  }, [menu])
+
   function onWorkItemContextMenu(event: MouseEvent, targetWorkItemId?: string) {
     const id = targetWorkItemId || (event.target as Element).closest<HTMLElement>('[data-work-item-id]')?.dataset.workItemId
     if (!id) return
@@ -63,13 +81,17 @@ export function useWorkItemContextMenu() {
               <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}`)}>
                 <Icon name="arrowRight" size={15} /><span>상세페이지 이동</span>
               </button>
-              <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}/edit`)}>
-                <Icon name="pencil" size={15} /><span>업무 수정</span>
-              </button>
+              {menuPermissions.canEdit ? (
+                <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}/edit`)}>
+                  <Icon name="pencil" size={15} /><span>업무 수정</span>
+                </button>
+              ) : null}
               <button type="button" className={styles.item} role="menuitem" onClick={() => createChild(menu.id)}>
                 <Icon name="plus" size={15} /><span>하위 업무 생성하기</span>
               </button>
               <WorkItemFavoriteButton workItemId={menu.id} menu onToggle={() => setMenu(null)} />
+              {menuPermissions.canDelete ? (
+                <>
               <div className={styles.separator} />
               <button
                 type="button"
@@ -102,6 +124,8 @@ export function useWorkItemContextMenu() {
                 <Icon name="trash" size={15} />
                 <span>업무 삭제</span>
               </button>
+                </>
+              ) : null}
             </div>,
             document.body,
           )
@@ -120,9 +144,23 @@ export function useWorkItemContextMenu() {
           onClose={() => setDeleteConfirmTarget(null)}
           onConfirm={async () => {
             const target = deleteConfirmTarget
+            const { showToast } = await import('../../notification/data/toastEvents')
+            const snapshot = getOrgSnapshot()
+            const currentUserId = getCurrentUser(snapshot)?.userId ?? null
+            const targetItem = snapshot.workItems.find((candidate) => candidate.workItemId === target.id)
+
+            if (!targetItem || !getWorkItemPermissions(targetItem, currentUserId, snapshot).canDelete) {
+              showToast({
+                title: '업무 삭제 실패',
+                content: '업무를 삭제할 권한이 없습니다.',
+                created_at: new Date().toISOString(),
+              })
+              setDeleteConfirmTarget(null)
+              return
+            }
+
             try {
               const { deleteWorkItem } = await import('../data/workItemService')
-              const { showToast } = await import('../../notification/data/toastEvents')
               const res = await deleteWorkItem(target.id)
               if (res.status === 'error') {
                 showToast({
@@ -138,7 +176,6 @@ export function useWorkItemContextMenu() {
                 })
               }
             } catch (error) {
-              const { showToast } = await import('../../notification/data/toastEvents')
               showToast({
                 title: '업무 삭제 실패',
                 content: error instanceof Error ? error.message : '업무를 삭제하지 못했습니다.',

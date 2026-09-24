@@ -250,6 +250,7 @@ DECLARE
     v_payload JSONB;
     v_work_item_id VARCHAR(50) := NULL;
     v_is_hidden BOOLEAN := FALSE;
+    v_is_recurring_file BOOLEAN := FALSE;
 BEGIN
     -- 대상이 업무, 댓글, 파일인 경우 연관된 work_item_id 및 hidden 여부 사전 확인
     IF NEW.entity_type = 'WORK_ITEM' THEN
@@ -264,12 +265,24 @@ BEGIN
             SELECT hidden INTO v_is_hidden FROM work_items WHERE work_item_id = v_work_item_id;
         END IF;
     ELSIF NEW.entity_type = 'FILE' THEN
-        SELECT work_item_id INTO v_work_item_id
-        FROM work_item_files
-        WHERE file_id = NEW.entity_id::INTEGER;
+        -- 업무 파일과 일정(정기 규칙) 파일은 file_id 시퀀스가 서로 독립적이라 id만으로 구분할 수 없다.
+        -- 1) 일정 파일에만 존재하면 일정 파일, 2) 두 테이블에 모두 존재하면 로그 문구로 판별,
+        -- 3) 업무 파일에만 존재하면 업무 파일로 취급한다.
+        IF EXISTS (SELECT 1 FROM recurring_rule_files WHERE file_id = NEW.entity_id::INTEGER)
+           AND (
+               NOT EXISTS (SELECT 1 FROM work_item_files WHERE file_id = NEW.entity_id::INTEGER)
+               OR NEW.target_name LIKE '%recurring file:%'
+           ) THEN
+            v_is_recurring_file := TRUE;
+            v_work_item_id := NULL;
+        ELSIF EXISTS (SELECT 1 FROM work_item_files WHERE file_id = NEW.entity_id::INTEGER) THEN
+            SELECT work_item_id INTO v_work_item_id
+            FROM work_item_files
+            WHERE file_id = NEW.entity_id::INTEGER;
 
-        IF v_work_item_id IS NOT NULL THEN
-            SELECT hidden INTO v_is_hidden FROM work_items WHERE work_item_id = v_work_item_id;
+            IF v_work_item_id IS NOT NULL THEN
+                SELECT hidden INTO v_is_hidden FROM work_items WHERE work_item_id = v_work_item_id;
+            END IF;
         END IF;
     END IF;
 
@@ -328,6 +341,7 @@ BEGIN
                 'entity_type', NEW.entity_type,
                 'entity_id', NEW.entity_id,
                 'work_item_id', v_work_item_id,
+                'is_recurring_file', v_is_recurring_file,
                 'target_name', NEW.target_name,
                 'action_type', NEW.action_type,
                 'field_name', NEW.field_name,

@@ -1,10 +1,11 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getNodeVisualMetadata } from '../../workspace/queries/workspaceDirectory'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../../workspace/model/labels'
 import { getWorkItemDisplayCode } from '../../workspace/model/formatters'
 import { WORK_ITEM_STATUS_OPTIONS } from '../../workspace/model/options'
 import type { WorkItemComposerContext } from '../../workspace/model/types'
+import { DatePicker } from '../../../design-system/primitives/DatePicker'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
 import styles from '../styles/WorkItemCreatePage.module.css'
 
@@ -12,7 +13,7 @@ type WorkItemCreateFormProps = {
   composer: WorkItemComposerContext
   form: WorkItemCreateFormState
   submitting: boolean
-  feedback: { tone: 'error' | 'success'; message: string } | null
+  feedback: { tone: 'error' | 'success' | 'info'; message: string } | null
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onCancel: () => void
   submitLabel?: string
@@ -21,7 +22,9 @@ type WorkItemCreateFormProps = {
   categorySupported?: boolean
   dueDateRequired?: boolean
   ownerLocked?: boolean
+  nodeLocked?: boolean
   submitDisabled?: boolean
+  submitHint?: string
   onFieldChange: <Key extends keyof WorkItemCreateFormState>(
     field: Key,
     value: WorkItemCreateFormState[Key],
@@ -49,19 +52,33 @@ export function WorkItemCreateForm({
   categorySupported = true,
   dueDateRequired = false,
   ownerLocked = false,
+  nodeLocked = false,
   submitDisabled = false,
+  submitHint,
   onFieldChange,
 }: WorkItemCreateFormProps) {
+  // 완료 상태는 항상 자체 진행률 100%이므로 진행률 입력을 잠근다.
+  const progressLocked = form.status === 'done'
   const [isNodeDropdownOpen, setIsNodeDropdownOpen] = useState(false)
+  const [isParentDropdownOpen, setIsParentDropdownOpen] = useState(false)
+  const parentDropdownId = useId()
+  const parentDropdownRef = useRef<HTMLDivElement | null>(null)
+  const parentTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
   const [isCustomCategoryMode, setIsCustomCategoryMode] = useState(false)
   const nodeDropdownRef = useRef<HTMLDivElement | null>(null)
   const userDropdownRef = useRef<HTMLDivElement | null>(null)
   const categoryDropdownRef = useRef<HTMLDivElement | null>(null)
+  const [titleError, setTitleError] = useState<string | null>(null)
+  const titleInputRef = useRef<HTMLInputElement | null>(null)
+  const titleErrorId = useId()
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      if (parentDropdownRef.current && !parentDropdownRef.current.contains(event.target as Node)) {
+        setIsParentDropdownOpen(false)
+      }
       if (
         nodeDropdownRef.current &&
         !nodeDropdownRef.current.contains(event.target as Node)
@@ -85,6 +102,21 @@ export function WorkItemCreateForm({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (isParentDropdownOpen) {
+      parentDropdownRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus()
+    }
+  }, [isParentDropdownOpen])
+
+  const parentOptions = [
+    { value: '', label: '(최상위 업무 - 상위 업무 없음)' },
+    ...composer.availableParentItems.map((parent) => ({
+      value: parent.workItemId,
+      label: `${parent.hidden ? '🔒 [숨김] ' : ''}[${getWorkItemDisplayCode(parent)}] ${parent.title}`,
+    })),
+  ]
+  const selectedParent = parentOptions.find((option) => option.value === form.parentWorkItemId)
+
   const selectedNodeObj = composer.availableNodes.find(
     (n) => String(n.id) === form.ownerNodeId,
   )
@@ -102,8 +134,20 @@ export function WorkItemCreateForm({
     form.categoryId && !allCategoryOptions.includes(form.categoryId),
   )
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!form.title.trim()) {
+      event.preventDefault()
+      setTitleError('업무 제목을 입력해 주세요.')
+      titleInputRef.current?.focus()
+      return
+    }
+
+    setTitleError(null)
+    onSubmit(event)
+  }
+
   return (
-    <form className={styles.form} onSubmit={onSubmit}>
+    <form className={styles.form} onSubmit={handleFormSubmit} noValidate>
       {/* 1. 기본 정보 및 배정 카드 */}
       <section className={styles.cardSection}>
         <div className={styles.cardHeader}>
@@ -119,18 +163,33 @@ export function WorkItemCreateForm({
           <label className={styles.fieldFull}>
             <span className={styles.fieldLabel}>업무 제목 <i className={styles.required}>*</i></span>
             <input
+              ref={titleInputRef}
               type="text"
-              className={styles.textInput}
+              className={[styles.textInput, titleError ? styles.textInputInvalid : ''].filter(Boolean).join(' ')}
               value={form.title}
-              onChange={(event) => onFieldChange('title', event.target.value)}
+              onChange={(event) => {
+                onFieldChange('title', event.target.value)
+
+                if (titleError && event.target.value.trim()) {
+                  setTitleError(null)
+                }
+              }}
               placeholder="예: 2분기 프론트엔드 성능 최적화 및 접근성 개선"
+              aria-invalid={titleError ? true : undefined}
+              aria-describedby={titleError ? titleErrorId : undefined}
               required
               autoFocus
             />
+            {titleError ? (
+              <span className={styles.fieldError} id={titleErrorId} role="alert">
+                <Icon name="alertTriangle" size={13} />
+                {titleError}
+              </span>
+            ) : null}
           </label>
 
           {/* 담당 조직 선택 및 상위 업무 선택 */}
-          <div className={styles.fieldGridTwo} style={{ position: 'relative', zIndex: isNodeDropdownOpen ? 30 : 20 }}>
+          <div className={styles.fieldGridTwo} style={{ position: 'relative', zIndex: (isNodeDropdownOpen || isParentDropdownOpen) ? 30 : 20 }}>
             <div className={styles.field}>
               <span className={styles.fieldLabel}>
                 담당 조직 (노드) <i className={styles.required}>*</i>
@@ -148,8 +207,15 @@ export function WorkItemCreateForm({
                     styles.workspaceDropdownTrigger,
                     isNodeDropdownOpen ? styles.workspaceDropdownTriggerOpen : '',
                   ].join(' ')}
-                  onClick={() => setIsNodeDropdownOpen((prev) => !prev)}
-                  aria-expanded={isNodeDropdownOpen}
+                  disabled={nodeLocked}
+                  onClick={() => {
+                    if (nodeLocked) {
+                      return
+                    }
+
+                    setIsNodeDropdownOpen((prev) => !prev)
+                  }}
+                  aria-expanded={nodeLocked ? undefined : isNodeDropdownOpen}
                   aria-haspopup="listbox"
                 >
                   <div className={styles.workspaceSelectedDisplay}>
@@ -177,7 +243,7 @@ export function WorkItemCreateForm({
                   />
                 </button>
 
-                {isNodeDropdownOpen && (
+                {isNodeDropdownOpen && !nodeLocked && (
                   <div className={styles.workspaceDropdownMenu} role="listbox">
                     {composer.availableNodes.map((node) => {
                       const isSelected = String(node.id) === form.ownerNodeId
@@ -210,28 +276,90 @@ export function WorkItemCreateForm({
                 )}
               </div>
               <span className={styles.fieldHelpText}>
-                상속된 권한을 포함해 업무 생성 권한이 있는 {composer.availableNodes.length}개 조직 중 선택 가능합니다.
+                {nodeLocked
+                  ? '업무를 만든 뒤에는 소속 조직을 변경할 수 없습니다.'
+                  : `상속된 권한을 포함해 업무 생성 권한이 있는 ${composer.availableNodes.length}개 조직 중 선택 가능합니다.`}
               </span>
             </div>
 
-            <label className={styles.field}>
-              <span className={styles.fieldLabel}>상위 업무 (Parent WorkItem)</span>
-              <select
-                className={styles.selectInput}
-                value={form.parentWorkItemId}
-                onChange={(event) => onFieldChange('parentWorkItemId', event.target.value)}
+            <div className={styles.field}>
+              <span id={`${parentDropdownId}-label`} className={styles.fieldLabel}>상위 업무 (Parent WorkItem)</span>
+              <div
+                ref={parentDropdownRef}
+                className={[
+                  styles.customDropdownContainer,
+                  isParentDropdownOpen ? styles.customDropdownContainerOpen : '',
+                ].join(' ')}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setIsParentDropdownOpen(false)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setIsParentDropdownOpen(false)
+                    parentTriggerRef.current?.focus()
+                  }
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    event.preventDefault()
+                    if (!isParentDropdownOpen) {
+                      setIsParentDropdownOpen(true)
+                      return
+                    }
+                    const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'))
+                    const index = options.findIndex((option) => option === document.activeElement)
+                    options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length]?.focus()
+                  }
+                }}
               >
-                <option value="">(최상위 업무 - 상위 업무 없음)</option>
-                {composer.availableParentItems.map((parent) => (
-                  <option key={parent.workItemId} value={parent.workItemId}>
-                    {parent.hidden ? '🔒 [숨김] ' : ''}[{getWorkItemDisplayCode(parent)}] {parent.title}
-                  </option>
-                ))}
-              </select>
+                <button
+                  ref={parentTriggerRef}
+                  type="button"
+                  className={[
+                    styles.workspaceDropdownTrigger,
+                    isParentDropdownOpen ? styles.workspaceDropdownTriggerOpen : '',
+                  ].join(' ')}
+                  onClick={() => setIsParentDropdownOpen((prev) => !prev)}
+                  aria-labelledby={`${parentDropdownId}-label ${parentDropdownId}-value`}
+                  aria-expanded={isParentDropdownOpen}
+                  aria-haspopup="listbox"
+                  aria-controls={isParentDropdownOpen ? parentDropdownId : undefined}
+                >
+                  <span className={styles.workspaceSelectedDisplay}>
+                    <span id={`${parentDropdownId}-value`} className={selectedParent?.value ? styles.workspaceSelectedText : styles.workspacePlaceholder}>
+                      {selectedParent?.label ?? parentOptions[0].label}
+                    </span>
+                  </span>
+                  <Icon name="chevronDown" size={14} className={isParentDropdownOpen ? styles.rotateChevron : undefined} />
+                </button>
+                {isParentDropdownOpen && (
+                  <div id={parentDropdownId} className={styles.workspaceDropdownMenu} role="listbox" aria-labelledby={`${parentDropdownId}-label`}>
+                    {parentOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={option.value === form.parentWorkItemId}
+                        className={[
+                          styles.workspaceDropdownItem,
+                          option.value === form.parentWorkItemId ? styles.workspaceDropdownItemSelected : '',
+                        ].join(' ')}
+                        title={option.label}
+                        onClick={() => {
+                          onFieldChange('parentWorkItemId', option.value)
+                          setIsParentDropdownOpen(false)
+                          parentTriggerRef.current?.focus()
+                        }}
+                      >
+                        <span className={styles.workspaceItemText}>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <span className={styles.fieldHelpText}>
                 담당 노드 및 직속 부모 노드의 업무까지만 선택할 수 있습니다.
               </span>
-            </label>
+            </div>
           </div>
 
           {/* 담당자 배정 및 업무 카테고리 */}
@@ -497,7 +625,14 @@ export function WorkItemCreateForm({
                         isSelected ? styles.statusButtonSelected : '',
                       ].filter(Boolean).join(' ')}
                       data-status={status}
-                      onClick={() => onFieldChange('status', status)}
+                      onClick={() => {
+                        onFieldChange('status', status)
+
+                        // 완료 상태로 바꾸면 자체 진행률은 자동으로 100%가 된다.
+                        if (status === 'done') {
+                          onFieldChange('progress', '100')
+                        }
+                      }}
                     >
                       <span className={styles.statusIndicator} data-status={status} />
                       {getWorkItemStatusLabel(status)}
@@ -540,45 +675,59 @@ export function WorkItemCreateForm({
 
           {/* 일정 (시작일, 마감일) */}
           <div className={styles.fieldGridTwo}>
-            <label className={styles.field}>
+            <div className={styles.field}>
               <span className={styles.fieldLabel}>시작일 (Start Date)</span>
-              <input
-                type="date"
-                className={styles.dateInput}
+              <DatePicker
+                label="시작일"
                 value={form.startDate}
-                onChange={(event) => onFieldChange('startDate', event.target.value)}
+                onChange={(nextValue) => onFieldChange('startDate', nextValue)}
+                maxDate={form.dueDate || undefined}
               />
-            </label>
+            </div>
 
-            <label className={styles.field}>
+            <div className={styles.field}>
               <span className={styles.fieldLabel}>마감일 (Due Date) {dueDateRequired ? <i className={styles.required}>*</i> : null}</span>
-              <input
-                type="date"
-                className={styles.dateInput}
+              <DatePicker
+                label="마감일"
                 value={form.dueDate}
-                onChange={(event) => onFieldChange('dueDate', event.target.value)}
-                required={dueDateRequired}
+                onChange={(nextValue) => onFieldChange('dueDate', nextValue)}
+                minDate={form.startDate || undefined}
               />
-            </label>
+            </div>
           </div>
 
           {/* 가중치 및 진행률 */}
           <div className={styles.fieldGridTwo}>
             <label className={styles.field}>
-              <span className={styles.fieldLabel}>가중치 (Weight)</span>
+              <span className={styles.fieldLabel}>하위 업무 가중치 (Weight)</span>
               <input
                 type="number"
-                min="1"
+                min="0"
                 max="100"
                 className={styles.textInput}
                 value={form.weight}
-                onChange={(event) => onFieldChange('weight', event.target.value)}
+                onChange={(event) => {
+                  const raw = event.target.value
+
+                  if (raw === '') {
+                    onFieldChange('weight', '')
+                    return
+                  }
+
+                  const clampedWeight = Math.min(100, Math.max(0, Number(raw)))
+
+                  if (!Number.isNaN(clampedWeight)) {
+                    onFieldChange('weight', String(clampedWeight))
+                  }
+                }}
               />
-              <span className={styles.fieldHelpText}>업무의 상대적 비중(기본: 1)</span>
+              <span className={styles.fieldHelpText}>
+                하위 업무가 차지하는 비중(%)입니다. 하위 업무가 없으면 반영되지 않습니다.
+              </span>
             </label>
 
             <div className={styles.field}>
-              <span className={styles.fieldLabel}>초기 진행률 ({form.progress}%)</span>
+              <span className={styles.fieldLabel}>자체 진행률 ({progressLocked ? 100 : form.progress}%)</span>
               <div className={styles.sliderRow}>
                 <input
                   type="range"
@@ -586,17 +735,22 @@ export function WorkItemCreateForm({
                   max="100"
                   step="5"
                   className={styles.rangeSlider}
-                  value={form.progress}
+                  value={progressLocked ? 100 : form.progress}
+                  disabled={progressLocked}
                   onChange={(event) => onFieldChange('progress', event.target.value)}
                 />
-                <div className={styles.progressInputWrapper}>
+                <div
+                  className={styles.progressInputWrapper}
+                  data-locked={progressLocked ? 'true' : undefined}
+                >
                   <input
                     type="number"
                     min="0"
                     max="100"
                     step="1"
                     className={styles.progressNumberInput}
-                    value={form.progress}
+                    value={progressLocked ? 100 : form.progress}
+                    disabled={progressLocked}
                     onChange={(event) => {
                       const raw = event.target.value
                       if (raw === '') {
@@ -612,6 +766,11 @@ export function WorkItemCreateForm({
                   <span className={styles.progressUnit}>%</span>
                 </div>
               </div>
+              {progressLocked ? (
+                <span className={styles.fieldHelpText}>
+                  완료 상태에서는 자체 진행률이 100%로 고정됩니다.
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -686,17 +845,26 @@ export function WorkItemCreateForm({
         <div
           className={[
             styles.feedbackBanner,
-            feedback.tone === 'error' ? styles.feedbackError : styles.feedbackSuccess,
+            feedback.tone === 'error'
+              ? styles.feedbackError
+              : feedback.tone === 'info'
+                ? styles.feedbackInfo
+                : styles.feedbackSuccess,
           ].join(' ')}
           role="alert"
         >
-          <span className={styles.feedbackIcon}>{feedback.tone === 'error' ? '⚠️' : '✅'}</span>
+          <span className={styles.feedbackIcon}>
+            {feedback.tone === 'error' ? '⚠️' : feedback.tone === 'info' ? 'ℹ️' : '✅'}
+          </span>
           <span>{feedback.message}</span>
         </div>
       ) : null}
 
       {/* 하단 액션 버튼 바 */}
       <div className={styles.formActionBar}>
+        {submitDisabled && submitHint ? (
+          <span className={styles.actionHint}>{submitHint}</span>
+        ) : null}
         <button
           type="button"
           className={styles.cancelBtn}
@@ -722,4 +890,3 @@ export function WorkItemCreateForm({
     </form>
   )
 }
-

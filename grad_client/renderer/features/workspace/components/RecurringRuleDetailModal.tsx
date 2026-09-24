@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import { getCategoryBadgeStyle } from '../model/labels'
+import { getCategoryBadgeStyle, getRecurringCategoryLabel } from '../model/labels'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
 import { deleteRecurringRule } from '../data/recurringRuleService'
 import { showToast } from '../../notification/data/toastEvents'
@@ -14,17 +14,19 @@ export type RecurringRuleDetailModalProps = {
   rule: RecurringRuleRecord | null
   members?: Array<Pick<UserRecord, 'userId' | 'name'> & { roleName?: string }>
   onClose: () => void
-  onEdit: (rule: RecurringRuleRecord) => void
-  onDeleted: (ruleId: number) => void
+  /** 수정/삭제 액션. 대시보드처럼 상세만 볼 때는 넘기지 않으며, 그때는 버튼이 숨겨진다. */
+  onEdit?: (rule: RecurringRuleRecord) => void
+  onDeleted?: (ruleId: number) => void
+  /** 수정/삭제 대신 노출하는 '일정 목록으로 이동' 액션 */
+  onNavigateToList?: () => void
+  /** 수정 권한이 없으면 버튼을 비활성화한다 (기본: 허용) */
+  canEdit?: boolean
+  /** 삭제 권한이 없으면 버튼을 비활성화한다 (기본: 허용) */
+  canDelete?: boolean
 }
 
-const CATEGORY_NAMES: Record<string, string> = {
-  ROUTINE: '정기 루틴',
-  REPORT: '정기 보고',
-  INSPECTION: '시스템 점검',
-  MEETING: '정기 회의',
-  EVENT: '조직 행사',
-}
+const NO_EDIT_PERMISSION_HINT = '수정 권한이 없습니다.'
+const NO_DELETE_PERMISSION_HINT = '삭제 권한이 없습니다.'
 
 const HOLIDAY_ACTIONS: Record<string, string> = {
   SKIP: '건너뜀 (SKIP)',
@@ -39,6 +41,9 @@ export function RecurringRuleDetailModal({
   onClose,
   onEdit,
   onDeleted,
+  onNavigateToList,
+  canEdit = true,
+  canDelete = true,
 }: RecurringRuleDetailModalProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
@@ -54,13 +59,21 @@ export function RecurringRuleDetailModal({
 
   if (!isOpen || !rule || typeof document === 'undefined') return null
 
-  const assigneeMember = members.find((m) => m.userId === rule.assigneeUserId)
-  const assigneeDisplay = assigneeMember
-    ? `${assigneeMember.name}${assigneeMember.roleName ? ` (${assigneeMember.roleName})` : ''}`
-    : rule.assigneeUserId || '미지정 (공용)'
+  const formatMember = (userId?: string | null, fallback = '') => {
+    const member = members.find((m) => m.userId === userId)
+
+    if (member) {
+      return `${member.name}${member.roleName ? ` (${member.roleName})` : ''}`
+    }
+
+    return userId || fallback
+  }
+
+  const assigneeDisplay = formatMember(rule.assigneeUserId, '미지정 (공용)')
+  const creatorDisplay = formatMember(rule.creatorUserId, '알 수 없음')
 
   const categoryStyle = getCategoryBadgeStyle(rule.category)
-  const categoryLabel = CATEGORY_NAMES[rule.category] || rule.category
+  const categoryLabel = getRecurringCategoryLabel(rule.category)
 
   const getCycleText = () => {
     let base = ''
@@ -91,7 +104,7 @@ export function RecurringRuleDetailModal({
           content: `'${rule.title}' 일정이 성공적으로 삭제되어 휴지통으로 이동되었습니다.`,
           created_at: new Date().toISOString(),
         })
-        onDeleted(rule.ruleId)
+        onDeleted?.(rule.ruleId)
         onClose()
       } else {
         setErrorMessage(res.message || '삭제에 실패했습니다.')
@@ -147,15 +160,21 @@ export function RecurringRuleDetailModal({
               </span>
             </div>
             <div className={styles.metaItem}>
-              <span className={styles.metaLabel}>공휴일 정책</span>
+              <span className={styles.metaLabel}>생성자</span>
               <span className={styles.metaValue}>
-                {rule.excludeHolidays ? HOLIDAY_ACTIONS[rule.holidayAction] : '휴일 무시'}
+                {creatorDisplay}
               </span>
             </div>
             <div className={styles.metaItem}>
               <span className={styles.metaLabel}>기본 담당자</span>
               <span className={styles.metaValue}>
                 {assigneeDisplay}
+              </span>
+            </div>
+            <div className={`${styles.metaItem} ${styles.metaItemWide}`}>
+              <span className={styles.metaLabel}>공휴일 정책</span>
+              <span className={styles.metaValue}>
+                {rule.excludeHolidays ? HOLIDAY_ACTIONS[rule.holidayAction] : '휴일 무시'}
               </span>
             </div>
           </div>
@@ -200,24 +219,38 @@ export function RecurringRuleDetailModal({
 
         <footer className={styles.footer}>
           <div className={styles.leftActions}>
-            <button
-              type="button"
-              className={styles.deleteBtn}
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              삭제
-            </button>
-            <button
-              type="button"
-              className={styles.editBtn}
-              onClick={() => {
-                onEdit(rule)
-                onClose()
-              }}
-            >
-              수정
-            </button>
+            {onNavigateToList ? (
+              <button type="button" className={styles.editBtn} onClick={onNavigateToList}>
+                일정 목록으로 이동
+              </button>
+            ) : null}
+
+            {onDeleted ? (
+              <button
+                type="button"
+                className={styles.deleteBtn}
+                onClick={handleDelete}
+                disabled={isDeleting || !canDelete}
+                title={canDelete ? undefined : NO_DELETE_PERMISSION_HINT}
+              >
+                삭제
+              </button>
+            ) : null}
+
+            {onEdit ? (
+              <button
+                type="button"
+                className={styles.editBtn}
+                onClick={() => {
+                  onEdit(rule)
+                  onClose()
+                }}
+                disabled={!canEdit}
+                title={canEdit ? undefined : NO_EDIT_PERMISSION_HINT}
+              >
+                수정
+              </button>
+            ) : null}
           </div>
 
           <div className={styles.rightActions}>

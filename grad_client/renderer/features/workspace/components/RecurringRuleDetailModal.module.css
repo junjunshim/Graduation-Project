@@ -131,6 +131,11 @@
   gap: 0.25rem;
 }
 
+/* 홀수 개 항목이 남지 않도록 마지막 항목은 가로 전체를 쓴다 */
+.metaItemWide {
+  grid-column: 1 / -1;
+}
+
 .metaLabel {
   font-size: 0.75rem;
   color: var(--axis-text-muted, #64748b);
@@ -202,7 +207,7 @@
   cursor: pointer;
 }
 
-.deleteBtn:hover {
+.deleteBtn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--axis-danger) 20%, var(--axis-surface-panel));
 }
 
@@ -217,8 +222,17 @@
   cursor: pointer;
 }
 
-.editBtn:hover {
+.editBtn:hover:not(:disabled) {
   background: var(--axis-surface-panel-hover, #f1f5f9);
+}
+
+/* 권한이 없어 비활성화된 액션 버튼 */
+.deleteBtn:disabled,
+.editBtn:disabled {
+  border-color: var(--axis-line-default, #cbd5e1);
+  background: var(--axis-surface-muted, #f8fafc);
+  color: var(--axis-text-muted, #94a3b8);
+  cursor: not-allowed;
 }
 
 .fileItem {

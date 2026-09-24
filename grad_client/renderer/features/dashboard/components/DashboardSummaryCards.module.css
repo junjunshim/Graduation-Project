@@ -1,0 +1,202 @@
+/* 좌우 폭을 아래 일정 패널과 동일하게 맞춘다 (5 : 7, 같은 간격) */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 1.75rem;
+  align-items: stretch;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+  min-width: 0;
+  padding: 1.1rem 1.35rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-panel);
+}
+
+.progressCard {
+  background: var(--axis-status-info-soft);
+  border-color: var(--axis-status-info-border);
+}
+
+.dueCard {
+  background: var(--axis-status-warning-soft);
+  border-color: var(--axis-status-warning-border);
+}
+
+.iconBox {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel);
+}
+
+.iconBox[data-tone='info'] {
+  color: var(--axis-status-info);
+  border-color: var(--axis-status-info-border);
+}
+
+.iconBox[data-tone='warning'] {
+  color: var(--axis-status-warning);
+  border-color: var(--axis-status-warning-border);
+}
+
+.primary {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.label {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.label[data-tone='info'] {
+  color: var(--axis-status-info);
+}
+
+.label[data-tone='danger'] {
+  color: var(--axis-status-danger);
+}
+
+.valueRow {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.value,
+.dueValue,
+.overdueValue,
+.countValue,
+.rateValue {
+  color: var(--text-primary);
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.dueValue,
+.overdueValue {
+  color: var(--axis-status-danger);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--axis-radius-pill);
+  background: var(--surface-panel);
+  font-size: 0.79rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill[data-tone='info'] {
+  color: var(--axis-status-info);
+  border-color: var(--axis-status-info-border);
+}
+
+.pill[data-tone='warning'] {
+  color: var(--axis-status-warning);
+  border-color: var(--axis-status-warning-border);
+}
+
+.divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1px;
+  margin: 0.1rem 0.25rem;
+  background: var(--line-default);
+}
+
+.rate {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.rateRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.progressTrack {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  height: 0.5rem;
+  min-width: 4rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-surface-muted);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-status-info);
+}
+
+.rateCaption {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.count {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+/* 4개 지표를 카드 폭에 맞춰 같은 간격으로 끝에서 끝까지 배치한다. */
+.stats {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.15rem;
+  min-width: 0;
+}
+
+.count .label {
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .card {
+    flex-wrap: wrap;
+  }
+
+  .divider {
+    display: none;
+  }
+}

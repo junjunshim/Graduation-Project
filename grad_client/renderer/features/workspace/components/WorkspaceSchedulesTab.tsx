@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import { getCategoryBadgeStyle } from '../model/labels'
+import { getCategoryBadgeStyle, getRecurringCategoryLabel } from '../model/labels'
+import { canCreateRecurringRule, canManageRecurringRule } from '../model/recurringRulePermission'
+import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../data/orgService'
+import { useKoreanHolidays } from '../model/koreanHolidays'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
 import { fetchRecurringRules, fetchRecurringRuleDetail, restoreRecurringRule } from '../data/recurringRuleService'
+import { formatCycleText, getNextOccurrenceInfo } from '../model/recurringSchedule'
 import { RecurringRuleModal } from './RecurringRuleModal'
 import { RecurringRuleDetailModal } from './RecurringRuleDetailModal'
 import { ConfirmRestoreModal } from './ConfirmRestoreModal'
@@ -28,218 +33,13 @@ const SECTION_CONFIG: Array<{ key: FrequencySectionKey; title: string; icon: str
   { key: 'YEARLY', title: '연간 정기 일정', icon: 'flag' },
 ]
 
-const CATEGORY_LABELS: Record<string, string> = {
-  ROUTINE: '정기 루틴',
-  REPORT: '정기 보고',
-  INSPECTION: '시스템 점검',
-  MEETING: '정기 회의',
-  EVENT: '조직 행사',
-}
-
-function formatCycleText(rule: RecurringRuleRecord): string {
-  const time = rule.startTime ? rule.startTime.slice(0, 5) : ''
-  const timeStr = time ? ` (${time})` : ''
-
-  if (rule.frequency === 'DAILY') {
-    return rule.intervalValue === 1 ? `매일${timeStr}` : `${rule.intervalValue}일마다${timeStr}`
-  }
-  if (rule.frequency === 'WEEKLY') {
-    const dayMap: Record<string, string> = {
-      MO: '월',
-      TU: '화',
-      WE: '수',
-      TH: '목',
-      FR: '금',
-      SA: '토',
-      SU: '일',
-    }
-    const days = rule.byDay
-      ? rule.byDay
-          .split(',')
-          .map((d) => dayMap[d.trim()] || d.trim())
-          .join(', ')
-      : ''
-    const intervalStr = rule.intervalValue === 1 ? '매주' : `${rule.intervalValue}주마다`
-    return `${intervalStr} ${days ? `${days}요일` : ''}${timeStr}`.trim()
-  }
-  if (rule.frequency === 'MONTHLY') {
-    const day = rule.byMonthDay ? `${rule.byMonthDay}일` : ''
-    const intervalStr = rule.intervalValue === 1 ? '매월' : `${rule.intervalValue}개월마다`
-    return `${intervalStr} ${day}${timeStr}`.trim()
-  }
-  if (rule.frequency === 'YEARLY') {
-    const intervalStr = rule.intervalValue === 1 ? '매년' : `${rule.intervalValue}년마다`
-    return `${intervalStr}${timeStr}`
-  }
-  return rule.frequency
-}
-
-/**
- * 오늘을 기준으로 다음 발생 일시(Next Occurrence) 및 D-Day 계산
- */
-export function getNextOccurrenceInfo(rule: RecurringRuleRecord): {
-  nextDate: Date | null
-  dDay: number | null
-  dateString: string
-} {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-  const [sYear, sMonth, sDay] = rule.repeatStartDate.split('-').map(Number)
-  const startDate = new Date(sYear, sMonth - 1, sDay)
-
-  const endDate = rule.repeatEndDate
-    ? new Date(
-        Number(rule.repeatEndDate.split('-')[0]),
-        Number(rule.repeatEndDate.split('-')[1]) - 1,
-        Number(rule.repeatEndDate.split('-')[2]),
-        23,
-        59,
-        59,
-      )
-    : null
-
-  // 이미 만료된 경우
-  if (endDate && today > endDate) {
-    return { nextDate: null, dDay: null, dateString: '종료됨' }
-  }
-
-  const [hour, minute] = rule.startTime ? rule.startTime.split(':').map(Number) : [9, 0]
-
-  // 1. 일간(DAILY)
-  if (rule.frequency === 'DAILY') {
-    const step = Math.max(1, rule.intervalValue)
-    let candidate = new Date(startDate)
-    candidate.setHours(hour, minute, 0, 0)
-
-    if (candidate < now) {
-      const diffDays = Math.ceil((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
-      const cycles = Math.max(0, Math.ceil(diffDays / step))
-      candidate = new Date(startDate.getTime() + cycles * step * 24 * 60 * 60 * 1000)
-      candidate.setHours(hour, minute, 0, 0)
-      if (candidate < now) {
-        candidate = new Date(candidate.getTime() + step * 24 * 60 * 60 * 1000)
-      }
-    }
-
-    if (endDate && candidate > endDate) {
-      return { nextDate: null, dDay: null, dateString: '종료됨' }
-    }
-
-    const candidateDay = new Date(candidate.getFullYear(), candidate.getMonth(), candidate.getDate())
-    const diffTime = candidateDay.getTime() - today.getTime()
-    const dDay = Math.round(diffTime / (1000 * 60 * 60 * 24))
-    const dateString = `${candidate.getFullYear()}.${String(candidate.getMonth() + 1).padStart(2, '0')}.${String(candidate.getDate()).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-    return { nextDate: candidate, dDay, dateString }
-  }
-
-  // 2. 주간(WEEKLY)
-  if (rule.frequency === 'WEEKLY') {
-    const dayIndexMap: Record<string, number> = {
-      SU: 0,
-      MO: 1,
-      TU: 2,
-      WE: 3,
-      TH: 4,
-      FR: 5,
-      SA: 6,
-    }
-    const targetDays = rule.byDay
-      ? rule.byDay.split(',').map((d) => dayIndexMap[d.trim()]).filter((n) => n !== undefined)
-      : [1] // 기본 월요일
-
-    let candidateDate: Date | null = null
-    // 향후 180일 탐색
-    for (let i = 0; i <= 180; i++) {
-      const test = new Date(today.getTime() + i * 24 * 60 * 60 * 1000)
-      if (test < startDate) continue
-      if (endDate && test > endDate) break
-
-      if (targetDays.includes(test.getDay())) {
-        test.setHours(hour, minute, 0, 0)
-        if (test >= now) {
-          candidateDate = test
-          break
-        }
-      }
-    }
-
-    if (!candidateDate) {
-      return { nextDate: null, dDay: null, dateString: '예정 없음' }
-    }
-
-    const candidateDay = new Date(candidateDate.getFullYear(), candidateDate.getMonth(), candidateDate.getDate())
-    const diffTime = candidateDay.getTime() - today.getTime()
-    const dDay = Math.round(diffTime / (1000 * 60 * 60 * 24))
-    const dateString = `${candidateDate.getFullYear()}.${String(candidateDate.getMonth() + 1).padStart(2, '0')}.${String(candidateDate.getDate()).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-    return { nextDate: candidateDate, dDay, dateString }
-  }
-
-  // 3. 월간(MONTHLY)
-  if (rule.frequency === 'MONTHLY') {
-    const targetDay = rule.byMonthDay || 1
-    let candidateDate: Date | null = null
-
-    for (let m = 0; m < 24; m++) {
-      const testMonth = new Date(now.getFullYear(), now.getMonth() + m, 1)
-      const lastDayOfMonth = new Date(testMonth.getFullYear(), testMonth.getMonth() + 1, 0).getDate()
-      const day = Math.min(targetDay, lastDayOfMonth)
-      const test = new Date(testMonth.getFullYear(), testMonth.getMonth(), day, hour, minute, 0, 0)
-
-      if (test < startDate) continue
-      if (endDate && test > endDate) break
-
-      if (test >= now) {
-        candidateDate = test
-        break
-      }
-    }
-
-    if (!candidateDate) {
-      return { nextDate: null, dDay: null, dateString: '예정 없음' }
-    }
-
-    const candidateDay = new Date(candidateDate.getFullYear(), candidateDate.getMonth(), candidateDate.getDate())
-    const diffTime = candidateDay.getTime() - today.getTime()
-    const dDay = Math.round(diffTime / (1000 * 60 * 60 * 24))
-    const dateString = `${candidateDate.getFullYear()}.${String(candidateDate.getMonth() + 1).padStart(2, '0')}.${String(candidateDate.getDate()).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-    return { nextDate: candidateDate, dDay, dateString }
-  }
-
-  // 4. 연간(YEARLY)
-  if (rule.frequency === 'YEARLY') {
-    let candidateDate: Date | null = null
-    for (let y = 0; y < 5; y++) {
-      const testYear = now.getFullYear() + y
-      const test = new Date(testYear, startDate.getMonth(), startDate.getDate(), hour, minute, 0, 0)
-
-      if (test < startDate) continue
-      if (endDate && test > endDate) break
-
-      if (test >= now) {
-        candidateDate = test
-        break
-      }
-    }
-
-    if (!candidateDate) {
-      return { nextDate: null, dDay: null, dateString: '예정 없음' }
-    }
-
-    const candidateDay = new Date(candidateDate.getFullYear(), candidateDate.getMonth(), candidateDate.getDate())
-    const diffTime = candidateDay.getTime() - today.getTime()
-    const dDay = Math.round(diffTime / (1000 * 60 * 60 * 24))
-    const dateString = `${candidateDate.getFullYear()}.${String(candidateDate.getMonth() + 1).padStart(2, '0')}.${String(candidateDate.getDate()).padStart(2, '0')} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-    return { nextDate: candidateDate, dDay, dateString }
-  }
-
-  return { nextDate: null, dDay: null, dateString: '-' }
-}
-
 export function WorkspaceSchedulesTab({
   activeNodeId = 1,
   members = [],
 }: WorkspaceSchedulesTabProps) {
+  // 공휴일 데이터가 늦게 도착하면 '다음 발생'을 다시 계산하도록 구독한다.
+  const currentYear = new Date().getFullYear()
+  const holidayRevision = useKoreanHolidays([currentYear - 1, currentYear, currentYear + 1])
   const [loadedRecurringRules, setLoadedRecurringRules] = useState<RecurringRuleRecord[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showDeletedSchedules, setShowDeletedSchedules] = useState(false)
@@ -250,6 +50,25 @@ export function WorkspaceSchedulesTab({
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedRuleId = searchParams.get('ruleId')
 
+  // 수정/삭제/복구는 서버가 최종 판정하므로, 화면에서도 같은 기준으로 버튼을 막는다.
+  const canManageRule = useCallback((rule: RecurringRuleRecord) => {
+    const snapshot = getOrgSnapshot()
+
+    return canManageRecurringRule(rule, getCurrentUser(snapshot)?.userId ?? null, snapshot)
+  }, [])
+
+  const canManageSelectedRule = useMemo(
+    () => (selectedRecurringRule ? canManageRule(selectedRecurringRule) : false),
+    [canManageRule, selectedRecurringRule],
+  )
+
+  // 일정 생성은 DB create_recurring_rule 과 동일하게 노드의 WI_PERSONAL_CHANGE 가 필요하다.
+  const canCreateRule = useMemo(() => {
+    const snapshot = getOrgSnapshot()
+
+    return canCreateRecurringRule(activeNodeId, getCurrentUser(snapshot)?.userId ?? null, snapshot)
+  }, [activeNodeId])
+
   useEffect(() => {
     if (!requestedRuleId) return
     let cancelled = false
@@ -258,8 +77,19 @@ export function WorkspaceSchedulesTab({
       const rule = Number.isSafeInteger(id) && id > 0 ? await fetchRecurringRuleDetail(id) : null
       if (cancelled) return
       if (rule && rule.ownerNodeId === activeNodeId) {
-        if (rule.isDeleted) setRestoreConfirmTarget(rule)
-        else setSelectedRecurringRule(rule)
+        if (rule.isDeleted) {
+          if (canManageRule(rule)) {
+            setRestoreConfirmTarget(rule)
+          } else {
+            showToast({
+              title: '복구 권한이 없습니다',
+              content: '이 일정을 복구할 권한이 없습니다.',
+              created_at: new Date().toISOString(),
+            })
+          }
+        } else {
+          setSelectedRecurringRule(rule)
+        }
       } else {
         showToast({ title: '일정을 열 수 없습니다', content: '일정이 없거나 조회 권한이 없습니다.', created_at: new Date().toISOString() })
       }
@@ -271,7 +101,7 @@ export function WorkspaceSchedulesTab({
     }
     void openRequestedRule()
     return () => { cancelled = true }
-  }, [requestedRuleId, activeNodeId, setSearchParams])
+  }, [requestedRuleId, activeNodeId, setSearchParams, canManageRule])
 
   const reloadRules = () => {
     if (activeNodeId) {
@@ -322,6 +152,7 @@ export function WorkspaceSchedulesTab({
 
   // 각 일정에 nextOccurrence 정보 계산 및 남은 일수(dDay) 오름차순 정렬
   const enrichedAndSortedRules = useMemo(() => {
+    void holidayRevision
     return displayedRules
       .map((rule) => {
         const occ = getNextOccurrenceInfo(rule)
@@ -336,7 +167,7 @@ export function WorkspaceSchedulesTab({
         if (b.nextOccurrence.dDay === null) return -1
         return a.nextOccurrence.dDay - b.nextOccurrence.dDay
       })
-  }, [displayedRules])
+  }, [displayedRules, holidayRevision])
 
   // 일/주/월/년 단위로 섹션 그룹핑
   const rulesByFrequency = useMemo(() => {
@@ -361,6 +192,18 @@ export function WorkspaceSchedulesTab({
   const handleRestoreConfirm = async (cascade: boolean) => {
     if (!restoreConfirmTarget) return
     const target = restoreConfirmTarget
+
+    // 모달이 열린 뒤 권한이 바뀌었을 수 있으므로 제출 직전에 한 번 더 확인한다.
+    if (!canManageRule(target)) {
+      setRestoreConfirmTarget(null)
+      showToast({
+        title: '정기 일정 복구 실패',
+        content: '정기 일정을 복구할 권한이 없습니다.',
+        created_at: new Date().toISOString(),
+      })
+      return
+    }
+
     try {
       const res = await restoreRecurringRule(target.ruleId, cascade)
       if (res.status === 'success') {
@@ -391,6 +234,7 @@ export function WorkspaceSchedulesTab({
   }
 
   const renderCard = (rule: (typeof enrichedAndSortedRules)[0]) => {
+    const canManage = canManageRule(rule)
     const categoryStyle = getCategoryBadgeStyle(rule.category)
     const { dDay, dateString } = rule.nextOccurrence
 
@@ -457,7 +301,7 @@ export function WorkspaceSchedulesTab({
                 ...categoryStyle,
               }}
             >
-              {CATEGORY_LABELS[rule.category] || rule.category}
+              {getRecurringCategoryLabel(rule.category)}
             </span>
 
             <span className={styles.recurringCardTitle} title={rule.title}>
@@ -510,6 +354,8 @@ export function WorkspaceSchedulesTab({
               <button
                 type="button"
                 className={styles.restoreButton}
+                disabled={!canManage}
+                title={canManage ? '휴지통에서 복구' : '복구 권한이 없습니다.'}
                 onClick={() => setRestoreConfirmTarget(rule)}
               >
                 <Icon name="restore" size={13} />
@@ -574,6 +420,8 @@ export function WorkspaceSchedulesTab({
             <button
               type="button"
               className={styles.primaryButton}
+              disabled={!canCreateRule}
+              title={canCreateRule ? '새 정기 일정 등록' : '정기 일정을 등록할 권한이 없습니다.'}
               onClick={() => setIsRecurringModalOpen(true)}
             >
               <Icon name="plus" size={14} />
@@ -674,6 +522,8 @@ export function WorkspaceSchedulesTab({
             )
             setSelectedRecurringRule(null)
           }}
+          canEdit={canManageSelectedRule}
+          canDelete={canManageSelectedRule}
         />
       )}
 

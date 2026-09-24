@@ -1,19 +1,233 @@
 .dialog {
-  width: min(480px, calc(100vw - 32px));
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(78vh, 620px);
   padding: 0;
-  border: 1px solid var(--axis-line-default);
+  border: 1px solid var(--axis-dialog-border, var(--axis-line-default));
   border-radius: var(--axis-radius-surface, 8px);
   background: var(--axis-surface-panel);
   color: var(--axis-text-primary);
+  box-shadow: var(--axis-shadow-dialog);
+  overflow: hidden;
 }
-.dialog::backdrop { background: rgb(0 0 0 / 35%); }
-.content { padding: 24px; }
-.header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.header h2 { margin: 0; font-size: 1.1rem; }
-.header button { border: 0; background: transparent; color: inherit; cursor: pointer; }
-.filters { display: flex; gap: 8px; margin: 20px 0 12px; }
-.filters input, .filters select { min-width: 0; padding: 8px; border: 1px solid var(--axis-line-default); border-radius: 6px; background: var(--axis-surface-panel); color: inherit; }
-.filters input { flex: 1; }
-.list { max-height: 360px; overflow-y: auto; }
-.option { display: flex; align-items: center; gap: 10px; padding: 10px 4px; cursor: pointer; overflow-wrap: anywhere; }
-.option:hover { background: var(--axis-brand-primary-soft); }
+
+/* showModal() 이전 프레임에 인라인으로 잠깐 보이지 않도록 열린 상태에서만 flex 로 배치한다. */
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog::backdrop {
+  background: var(--axis-dialog-backdrop, rgb(0 0 0 / 45%));
+  backdrop-filter: blur(4px);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--axis-dialog-divider, var(--axis-line-default));
+}
+
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.titleIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border: 1px solid var(--axis-brand-border);
+  border-radius: var(--axis-radius-control);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+}
+
+.title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--axis-text-primary);
+  font-size: 0.98rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  flex: 0 0 1.85rem;
+  border: 0;
+  border-radius: var(--axis-radius-control);
+  background: transparent;
+  color: var(--axis-text-muted);
+  cursor: pointer;
+  transition: background var(--axis-motion-fast) ease, color var(--axis-motion-fast) ease;
+}
+
+.closeButton:hover {
+  background: var(--axis-surface-panel-hover);
+  color: var(--axis-text-primary);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.9rem 1.25rem 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.8rem;
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--axis-motion-fast) ease;
+}
+
+.tab:hover {
+  background: var(--axis-surface-panel-hover);
+  color: var(--axis-text-primary);
+}
+
+.tab[data-active='true'] {
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-text-selected);
+}
+
+.tabCount {
+  padding: 0 0.35rem;
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-status-neutral-soft);
+  color: var(--axis-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.search {
+  margin: 0.75rem 1.25rem 0;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.6rem 0.95rem 1rem;
+}
+
+.option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--axis-radius-control);
+  color: var(--axis-text-secondary);
+  font-size: 0.84rem;
+  transition: background var(--axis-motion-fast) ease, color var(--axis-motion-fast) ease;
+}
+
+.option:hover {
+  background: var(--axis-surface-panel-hover);
+  color: var(--axis-text-primary);
+}
+
+.option[data-favorite='true'] {
+  color: var(--axis-text-primary);
+}
+
+.optionIcon {
+  color: var(--axis-text-icon-muted);
+}
+
+.optionName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionStar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex: 0 0 1.9rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--axis-radius-control);
+  background: transparent;
+  color: var(--axis-text-icon-muted);
+  cursor: pointer;
+  transition: background var(--axis-motion-fast) ease, color var(--axis-motion-fast) ease;
+}
+
+.optionStar:hover {
+  background: var(--axis-surface-selected);
+  color: var(--axis-text-primary);
+}
+
+.optionStar:focus-visible {
+  outline: 2px solid var(--axis-option-focus-outline, var(--axis-brand-primary));
+  outline-offset: 2px;
+}
+
+.option[data-favorite='true'] .optionStar {
+  color: var(--axis-brand-primary);
+}
+
+.empty {
+  margin: 0;
+  padding: 1.2rem 0.6rem;
+  color: var(--axis-text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--axis-dialog-divider, var(--axis-line-default));
+}
+
+.footerHint {
+  min-width: 0;
+  color: var(--axis-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}

@@ -492,6 +492,9 @@ BEGIN
         'parent_id', w.parent_work_item_id,
         'owner_node_id', w.owner_node_id,
         'owner_user_id', w.owner_user_id,
+        -- 역할 목록에 없는 담당자(퇴장·스코프 밖)도 이름을 표시할 수 있도록 함께 내려준다.
+        'owner_user_email', u_owner.email,
+        'owner_user_name', u_owner.name,
         'title', w.title,
         'description', w.description,
         'category', w.category,
@@ -500,6 +503,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'comment_count', COALESCE(cc.cnt, 0),
         'is_deleted', w.is_deleted,
         'start_date', w.start_date,
@@ -507,6 +511,7 @@ BEGIN
         'updated_at', w.updated_at
     )
     FROM work_items w
+    LEFT JOIN users u_owner ON w.owner_user_id = u_owner.user_id
     LEFT JOIN (
         SELECT work_item_id, COUNT(*)::INT as cnt
         FROM work_item_comments
@@ -525,7 +530,14 @@ BEGIN
       );
 
     -- 4-5. 노드 소속 업무에 공유된 파일 목록 (FILE)
-    IF (v_authority & v_file_view) = v_file_view THEN
+    -- 담당자 본인 업무의 파일은 FILE_VIEW 가 없어도 포함한다
+    -- (get_initial_context / get_work_item_detail / add_work_item_file 와 동일한 담당자 기준).
+    IF (v_authority & v_file_view) = v_file_view
+       OR EXISTS (
+           SELECT 1 FROM work_items w
+           WHERE w.owner_node_id = p_node_id AND w.owner_user_id = v_requester_id
+       )
+    THEN
         RETURN QUERY
         SELECT jsonb_build_object(
             'type', 'FILE',
@@ -703,5 +715,250 @@ BEGIN
         WHEN OTHERS THEN
             RAISE EXCEPTION '[P0307]Error restoring node: %, requester: % (REASON: %)', p_node_id, p_requester_email, SQLERRM
             USING ERRCODE = 'P0307';
+END;
+$$ LANGUAGE plpgsql;
+
+-- OrgController::previewNodeMove / moveNode (워크스페이스 이전)
+-- Workspace relocation is separate from update_node. Preview never writes data.
+-- Resolve authority against a hypothetical path using the same nearest-role override
+-- semantics as get_effective_authority (including explicit DENY).
+CREATE OR REPLACE FUNCTION check_authority_on_path(
+    p_user_id VARCHAR, p_path INTEGER[], p_authority_name VARCHAR
+) RETURNS BOOLEAN AS $$
+DECLARE v_auth BIT(24);
+BEGIN
+    SELECT a.authority INTO v_auth
+    FROM unnest(p_path) WITH ORDINALITY AS path(node_id, depth)
+    JOIN role_assignments r ON r.node_id = path.node_id AND r.user_id = p_user_id
+    JOIN role_authorities a ON a.authority_id = r.role_id AND a.node_id = r.node_id
+    ORDER BY path.depth DESC LIMIT 1;
+    RETURN COALESCE((v_auth & get_bit_position('DENY')) <> get_bit_position('DENY')
+        AND (v_auth & get_bit_position(p_authority_name)) = get_bit_position(p_authority_name), FALSE);
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION build_node_move_preview(
+    p_requester_email VARCHAR, p_node_id INTEGER, p_parent_node_id INTEGER
+) RETURNS JSONB AS $$
+DECLARE
+    v_requester VARCHAR;
+    v_node organization_nodes%ROWTYPE;
+    v_parent organization_nodes%ROWTYPE;
+    v_prefix INTEGER[] := '{}';
+    v_ids INTEGER[];
+    v_scope INTEGER[];
+    v_nodes JSONB;
+    v_work JSONB;
+    v_schedules JSONB;
+    v_groups JSONB := '[]';
+    v_targets JSONB;
+    v_all_targets JSONB;
+    v_detached JSONB;
+    v_group RECORD;
+    v_token TEXT;
+BEGIN
+    SELECT user_id INTO v_requester FROM users WHERE email = p_requester_email AND NOT is_deleted;
+    IF v_requester IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester does not exist' USING ERRCODE = 'P0001';
+    END IF;
+    SELECT * INTO v_node FROM organization_nodes WHERE node_id = p_node_id AND NOT is_deleted;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0002]Workspace does not exist' USING ERRCODE = 'P0002';
+    END IF;
+    IF NOT check_direct_authority(v_requester, p_node_id, 'NODE_INFO_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Direct NODE_INFO_CHANGE authority required' USING ERRCODE = 'P0103';
+    END IF;
+    IF v_node.node_type = 'USER' OR EXISTS (SELECT 1 FROM users WHERE personal_node_id = p_node_id) THEN
+        RAISE EXCEPTION '[P0320]Personal workspace cannot be moved' USING ERRCODE = 'P0320';
+    END IF;
+    IF EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = ANY(v_node.path) AND is_deleted) THEN
+        RAISE EXCEPTION '[P0320]Restore the workspace ancestors before moving' USING ERRCODE = 'P0320';
+    END IF;
+    IF p_parent_node_id IS NOT NULL THEN
+        SELECT * INTO v_parent FROM organization_nodes WHERE node_id = p_parent_node_id AND NOT is_deleted;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION '[P0002]Destination workspace does not exist' USING ERRCODE = 'P0002';
+        END IF;
+        IF p_node_id = ANY(v_parent.path) OR v_parent.node_type = 'USER'
+           OR EXISTS (SELECT 1 FROM users WHERE personal_node_id = p_parent_node_id)
+           OR EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = ANY(v_parent.path) AND is_deleted) THEN
+            RAISE EXCEPTION '[P0320]Invalid destination workspace' USING ERRCODE = 'P0320';
+        END IF;
+        IF NOT check_authority_with_override(v_requester, p_parent_node_id, 'NODE_SUB_CREATE') THEN
+            RAISE EXCEPTION '[P0103]Destination NODE_SUB_CREATE authority required' USING ERRCODE = 'P0103';
+        END IF;
+        v_prefix := v_parent.path;
+    END IF;
+
+    -- Include soft-deleted descendants so later restoration uses the new path too.
+    SELECT array_agg(n.node_id ORDER BY n.node_id), jsonb_agg(jsonb_build_object(
+        'node_id', n.node_id, 'name', n.name, 'parent_node_id', n.parent_node_id,
+        'path', n.path, 'new_path', v_prefix || n.path[array_length(v_node.path, 1):],
+        'is_deleted', n.is_deleted
+    ) ORDER BY n.path) INTO v_ids, v_nodes
+    FROM organization_nodes n WHERE p_node_id = ANY(n.path);
+    v_scope := v_ids || v_node.path || v_prefix;
+
+    -- Only assignments inherited from outside the moving subtree can be lost.
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'work_item_id', w.work_item_id, 'owner_node_id', w.owner_node_id,
+        'owner_node_name', n.name, 'owner_user_id', w.owner_user_id,
+        'title', CASE WHEN w.hidden AND NOT check_authority_with_override(v_requester, n.node_id, 'WI_HIDDEN_VIEW')
+                      THEN '숨김 업무' ELSE w.title END,
+        'hidden', w.hidden, 'status', w.status
+    ) ORDER BY w.work_item_id), '[]') INTO v_work
+    FROM work_items w JOIN organization_nodes n ON n.node_id = w.owner_node_id
+    WHERE n.node_id = ANY(v_ids) AND NOT n.is_deleted AND NOT w.is_deleted AND w.status <> 'done'
+      AND NOT COALESCE(get_authority_source_node(w.owner_user_id, n.node_id) = ANY(v_ids), FALSE)
+      AND (NOT check_authority_on_path(w.owner_user_id, v_prefix || n.path[array_length(v_node.path, 1):], 'WI_PERSONAL_CHANGE')
+           OR (w.hidden AND NOT check_authority_on_path(w.owner_user_id, v_prefix || n.path[array_length(v_node.path, 1):], 'WI_HIDDEN_CHANGE')));
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'rule_id', r.rule_id, 'title', r.title, 'owner_node_id', r.owner_node_id,
+        'assignee_user_id', r.assignee_user_id
+    ) ORDER BY r.rule_id), '[]') INTO v_schedules
+    FROM recurring_rules r JOIN organization_nodes n ON n.node_id = r.owner_node_id
+    WHERE n.node_id = ANY(v_ids) AND NOT n.is_deleted AND NOT r.is_deleted AND r.assignee_user_id IS NOT NULL
+      AND NOT COALESCE(get_authority_source_node(r.assignee_user_id, n.node_id) = ANY(v_ids), FALSE)
+      AND NOT check_authority_on_path(r.assignee_user_id, v_prefix || n.path[array_length(v_node.path, 1):], 'WI_PERSONAL_CHANGE');
+
+    FOR v_group IN
+        SELECT u.user_id, u.name, u.email, jsonb_agg(w.item ORDER BY w.item->>'work_item_id') AS items
+        FROM jsonb_array_elements(v_work) AS w(item)
+        JOIN users u ON u.user_id = w.item->>'owner_user_id'
+        GROUP BY u.user_id, u.name, u.email ORDER BY u.user_id
+    LOOP
+        SELECT COALESCE(jsonb_agg(jsonb_build_object('user_id', u.user_id, 'name', u.name, 'email', u.email)
+            ORDER BY u.name, u.user_id), '[]') INTO v_targets
+        FROM users u WHERE NOT u.is_deleted AND u.user_id <> v_group.user_id
+          AND EXISTS (SELECT 1 FROM role_assignments r WHERE r.user_id = u.user_id AND r.node_id = ANY(v_ids || v_prefix))
+          AND NOT EXISTS (
+              SELECT 1 FROM jsonb_array_elements(v_group.items) AS w(item)
+              JOIN organization_nodes n ON n.node_id = (w.item->>'owner_node_id')::INTEGER
+              WHERE NOT check_authority_on_path(u.user_id, v_prefix || n.path[array_length(v_node.path, 1):], 'WI_PERSONAL_CHANGE')
+                 OR ((w.item->>'hidden')::BOOLEAN AND NOT check_authority_on_path(u.user_id, v_prefix || n.path[array_length(v_node.path, 1):], 'WI_HIDDEN_CHANGE'))
+          );
+        v_groups := v_groups || jsonb_build_array(jsonb_build_object(
+            'user_id', v_group.user_id, 'name', v_group.name, 'email', v_group.email,
+            'work_items', v_group.items, 'transfer_targets', v_targets));
+    END LOOP;
+    SELECT COALESCE(jsonb_agg(t.item ORDER BY t.item->>'user_id'), '[]') INTO v_all_targets
+    FROM jsonb_array_elements(COALESCE(v_groups->0->'transfer_targets', '[]')) AS t(item)
+    WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_groups) AS g(item)
+        WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(g.item->'transfer_targets') AS c(item)
+            WHERE c.item->>'user_id' = t.item->>'user_id'));
+
+    SELECT COALESCE(jsonb_agg(w.work_item_id ORDER BY w.work_item_id), '[]') INTO v_detached
+    FROM work_items w JOIN work_items parent ON parent.work_item_id = w.parent_work_item_id
+    WHERE w.owner_node_id = p_node_id AND parent.owner_node_id = v_node.parent_node_id
+      AND v_node.parent_node_id IS DISTINCT FROM p_parent_node_id;
+
+    -- Fingerprint the relevant hierarchy, roles and workloads, not just counts.
+    -- It detects changes between preview and commit, including newly created work.
+    SELECT md5(jsonb_build_object(
+        'destination', p_parent_node_id,
+        'nodes', (SELECT jsonb_agg(to_jsonb(n) ORDER BY n.node_id) FROM organization_nodes n WHERE n.node_id = ANY(v_scope)),
+        'roles', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.assignment_id) FROM role_assignments r WHERE r.node_id = ANY(v_scope)),
+        'authorities', (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.authority_id) FROM role_authorities a WHERE a.node_id = ANY(v_scope)),
+        'users', (SELECT jsonb_agg(jsonb_build_array(u.user_id, u.name, u.email, u.is_deleted) ORDER BY u.user_id) FROM users u
+                  WHERE EXISTS (SELECT 1 FROM role_assignments r WHERE r.user_id = u.user_id AND r.node_id = ANY(v_scope))),
+        'work', (SELECT jsonb_agg(to_jsonb(w) ORDER BY w.work_item_id) FROM work_items w WHERE w.owner_node_id = ANY(v_ids)),
+        'schedules', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.rule_id) FROM recurring_rules r WHERE r.owner_node_id = ANY(v_ids)),
+        'detached', v_detached
+    )::TEXT) INTO v_token;
+
+    RETURN jsonb_build_object('type', 'NODE_MOVE_PREVIEW', 'node_id', p_node_id,
+        'parent_node_id', p_parent_node_id, 'old_parent_node_id', v_node.parent_node_id,
+        'preview_token', v_token, 'nodes', v_nodes, 'owner_groups', v_groups,
+        'all_transfer_targets', v_all_targets, 'cleared_schedules', v_schedules,
+        'detached_work_item_ids', v_detached,
+        'can_move', v_node.parent_node_id IS DISTINCT FROM p_parent_node_id AND
+            NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_groups) g WHERE jsonb_array_length(g->'transfer_targets') = 0));
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_node_move_preview(
+    p_requester_email VARCHAR, p_node_id INTEGER, p_parent_node_id INTEGER
+) RETURNS SETOF integrated_data AS $$
+BEGIN
+    -- Keep all preview queries on a consistent state even with concurrent writes.
+    LOCK TABLE organization_nodes, users, role_assignments, role_authorities, work_items, recurring_rules
+        IN SHARE MODE;
+    RETURN QUERY SELECT build_node_move_preview(p_requester_email, p_node_id, p_parent_node_id);
+END;
+$$ LANGUAGE plpgsql;
+
+-- transfers is an object {old_user_id: new_owner_email}; alternatively supply
+-- one new_owner_email for every affected owner. Both modes cannot be mixed.
+CREATE OR REPLACE FUNCTION move_node(
+    p_requester_email VARCHAR, p_node_id INTEGER, p_parent_node_id INTEGER,
+    p_preview_token TEXT, p_transfers JSONB DEFAULT '{}', p_new_owner_email VARCHAR DEFAULT NULL
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_preview JSONB;
+    v_group JSONB;
+    v_work JSONB;
+    v_target JSONB;
+    v_email TEXT;
+    v_item RECORD;
+    v_name TEXT;
+    v_count INTEGER := 0;
+BEGIN
+    -- A move changes inherited permissions for an entire subtree. Serialize the
+    -- short commit against ordinary writers too (not only other move requests).
+    LOCK TABLE organization_nodes, users, role_assignments, role_authorities, work_items, recurring_rules
+        IN SHARE ROW EXCLUSIVE MODE;
+    v_preview := build_node_move_preview(p_requester_email, p_node_id, p_parent_node_id);
+    IF p_preview_token IS NULL OR p_preview_token <> v_preview->>'preview_token' THEN
+        RAISE EXCEPTION '[P0321]Workspace changed. Reload the move preview' USING ERRCODE = 'P0321';
+    END IF;
+    IF NOT (v_preview->>'can_move')::BOOLEAN THEN
+        RAISE EXCEPTION '[P0320]Choose a different destination and resolve unavailable transfer targets' USING ERRCODE = 'P0320';
+    END IF;
+    IF p_transfers IS NULL OR jsonb_typeof(p_transfers) <> 'object'
+       OR (NULLIF(TRIM(p_new_owner_email), '') IS NOT NULL AND p_transfers <> '{}'::JSONB) THEN
+        RAISE EXCEPTION '[P0322]Choose per-owner transfers or a single transfer target' USING ERRCODE = 'P0322';
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_object_keys(p_transfers) k
+        WHERE NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v_preview->'owner_groups') g WHERE g->>'user_id' = k)) THEN
+        RAISE EXCEPTION '[P0322]Unknown transfer source user' USING ERRCODE = 'P0322';
+    END IF;
+    -- Validate against post-move authority. Any invalid group rolls back all groups.
+    FOR v_group IN SELECT value FROM jsonb_array_elements(v_preview->'owner_groups') LOOP
+        v_email := COALESCE(NULLIF(TRIM(p_new_owner_email), ''), p_transfers->>(v_group->>'user_id'));
+        SELECT value INTO v_target FROM jsonb_array_elements(v_group->'transfer_targets')
+        WHERE value->>'email' = v_email;
+        IF v_target IS NULL THEN
+            RAISE EXCEPTION '[P0322]Eligible transfer target required for user %', v_group->>'name' USING ERRCODE = 'P0322';
+        END IF;
+        FOR v_work IN SELECT value FROM jsonb_array_elements(v_group->'work_items') LOOP
+            UPDATE work_items SET owner_user_id = v_target->>'user_id' WHERE work_item_id = v_work->>'work_item_id';
+            SELECT title INTO v_name FROM work_items WHERE work_item_id = v_work->>'work_item_id';
+            PERFORM log_activity((v_work->>'owner_node_id')::INTEGER, p_requester_email, 'WORK_ITEM',
+                (v_work->>'work_item_id')::VARCHAR, v_name::VARCHAR, 'updated', 'owner', v_group->>'name', v_target->>'name');
+            v_count := v_count + 1;
+        END LOOP;
+    END LOOP;
+    -- Same policy as remove_role: schedules are unassigned, not transferred.
+    UPDATE recurring_rules SET assignee_user_id = NULL
+    WHERE rule_id IN (SELECT (value->>'rule_id')::INTEGER FROM jsonb_array_elements(v_preview->'cleared_schedules'));
+    UPDATE work_items SET parent_work_item_id = NULL, weight = 0
+    WHERE work_item_id IN (SELECT jsonb_array_elements_text(v_preview->'detached_work_item_ids'));
+
+    FOR v_item IN SELECT value AS item FROM jsonb_array_elements(v_preview->'nodes') LOOP
+        UPDATE organization_nodes SET
+            parent_node_id = CASE WHEN node_id = p_node_id THEN p_parent_node_id ELSE parent_node_id END,
+            path = ARRAY(SELECT jsonb_array_elements_text(v_item.item->'new_path')::INTEGER)
+        WHERE node_id = (v_item.item->>'node_id')::INTEGER;
+    END LOOP;
+    SELECT name INTO v_name FROM organization_nodes WHERE node_id = p_node_id;
+    PERFORM log_activity(p_node_id, p_requester_email, 'NODE', p_node_id::VARCHAR, v_name::VARCHAR,
+        'updated', 'workspace_location',
+        COALESCE((SELECT name::TEXT FROM organization_nodes WHERE node_id = (v_preview->>'old_parent_node_id')::INTEGER), '루트'),
+        COALESCE((SELECT name::TEXT FROM organization_nodes WHERE node_id = p_parent_node_id), '루트'));
+    RETURN QUERY SELECT jsonb_build_object('type', 'NODE_MOVE_RESULT', 'node_id', p_node_id,
+        'parent_node_id', p_parent_node_id, 'transferred_work_item_count', v_count,
+        'cleared_schedule_count', jsonb_array_length(v_preview->'cleared_schedules'),
+        'detached_work_item_count', jsonb_array_length(v_preview->'detached_work_item_ids'));
 END;
 $$ LANGUAGE plpgsql;

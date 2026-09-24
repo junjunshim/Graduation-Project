@@ -86,6 +86,9 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean, searc
   }
 
   if (pathname === '/setup/top-node') {
+    if (new URLSearchParams(search).has('editNodeId')) {
+      return { section: 'Workspace', title: '워크스페이스 수정', description: '워크스페이스의 이름과 유형을 수정합니다.', actionLabel: '워크스페이스', actionTo: '/workspace/select' }
+    }
     return {
       section: 'Workspace Setup',
       title: '공유 공간 만들기',
@@ -105,6 +108,10 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean, searc
     }
   }
 
+  if (pathname === '/workspace/move') {
+    return { section: 'Workspace', title: '워크스페이스 이전', description: '이동할 하위 공간과 목적지, 담당자 변경을 확인합니다.', actionLabel: '워크스페이스', actionTo: '/workspace/select' }
+  }
+
   if (pathname === '/org/manage') {
     return {
       section: 'Workspace Admin',
@@ -119,7 +126,7 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean, searc
     return {
       section: 'Calendar',
       title: '캘린더',
-      description: '마감 일정과 업무 일정을 한 화면에서 볼 수 있도록 준비 중입니다.',
+      description: '내 업무와 일정을 달력으로 한눈에 확인합니다.',
       actionLabel: '업무 등록',
       actionTo: '/work-items/new',
     }

@@ -19,6 +19,7 @@ export type IconName =
   | 'flask'
   | 'megaphone'
   | 'moreHorizontal'
+  | 'moreVertical'
   | 'search'
   | 'bell'
   | 'helpCircle'
@@ -35,6 +36,7 @@ export type IconName =
   | 'plus'
   | 'minus'
   | 'rotateCcw'
+  | 'repeat'
   | 'maximize2'
   | 'users'
   | 'messageCircle'
@@ -276,6 +278,21 @@ const iconPaths: Record<IconName, ReactNode> = {
     <>
       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
+    </>
+  ),
+  moreVertical: (
+    <>
+      <circle cx="12" cy="5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  repeat: (
+    <>
+      <path d="M4 9a4 4 0 0 1 4-4h9" />
+      <path d="M17 5l-3-2.6M17 5l-3 2.6" />
+      <path d="M20 15a4 4 0 0 1-4 4H7" />
+      <path d="M7 19l3-2.6M7 19l3 2.6" />
     </>
   ),
   maximize2: (

@@ -1,16 +1,24 @@
 import { type FormEvent, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
+import { getCascadeWorkItemSummary } from '../../workspace/data/cascadeWorkItemHelper'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
-import { claimWorkItem, updateWorkItem } from '../../workspace/data/workItemService'
+import { updateWorkItem } from '../../workspace/data/workItemService'
+import {
+  canAssignOthersWorkItem,
+  getWorkItemPermissions,
+} from '../../workspace/model/workItemPermission'
 import type { WorkItemRecord } from '../../workspace/model/types'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
+import { getServerAssignableUsers } from '../../workspace/queries/serverWorkItemCreateContract'
 import { getWorkItemComposerContext } from '../../workspace/queries/workItemComposer'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
+import { WorkItemEditSidebar } from '../components/WorkItemEditSidebar'
 import type { WorkItemCreateFormState } from '../hooks/useWorkItemCreateForm'
 import { getWorkItemDateRangeError } from '../model/workItemFormValidation'
-import { createWorkItemUpdatePayload } from '../model/workItemUpdatePayload'
-import styles from './WorkItemEditPage.module.css'
+import { createWorkItemUpdatePayload, hasWorkItemChanges } from '../model/workItemUpdatePayload'
+import styles from '../styles/WorkItemCreatePage.module.css'
+import editStyles from './WorkItemEditPage.module.css'
 
 function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
   return {
@@ -23,7 +31,7 @@ function createInitialForm(item?: WorkItemRecord): WorkItemCreateFormState {
     hidden: Boolean(item?.hidden),
     status: item?.status ?? 'todo',
     priority: String(item?.priority ?? 3),
-    weight: String(item?.weight ?? 1),
+    weight: String(item?.weight ?? 0),
     progress: String(item?.progress ?? 0),
     startDate: item?.startDate ?? '',
     dueDate: item?.dueDate ?? '',
@@ -42,7 +50,10 @@ export function WorkItemEditPage() {
   const [initialForm] = useState<WorkItemCreateFormState>(() => createInitialForm(detail?.item))
   const [form, setForm] = useState<WorkItemCreateFormState>(initialForm)
   const [submitting, setSubmitting] = useState(false)
-  const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
+  const [feedback, setFeedback] = useState<{
+    tone: 'error' | 'success' | 'info'
+    message: string
+  } | null>(null)
 
   if (!currentUser) {
     return null
@@ -50,20 +61,68 @@ export function WorkItemEditPage() {
 
   if (!detail) {
     return (
-      <section className={styles.page}>
-        <div className={styles.emptyState}>
-          <h2 className={styles.title}>수정할 업무를 찾을 수 없습니다.</h2>
-          <p className={styles.description}>
+      <div className={styles.page}>
+        <div className={editStyles.emptyState}>
+          <h2 className={editStyles.title}>수정할 업무를 찾을 수 없습니다.</h2>
+          <p className={editStyles.description}>
             요청한 업무가 없거나 현재 계정으로 접근할 수 없는 항목입니다.
           </p>
-          <Link to="/work-items" className={styles.primaryAction}>업무 목록으로 돌아가기</Link>
+          <Link to="/work-items" className={editStyles.primaryAction}>업무 목록으로 돌아가기</Link>
         </div>
-      </section>
+      </div>
     )
   }
 
   const { item } = detail
-  const composer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
+  // 서버(update_work_item)가 최종 판정하지만, 권한이 없으면 화면 자체를 막는다.
+  const permissions = getWorkItemPermissions(item, currentUser.userId, snapshot)
+
+  if (!permissions.canEdit) {
+    return (
+      <div className={styles.page}>
+        <div className={editStyles.emptyState}>
+          <h2 className={editStyles.title}>업무를 수정할 권한이 없습니다.</h2>
+          <p className={editStyles.description}>
+            이 업무를 수정하려면 해당 워크스페이스의 업무 변경 권한이 필요합니다.
+          </p>
+          <Link to={`/work-items/${item.workItemId}`} className={editStyles.primaryAction}>
+            업무 상세로 돌아가기
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // 자기 자신과 하위 업무는 상위 업무 후보에서 제외한다(순환 방지).
+  const excludedParentIds = new Set(
+    getCascadeWorkItemSummary(item.workItemId, snapshot.workItems)?.allWorkItems.map(
+      (workItem) => workItem.workItemId,
+    ) ?? [item.workItemId],
+  )
+  const baseComposer = getWorkItemComposerContext(currentUser.userId, item.ownerNodeId, snapshot)
+
+  // 담당자 후보는 서버(update_work_item)와 같은 기준으로 거른다.
+  // - 후보: 해당 노드에서 업무를 수행할 수 있는(WI_PERSONAL_CHANGE) 사용자 (+ 숨김 업무면 WI_HIDDEN_CHANGE)
+  // - 다른 사람에게 배정하려면 WI_ASSIGN 이 필요하므로, 없으면 본인만 후보로 남긴다.
+  const assignablePool = getServerAssignableUsers(item.ownerNodeId, snapshot, form.hidden)
+  const assignableCandidates = canAssignOthersWorkItem(item, currentUser.userId, snapshot)
+    ? assignablePool
+    : assignablePool.filter((user) => user.userId === currentUser.userId)
+  // 현재 담당자는 후보 조건을 만족하지 못하더라도 표시와 유지를 위해 항상 포함한다.
+  const currentOwnerUser = snapshot.users.find((user) => user.userId === item.ownerUserId)
+  const assignableUsers =
+    currentOwnerUser && !assignableCandidates.some((user) => user.userId === currentOwnerUser.userId)
+      ? [currentOwnerUser, ...assignableCandidates]
+      : assignableCandidates
+
+  const composer = {
+    ...baseComposer,
+    assignableUsers,
+    availableParentItems: baseComposer.availableParentItems.filter(
+      (parent) => !excludedParentIds.has(parent.workItemId),
+    ),
+  }
+  const hasChanges = hasWorkItemChanges(item.workItemId, initialForm, form)
 
   function setField<Key extends keyof WorkItemCreateFormState>(
     field: Key,
@@ -76,6 +135,18 @@ export function WorkItemEditPage() {
     event.preventDefault()
 
     if (submitting) {
+      return
+    }
+
+    if (!permissions.canEdit) {
+      setSubmitting(false)
+      setFeedback({ tone: 'error', message: '업무를 수정할 권한이 없습니다.' })
+      return
+    }
+
+    // 변경된 항목이 없으면 서버를 호출하지 않는다.
+    if (!hasChanges) {
+      setFeedback({ tone: 'info', message: '수정된 내용이 없습니다. 항목을 변경한 뒤 저장해 주세요.' })
       return
     }
 
@@ -97,18 +168,6 @@ export function WorkItemEditPage() {
     }
 
     try {
-      if (form.ownerUserId !== item.ownerUserId) {
-        const claimResponse = await claimWorkItem({
-          workItemId: item.workItemId,
-          ownerUserId: form.ownerUserId,
-        })
-
-        if (claimResponse.status === 'error') {
-          setFeedback({ tone: 'error', message: claimResponse.message })
-          return
-        }
-      }
-
       const response = await updateWorkItem(
         createWorkItemUpdatePayload(item.workItemId, initialForm, form),
       )
@@ -130,18 +189,44 @@ export function WorkItemEditPage() {
   }
 
   return (
-    <section className={styles.page}>
-      <WorkItemCreateForm
-        composer={composer}
-        form={form}
-        submitting={submitting}
-        feedback={feedback}
-        onSubmit={handleSubmit}
-        onCancel={() => navigate(`/work-items/${item.workItemId}`)}
-        onFieldChange={setField}
-        submitLabel="저장"
-        submittingLabel="저장 중..."
-      />
-    </section>
+    <div className={styles.page}>
+      {/* 상단 브레드크럼 및 네비게이션 */}
+      <div className={styles.breadcrumbRow}>
+        <Link to={`/work-items/${item.workItemId}`} className={styles.backLink}>
+          <span>←</span> 업무 상세로
+        </Link>
+        <span className={styles.breadcrumbDivider}>/</span>
+        <span className={styles.currentBreadcrumb}>업무 수정</span>
+      </div>
+
+      {/* 메인 레이아웃 (좌: 폼 카드 그룹, 우: 실시간 요약 사이드바) */}
+      <div className={styles.layout}>
+        <main className={styles.mainContent}>
+          <WorkItemCreateForm
+            composer={composer}
+            form={form}
+            submitting={submitting}
+            feedback={feedback}
+            onSubmit={handleSubmit}
+            onCancel={() => navigate(`/work-items/${item.workItemId}`)}
+            onFieldChange={setField}
+            nodeLocked
+            submitLabel="저장"
+            submittingLabel="저장 중..."
+            submitDisabled={!hasChanges}
+            submitHint="변경된 항목이 없어 저장할 수 없습니다."
+          />
+        </main>
+
+        <aside className={styles.sidebar}>
+          <WorkItemEditSidebar
+            item={item}
+            initialForm={initialForm}
+            form={form}
+            composer={composer}
+          />
+        </aside>
+      </div>
+    </div>
   )
 }

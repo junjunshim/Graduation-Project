@@ -6,8 +6,16 @@ import {
   getServerSessionEmail,
 } from '../renderer/features/workspace/data/server/apiClient.js'
 import { getServerContextSnapshot } from '../renderer/features/workspace/data/server/contextCache.js'
-import { signInServerUser } from '../renderer/features/workspace/data/server/serverWorkspace.js'
-import { readServerWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
+import {
+  deleteRoleDefinitionOnServer,
+  fetchRoleDefinitionDeletionPreviewOnServer,
+  fetchRoleRemovalPreviewOnServer,
+  isWorkspaceStructureNotification,
+  removeRoleOnServer,
+  signInServerUser,
+} from '../renderer/features/workspace/data/server/serverWorkspace.js'
+import { readWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
+import { fetchNodeMovePreview, moveNode } from '../renderer/features/workspace/data/nodeMoveService.js'
 
 type MemoryStorageOptions = {
   failSetKey?: string
@@ -84,6 +92,64 @@ function jsonResponse(body: unknown, status = 200) {
   })
 }
 
+test('워크스페이스 이전 사전 검사는 루트 목적지를 null로 보내고 업무 이관 그룹을 보존한다', async () => {
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+  const preview = {
+    type: 'NODE_MOVE_PREVIEW', node_id: 4, parent_node_id: null, old_parent_node_id: 1,
+    preview_token: 'revision', can_move: true,
+    nodes: [{ node_id: 4, name: 'Moving', path: [1, 4], new_path: [4], is_deleted: false }],
+    owner_groups: [{ user_id: 'old', name: 'Old', email: 'old@example.com', work_items: [], transfer_targets: [] }],
+    all_transfer_targets: [], cleared_schedules: [], detached_work_item_ids: ['WI-1'],
+  }
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'success', data: [preview] })
+  }
+  try {
+    assert.deepEqual(await fetchNodeMovePreview(4, null), preview)
+    assert.equal(calls[0].method, 'POST')
+    assert.equal(calls[0].pathname, '/api/org/nodes/move-preview')
+    assert.deepEqual(calls[0].body, { node_id: 4, parent_node_id: null })
+    assert.equal(calls.length, 1)
+  } finally { globalThis.fetch = originalFetch }
+})
+
+test('워크스페이스 이전은 담당자별 또는 전체 이관을 보내고 성공 후 전체 접근 범위를 갱신한다', async () => {
+  const storage = createMemoryStorage()
+  storage.setItem('grad-client-server-email', 'user@example.com')
+  const restoreWindow = installWindow(storage)
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse(createDocumentedContextResponse())
+  }
+  try {
+    await moveNode({ nodeId: 4, parentNodeId: null, previewToken: 'r1', transfers: { old: 'new@example.com' } })
+    assert.deepEqual(calls[0].body, { node_id: 4, parent_node_id: null, preview_token: 'r1', transfers: { old: 'new@example.com' } })
+    assert.equal(calls[0].method, 'PATCH')
+    assert.equal(calls[0].pathname, '/api/org/nodes/move')
+    assert.ok(calls.some((call) => call.pathname === '/api/context/init'))
+    calls.length = 0
+    await moveNode({ nodeId: 4, parentNodeId: 9, previewToken: 'r2', newOwnerEmail: 'all@example.com' })
+    assert.deepEqual(calls[0].body, { node_id: 4, parent_node_id: 9, preview_token: 'r2', new_owner_email: 'all@example.com' })
+  } finally { globalThis.fetch = originalFetch; restoreWindow() }
+})
+
+test('오래된 이전 사전 검사가 거부되면 캐시를 갱신하거나 재실행하지 않는다', async () => {
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'error', message: '이전 정보를 다시 확인해 주세요.' }, 409)
+  }
+  try {
+    await assert.rejects(moveNode({ nodeId: 4, parentNodeId: null, previewToken: 'old' }), /다시 확인/)
+    assert.equal(calls.length, 1)
+  } finally { globalThis.fetch = originalFetch }
+})
+
 function createDocumentedContextResponse() {
   const timestamp = '2026-03-19 12:29:24.745634+00'
 
@@ -125,6 +191,7 @@ function createDocumentedContextResponse() {
         type: 'ROLE',
         id: 20,
         node_id: 4,
+        role_id: 2,
         email: 'user@example.com',
         role: 'ADMIN',
         updated_at: timestamp,
@@ -186,7 +253,7 @@ function assertEmptyServerState() {
   assert.equal(getServerSessionEmail(), null)
   assert.equal(getServerContextSnapshot(), null)
 
-  const workspace = readServerWorkspaceDb()
+  const workspace = readWorkspaceDb()
   assert.equal(workspace.nodes.length, 0)
   assert.equal(workspace.roles.length, 0)
   assert.equal(workspace.workItems.length, 0)
@@ -217,7 +284,15 @@ test('server login stores both tokens before loading and preserving the document
       })
     }
 
-    assert.equal(calls.length, 2)
+    if (calls.length === 2) {
+      assert.match(String(input), /\/users\?target_email=user%40example\.com$/)
+      assert.equal(init?.method, 'GET')
+      assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer access-token')
+
+      return jsonResponse({ status: 'success', data: [] })
+    }
+
+    assert.equal(calls.length, 3)
     assert.match(path, /\/context\/init$/)
     assert.equal(init?.method, 'GET')
     assert.equal(getServerAccessToken(), 'access-token')
@@ -236,9 +311,9 @@ test('server login stores both tokens before loading and preserving the document
     })
 
     assert.equal(response.status, 'success')
-    assert.equal(calls.length, 2)
+    assert.equal(calls.length, 3)
 
-    const workspace = readServerWorkspaceDb()
+    const workspace = readWorkspaceDb()
     assert.equal(workspace.nodes.length, 1)
     assert.equal(workspace.nodes[0]?.id, 4)
     assert.deepEqual(workspace.nodes[0]?.path, [4])
@@ -249,22 +324,20 @@ test('server login stores both tokens before loading and preserving the document
     assert.equal(workspace.workItems[0]?.status, 'in-progress')
     assert.equal(workspace.workItems[0]?.progress, 40)
 
-    const snapshot = getServerContextSnapshot()
-    assert.ok(snapshot)
-    assert.equal(snapshot.serverTime, '2026-03-19 12:29:24.745634+00')
-    assert.equal(snapshot.authorities.length, 1)
-    assert.equal(snapshot.authorities[0]?.nodeId, 4)
-    assert.equal(snapshot.authorities[0]?.authority, '011111111111111111111111')
-    assert.equal(snapshot.mentions.length, 1)
-    assert.equal(snapshot.mentions[0]?.workItemId, 'WI-1101')
-    assert.equal(snapshot.mentions[0]?.isRead, false)
-    assert.equal(snapshot.activities.length, 1)
-    assert.equal(snapshot.activities[0]?.actionType, 'updated')
-    assert.equal(snapshot.activities[0]?.newValue, 'in_progress')
-    assert.equal(snapshot.files.length, 1)
-    assert.equal(snapshot.files[0]?.originalFileName, 'architecture_diagram.png')
-    assert.equal(snapshot.files[0]?.fileSize, 2_048_576)
-    assert.equal(snapshot.files[0]?.mimeType, 'image/png')
+    // 권한/멘션/활동/파일 같은 부가 컨텍스트는 워크스페이스 캐시에 그대로 보존된다.
+    assert.equal(workspace.authorities?.length, 1)
+    assert.equal(workspace.authorities?.[0]?.nodeId, 4)
+    assert.equal(workspace.authorities?.[0]?.authority, '011111111111111111111111')
+    assert.equal(workspace.mentions?.length, 1)
+    assert.equal(workspace.mentions?.[0]?.workItemId, 'WI-1101')
+    assert.equal(workspace.mentions?.[0]?.isRead, false)
+    assert.equal(workspace.activities?.length, 1)
+    assert.equal(workspace.activities?.[0]?.actionType, 'updated')
+    assert.equal(workspace.activities?.[0]?.newValue, 'in_progress')
+    assert.equal(workspace.files?.length, 1)
+    assert.equal(workspace.files?.[0]?.originalFileName, 'architecture_diagram.png')
+    assert.equal(workspace.files?.[0]?.fileSize, 2_048_576)
+    assert.equal(workspace.files?.[0]?.mimeType, 'image/png')
   } finally {
     globalThis.fetch = originalFetch
     restoreWindow()
@@ -288,7 +361,12 @@ test('server login rolls back tokens and all context caches when initial context
       })
     }
 
-    assert.equal(requestCount, 2)
+    if (requestCount === 2) {
+      assert.match(String(input), /\/users\?target_email=/)
+      return jsonResponse({ status: 'success', data: [] })
+    }
+
+    assert.equal(requestCount, 3)
     assert.match(getRequestPath(input), /\/context\/init$/)
     assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer access-token')
     assert.equal(getServerRefreshToken(), 'refresh-token')
@@ -307,7 +385,7 @@ test('server login rolls back tokens and all context caches when initial context
     })
 
     assert.equal(response.status, 'error')
-    assert.equal(requestCount, 2)
+    assert.equal(requestCount, 3)
     assertEmptyServerState()
   } finally {
     globalThis.fetch = originalFetch
@@ -349,6 +427,325 @@ test('server login does not initialize context and removes partial tokens when r
     assert.equal(loginRequestCount, 1)
     assert.equal(contextRequestCount, 0)
     assertEmptyServerState()
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('워크스페이스 구조 변경 알림(생성/수정/복구)만 노드 트리를 즉시 다시 그린다', () => {
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'inserted' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'created' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'updated' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'restored' }), true)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'node', action: 'INSERTED' }), true)
+
+  // 삭제는 로컬 캐시 연쇄 반영으로 처리하므로 이 경로가 아니다.
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'NODE', action: 'deleted' }), false)
+  // 워크스페이스가 아닌 다른 엔터티의 변경은 트리와 무관하다.
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'WORK_ITEM', action: 'created' }), false)
+  assert.equal(isWorkspaceStructureNotification({ entity_type: 'ROLE', action: 'inserted' }), false)
+  assert.equal(isWorkspaceStructureNotification({}), false)
+})
+
+
+/* ------------------------------------------------------------------ */
+/* 역할 회수 (remove_role / removal-preview)                            */
+/* ------------------------------------------------------------------ */
+
+type CapturedCall = {
+  pathname: string
+  search: string
+  method: string
+  body: Record<string, unknown> | undefined
+}
+
+function captureCall(
+  calls: CapturedCall[],
+  input: Parameters<typeof fetch>[0],
+  init: Parameters<typeof fetch>[1],
+) {
+  const url = new URL(String(input instanceof Request ? input.url : input))
+  const rawBody = init?.body
+  calls.push({
+    pathname: url.pathname,
+    search: url.search,
+    method: String(init?.method ?? 'GET').toUpperCase(),
+    body: typeof rawBody === 'string' ? (JSON.parse(rawBody) as Record<string, unknown>) : undefined,
+  })
+}
+
+const roleRemovalPreviewPayload = {
+  type: 'ROLE_REMOVAL_PREVIEW',
+  can_remove: true,
+  blocked_reason: null,
+  node_id: 4,
+  target_user_id: 'U-12',
+  target_user_name: '이영희',
+  target_user_email: 'user@example.com',
+  role_id: 7,
+  role: 'MEMBER',
+  is_top_role: false,
+  work_items: [
+    {
+      work_item_id: 'WI-1101',
+      title: '로그인 기능 구현',
+      owner_node_id: 4,
+      owner_node_name: 'Development',
+      hidden: true,
+      status: 'in_progress',
+    },
+  ],
+  transfer_targets: [{ user_id: 'U-13', name: '박민수', email: 'park@example.com' }],
+}
+
+test('역할 회수 사전 확인은 이관 업무와 이관 대상 목록을 파싱한다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'success', data: [roleRemovalPreviewPayload] })
+  }
+
+  try {
+    const result = await fetchRoleRemovalPreviewOnServer('User@Example.com', 4)
+
+    assert.equal(result.status, 'success')
+    if (result.status !== 'success') return
+
+    assert.equal(result.preview.canRemove, true)
+    assert.equal(result.preview.roleName, 'MEMBER')
+    assert.equal(result.preview.targetUserName, '이영희')
+    assert.equal(result.preview.workItems.length, 1)
+    assert.equal(result.preview.workItems[0].workItemId, 'WI-1101')
+    assert.equal(result.preview.workItems[0].isHidden, true)
+    assert.deepEqual(result.preview.transferTargets, [
+      { userId: 'U-13', name: '박민수', email: 'park@example.com' },
+    ])
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].pathname, '/api/roles/removal-preview')
+    // 이메일은 소문자로 정규화해 쿼리에 담는다.
+    assert.equal(calls[0].search, '?email=user%40example.com&node_id=4')
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('역할 회수는 이관 대상이 있을 때만 new_owner_email 을 보낸다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+
+    if (calls[calls.length - 1].method === 'DELETE') {
+      return jsonResponse({
+        status: 'success',
+        data: [
+          {
+            type: 'ROLE',
+            action: 'removed',
+            transferred_work_item_count: 2,
+            cleared_schedule_count: 1,
+            transfer_target_name: '박민수',
+          },
+        ],
+      })
+    }
+
+    return jsonResponse(createDocumentedContextResponse())
+  }
+
+  try {
+    const withoutTransfer = await removeRoleOnServer({ nodeId: 4, email: 'User@Example.com' })
+    assert.equal(withoutTransfer.status, 'success')
+    assert.deepEqual(calls[0].body, { email: 'user@example.com', node_id: 4 })
+
+    const withTransfer = await removeRoleOnServer({
+      nodeId: 4,
+      email: 'User@Example.com',
+      newOwnerEmail: 'Park@Example.com',
+    })
+
+    assert.equal(withTransfer.status, 'success')
+    if (withTransfer.status !== 'success') return
+
+    assert.equal(withTransfer.result.transferredWorkItemCount, 2)
+    assert.equal(withTransfer.result.clearedScheduleCount, 1)
+    assert.equal(withTransfer.result.transferTargetName, '박민수')
+    const deleteCalls = calls.filter((call) => call.method === 'DELETE')
+    assert.deepEqual(deleteCalls[deleteCalls.length - 1].body, {
+      email: 'user@example.com',
+      node_id: 4,
+      new_owner_email: 'park@example.com',
+    })
+
+    // 성공했을 때만 노드 상세를 다시 조회한다. (DELETE 2회 + 노드 재조회 2회)
+    assert.equal(calls.filter((call) => call.method === 'GET').length, 2)
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('역할 회수가 서버에서 실패하면 로컬 캐시를 갱신하지 않는다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse(
+      { status: 'error', code: '400', message: '업무를 이관할 수 없습니다. 이관 대상과 권한을 확인해 주세요.' },
+      400,
+    )
+  }
+
+  try {
+    const result = await removeRoleOnServer({ nodeId: 4, email: 'user@example.com' })
+
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.equal(result.message, '업무를 이관할 수 없습니다. 이관 대상과 권한을 확인해 주세요.')
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].method, 'DELETE')
+    // 실패했으므로 재조회(노드 상세) 요청이 없어야 한다.
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+/* ------------------------------------------------------------------ */
+/* 역할 정의 삭제 (delete_role_definition / deletion-preview)            */
+/* ------------------------------------------------------------------ */
+
+const roleDefinitionDeletionPreviewPayload = {
+  type: 'ROLE_DEFINITION_DELETION_PREVIEW',
+  can_delete: false,
+  blocked_reason: '이 역할을 배정받은 사용자가 2명 있습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.',
+  node_id: 4,
+  role_id: 7,
+  role: 'MEMBER',
+  is_top_role: false,
+  assignee_count: 2,
+  inactive_assignee_count: 1,
+  assignees: [
+    { user_id: 'U-12', name: '이영희', email: 'user@example.com' },
+    { user_id: 'U-13', name: '박민수', email: 'park@example.com' },
+  ],
+}
+
+test('역할 삭제 사전 확인은 배정된 사용자 목록을 파싱한다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse({ status: 'success', data: [roleDefinitionDeletionPreviewPayload] })
+  }
+
+  try {
+    const result = await fetchRoleDefinitionDeletionPreviewOnServer(4, 7)
+
+    assert.equal(result.status, 'success')
+    if (result.status !== 'success') return
+
+    assert.equal(result.preview.canDelete, false)
+    assert.equal(result.preview.assigneeCount, 2)
+    assert.equal(result.preview.roleName, 'MEMBER')
+    assert.equal(result.preview.isTopRole, false)
+    assert.equal(result.preview.inactiveAssigneeCount, 1)
+    assert.deepEqual(result.preview.assignees, [
+      { userId: 'U-12', name: '이영희', email: 'user@example.com' },
+      { userId: 'U-13', name: '박민수', email: 'park@example.com' },
+    ])
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].pathname, '/api/roles/definition/deletion-preview')
+    assert.equal(calls[0].search, '?node_id=4&role_id=7')
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('역할 정의 삭제는 성공했을 때만 노드 상세를 다시 조회한다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+
+    if (calls[calls.length - 1].method === 'DELETE') {
+      return jsonResponse({
+        status: 'success',
+        data: [{ type: 'AUTHORITY', action: 'deleted', role_id: 7, role: 'MEMBER' }],
+      })
+    }
+
+    return jsonResponse(createDocumentedContextResponse())
+  }
+
+  try {
+    const result = await deleteRoleDefinitionOnServer({ nodeId: 4, roleId: 7, roleName: 'MEMBER' })
+
+    assert.equal(result.status, 'success')
+
+    assert.equal(calls[0].method, 'DELETE')
+    assert.equal(calls[0].pathname, '/api/roles/definition')
+    assert.deepEqual(calls[0].body, { node_id: 4, role_id: 7 })
+
+    // 배정된 사용자가 없어 삭제가 커밋되면 변경 대상 노드만 다시 조회한다.
+    assert.equal(calls.filter((call) => call.method === 'GET').length, 1)
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('배정된 사용자가 남아 역할 삭제가 거부되면 로컬 캐시를 갱신하지 않는다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    return jsonResponse(
+      {
+        status: 'error',
+        code: '409',
+        message: '이 역할을 배정받은 사용자가 남아 있어 삭제할 수 없습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.',
+      },
+      409,
+    )
+  }
+
+  try {
+    const result = await deleteRoleDefinitionOnServer({ nodeId: 4, roleId: 7, roleName: 'MEMBER' })
+
+    assert.equal(result.status, 'error')
+    if (result.status !== 'error') return
+    assert.equal(
+      result.message,
+      '이 역할을 배정받은 사용자가 남아 있어 삭제할 수 없습니다. 사용자 탭에서 먼저 다른 역할로 변경해 주세요.',
+    )
+
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].method, 'DELETE')
+    // 실패했으므로 재조회(노드 상세) 요청이 없어야 한다.
+    assert.equal(calls.filter((call) => call.pathname === '/api/org/nodes').length, 0)
   } finally {
     globalThis.fetch = originalFetch
     restoreWindow()

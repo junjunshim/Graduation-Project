@@ -412,24 +412,31 @@
 }
 
 .treeProgressTrack {
+  position: relative;
   height: 2px;
   width: 100%;
   background: var(--axis-surface-muted, var(--surface-muted));
   overflow: hidden;
 }
 
-.treeProgressBar {
+/* 자체 진행률: 좌측에서 채워진다. */
+.treeProgressSelf {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
-  background: var(--axis-brand-primary);
+  background: var(--axis-status-neutral);
   transition: width 240ms ease;
 }
 
-.treeProgressBar[data-status='done'] {
-  background: var(--axis-status-success);
-}
-
-.treeProgressBar[data-status='in-progress'] {
-  background: var(--axis-status-warning);
+/* 하위 업무 평균 진행률: 우측에서 채워진다. */
+.treeProgressChild {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  background: var(--axis-brand-primary);
+  transition: width 240ms ease;
 }
 
 .treeChildrenGroup {
@@ -1777,9 +1784,17 @@
   white-space: nowrap;
 }
 
-.trashRestoreButton:hover {
+.trashRestoreButton:hover:not(:disabled) {
   background: var(--axis-brand-primary);
   color: var(--axis-text-on-brand, #ffffff);
+}
+
+/* 권한이 없어 비활성화된 복구 버튼 */
+.trashRestoreButton:disabled {
+  border-color: var(--axis-line-default, #cbd5e1);
+  background: var(--axis-surface-muted, #f8fafc);
+  color: var(--axis-text-muted, #94a3b8);
+  cursor: not-allowed;
 }
 
 .trashRowDeleted {

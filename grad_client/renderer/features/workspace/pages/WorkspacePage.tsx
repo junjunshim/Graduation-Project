@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
@@ -19,6 +19,9 @@ import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
 } from '../data/workspaceDirectorySelection'
+import { readWorkspaceDb } from '../data/localStore'
+import { findDeletedAncestorNode } from '../model/nodeDeletion'
+import { showToast as showLiveToast } from '../../notification/data/toastEvents'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
 import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
@@ -44,6 +47,7 @@ const workspaceTabs: WorkspaceTab[] = [
 ]
 
 export function WorkspacePage() {
+  const navigate = useNavigate()
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const currentUser = getCurrentUser(snapshot)
   const [searchParams] = useSearchParams()
@@ -126,12 +130,13 @@ export function WorkspacePage() {
 
       // 알림의 소속 노드가 현재 보고 있는 노드와 일치할 때
       if (notifNodeId === currentNodeId) {
-        // 1. 일정 관련 알림 (일정 생성/수정/삭제/복구 또는 일정 양식 파일)인 경우:
+        // 1. 일정 관련 알림 (일정 생성/수정/삭제/복구 또는 일정 전용 파일)인 경우:
         //    일정 전용 캐시 갱신 브로드캐스트만 수행 (fetchNodeDetail 중복 호출 방지)
+        //    일정 파일은 노드 상세가 아닌 일정(정기 규칙) 조회로 목록을 구성하므로 반드시 이 경로로 갱신해야 한다.
         const isRecurringEvent =
-          payload.link_url?.includes('view=schedules') ||
-          payload.target_name?.includes('정기') ||
-          payload.target_name?.includes('recurring')
+          payload.entity_type === 'RECURRING_RULE' ||
+          payload.is_recurring_file === true ||
+          payload.link_url?.includes('view=schedules')
 
         if (isRecurringEvent) {
           notifyRecurringCacheUpdated(currentNodeId)
@@ -157,8 +162,53 @@ export function WorkspacePage() {
     }
   }, [activeWorkspaceRootId, reloadTrigger])
 
-  if (!currentUser) {
-    return null
+  // 삭제된 워크스페이스(또는 삭제된 상위 워크스페이스의 하위)에는 진입할 수 없다.
+  // 캐시가 갱신될 때마다 판정하므로, 다른 사용자가 삭제하면 실시간 캐시 반영과 함께 진입점으로 내보낸다.
+  const hasRedirectedFromDeletedRef = useRef(false)
+  useEffect(() => {
+    hasRedirectedFromDeletedRef.current = false
+    if (!activeWorkspaceRootId) return
+
+    const redirectIfDeleted = () => {
+      if (hasRedirectedFromDeletedRef.current) return
+
+      // 화면용 스냅샷은 삭제된 노드를 제외하므로, 삭제 여부 판별은 원본 캐시에서 수행한다.
+      const deletedNode = findDeletedAncestorNode(activeWorkspaceRootId, readWorkspaceDb().nodes)
+      if (!deletedNode) return
+
+      hasRedirectedFromDeletedRef.current = true
+      showLiveToast({
+        entity_type: 'NODE',
+        node_id: deletedNode.id,
+        title: '워크스페이스 삭제',
+        content: `'${deletedNode.name}' 워크스페이스가 삭제되어 진입점으로 이동했습니다.`,
+        created_at: new Date().toISOString(),
+      })
+      navigate('/workspace/select', { replace: true })
+    }
+
+    redirectIfDeleted()
+    return subscribeToWorkspaceCache(redirectIfDeleted)
+  }, [activeWorkspaceRootId, navigate])
+
+  // 훅은 조건부 렌더링(조기 반환)보다 먼저 호출해 순서를 고정한다.
+  // 역할 회수 등으로 스냅샷이 갱신되며 currentUser 가 null 이 되어도 훅 개수가 달라지면 안 된다.
+  const currentUserId = currentUser?.userId
+  const overview = useMemo(
+    () =>
+      currentUserId
+        ? getWorkspaceOverview(currentUserId, snapshot, {
+            rootNodeId: activeWorkspaceRootId,
+            singleNodeOnly: true,
+          })
+        : null,
+    [currentUserId, snapshot, activeWorkspaceRootId],
+  )
+  const { workItemContextMenu } = useWorkItemContextMenu()
+
+  // 스코프 정보가 유실된 경우(역할 회수·내보내기 등) 진입점으로 돌려보낸다.
+  if (!currentUser || !overview) {
+    return <Navigate to="/workspace/select" replace />
   }
 
   // 1. 첫 진입 로딩 화면
@@ -229,14 +279,6 @@ export function WorkspacePage() {
     }
   }
 
-  const overview = useMemo(
-    () =>
-      getWorkspaceOverview(currentUser.userId, snapshot, {
-        rootNodeId: activeWorkspaceRootId,
-        singleNodeOnly: true,
-      }),
-    [currentUser.userId, snapshot, activeWorkspaceRootId],
-  )
   const displayRoleMembers = overview.rootRoleMembers.length > 0
     ? overview.rootRoleMembers
     : overview.allRoleMembers && overview.allRoleMembers.length > 0
@@ -245,7 +287,6 @@ export function WorkspacePage() {
   const visibleMembers = displayRoleMembers.slice(0, 4)
   const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : overview.rootRoleMembers.length
   const extraMemberCount = Math.max(0, totalMemberCount - visibleMembers.length)
-  const { workItemContextMenu } = useWorkItemContextMenu()
 
   return (
     <section
@@ -325,6 +366,7 @@ export function WorkspacePage() {
           workItems={overview.visibleWorkItems}
           nodes={overview.visibleNodes}
           members={overview.allRoleMembers && overview.allRoleMembers.length > 0 ? overview.allRoleMembers : overview.rootRoleMembers}
+          users={snapshot.users}
         />
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
@@ -354,6 +396,7 @@ export function WorkspacePage() {
       ) : activeView === 'members' ? (
         <WorkspaceMembersTab
           rootNode={overview.rootNode}
+          currentUserId={currentUser?.userId}
           nodes={overview.visibleNodes}
           roles={snapshot.roles}
           users={snapshot.users}

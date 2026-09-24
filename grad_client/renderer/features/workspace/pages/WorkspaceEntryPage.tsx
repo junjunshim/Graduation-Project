@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
@@ -6,7 +6,12 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { Panel } from '../../../design-system/primitives/Panel'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceEntryViewToggle } from '../components/WorkspaceEntryViewToggle'
-import { getOrgSnapshot, fetchWorkspaceDirectoryScope } from '../data/orgService'
+import {
+  deleteWorkspace,
+  fetchWorkspaceDirectoryScope,
+  getOrgSnapshot,
+  restoreWorkspace,
+} from '../data/orgService'
 import { subscribeToWorkspaceCache } from '../data/workspaceCacheEvents'
 import {
   getActiveWorkspaceRootId,
@@ -17,7 +22,17 @@ import {
 } from '../data/workspaceDirectorySelection'
 import type { WorkspaceDirectoryItem, WorkspaceDirectoryTone } from '../model/workspaceDirectory'
 import { getWorkspaceDirectory } from '../queries/workspaceDirectory'
-import { canCreateSubNode } from '../model/effectiveAuthority'
+import { canChangeNodeInfo, canCreateSubNode, hasDirectAuthorityBit } from '../model/effectiveAuthority'
+import {
+  collectNodeSubtreeIds,
+  excludeDeletedNodes,
+  findDeletedAncestorNode,
+  isAllNodesDeleted,
+  isRestorableFromTrash,
+  selectTrashNodes,
+} from '../model/nodeDeletion'
+import { readWorkspaceDb } from '../data/localStore'
+import { WorkspaceDeleteModal } from '../components/WorkspaceDeleteModal'
 import styles from './WorkspaceEntryPage.module.css'
 
 const WORKSPACE_LIST_PAGE_SIZE = 10
@@ -59,6 +74,10 @@ function WorkspaceGlyph({
 
 function RootBadge() {
   return <span className={styles.rootBadge}>루트</span>
+}
+
+function DeletedBadge() {
+  return <span className={styles.deletedBadge}>삭제됨</span>
 }
 
 function FavoriteButton({
@@ -278,7 +297,11 @@ function TreeNodeCard({
           className={[
             styles.dendroCard,
             depth === 1 ? styles.dendroCardLevel1 : depth === 2 ? styles.dendroCardLevel2 : styles.dendroCardLevelDeep,
-            item.canEnter === false ? styles.dendroCardDisabled : '',
+            item.isDeleted
+              ? styles.dendroCardDeleted
+              : item.canEnter === false
+                ? styles.dendroCardDisabled
+                : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -286,7 +309,13 @@ function TreeNodeCard({
           onContextMenu={(e) => onContextMenu(e, item)}
           role="button"
           tabIndex={0}
-          title={item.canEnter === false ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.' : undefined}
+          title={
+            item.isDeleted
+              ? '삭제된 워크스페이스입니다. 우클릭 후 복구할 수 있습니다.'
+              : item.canEnter === false
+                ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.'
+                : undefined
+          }
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
@@ -294,13 +323,15 @@ function TreeNodeCard({
             }
           }}
         >
-          <div className={styles.dendroFavorite} onClick={(e) => e.stopPropagation()}>
-            <FavoriteButton
-              isFavorite={isFavorite}
-              label={item.name}
-              onToggle={() => onToggleFavorite(item.id)}
-            />
-          </div>
+          {item.isDeleted ? null : (
+            <div className={styles.dendroFavorite} onClick={(e) => e.stopPropagation()}>
+              <FavoriteButton
+                isFavorite={isFavorite}
+                label={item.name}
+                onToggle={() => onToggleFavorite(item.id)}
+              />
+            </div>
+          )}
 
           <div className={styles.dendroGlyphWrapper}>
             <WorkspaceGlyph item={item} variant={depth === 1 ? 'branch' : 'leaf'} />
@@ -308,6 +339,7 @@ function TreeNodeCard({
 
           <div className={styles.dendroCopy}>
             <strong className={styles.dendroName} title={item.name}>{item.name}</strong>
+            {item.isDeleted ? <DeletedBadge /> : null}
           </div>
 
           <div className={styles.dendroFooter}>
@@ -608,19 +640,30 @@ function HierarchyView({
               type="button"
               className={[
                 styles.rootCard,
-                root.canEnter === false ? styles.rootCardDisabled : '',
+                root.isDeleted
+                  ? styles.rootCardDeleted
+                  : root.canEnter === false
+                    ? styles.rootCardDisabled
+                    : '',
               ]
                 .filter(Boolean)
                 .join(' ')}
               onClick={handleCardClick}
               onContextMenu={(e) => onContextMenu(e, root)}
-              title={root.canEnter === false ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.' : undefined}
+              title={
+                root.isDeleted
+                  ? '삭제된 워크스페이스입니다. 우클릭 후 복구할 수 있습니다.'
+                  : root.canEnter === false
+                    ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.'
+                    : undefined
+              }
             >
               <WorkspaceGlyph item={root} variant="root" />
               <span className={styles.rootCardCopy}>
                 <span className={styles.rootNameLine}>
                   <strong>{root.name}</strong>
                   <RootBadge />
+                  {root.isDeleted ? <DeletedBadge /> : null}
                 </span>
                 <span>{root.description}</span>
                 <span>
@@ -629,15 +672,20 @@ function HierarchyView({
                   하위 {root.childCount}개
                 </span>
               </span>
-              <Icon name={root.canEnter === false ? 'lock' : 'chevronRight'} size={20} />
-            </button>
-            <div className={styles.rootFavorite}>
-              <FavoriteButton
-                isFavorite={favoriteIds.has(root.id)}
-                label={root.name}
-                onToggle={() => onToggleFavorite(root.id)}
+              <Icon
+                name={root.isDeleted ? 'trash' : root.canEnter === false ? 'lock' : 'chevronRight'}
+                size={20}
               />
-            </div>
+            </button>
+            {root.isDeleted ? null : (
+              <div className={styles.rootFavorite}>
+                <FavoriteButton
+                  isFavorite={favoriteIds.has(root.id)}
+                  label={root.name}
+                  onToggle={() => onToggleFavorite(root.id)}
+                />
+              </div>
+            )}
           </div>
 
           {/* 1단계 브랜치 및 하위 수형 덴드로그램 트리 (접었을 때 부드러운 전환 후 레이아웃 재계산) */}
@@ -712,38 +760,57 @@ function ListView({
   const startPage = currentGroup * PAGE_GROUP_SIZE + 1
   const endPage = Math.min(startPage + PAGE_GROUP_SIZE - 1, totalPages)
   const visiblePages = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i)
+  const listRef = useRef<HTMLElement>(null)
+  // 페이지를 넘기면 목록 맨 위부터 보여준다.
+  const changePage = (page: number) => {
+    onPageChange(page)
+    listRef.current?.scrollTo({ top: 0 })
+  }
   return (
-    <section className={styles.listSection} aria-label="워크스페이스 목록">
+    <section className={styles.listSection} aria-label="워크스페이스 목록" ref={listRef}>
       <ol className={styles.workspaceRows}>
         {rows.length > 0 ? (
           rows.map((item) => (
             <li
-              className={styles.workspaceRow}
+              className={[styles.workspaceRow, item.isDeleted ? styles.rowDeleted : '']
+                .filter(Boolean)
+                .join(' ')}
               key={item.id}
               onContextMenu={(e) => onContextMenu(e, item)}
             >
-              <FavoriteButton
-                isFavorite={favoriteIds.has(item.id)}
-                label={item.name}
-                onToggle={() => onToggleFavorite(item.id)}
-              />
+              {item.isDeleted ? (
+                <span aria-hidden="true" />
+              ) : (
+                <FavoriteButton
+                  isFavorite={favoriteIds.has(item.id)}
+                  label={item.name}
+                  onToggle={() => onToggleFavorite(item.id)}
+                />
+              )}
 
               <button
                 type="button"
                 className={[
                   styles.rowIdentity,
-                  item.canEnter === false ? styles.rowIdentityDisabled : '',
+                  item.isDeleted || item.canEnter === false ? styles.rowIdentityDisabled : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
                 onClick={() => onOpenWorkspace(item.id)}
-                title={item.canEnter === false ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.' : undefined}
+                title={
+                  item.isDeleted
+                    ? '삭제된 워크스페이스입니다. 우클릭 후 복구할 수 있습니다.'
+                    : item.canEnter === false
+                      ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.'
+                      : undefined
+                }
               >
                 <WorkspaceGlyph item={item} variant="list" />
                 <span className={styles.rowCopy}>
                   <span className={styles.rowNameLine}>
                     <strong>{item.name}</strong>
                     {item.isRoot ? <RootBadge /> : null}
+                    {item.isDeleted ? <DeletedBadge /> : null}
                     {item.canEnter === false ? (
                       <span title="상위 노드 식별 전용 (진입 불가)" style={{ display: 'inline-flex', alignItems: 'center', opacity: 0.65 }}>
                         <Icon name="lock" size={14} />
@@ -792,7 +859,7 @@ function ListView({
             type="button"
             aria-label="이전 페이지"
             disabled={currentPage === 1}
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            onClick={() => changePage(Math.max(1, currentPage - 1))}
           >
             <Icon name="chevronLeft" size={17} />
           </button>
@@ -803,7 +870,7 @@ function ListView({
                   type="button"
                   className={currentPage === page ? styles.currentPageButton : undefined}
                   aria-current={currentPage === page ? 'page' : undefined}
-                  onClick={() => onPageChange(page)}
+                  onClick={() => changePage(page)}
                 >
                   {page}
                 </button>
@@ -814,7 +881,7 @@ function ListView({
             type="button"
             aria-label="다음 페이지"
             disabled={currentPage >= totalPages}
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            onClick={() => changePage(Math.min(totalPages, currentPage + 1))}
           >
             <Icon name="chevronRight" size={17} />
           </button>
@@ -828,6 +895,7 @@ function WorkspaceChooserDialog({
   isOpen,
   rootOptions,
   selectedRootId,
+  canConfirm,
   onCancel,
   onConfirm,
   onSelectRoot,
@@ -835,6 +903,7 @@ function WorkspaceChooserDialog({
   isOpen: boolean
   rootOptions: WorkspaceDirectoryItem[]
   selectedRootId: string
+  canConfirm: boolean
   onCancel: () => void
   onConfirm: () => void
   onSelectRoot: (id: string) => void
@@ -944,7 +1013,11 @@ function WorkspaceChooserDialog({
 
             return (
               <label
-                className={[styles.rootOption, isSelected ? styles.rootOptionSelected : '']
+                className={[
+                  styles.rootOption,
+                  isSelected ? styles.rootOptionSelected : '',
+                  root.isDeleted ? styles.rootOptionDeleted : '',
+                ]
                   .filter(Boolean)
                   .join(' ')}
                 key={root.id}
@@ -955,6 +1028,7 @@ function WorkspaceChooserDialog({
                   name="workspace-root"
                   value={root.id}
                   checked={isSelected}
+                  disabled={root.isDeleted}
                   onChange={() => onSelectRoot(root.id)}
                 />
                 <WorkspaceGlyph item={root} variant="dialog" />
@@ -962,6 +1036,7 @@ function WorkspaceChooserDialog({
                   <span className={styles.rootNameLine}>
                     <strong>{root.name}</strong>
                     <RootBadge />
+                    {root.isDeleted ? <DeletedBadge /> : null}
                   </span>
                   <span>{root.description}</span>
                   <span>
@@ -980,7 +1055,12 @@ function WorkspaceChooserDialog({
 
         <footer className={styles.dialogFooter}>
           <div className={styles.dialogActions}>
-            <Button variant="primary" className={styles.dialogButton} onClick={onConfirm}>
+            <Button
+              variant="primary"
+              className={styles.dialogButton}
+              onClick={onConfirm}
+              disabled={!canConfirm}
+            >
               확인
             </Button>
             <Button variant="secondary" className={styles.dialogButton} onClick={onCancel}>
@@ -997,26 +1077,66 @@ function WorkspaceChooserDialog({
 export function WorkspaceEntryPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
+  // 삭제된 워크스페이스까지 담아 두고, 휴지통 모드일 때만 같은 화면에 흐릿하게 함께 표시한다.
+  const [snapshot, setSnapshot] = useState(() => getOrgSnapshot({ includeDeleted: true }))
   const currentUser = getCurrentUser(snapshot)
-  const workspaceDirectory = getWorkspaceDirectory(currentUser?.userId, snapshot)
+  const [isTrashMode, setIsTrashMode] = useState(false)
+  const liveSnapshot = useMemo(
+    () => ({ ...snapshot, nodes: excludeDeletedNodes(snapshot.nodes) }),
+    [snapshot],
+  )
+  const trashSnapshot = useMemo(
+    () => ({ ...snapshot, nodes: selectTrashNodes(snapshot.nodes) }),
+    [snapshot],
+  )
+  const deletedNodeCount = trashSnapshot.nodes.length
+  // 루트까지 삭제되어 살아있는 워크스페이스가 하나도 없으면 휴지통 모드를 켠 상태로 고정한다.
+  const isTrashModeLocked = isAllNodesDeleted(snapshot.nodes)
+  const isShowingDeleted = isTrashModeLocked || isTrashMode
+
+  // 살아있는 워크스페이스만 그리는 디렉터리 (표시할 루트 선택용)
+  const liveDirectory = useMemo(
+    () => getWorkspaceDirectory(currentUser?.userId, liveSnapshot),
+    [currentUser?.userId, liveSnapshot],
+  )
+  // 휴지통 모드에서는 삭제된 워크스페이스를 흐릿하게 함께 그린다.
+  const visibleDirectory = useMemo(
+    () =>
+      getWorkspaceDirectory(currentUser?.userId, isShowingDeleted ? snapshot : liveSnapshot),
+    [currentUser?.userId, snapshot, liveSnapshot, isShowingDeleted],
+  )
+  // 루트 선택창은 삭제된 루트도 '삭제됨'으로 함께 보여준다.
+  const chooserDirectory = useMemo(
+    () => getWorkspaceDirectory(currentUser?.userId, snapshot),
+    [currentUser?.userId, snapshot],
+  )
+
   const paramRootId = searchParams.get('rootId')
   const [activeRootId, setActiveRootId] = useState(
     () => paramRootId || getActiveWorkspaceRootId(currentUser?.userId),
   )
   const defaultRootId = getDefaultWorkspaceRootId(currentUser?.userId)
-  const activeRoot = workspaceDirectory.rootOptions.find((root) => root.id === (paramRootId || activeRootId))
-  const defaultRoot = workspaceDirectory.rootOptions.find((root) => root.id === defaultRootId)
-  const hierarchyRoot =
-    activeRoot ?? defaultRoot ?? workspaceDirectory.hierarchyRoot
+  // 표시할 루트는 살아있는 워크스페이스를 우선하고, 전부 삭제된 경우에만 삭제된 루트를 사용한다.
+  const rootCandidateDirectory =
+    liveDirectory.rootOptions.length > 0 ? liveDirectory : visibleDirectory
+  // 주소의 rootId 쿼리는 진입 시 1회만 시드로 사용하고, 이후 루트 변경은 activeRootId 상태가 기준이 된다.
+  // (쿼리가 계속 우선하면 이전 화면에서 돌아온 뒤 루트를 바꿔도 화면이 따라오지 않는다.)
+  const activeRoot = rootCandidateDirectory.rootOptions.find((root) => root.id === activeRootId)
+  const defaultRoot = rootCandidateDirectory.rootOptions.find((root) => root.id === defaultRootId)
+  const hierarchyRootId = (activeRoot ?? defaultRoot ?? rootCandidateDirectory.hierarchyRoot)?.id
+  const hierarchyRoot = hierarchyRootId
+    ? (visibleDirectory.rootOptions.find((root) => root.id === hierarchyRootId) ?? null)
+    : visibleDirectory.hierarchyRoot
   const shouldOpenChooserInitially = Boolean(
-    !paramRootId && hierarchyRoot && !activeRoot && !defaultRoot,
+    !paramRootId && !isShowingDeleted && hierarchyRoot && !activeRoot && !defaultRoot,
   )
   const view = searchParams.get('view') === 'list' ? 'list' : 'hierarchy'
   const [isChooserOpen, setIsChooserOpen] = useState(shouldOpenChooserInitially)
   const [selectedRootId, setSelectedRootId] = useState(
-    () => paramRootId || hierarchyRoot?.id || workspaceDirectory.defaultRootId || '',
+    () => paramRootId || hierarchyRoot?.id || visibleDirectory.defaultRootId || '',
   )
+  const selectedChooserRoot = chooserDirectory.rootOptions.find((root) => root.id === selectedRootId)
+  const canConfirmChooser = Boolean(selectedChooserRoot && !selectedChooserRoot.isDeleted)
   const [currentPage, setCurrentPage] = useState(1)
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(
     () => getFavoriteWorkspaceIds(currentUser?.userId),
@@ -1036,7 +1156,7 @@ export function WorkspaceEntryPage() {
     let isMounted = true
 
     // 진입점 화면 진입 시: 캐시로 즉시 띄우되, 백그라운드에서 최신 스코프(트리/역할)를 경량 동기화하여 삭제/권한 박탈된 노드 자동 갱신
-    fetchWorkspaceDirectoryScope()
+    fetchWorkspaceDirectoryScope({ includeDeleted: true })
       .then((latestSnapshot) => {
         if (isMounted) {
           setSnapshot(latestSnapshot)
@@ -1048,7 +1168,7 @@ export function WorkspaceEntryPage() {
 
     const unsubscribe = subscribeToWorkspaceCache(() => {
       if (isMounted) {
-        setSnapshot(getOrgSnapshot())
+        setSnapshot(getOrgSnapshot({ includeDeleted: true }))
       }
     })
 
@@ -1066,7 +1186,7 @@ export function WorkspaceEntryPage() {
     }
   }, [paramRootId])
 
-  const sortedRootOptions = [...workspaceDirectory.rootOptions].sort((a, b) => {
+  const sortedRootOptions = [...chooserDirectory.rootOptions].sort((a, b) => {
     const aFav = favoriteIds.has(a.id) ? 1 : 0
     const bFav = favoriteIds.has(b.id) ? 1 : 0
     return bFav - aFav
@@ -1074,10 +1194,10 @@ export function WorkspaceEntryPage() {
 
   const hierarchyBranches = hierarchyRoot ? hierarchyRoot.children : []
   const scopedListItems = hierarchyRoot
-    ? workspaceDirectory.listItems.filter(
+    ? visibleDirectory.listItems.filter(
         (item) => item.rootId === hierarchyRoot.id || item.id === hierarchyRoot.id,
       )
-    : workspaceDirectory.listItems
+    : visibleDirectory.listItems
 
   // 즐겨찾기된 워크스페이스가 목록의 맨 앞에 우선 배치되도록 정렬
   const filteredListRows = [...scopedListItems].sort((a, b) => {
@@ -1146,6 +1266,21 @@ export function WorkspaceEntryPage() {
   const [collapsingIds, setCollapsingIds] = useState<Set<string>>(new Set())
   const [expandingIds, setExpandingIds] = useState<Set<string>>(new Set())
 
+  // 개별 노드 접기 애니메이션(160ms) 타이머.
+  // 전체 펼치기/하위 전체 펼치기를 실행할 때 예약된 접기를 취소하기 위해 id별로 보관한다.
+  const collapseTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  // 예약된 접기 타이머를 취소한다(취소하지 않으면 애니메이션 종료 시점에 노드가 다시 접힌다).
+  function cancelPendingCollapse(ids: Iterable<string>) {
+    for (const id of ids) {
+      const timer = collapseTimersRef.current.get(id)
+      if (timer !== undefined) {
+        clearTimeout(timer)
+        collapseTimersRef.current.delete(id)
+      }
+    }
+  }
+
   // 루트 워크스페이스 변경 시 새 루트의 모든 하위 브랜치 노드들도 기본 접힘 처리
   useEffect(() => {
     if (hierarchyBranches.length > 0) {
@@ -1172,8 +1307,10 @@ export function WorkspaceEntryPage() {
       }, 350)
     } else {
       // 접기: 먼저 collapsingIds에 추가하여 페이드아웃 애니메이션을 실행하고 160ms 후 collapsedIds에 추가
+      cancelPendingCollapse([id])
       setCollapsingIds((prev) => new Set(prev).add(id))
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        collapseTimersRef.current.delete(id)
         setCollapsedIds((prev) => new Set(prev).add(id))
         setCollapsingIds((prev) => {
           const next = new Set(prev)
@@ -1181,14 +1318,68 @@ export function WorkspaceEntryPage() {
           return next
         })
       }, 160)
+      collapseTimersRef.current.set(id, timer)
     }
   }
+
+  // 도구 모음의 "전체 펼치기/접기": 하위 워크스페이스를 한 번에 펼치거나 접는다.
+  function toggleExpandAllSubWorkspaces() {
+    cancelPendingCollapse(collapseTimersRef.current.keys())
+    setCollapsingIds(new Set())
+    setExpandingIds(new Set())
+
+    if (collapsedIds.size === 0) {
+      // 모두 펼쳐진 상태이므로 전체 접기 (기본 상태와 동일하게 루트는 펼친 채로 둔다)
+      setCollapsedIds(collectAllCollapsibleIds(hierarchyBranches))
+      return
+    }
+
+    setCollapsedIds(new Set())
+  }
+
+  // 우클릭 메뉴의 "하위 워크스페이스 모두 펼치기": 해당 노드와 그 아래 트리 전체를 펼친다.
+  function expandSubWorkspacesOf(item: WorkspaceDirectoryItem) {
+    const descendantCollapsibleIds = collectAllCollapsibleIds(item.children ?? [])
+    cancelPendingCollapse([item.id, ...descendantCollapsibleIds])
+
+    setCollapsingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(item.id)
+      for (const id of descendantCollapsibleIds) {
+        next.delete(id)
+      }
+      return next
+    })
+
+    setCollapsedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(item.id)
+      for (const id of descendantCollapsibleIds) {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const isHierarchyFullyExpanded = collapsedIds.size === 0
 
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
     item: WorkspaceDirectoryItem
     canCreateSub: boolean
+    canEdit: boolean
+    canMove: boolean
+    canDelete: boolean
+    canRestore: boolean
+    restoreBlockedByParent: boolean
+    isItemDeleted: boolean
+  } | null>(null)
+
+  const [deleteTarget, setDeleteTarget] = useState<{
+    item: WorkspaceDirectoryItem
+    descendantWorkspaces: Array<{ id: string; name: string }>
+    workItemCount: number
   } | null>(null)
 
   // 외부 클릭 시 컨텍스트 메뉴 닫기
@@ -1209,51 +1400,87 @@ export function WorkspaceEntryPage() {
     e.stopPropagation()
 
     const parsedNodeId = parseInt(item.id, 10)
+    const targetNode = snapshot.nodes.find((node) => String(node.id) === item.id)
+    const isItemDeleted = Boolean(targetNode?.isDeleted)
     const canCreateSub =
-      Number.isFinite(parsedNodeId) && currentUser
+      Number.isFinite(parsedNodeId) && currentUser && !isItemDeleted
         ? canCreateSubNode(currentUser.userId, parsedNodeId, snapshot)
         : false
+    const canDelete =
+      Number.isFinite(parsedNodeId) && currentUser && !isItemDeleted
+        ? canChangeNodeInfo(currentUser.userId, parsedNodeId, snapshot)
+        : false
+    const restoreBlockedByParent = targetNode ? !isRestorableFromTrash(targetNode, snapshot.nodes) : false
+    // 서버 restore_node 가 요구하는 NODE_INFO_CHANGE(Bit 12) 와 동일한 기준으로 막는다.
+    const canRestoreByAuthority =
+      targetNode && Number.isFinite(parsedNodeId) && currentUser
+        ? canChangeNodeInfo(currentUser.userId, parsedNodeId, snapshot)
+        : false
+    const canRestore = Boolean(targetNode) && !restoreBlockedByParent && canRestoreByAuthority
 
     // 권한이 있는 경우 컨텍스트 메뉴 표시 (화면 벗어남 방지)
     const menuWidth = 220
-    const menuHeight = 150
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    const canEdit = Boolean(canDelete && targetNode?.nodeType !== 'USER')
+    const canMove = Boolean(currentUser && !isItemDeleted && targetNode?.nodeType !== 'USER'
+      && hasDirectAuthorityBit(currentUser.userId, parsedNodeId, 12, snapshot))
+    const rowCount = isItemDeleted ? 1 : 2 + (item.children?.length ? 2 : 0)
+      + Number(canCreateSub) + Number(canEdit) + Number(canMove) + Number(canDelete)
+    const separatorCount = isItemDeleted ? 0 : Number(Boolean(item.children?.length))
+      + Number(canCreateSub || canEdit || canMove) + Number(canDelete)
+    const menuHeight = rowCount * 42 + separatorCount * 12 + 16
+    const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 10))
+    const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 10))
 
     setContextMenu({
       x,
       y,
       item,
       canCreateSub,
+      canEdit,
+      canMove,
+      canDelete,
+      canRestore,
+      restoreBlockedByParent,
+      isItemDeleted,
     })
   }
 
   function handleConfirmWorkspace() {
-    if (!workspaceDirectory.rootOptions.some((root) => root.id === selectedRootId)) {
+    const targetRoot = chooserDirectory.rootOptions.find((root) => root.id === selectedRootId)
+    if (!targetRoot || targetRoot.isDeleted) {
       return
     }
 
     selectWorkspaceRoot(selectedRootId, false, currentUser?.userId)
     setActiveRootId(selectedRootId)
     setIsChooserOpen(false)
+
+    // 상단 셸(AppShell)도 같은 루트를 바라보도록 주소의 rootId 쿼리를 함께 맞춘다.
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.set('rootId', selectedRootId)
+    setSearchParams(nextSearchParams, { replace: true })
   }
 
   const closeChooser = useCallback(() => {
     setIsChooserOpen(false)
   }, [])
 
-  function openChooser(rootId = hierarchyRoot?.id ?? workspaceDirectory.defaultRootId ?? '') {
-    if (!workspaceDirectory.rootOptions.some((root) => root.id === rootId)) {
-      return
-    }
-
-    setSelectedRootId(rootId)
+  function openChooser(rootId = hierarchyRoot?.id ?? visibleDirectory.defaultRootId ?? '') {
+    // 삭제된 루트도 '삭제됨'으로 함께 보여주기 위해 항상 열어 준다. (삭제된 루트는 선택만 비활성)
+    const targetRoot = chooserDirectory.rootOptions.find((root) => root.id === rootId)
+    setSelectedRootId(targetRoot ? rootId : '')
     setIsChooserOpen(true)
   }
 
   function openWorkspace(workspaceId: string) {
-    const targetItem = workspaceDirectory.listItems.find((item) => item.id === workspaceId)
+    const targetItem = chooserDirectory.listItems.find((item) => item.id === workspaceId)
     if (!targetItem) {
+      return
+    }
+
+    // 삭제된 워크스페이스는 휴지통에서 복구하기 전까지 상세로 진입할 수 없다.
+    if (findDeletedAncestorNode(workspaceId, snapshot.nodes)) {
+      showToast('삭제된 워크스페이스입니다. 휴지통에서 복구한 뒤 진입할 수 있습니다.')
       return
     }
 
@@ -1271,12 +1498,67 @@ export function WorkspaceEntryPage() {
     navigate(`/workspace?nodeId=${encodeURIComponent(workspaceId)}`)
   }
 
+  function openDeleteModal(item: WorkspaceDirectoryItem) {
+    const nodeId = parseInt(item.id, 10)
+    if (!Number.isFinite(nodeId)) {
+      return
+    }
+
+    const db = readWorkspaceDb()
+    const subtreeIds = new Set(collectNodeSubtreeIds(nodeId, db.nodes))
+    const descendantWorkspaces = db.nodes
+      .filter((node) => node.id !== nodeId && subtreeIds.has(node.id) && !node.isDeleted)
+      .map((node) => ({ id: String(node.id), name: node.name }))
+    const workItemCount = db.workItems.filter(
+      (workItem) => !workItem.isDeleted && subtreeIds.has(workItem.ownerNodeId),
+    ).length
+
+    setDeleteTarget({ item, descendantWorkspaces, workItemCount })
+  }
+
+  async function confirmDeleteWorkspace() {
+    if (!deleteTarget) return
+
+    const nodeId = parseInt(deleteTarget.item.id, 10)
+    const result = await deleteWorkspace(nodeId)
+
+    if (result.status === 'error') {
+      showToast(result.message)
+      return
+    }
+
+    showToast(`'${deleteTarget.item.name}' 워크스페이스가 휴지통으로 이동했습니다.`)
+  }
+
+  async function restoreFromTrash(item: WorkspaceDirectoryItem) {
+    const nodeId = parseInt(item.id, 10)
+    if (!Number.isFinite(nodeId)) {
+      return
+    }
+
+    const result = await restoreWorkspace(nodeId, true)
+    if (result.status === 'error') {
+      showToast(result.message)
+      return
+    }
+
+    showToast(`'${item.name}' 워크스페이스가 복구되었습니다.`)
+  }
+
   return (
-    <div className={[styles.page, view === 'hierarchy' ? styles.pageHierarchy : ''].filter(Boolean).join(' ')}>
+    <div
+      className={[styles.page, view === 'hierarchy' ? styles.pageHierarchy : '', view === 'list' ? styles.pageListView : ''].filter(Boolean).join(' ')}
+    >
       <WorkspaceEntryViewToggle
         view={view}
         onChange={handleViewChange}
         onOpenChooser={() => openChooser()}
+        isAllExpanded={isHierarchyFullyExpanded}
+        onToggleExpandAll={toggleExpandAllSubWorkspaces}
+        isTrashMode={isShowingDeleted}
+        deletedCount={deletedNodeCount}
+        isTrashModeLocked={isTrashModeLocked}
+        onToggleTrash={() => setIsTrashMode((prev) => !prev)}
       />
 
       {view === 'hierarchy' && hierarchyRoot ? (
@@ -1318,76 +1600,173 @@ export function WorkspaceEntryPage() {
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
-            className={[
-              styles.contextMenuItem,
-              contextMenu.item.canEnter === false ? styles.contextMenuItemDisabled : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={() => {
-              const item = contextMenu.item
-              setContextMenu(null)
-              if (item.canEnter === false) {
-                showToast('상위 조상 식별용 노드로, 상세 워크스페이스 진입 권한이 없습니다.')
-                return
+          {contextMenu.isItemDeleted ? (
+            <button
+              type="button"
+              className={[
+                styles.contextMenuItem,
+                contextMenu.canRestore ? '' : styles.contextMenuItemDisabled,
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              title={
+                contextMenu.canRestore
+                  ? '이 워크스페이스를 하위 워크스페이스·업무와 함께 복구합니다.'
+                  : contextMenu.restoreBlockedByParent
+                    ? '상위 워크스페이스를 먼저 복구해 주세요.'
+                    : '워크스페이스를 복구할 권한이 없습니다.'
               }
-              openWorkspace(item.id)
-            }}
-            title={contextMenu.item.canEnter === false ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.' : undefined}
-          >
-            <Icon name={contextMenu.item.canEnter === false ? 'lock' : 'folder'} size={15} />
-            <span>{contextMenu.item.canEnter === false ? '워크스페이스 열기 (권한 없음)' : '워크스페이스 열기'}</span>
-          </button>
-
-          {/* 하위 노드가 있는 경우: 숨기기 / 펼치기 메뉴 */}
-          {contextMenu.item.children && contextMenu.item.children.length > 0 ? (
-            <button
-              type="button"
-              className={styles.contextMenuItem}
               onClick={() => {
                 const item = contextMenu.item
                 setContextMenu(null)
-                toggleCollapse(item.id)
+                if (!contextMenu.canRestore) {
+                  showToast(
+                    contextMenu.restoreBlockedByParent
+                      ? '상위 워크스페이스를 먼저 복구해 주세요.'
+                      : '워크스페이스를 복구할 권한이 없습니다.',
+                  )
+                  return
+                }
+                void restoreFromTrash(item)
               }}
             >
-              <Icon name={collapsedIds.has(contextMenu.item.id) ? 'chevronDown' : 'chevronUp'} size={15} />
-              <span>{collapsedIds.has(contextMenu.item.id) ? '하위 노드 펼치기' : '하위 노드 숨기기'}</span>
+              <Icon name="restore" size={15} />
+              <span>워크스페이스 복구</span>
             </button>
-          ) : null}
+          ) : (
+            <>
+              <button
+                type="button"
+                className={[
+                  styles.contextMenuItem,
+                  contextMenu.item.canEnter === false ? styles.contextMenuItemDisabled : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() => {
+                  const item = contextMenu.item
+                  setContextMenu(null)
+                  if (item.canEnter === false) {
+                    showToast('상위 조상 식별용 노드로, 상세 워크스페이스 진입 권한이 없습니다.')
+                    return
+                  }
+                  openWorkspace(item.id)
+                }}
+                title={contextMenu.item.canEnter === false ? '상위 조상 식별용 노드로, 상세 진입 권한이 없습니다.' : undefined}
+              >
+                <Icon name={contextMenu.item.canEnter === false ? 'lock' : 'folder'} size={15} />
+                <span>{contextMenu.item.canEnter === false ? '워크스페이스 열기 (권한 없음)' : '워크스페이스 열기'}</span>
+              </button>
 
-          {contextMenu.canCreateSub ? (
+              <button
+                type="button"
+                className={styles.contextMenuItem}
+                onClick={() => {
+                  const item = contextMenu.item
+                  setContextMenu(null)
+                  toggleFavorite(item.id)
+                }}
+              >
+                <Icon name="star" size={15} />
+                <span>{favoriteIds.has(contextMenu.item.id) ? '즐겨찾기 해제' : '즐겨찾기 추가'}</span>
+              </button>
+
+              {/* 트리 보기 작업 */}
+              {contextMenu.item.children?.length ? <div className={styles.contextMenuDivider} role="separator" /> : null}
+              {contextMenu.item.children && contextMenu.item.children.length > 0 ? (
+                <button
+                  type="button"
+                  className={styles.contextMenuItem}
+                  onClick={() => {
+                    const item = contextMenu.item
+                    setContextMenu(null)
+                    toggleCollapse(item.id)
+                  }}
+                >
+                  <Icon name={collapsedIds.has(contextMenu.item.id) ? 'chevronDown' : 'chevronUp'} size={15} />
+                  <span>{collapsedIds.has(contextMenu.item.id) ? '하위 워크스페이스 펼치기' : '하위 워크스페이스 접기'}</span>
+                </button>
+              ) : null}
+
+              {/* 하위 트리 전체 펼치기 */}
+              {contextMenu.item.children && contextMenu.item.children.length > 0 ? (
+                <button
+                  type="button"
+                  className={styles.contextMenuItem}
+                  onClick={() => {
+                    const item = contextMenu.item
+                    setContextMenu(null)
+                    expandSubWorkspacesOf(item)
+                  }}
+                >
+                  <Icon name="maximize2" size={15} />
+                  <span>하위 워크스페이스 모두 펼치기</span>
+                </button>
+              ) : null}
+
+              {/* 워크스페이스 관리 작업 */}
+              {contextMenu.canCreateSub || contextMenu.canEdit || contextMenu.canMove ? (
+                <div className={styles.contextMenuDivider} role="separator" />
+              ) : null}
+              {contextMenu.canCreateSub ? (
+                <button
+                  type="button"
+                  className={styles.contextMenuItem}
+                  onClick={() => {
+                    const item = contextMenu.item
+                    setContextMenu(null)
+                    navigate(`/setup/sub-node?parentNodeId=${encodeURIComponent(item.id)}`)
+                  }}
+                >
+                  <Icon name="plus" size={15} />
+                  <span>하위 워크스페이스 생성</span>
+                </button>
+              ) : null}
+
+              {contextMenu.canEdit ? (
+                <button type="button" className={styles.contextMenuItem} onClick={() => {
+                  navigate(`/setup/top-node?editNodeId=${encodeURIComponent(contextMenu.item.id)}`)
+                  setContextMenu(null)
+                }}><Icon name="pencil" size={15} /><span>워크스페이스 수정</span></button>
+              ) : null}
+              {contextMenu.canMove ? (
+                <button type="button" className={styles.contextMenuItem} onClick={() => {
+                  navigate(`/workspace/move?nodeId=${encodeURIComponent(contextMenu.item.id)}`)
+                  setContextMenu(null)
+                }}><Icon name="orgChart" size={15} /><span>워크스페이스 이전</span></button>
+              ) : null}
+
+            </>
+          )}
+
+          {contextMenu.canDelete ? <div className={styles.contextMenuDivider} role="separator" /> : null}
+
+          {contextMenu.canDelete ? (
             <button
               type="button"
               className={styles.contextMenuItem}
+              title="이 워크스페이스와 하위 워크스페이스를 휴지통으로 이동합니다."
               onClick={() => {
                 const item = contextMenu.item
                 setContextMenu(null)
-                navigate(`/setup/sub-node?parentNodeId=${encodeURIComponent(item.id)}`)
+                openDeleteModal(item)
               }}
             >
-              <Icon name="plus" size={15} />
-              <span>하위 워크스페이스 생성</span>
+              <Icon name="trash" size={15} />
+              <span>워크스페이스 삭제</span>
             </button>
           ) : null}
-
-          <div className={styles.contextMenuDivider} />
-
-          <button
-            type="button"
-            className={styles.contextMenuItem}
-            onClick={() => {
-              const item = contextMenu.item
-              setContextMenu(null)
-              toggleFavorite(item.id)
-            }}
-          >
-            <Icon name="star" size={15} />
-            <span>{favoriteIds.has(contextMenu.item.id) ? '즐겨찾기 해제' : '즐겨찾기 추가'}</span>
-          </button>
         </div>
       ) : null}
+
+      <WorkspaceDeleteModal
+        isOpen={deleteTarget !== null}
+        workspaceName={deleteTarget?.item.name ?? ""}
+        descendantWorkspaces={deleteTarget?.descendantWorkspaces ?? []}
+        descendantWorkItemCount={deleteTarget?.workItemCount ?? 0}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeleteWorkspace}
+      />
 
       <WorkspaceChooserDialog
         isOpen={isChooserOpen}
@@ -1396,6 +1775,7 @@ export function WorkspaceEntryPage() {
         onCancel={closeChooser}
         onConfirm={handleConfirmWorkspace}
         onSelectRoot={setSelectedRootId}
+        canConfirm={canConfirmChooser}
       />
 
       {toastMessage ? (

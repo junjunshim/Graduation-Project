@@ -11,15 +11,21 @@ export function WorkItemFileDelete({
   onComplete,
   onDeleted,
   onRequestConfirm,
+  disabled = false,
+  disabledReason,
 }: {
   file: WorkItemFileRecord
   onComplete?: () => void
   onDeleted?: () => Promise<void> | void
   onRequestConfirm?: () => void
+  /** 권한이 없으면 메뉴 항목을 비활성화한다 (기본: 허용) */
+  disabled?: boolean
+  disabledReason?: string
 }) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
 
   async function handleDeleteConfirm() {
+    if (disabled) return
     try {
       await deleteWorkItemFile(file.id)
       showToast({
@@ -45,8 +51,10 @@ export function WorkItemFileDelete({
     <>
       <button
         type="button"
-        className={styles.deleteItem}
+        className={[styles.deleteItem, disabled ? styles.permissionDenied : ''].join(' ')}
         role="menuitem"
+        disabled={disabled}
+        title={disabled ? disabledReason : undefined}
         aria-label={`${file.originalFileName} 삭제`}
         onClick={(event) => {
           event.stopPropagation()

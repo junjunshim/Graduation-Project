@@ -1,5 +1,49 @@
 -- 컨트롤러에서 사용될 work_items 관련 함수 생성
 
+-- 업무 진행률 계산: 자체 진행률과 하위 업무들의 평균 진행률을 가중치로 합성한다.
+-- 가중치 W(%)는 하위 업무가 차지하는 비중이고, 자체 진행률은 (100 - W)% 비중을 가진다.
+-- 하위 업무가 없거나 가중치가 0이면 자체 진행률을 그대로 사용한다.
+CREATE OR REPLACE FUNCTION compute_work_item_progress(
+    p_work_item_id work_items.work_item_id%TYPE,
+    p_depth INTEGER DEFAULT 0
+) RETURNS INTEGER AS $$
+DECLARE
+    v_weight      work_items.weight%TYPE;
+    v_progress    work_items.progress%TYPE;
+    v_child_count INTEGER;
+    v_child_avg   NUMERIC;
+    v_ratio       NUMERIC;
+BEGIN
+    SELECT weight, progress
+    INTO v_weight, v_progress
+    FROM work_items
+    WHERE work_item_id = p_work_item_id;
+
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
+
+    -- 자기 참조/순환 연결 방어
+    IF p_depth >= 32 THEN
+        RETURN v_progress;
+    END IF;
+
+    SELECT COUNT(*), AVG(compute_work_item_progress(child.work_item_id, p_depth + 1))
+    INTO v_child_count, v_child_avg
+    FROM work_items child
+    WHERE child.parent_work_item_id = p_work_item_id
+      AND child.is_deleted = FALSE;
+
+    v_ratio := LEAST(GREATEST(COALESCE(v_weight, 0), 0), 100) / 100.0;
+
+    IF v_child_count = 0 OR v_ratio = 0 THEN
+        RETURN v_progress;
+    END IF;
+
+    RETURN LEAST(100, GREATEST(0, ROUND(v_progress * (1 - v_ratio) + v_child_avg * v_ratio)))::INTEGER;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
 -- WorkItemController::createWorkItem
 CREATE OR REPLACE FUNCTION create_work_item(
     p_requester_email users.email%TYPE,
@@ -13,7 +57,7 @@ CREATE OR REPLACE FUNCTION create_work_item(
     p_hidden work_items.hidden%TYPE DEFAULT FALSE,
     p_status work_items.status%TYPE DEFAULT 'todo',
     p_priority work_items.priority%TYPE DEFAULT 3,
-    p_weight work_items.weight%TYPE DEFAULT 1,
+    p_weight work_items.weight%TYPE DEFAULT 0,
     p_progress work_items.progress%TYPE DEFAULT 0,
     p_start_date VARCHAR DEFAULT NULL,
     p_due_date VARCHAR DEFAULT NULL
@@ -122,8 +166,8 @@ BEGIN
         COALESCE(p_hidden, FALSE),
         COALESCE(NULLIF(p_status, ''), 'todo'),
         COALESCE(p_priority, 3),
-        COALESCE(p_weight, 1),
-        COALESCE(p_progress, 0),
+        COALESCE(p_weight, 0),
+        CASE WHEN COALESCE(NULLIF(p_status, ''), 'todo') = 'done' THEN 100 ELSE COALESCE(p_progress, 0) END,
         NULLIF(p_start_date, '')::DATE,
         NULLIF(p_due_date, '')::DATE
     );
@@ -148,6 +192,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
@@ -181,18 +226,33 @@ CREATE OR REPLACE FUNCTION update_work_item(
     p_weight work_items.weight%TYPE DEFAULT -1,
     p_progress work_items.progress%TYPE DEFAULT -1,
     p_start_date VARCHAR DEFAULT NULL,
-    p_due_date VARCHAR DEFAULT NULL
+    p_due_date VARCHAR DEFAULT NULL,
+    p_parent_work_item_id work_items.parent_work_item_id%TYPE DEFAULT NULL,
+    p_parent_changed BOOLEAN DEFAULT FALSE,
+    p_owner_user_email users.email%TYPE DEFAULT NULL,
+    p_owner_changed BOOLEAN DEFAULT FALSE
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id  users.user_id%TYPE;
     v_owner_node_id organization_nodes.node_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
     v_owner_user_email users.email%TYPE;
+    v_new_owner_user_id users.user_id%TYPE;
+    v_new_owner_user_email users.email%TYPE;
     v_current_hidden work_items.hidden%TYPE;
     v_old_title work_items.title%TYPE;
     v_old_category work_items.category%TYPE;
     v_old_status work_items.status%TYPE;
     v_old_progress work_items.progress%TYPE;
+    v_old_parent_id work_items.parent_work_item_id%TYPE;
+    v_old_description work_items.description%TYPE;
+    v_old_priority work_items.priority%TYPE;
+    v_old_start_date work_items.start_date%TYPE;
+    v_old_due_date work_items.due_date%TYPE;
+    v_effective_parent_id work_items.parent_work_item_id%TYPE;
+    v_new_parent_node_id organization_nodes.node_id%TYPE;
+    v_new_parent_hidden work_items.hidden%TYPE;
+    v_owner_node_parent_id organization_nodes.node_id%TYPE;
 BEGIN
     -- 1. 요청자 id 가져오기 및 존재 여부 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email;
@@ -203,8 +263,10 @@ BEGIN
     END IF;
 
     -- 2. work_item 정보 한 번에 가져오기 (성능 최적화)
-    SELECT owner_node_id, owner_user_id, hidden, title, category, status, progress
-    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_category, v_old_status, v_old_progress
+    SELECT owner_node_id, owner_user_id, hidden, title, category, status, progress, parent_work_item_id,
+           description, priority, start_date, due_date
+    INTO v_owner_node_id, v_owner_user_id, v_current_hidden, v_old_title, v_old_category, v_old_status, v_old_progress, v_old_parent_id,
+         v_old_description, v_old_priority, v_old_start_date, v_old_due_date
     FROM work_items 
     WHERE work_item_id = p_work_item_id AND is_deleted = FALSE;
 
@@ -242,7 +304,101 @@ BEGIN
         USING ERRCODE = 'P0103';
     END IF;
 
-    -- 7. work_item 업데이트
+    -- 7. 상위 업무(부모) 변경 처리 (노드 이동은 지원하지 않는다)
+    IF p_parent_changed THEN
+        IF p_parent_work_item_id IS NULL OR p_parent_work_item_id = '' THEN
+            -- 빈 값은 최상위 업무로 이동을 의미한다.
+            v_effective_parent_id := NULL;
+        ELSE
+            SELECT owner_node_id, hidden INTO v_new_parent_node_id, v_new_parent_hidden
+            FROM work_items
+            WHERE work_item_id = p_parent_work_item_id AND is_deleted = FALSE;
+
+            IF NOT FOUND THEN
+                RAISE EXCEPTION '[P0601]Parent work item does not exist or already deleted: %', p_parent_work_item_id
+                USING ERRCODE = 'P0601';
+            END IF;
+
+            -- 자기 자신 또는 자신의 하위 업무를 부모로 지정할 수 없다 (순환 방지)
+            IF EXISTS (
+                WITH RECURSIVE ancestors AS (
+                    SELECT p_parent_work_item_id AS ancestor_id, 1 AS depth
+                    UNION ALL
+                    SELECT w.parent_work_item_id, a.depth + 1
+                    FROM work_items w
+                    JOIN ancestors a ON w.work_item_id = a.ancestor_id
+                    WHERE w.parent_work_item_id IS NOT NULL AND a.depth < 64
+                )
+                SELECT 1 FROM ancestors WHERE ancestor_id = p_work_item_id
+            ) THEN
+                RAISE EXCEPTION '[P0620]Parent work item cannot be itself or its descendant: %', p_parent_work_item_id
+                USING ERRCODE = 'P0620';
+            END IF;
+
+            -- 부모 후보는 현재 노드 또는 직속 상위 노드의 업무만 허용한다
+            SELECT parent_node_id INTO v_owner_node_parent_id
+            FROM organization_nodes WHERE node_id = v_owner_node_id;
+
+            IF v_new_parent_node_id <> v_owner_node_id
+               AND (v_owner_node_parent_id IS NULL OR v_new_parent_node_id <> v_owner_node_parent_id) THEN
+                RAISE EXCEPTION '[P0621]Parent work item must belong to the same node or its direct parent node: %', p_parent_work_item_id
+                USING ERRCODE = 'P0621';
+            END IF;
+
+            -- 생성과 동일한 기준으로 부모 업무에 대한 권한을 확인한다
+            IF v_new_parent_hidden THEN
+                IF NOT check_authority_with_override(v_requester_id, v_new_parent_node_id, 'WI_HIDDEN_VIEW') THEN
+                    RAISE EXCEPTION '[P0103]Requester does not have WI_HIDDEN_VIEW permission on parent node: %', v_new_parent_node_id
+                    USING ERRCODE = 'P0103';
+                END IF;
+            END IF;
+
+            IF NOT check_authority_with_override(v_requester_id, v_new_parent_node_id, 'WI_PERSONAL_CHANGE') THEN
+                RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on parent node: %', v_new_parent_node_id
+                USING ERRCODE = 'P0103';
+            END IF;
+
+            v_effective_parent_id := p_parent_work_item_id;
+        END IF;
+    END IF;
+
+    -- 6.5 담당자(owner) 변경 처리
+    IF p_owner_changed THEN
+        SELECT user_id INTO v_new_owner_user_id
+        FROM users
+        WHERE email = p_owner_user_email AND is_deleted = FALSE;
+
+        IF v_new_owner_user_id IS NULL THEN
+            RAISE EXCEPTION '[P0002]Owner user does not exist: %', COALESCE(p_owner_user_email, '')
+            USING ERRCODE = 'P0002';
+        END IF;
+
+        IF v_new_owner_user_id <> v_owner_user_id THEN
+            -- 다른 사람에게 배정하려면 WI_ASSIGN 권한이 필요하다 (생성과 동일 기준)
+            IF v_new_owner_user_id <> v_requester_id
+               AND NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_ASSIGN') THEN
+                RAISE EXCEPTION '[P0103]Requester does not have WI_ASSIGN permission on node: %, requester: %', v_owner_node_id, p_requester_email
+                USING ERRCODE = 'P0103';
+            END IF;
+
+            -- 새 담당자는 해당 노드에서 업무를 수행(WI_PERSONAL_CHANGE)할 수 있어야 한다
+            IF NOT check_authority_with_override(v_new_owner_user_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
+                SELECT email INTO v_new_owner_user_email FROM users WHERE user_id = v_new_owner_user_id;
+                RAISE EXCEPTION '[P0103]Owner does not have WI_PERSONAL_CHANGE permission on node: %, requester: %', v_new_owner_user_email, p_requester_email
+                USING ERRCODE = 'P0103';
+            END IF;
+
+            -- 최종 숨김 상태의 업무는 숨김 속성 권한이 있는 담당자에게만 배정할 수 있다
+            IF COALESCE(p_hidden, v_current_hidden)
+               AND NOT check_authority_with_override(v_new_owner_user_id, v_owner_node_id, 'WI_HIDDEN_CHANGE') THEN
+                SELECT email INTO v_new_owner_user_email FROM users WHERE user_id = v_new_owner_user_id;
+                RAISE EXCEPTION '[P0103]Owner does not have WI_HIDDEN_CHANGE permission on node: %, requester: %', v_new_owner_user_email, p_requester_email
+                USING ERRCODE = 'P0103';
+            END IF;
+        END IF;
+    END IF;
+
+    -- 7-1. work_item 업데이트
     UPDATE work_items
     SET
         title = COALESCE(NULLIF(p_title, ''), title),
@@ -252,23 +408,112 @@ BEGIN
         status = COALESCE(NULLIF(p_status, ''), status),
         priority = CASE WHEN p_priority >= 1 AND p_priority <= 5 THEN p_priority ELSE priority END,
         weight = CASE WHEN p_weight >= 0 THEN p_weight ELSE weight END,
-        progress = CASE WHEN p_progress >= 0 AND p_progress <= 100 THEN p_progress ELSE progress END,
+        -- 완료 상태는 항상 자체 진행률 100%를 유지한다.
+        progress = CASE
+            WHEN COALESCE(NULLIF(p_status, ''), status) = 'done' THEN 100
+            WHEN p_progress >= 0 AND p_progress <= 100 THEN p_progress
+            ELSE progress
+        END,
         start_date = COALESCE(NULLIF(p_start_date, '')::DATE, start_date),
-        due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date)
+        due_date = COALESCE(NULLIF(p_due_date, '')::DATE, due_date),
+        -- 부모 변경은 플래그로 명시된 경우에만 적용한다("" 은 최상위 업무를 의미)
+        parent_work_item_id = CASE WHEN p_parent_changed THEN v_effective_parent_id ELSE parent_work_item_id END,
+        -- 담당자 변경은 플래그로 명시된 경우에만 적용한다
+        owner_user_id = CASE WHEN p_owner_changed THEN v_new_owner_user_id ELSE owner_user_id END
     WHERE work_item_id = p_work_item_id;
 
-    -- 7.5 활동 로그 적재 (제목, 카테고리, 상태, 진행률 변경 시 기록)
+    -- 7.5 활동 로그 적재 (변경된 필드마다 1건씩 기록)
     IF p_title <> '' AND p_title <> v_old_title THEN
         PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, p_title, 'updated', 'title', v_old_title, p_title);
     END IF;
     IF p_category IS NOT NULL AND p_category <> COALESCE(v_old_category, '') THEN
-        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'category', v_old_category, p_category);
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'category', v_old_category, p_category);
     END IF;
     IF p_status <> '' AND p_status <> v_old_status THEN
-        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'status', v_old_status, p_status);
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'status', v_old_status, p_status);
     END IF;
-    IF p_progress >= 0 AND p_progress <> v_old_progress THEN
-        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(p_title, v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, p_progress::VARCHAR);
+    IF COALESCE(NULLIF(p_status, ''), v_old_status) = 'done' AND v_old_progress <> 100 THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, '100');
+    ELSIF p_progress >= 0 AND p_progress <> v_old_progress THEN
+        PERFORM log_activity(v_owner_node_id, p_requester_email, 'WORK_ITEM', p_work_item_id, COALESCE(NULLIF(p_title, ''), v_old_title), 'updated', 'progress', v_old_progress::VARCHAR, p_progress::VARCHAR);
+    END IF;
+    IF p_parent_changed AND COALESCE(p_parent_work_item_id, '') <> COALESCE(v_old_parent_id, '') THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'parent',
+            COALESCE(v_old_parent_id, 'ROOT'),
+            COALESCE(NULLIF(p_parent_work_item_id, ''), 'ROOT')
+        );
+    END IF;
+    IF p_description <> '' AND p_description <> COALESCE(v_old_description, '') THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'description',
+            NULL,
+            NULL
+        );
+    END IF;
+    IF p_priority BETWEEN 1 AND 5 AND p_priority <> COALESCE(v_old_priority, -1) THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'priority',
+            v_old_priority::VARCHAR,
+            p_priority::VARCHAR
+        );
+    END IF;
+    IF p_start_date <> '' AND NULLIF(p_start_date, '')::DATE IS DISTINCT FROM v_old_start_date THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'start_date',
+            COALESCE(v_old_start_date::VARCHAR, '없음'),
+            p_start_date
+        );
+    END IF;
+    IF p_due_date <> '' AND NULLIF(p_due_date, '')::DATE IS DISTINCT FROM v_old_due_date THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'due_date',
+            COALESCE(v_old_due_date::VARCHAR, '없음'),
+            p_due_date
+        );
+    END IF;
+    IF p_owner_changed AND v_new_owner_user_id <> v_owner_user_id THEN
+        PERFORM log_activity(
+            v_owner_node_id,
+            p_requester_email,
+            'WORK_ITEM',
+            p_work_item_id,
+            COALESCE(NULLIF(p_title, ''), v_old_title),
+            'updated',
+            'owner',
+            (SELECT name FROM users WHERE user_id = v_owner_user_id),
+            (SELECT name FROM users WHERE user_id = v_new_owner_user_id)
+        );
     END IF;
 
     -- 8. 업데이트된 work_item 반환
@@ -288,6 +533,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'start_date', w.start_date,
         'due_date', w.due_date,
         'updated_at', w.updated_at
@@ -301,6 +547,12 @@ BEGIN
         WHEN SQLSTATE 'P0103' THEN
         RAISE;
         WHEN SQLSTATE 'P0603' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0601' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0620' THEN
+        RAISE;
+        WHEN SQLSTATE 'P0621' THEN
         RAISE;
         WHEN OTHERS THEN
         RAISE EXCEPTION '[P0604]Failed to update work item: %', SQLERRM
@@ -485,7 +737,8 @@ BEGIN
         'comment_id', m.comment_id,
         'mention_id', m.mention_id,
         'mentioned_user_id', m.mentioned_user_id,
-        'mentioned_user_name', u.name
+        'mentioned_user_name', u.name,
+        'created_at', to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
     )::jsonb AS out_data
     FROM comment_mentions m
     JOIN work_item_comments c ON m.comment_id = c.comment_id
@@ -593,6 +846,7 @@ BEGIN
         'priority', w.priority,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'hidden', w.hidden,
         'is_deleted', w.is_deleted,
         'start_date', w.start_date,
@@ -1092,6 +1346,7 @@ BEGIN
         'hidden', w.hidden,
         'weight', w.weight,
         'progress', w.progress,
+        'computed_progress', compute_work_item_progress(w.work_item_id),
         'comment_count', COALESCE(cc.cnt, 0),
         'is_deleted', w.is_deleted,
         'start_date', w.start_date,

@@ -1,10 +1,11 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
-import { createTopNode } from '../../workspace/data/orgService'
+import { createTopNode, fetchNodeDetail, updateNode } from '../../workspace/data/orgService'
+import { canChangeNodeInfo } from '../../workspace/model/effectiveAuthority'
 import { selectWorkspaceRoot } from '../../workspace/data/workspaceDirectorySelection'
 import { ORG_NODE_TYPE_OPTIONS } from '../../workspace/model/options'
 import type { StandardNodeType } from '../../workspace/model/types'
@@ -63,6 +64,10 @@ const CUSTOM_ICON_OPTIONS: { icon: IconName; label: string }[] = [
 
 export function TopNodeSetupPage() {
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const editing = params.has('editNodeId')
+  const editNodeId = Number(params.get('editNodeId'))
+  const [editReady, setEditReady] = useState(false)
   const currentUser = getCurrentUser()
   const [nodeType, setNodeType] = useState<StandardNodeType | 'CUSTOM'>('COMPANY')
   const [customTypeName, setCustomTypeName] = useState('')
@@ -70,6 +75,37 @@ export function TopNodeSetupPage() {
   const [name, setName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
+  const userId = currentUser?.userId
+
+  useEffect(() => {
+    let active = true
+    setEditReady(false)
+    if (!editing) { setName(''); setNodeType('COMPANY'); return }
+    if (!Number.isInteger(editNodeId) || editNodeId <= 0) {
+      setFeedback({ tone: 'error', message: '워크스페이스를 선택해 주세요.' })
+      return
+    }
+    fetchNodeDetail(editNodeId).then((snapshot) => {
+      if (!active) return
+      const node = snapshot.nodes.find((item) => item.id === editNodeId)
+      if (!node || node.isDeleted || node.nodeType === 'USER' || !userId || !canChangeNodeInfo(userId, editNodeId, snapshot)) {
+        setFeedback({ tone: 'error', message: '워크스페이스를 수정할 권한이 없습니다.' })
+        return
+      }
+      setName(node.name)
+      if (ORG_NODE_TYPE_OPTIONS.some((type) => type === node.nodeType)) {
+        setNodeType(node.nodeType as NodeTypeOption)
+      } else {
+        const parts = node.nodeType.split(':')
+        setNodeType('CUSTOM')
+        setCustomTypeName(parts[0] === 'CUSTOM' ? parts[1] ?? '' : node.nodeType)
+        setCustomIcon(CUSTOM_ICON_OPTIONS.find((option) => option.icon === parts[2])?.icon ?? 'sparkles')
+      }
+      setFeedback(null)
+      setEditReady(true)
+    }).catch((error: unknown) => { if (active) setFeedback({ tone: 'error', message: error instanceof Error ? error.message : '워크스페이스 정보를 불러오지 못했습니다.' }) })
+    return () => { active = false }
+  }, [editing, editNodeId, userId])
 
   if (!currentUser) {
     return null
@@ -80,7 +116,7 @@ export function TopNodeSetupPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (submitting) {
+    if (submitting || (editing && !editReady)) {
       return
     }
 
@@ -105,6 +141,15 @@ export function TopNodeSetupPage() {
         : nodeType
 
     try {
+      if (editing) {
+        const response = await updateNode({ nodeId: editNodeId, nodeType: finalNodeType, name: name.trim() })
+        if (response.status === 'error') {
+          setFeedback({ tone: 'error', message: response.message })
+          return
+        }
+        navigate('/workspace/select')
+        return
+      }
       const response = await createTopNode({
         nodeType: finalNodeType,
         name: name.trim(),
@@ -155,7 +200,7 @@ export function TopNodeSetupPage() {
                 <span className={styles.stepBadge}>01</span>
                 <div>
                   <h2 className={styles.sectionTitle}>워크스페이스 유형 선택</h2>
-                  <p className={styles.sectionSubtitle}>루트 워크스페이스의 성격에 맞는 조직 유형을 선택하세요.</p>
+                  <p className={styles.sectionSubtitle}>워크스페이스의 성격에 맞는 조직 유형을 선택하세요.</p>
                 </div>
               </div>
 
@@ -294,10 +339,10 @@ export function TopNodeSetupPage() {
                 type="submit"
                 variant="primary"
                 className={styles.submitButton}
-                disabled={submitting || !name.trim()}
+                disabled={submitting || !name.trim() || (editing && !editReady)}
               >
-                <Icon name="plus" size={17} />
-                {submitting ? '워크스페이스 생성 중...' : '루트 워크스페이스 생성'}
+                <Icon name={editing ? 'pencil' : 'plus'} size={17} />
+                {editing ? (submitting ? '워크스페이스 수정 중...' : '워크스페이스 수정') : (submitting ? '워크스페이스 생성 중...' : '루트 워크스페이스 생성')}
               </Button>
             </div>
           </form>
@@ -309,7 +354,7 @@ export function TopNodeSetupPage() {
           <section className={styles.sideCard}>
             <div className={styles.sideCardHeader}>
               <h3 className={styles.sideCardTitle}>미리보기</h3>
-              <span className={styles.rootPill}>루트 공간</span>
+              <span className={styles.rootPill}>{editing ? '정보 수정' : '루트 공간'}</span>
             </div>
             <div className={styles.previewBox}>
               <span className={[styles.previewGlyph, currentTypeInfo.tone].join(' ')}>
@@ -318,10 +363,10 @@ export function TopNodeSetupPage() {
               <div className={styles.previewInfo}>
                 <strong className={styles.previewName}>{name.trim() || '워크스페이스 이름'}</strong>
                 <span className={styles.previewType}>{currentTypeInfo.label}</span>
-                <span className={styles.previewMembers}>
+                {!editing ? <span className={styles.previewMembers}>
                   <Icon name="users" size={14} />
                   생성자 1명 (초기 관리자)
-                </span>
+                </span> : null}
               </div>
             </div>
 
@@ -375,7 +420,7 @@ export function TopNodeSetupPage() {
           </section>
 
           {/* 소유자 및 권한 카드 */}
-          <section className={styles.sideCard}>
+          {!editing ? <section className={styles.sideCard}>
             <div className={styles.sideCardHeader}>
               <h3 className={styles.sideCardTitle}>생성자 및 기본 권한</h3>
             </div>
@@ -390,10 +435,10 @@ export function TopNodeSetupPage() {
             <p className={styles.creatorNotice}>
               루트 워크스페이스를 생성한 계정은 자동으로 <strong>ADMIN(총괄 관리자)</strong> 역할을 부여받으며, 하위 조직과 팀원을 관리할 수 있습니다.
             </p>
-          </section>
+          </section> : null}
 
           {/* 안내 가이드 카드 */}
-          <section className={styles.sideCard}>
+          {!editing ? <section className={styles.sideCard}>
             <div className={styles.sideCardHeader}>
               <h3 className={styles.sideCardTitle}>생성 후 진행 가이드</h3>
             </div>
@@ -411,10 +456,9 @@ export function TopNodeSetupPage() {
                 <p>조직에 소속된 업무를 생성하고 타임라인과 문서를 함께 관리합니다.</p>
               </li>
             </ol>
-          </section>
+          </section> : null}
         </aside>
       </div>
     </div>
   )
 }
-

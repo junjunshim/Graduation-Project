@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { WindowTitleBar } from '../chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../chrome/windowControls'
@@ -20,6 +20,7 @@ import { getShellPageMeta } from './shellPageMeta'
 import styles from './AppShell.module.css'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'grad-client-sidebar-collapsed'
+const WORK_ITEM_EDIT_PATH_PATTERN = /^\/work-items\/[^/]+\/edit\/?$/
 const SECTION_HEADING_ROUTES = new Set([
   '/work-items/new',
   '/calendar',
@@ -45,6 +46,8 @@ export function AppShell() {
   const currentUser = getCurrentUser(snapshot)
   const hasCustomTitleBar = hasCustomWindowControls()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
+  // 캘린더 페이지가 셸 헤더의 툴바 자리로 포털할 수 있게 하는 참조.
+  const calendarToolbarRef = useRef<HTMLDivElement>(null)
 
   useBodyScrollSurface('workspace')
 
@@ -76,6 +79,14 @@ export function AppShell() {
   const workspaceSelectView = searchParams.get('view') === 'list' ? 'list' : 'hierarchy'
   const isWorkspaceSelectListView = workspaceSelectView === 'list'
   const isWorkspaceRoute = location.pathname === '/workspace'
+  const isWorkspaceMoveRoute = location.pathname === '/workspace/move'
+  const movingWorkspace = isWorkspaceMoveRoute
+    ? snapshot.nodes.find((node) => node.id === Number(searchParams.get('nodeId')))
+    : undefined
+  const isWorkspaceEditRoute = location.pathname === '/setup/top-node' && searchParams.has('editNodeId')
+  const editingWorkspace = isWorkspaceEditRoute
+    ? snapshot.nodes.find((node) => node.id === Number(searchParams.get('editNodeId')))
+    : undefined
   const isWorkspaceTimelineRoute =
     isWorkspaceRoute && searchParams.get('view') === 'timeline'
   const isWorkspacePanelRoute =
@@ -83,11 +94,12 @@ export function AppShell() {
       searchParams.get('view') !== 'timeline') ||
     location.pathname === '/setup/top-node' ||
     location.pathname === '/setup/sub-node'
-  const isWorkItemEditRoute = /^\/work-items\/[^/]+\/edit$/.test(location.pathname)
+  const isWorkItemEditRoute = WORK_ITEM_EDIT_PATH_PATTERN.test(location.pathname)
   const hasSectionHeading = SECTION_HEADING_ROUTES.has(location.pathname) || isWorkItemEditRoute
-  const workItemDetailMatch = location.pathname.match(/^\/work-items\/([^/]+)$/)
-  const workItemDetail = workItemDetailMatch
-    ? getSelectedWorkItemDetail(workItemDetailMatch[1], currentUser.userId, snapshot)
+  // 상세(/work-items/:id)와 수정(/work-items/:id/edit) 모두 같은 업무를 가리킨다.
+  const workItemRouteMatch = location.pathname.match(/^\/work-items\/([^/]+)(\/edit)?\/?$/)
+  const workItemDetail = workItemRouteMatch
+    ? getSelectedWorkItemDetail(workItemRouteMatch[1], currentUser.userId, snapshot)
     : null
   const parentNodeParam = searchParams.get('parentNodeId')
   const parentNodeForHeading = parentNodeParam
@@ -107,8 +119,9 @@ export function AppShell() {
     ? {
         type: 'breadcrumb',
         label: '워크스페이스',
-        title: '루트 워크스페이스 생성',
-        subtitle: '회사, 본부, 프로젝트 등 전체 조직 계층 트리의 기준이 될 최상위 루트 워크스페이스를 등록합니다.',
+        title: isWorkspaceEditRoute ? editingWorkspace?.name ?? '워크스페이스' : '루트 워크스페이스 생성',
+        titleSuffix: isWorkspaceEditRoute ? '(수정)' : undefined,
+        subtitle: isWorkspaceEditRoute ? '워크스페이스의 이름과 유형을 변경하고, 미리보기에서 수정할 내용을 확인하세요.' : '회사, 본부, 프로젝트 등 전체 조직 계층 트리의 기준이 될 최상위 루트 워크스페이스를 등록합니다.',
       }
     : isWorkspaceSelectRoute
     ? {
@@ -119,6 +132,14 @@ export function AppShell() {
           ? '조직의 모든 워크스페이스를 목록으로 확인하고 이동할 수 있습니다.'
           : '조직의 모든 워크스페이스를 계층 구조로 확인하고 이동할 수 있습니다.',
       }
+    : isWorkspaceMoveRoute
+      ? {
+          type: 'breadcrumb',
+          label: '워크스페이스',
+          title: movingWorkspace?.name ?? '워크스페이스',
+          titleSuffix: '(이전)',
+          subtitle: '트리에서 이전할 위치를 선택하고, 변경될 구조와 업무·일정 이관 내용을 확인하세요.',
+        }
     : isWorkspaceRoute
       ? {
           type: 'breadcrumb',
@@ -131,9 +152,14 @@ export function AppShell() {
       : workItemDetail
         ? {
             type: 'breadcrumb',
-            label: '업무',
+            label: '워크스페이스',
+            parent: {
+              label: workItemDetail.ownerNode.name,
+              to: `/workspace?nodeId=${workItemDetail.ownerNode.id}`,
+            },
             title: workItemDetail.item.title,
-            subtitle: workItemDetail.ownerNode.name,
+            titleSuffix: isWorkItemEditRoute ? '(수정)' : undefined,
+            subtitle: workItemDetail.ownerNodePathLabel,
           }
       : hasSectionHeading
         ? {
@@ -142,13 +168,26 @@ export function AppShell() {
             subtitle: pageMeta.description,
           }
         : { type: 'none' }
-  const isWorkspaceSelectHierarchyRoute = isWorkspaceSelectRoute && !isWorkspaceSelectListView
+  const isWorkItemCreateRoute = location.pathname === '/work-items/new'
+  const isWorkItemDetailRoute = /^\/work-items\/[^/]+$/.test(location.pathname)
+  const isWorkItemFormRoute = isWorkItemCreateRoute || isWorkItemEditRoute
+  const isDashboardRoute = location.pathname === '/dashboard'
+  const isCalendarRoute = location.pathname === '/calendar'
+  const hasInternalScroll =
+    isWorkspaceMoveRoute ||
+    isWorkspaceTimelineRoute ||
+    isWorkspacePanelRoute ||
+    isWorkspaceSelectRoute ||
+    isWorkItemFormRoute ||
+    isDashboardRoute ||
+    isCalendarRoute ||
+    isWorkItemDetailRoute
   const shellClassName = [
     styles.shell,
-    isWorkspacePanelRoute ? styles.shellWorkspacePanels : '',
+    isWorkspacePanelRoute || isWorkItemFormRoute ? styles.shellWorkspacePanels : '',
     hasCustomTitleBar ? styles.shellWithCustomChrome : '',
     isSidebarCollapsed ? styles.shellCollapsed : '',
-    isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.shellTimeline : '',
+    hasInternalScroll ? styles.shellTimeline : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -178,21 +217,21 @@ export function AppShell() {
       <div
         className={[
           styles.workspace,
-          hasCustomTitleBar || isWorkspaceSelectRoute || location.pathname === '/setup/top-node' || location.pathname === '/setup/sub-node'
+          hasCustomTitleBar || isWorkspaceSelectRoute || isWorkspaceMoveRoute || location.pathname === '/setup/top-node' || location.pathname === '/setup/sub-node'
             ? styles.workspaceWithoutPageBar
             : '',
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {!hasCustomTitleBar && !isWorkspaceSelectRoute && location.pathname !== '/setup/top-node' && location.pathname !== '/setup/sub-node' ? (
+        {!hasCustomTitleBar && !isWorkspaceSelectRoute && !isWorkspaceMoveRoute && location.pathname !== '/setup/top-node' && location.pathname !== '/setup/sub-node' ? (
           <WorkspacePageHeader workspaceLabel={workspaceLabel} pageMeta={pageMeta} />
         ) : null}
 
         <div
           className={[
             styles.workspaceBody,
-            isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.workspaceBodyTimeline : '',
+            hasInternalScroll ? styles.workspaceBodyTimeline : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -201,17 +240,23 @@ export function AppShell() {
             currentUser={currentUser}
             heading={shellHeading}
             inset="standard"
+            actions={
+              isCalendarRoute ? (
+                <div ref={calendarToolbarRef} className={styles.shellCalendarActions} />
+              ) : undefined
+            }
           />
 
           <main
             className={[
               styles.main,
-              isWorkspaceTimelineRoute || isWorkspacePanelRoute || isWorkspaceSelectHierarchyRoute ? styles.mainTimeline : '',
+              hasInternalScroll ? styles.mainTimeline : '',
+              isWorkItemFormRoute ? styles.mainScrollable : '',
             ]
               .filter(Boolean)
               .join(' ')}
           >
-            <Outlet />
+            <Outlet context={{ calendarToolbarRef }} />
           </main>
         </div>
       </div>

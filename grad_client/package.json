@@ -5,13 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:mock": "vite --mode mock",
     "dev:server": "vite --mode server",
     "build": "tsc && vite build && electron-builder",
-    "build:mock": "tsc && vite build --mode mock && electron-builder",
     "build:server": "tsc && vite build --mode server && electron-builder",
     "build:bundle": "tsc && vite build",
-    "build:bundle:mock": "tsc && vite build --mode mock",
     "build:bundle:server": "tsc && vite build --mode server",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "tsc -p tsconfig.test.json && node node_modules/.grad-client-tests/tests/all.test.js",
@@ -19,6 +16,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hyunbinseo/holidays-kr": "^5.2027.2",
+    "kr-holidays": "^0.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.13.1"

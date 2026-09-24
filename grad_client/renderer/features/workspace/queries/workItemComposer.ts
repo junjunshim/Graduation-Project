@@ -95,7 +95,7 @@ export function getWorkItemComposerContext(
   const suggestedDisplayCode = `WI-${maxDisplayId + 1}`
 
   return {
-    suggestedWorkItemId: getNextGeneratedWorkItemId(snapshot),
+    suggestedWorkItemId: getNextGeneratedWorkItemId(),
     suggestedDisplayCode,
     availableNodes,
     selectedNode,

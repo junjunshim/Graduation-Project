@@ -13,7 +13,8 @@ enum class DbErrorCode {
     AuthorityCheckFailed,       // P0102 권한 체크 실패
     InsufficientAuthority,      // P0103 권한 부족
     InitialContextError,        // P0201 사용자 전체 데이터 로드 실패
-    SyncContextError,           // P0202 사용자 변경 데이터 로드 실패
+    WorkspaceScopeError,        // P0202 워크스페이스 스코프 조회 실패
+    DashboardContextError,      // P0203 대시보드 데이터 로드 실패
     CreateTopNodeError,         // P0301 최상위 노드 생성 실패
     CreateSubNodeError,         // P0302 하위 노드 생성 실패
     UpdateNodeError,            // P0303 노드 업데이트 실패
@@ -31,6 +32,13 @@ enum class DbErrorCode {
     RoleDefinitionAlreadyExists,// P0412 노드에 이미 존재하는 역할 정의
     UpdateRoleAuthorityFailed,  // P0413 역할 권한 수정 실패
     RenameRoleDefinitionFailed, // P0414 역할 이름 변경 실패
+    SelfRoleRemovalNotAllowed,  // P0415 본인의 역할은 회수할 수 없음
+    RoleRemovalTransferInvalid, // P0416 업무 이관 대상이 없거나 자격 미달
+    RemoveRoleFailed,           // P0417 사용자 역할 회수 실패
+    RoleRemovalPreviewFailed,   // P0418 역할 회수 사전 확인 실패
+    RoleDefinitionInUse,        // P0419 역할 정의에 배정된 사용자가 남아 있음
+    RoleDeletionPreviewFailed,  // P0420 역할 삭제 사전 확인 실패
+    DeleteRoleDefinitionFailed, // P0421 역할 정의 삭제 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
     EmailNotFound,              // P0503 이메일 찾을 수 없음
@@ -49,6 +57,9 @@ enum class DbErrorCode {
     GetNodeDetailFailed,        // P0305 노드 상세 조회 실패
     ParentNodeIsDeleted,        // P0306 상위 노드가 삭제되어 복구 불가
     RestoreNodeFailed,          // P0307 노드 복구 실패
+    MoveNodeInvalidDestination, // P0320 이전할 수 없는 목적지이거나 이관 대상 지정 불가
+    MoveNodePreviewStale,       // P0321 사전 검사 이후 이전 대상 정보 변경
+    MoveNodeTransferInvalid,    // P0322 이관 대상 업무를 맡을 담당자 지정 필요
     InvalidActivityFilter,      // P0701 활동 조회 필터 부적절
     FetchActivitiesFailed,      // P0702 활동 조회 실패
     UpdateUserFailed,           // P0508 사용자 정보 수정 실패
@@ -66,6 +77,8 @@ enum class DbErrorCode {
     RestoreWorkItemFailed,      // P0617 업무 복구 실패
     WorkItemIsDeletedForFile,   // P0618 소속 업무가 삭제되어 파일 복구 불가
     RestoreWorkItemFileFailed,  // P0619 파일 복구 실패
+    InvalidParentHierarchy,     // P0620 부모 업무를 자기 자신/하위 업무로 지정
+    ParentNodeOutOfScope,       // P0621 부모 업무가 현재 노드/직속 상위 노드 범위 밖
     LogActivityFailed,          // P0703 활동 로그 기록 실패
     Unknown                     // 알 수 없는 에러
 };
@@ -79,5 +92,5 @@ namespace app_utils {
     // DB 에러 발생 시 Json::Value 반환하는 함수
     Json::Value parseDbError(const drogon::orm::DrogonDbException &e);
     // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
-    bool sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message = "");
+    bool sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message = "", const Json::Value &extra = Json::Value());
 }

@@ -18,6 +18,24 @@ export function createWorkItemUpdatePayload(
   if (current.progress !== initial.progress) payload.progress = Number(current.progress)
   if (current.startDate !== initial.startDate) payload.startDate = current.startDate
   if (current.dueDate !== initial.dueDate) payload.dueDate = current.dueDate
+  if (current.parentWorkItemId !== initial.parentWorkItemId) {
+    payload.parentWorkItemId = current.parentWorkItemId
+  }
+  if (current.ownerUserId !== initial.ownerUserId) {
+    payload.ownerUserId = current.ownerUserId
+  }
 
   return payload
+}
+
+/** 수정 페이지에서 서버로 보낼 변경 사항이 실제로 있는지 판단한다. */
+
+export function hasWorkItemChanges(
+  workItemId: string,
+  initial: WorkItemCreateFormState,
+  current: WorkItemCreateFormState,
+): boolean {
+  const payload = createWorkItemUpdatePayload(workItemId, initial, current)
+
+  return Object.keys(payload).length > 1
 }

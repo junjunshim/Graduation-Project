@@ -139,6 +139,14 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         if ((*jsonPtr)[key].isNull()) return std::nullopt;
         return (*jsonPtr)[key].asBool();
     };
+
+    // 상위 업무(부모) 변경: 키가 아예 없으면 "변경 없음", 빈 문자열이면 "최상위 업무로 이동"
+    bool parent_changed = jsonPtr->isMember("parent_work_item_id");
+    std::string parent_work_item_id = parent_changed ? getStrOrNull("parent_work_item_id") : "";
+
+    // 담당자 변경: 키가 아예 없으면 "변경 없음"
+    bool owner_changed = jsonPtr->isMember("owner_user_email");
+    std::string owner_user_email = owner_changed ? getStrOrNull("owner_user_email") : "";
     
 
     // 2. 비지니스 로직
@@ -146,7 +154,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
     auto dbClient = drogon::app().getDbClient();
     
     // DB 함수 호출 SQL
-    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)";
+    std::string sql = "SELECT * from update_work_item($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)";
     
     // DB 함수 비동기 실행
     dbClient->execSqlAsync(
@@ -189,7 +197,11 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         getIntOrNull("weight", -1),
         getIntOrNull("progress", -1),
         getStrOrNull("start_date"),
-        getStrOrNull("due_date")
+        getStrOrNull("due_date"),
+        parent_work_item_id,
+        parent_changed,
+        owner_user_email,
+        owner_changed
     );
 }
 
@@ -318,9 +330,12 @@ void WorkItemController::addComment(const HttpRequestPtr &req, std::function<voi
                 
                 dbClient->execSqlAsync(
                     mentionSql,
-                    [author_name](const orm::Result &mResult) {
-                        // DB 결과(out_data)를 파싱하고 API에서 지정한 메시지를 주입하여 웹소켓 전송
-                        sendNotificationFromDbResult(mResult, author_name + "님이 댓글에서 회원님을 멘션했습니다.");
+                    [author_name, requester_email](const orm::Result &mResult) {
+                        // 멘션 알림도 문장을 만들지 않고 원시 데이터만 전달한다(문장은 클라이언트가 생성).
+                        Json::Value mentionRaw;
+                        mentionRaw["actor_name"] = author_name;
+                        mentionRaw["actor_user_id"] = requester_email;
+                        sendNotificationFromDbResult(mResult, "", mentionRaw);
                     },
                     [](const orm::DrogonDbException &me) {
                         LOG_ERROR << "Failed to insert comment mention: " << me.base().what();

@@ -65,16 +65,20 @@
 .statProgress { --stat-bg: var(--axis-status-info-soft); --stat-color: var(--axis-status-info); }
 .statDone { --stat-bg: var(--axis-status-success-soft); --stat-color: var(--axis-status-success); }
 .statOverdue { --stat-bg: var(--axis-status-danger-soft); --stat-color: var(--axis-status-danger); }
-.hierarchy { display: flex; align-items: flex-start; gap: 18px; padding: 20px 18px; border-radius: 11px; background: var(--axis-surface-muted); min-width: 0; min-height: 0; overflow-y: auto; font-size: .84rem; }
-.workspaceIcon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 60px; height: 62px; border: 1px solid var(--axis-line-default); border-radius: 16px; color: var(--axis-text-secondary); }
-.hierarchyContent { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
-.hierarchyContent > .muted:not(:first-child) { margin-top: 8px; }
+.hierarchy { display: flex; align-items: stretch; gap: 18px; padding: 20px 18px; border-radius: 11px; background: var(--axis-surface-muted); min-width: 0; min-height: 0; overflow: hidden; font-size: .84rem; }
+.hierarchyContent { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); grid-template-rows: minmax(0, 1fr); gap: 18px; min-width: 0; min-height: 0; }
+.hierarchyColumn { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
+.hierarchyColumn > .muted { flex-shrink: 0; }
+.hierarchy .muted { font-size: .84rem; }
 .hierarchy a { display: inline-flex; align-items: center; gap: 7px; color: var(--axis-text-secondary); text-decoration: none; overflow-wrap: anywhere; }
 .hierarchy a:hover { color: var(--axis-brand-primary); border-color: var(--axis-brand-primary); }
 .hierarchy a svg { flex-shrink: 0; }
-.children { display: flex; flex-wrap: wrap; gap: 7px 6px; }
-.children a { padding: 6px 8px; font-size: .73rem; border: 1px solid var(--axis-line-default); border-radius: 7px; background: var(--axis-surface-panel); }
-.children a svg { width: 14px; height: 14px; }
+.children { display: flex; flex: 1; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 10px; min-width: 0; min-height: 0; max-width: 100%; overflow-y: auto; overscroll-behavior-y: contain; }
+.hierarchy a { box-sizing: border-box; max-width: 100%; padding: 10px 12px; gap: 9px; font-size: .9rem; font-weight: 600; line-height: 1.5; border: 1px solid var(--axis-line-default); border-radius: 9px; background: var(--axis-surface-panel); }
+.hierarchy a svg { width: 18px; height: 18px; }
+.hierarchy .parentCard { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; width: 100%; min-height: 0; padding: 18px 12px; gap: 12px; border: 1px solid var(--axis-line-default); border-radius: 11px; background: var(--axis-surface-panel); text-align: center; overflow-wrap: anywhere; }
+.hierarchy .parentCard svg { width: 28px; height: 28px; color: var(--axis-brand-primary); }
+.parentCard strong { max-width: 100%; font-size: .95rem; line-height: 1.5; }
 .facts { display: grid; align-content: start; grid-template-columns: minmax(0, 1fr); gap: 5px; margin: 0; padding: 17px 16px; border: 1px solid var(--axis-line-default); border-radius: 11px; background: color-mix(in srgb, var(--axis-surface-muted) 45%, var(--axis-surface-panel)); font-size: .76rem; min-height: 0; overflow-y: auto; overflow-wrap: anywhere; }
 .facts dt { color: var(--axis-text-muted); }
 .facts dd { margin: 0 0 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .85rem; font-weight: 650; }
@@ -90,7 +94,7 @@ a.item:hover { color: var(--axis-brand-primary); }
 .itemContent { display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; }
 .itemContent > strong { font-size: .87rem; line-height: 1.35; font-weight: 700; }
 .meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: .73rem; color: var(--axis-text-secondary); }
-.badge, .statusBadge { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 6px; font-size: .73rem; line-height: 1.35; white-space: nowrap; color: var(--axis-text-secondary); background: var(--axis-surface-muted); }
+.badge, .statusBadge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 6px; font-size: .73rem; line-height: 1.35; white-space: nowrap; color: var(--axis-text-secondary); background: var(--axis-surface-muted); }
 .statusBadge { color: var(--axis-status-info); background: var(--axis-status-info-soft); }
 .due { color: var(--axis-status-warning); background: var(--axis-status-warning-soft); }
 .overdue { color: var(--axis-status-danger); background: var(--axis-status-danger-soft); }
@@ -114,21 +118,29 @@ a.item:hover { color: var(--axis-brand-primary); }
 }
 .weekHeading strong span { margin-left: 8px; color: var(--axis-text-secondary); font-weight: 500; }
 .weekStrip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin: 12px 0 18px; }
-.weekDay { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px 6px; border: 1px solid transparent; border-radius: 12px; background: var(--axis-surface-muted); color: var(--axis-text-secondary); font: inherit; cursor: pointer; }
+.weekDay { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 2px 8px; border: 1px solid transparent; border-radius: 12px; background: var(--axis-surface-muted); color: var(--axis-text-secondary); font: inherit; cursor: pointer; }
 .weekDay > span:first-child { font-size: .72rem; }
 .weekDay > b { font-size: 1.02rem; line-height: 1.2; }
 .weekDay[aria-current='date'] { border-color: var(--axis-brand-primary); }
 .weekDay[aria-pressed='true'] { background: var(--axis-brand-primary); border-color: var(--axis-brand-primary); color: var(--axis-text-on-brand); }
 .weekDay:hover:not([aria-pressed='true']) { background: var(--axis-brand-primary-soft); color: var(--axis-brand-primary); }
 .weekDay:focus-visible, .scheduleCard:focus-visible, .priorityTask:focus-visible { outline: 2px solid var(--axis-brand-primary); outline-offset: 2px; }
-.dayCount { display: grid; place-items: center; height: 16px; min-width: 16px; font-size: .65rem; font-weight: 700; }
+.dayCount { position: absolute; top: 4px; left: 6px; font-size: .6rem; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
 .selectedDayHeading strong { display: inline-flex; align-items: center; gap: 7px; }
-.scheduleCards { display: flex; flex-direction: column; gap: 9px; margin-top: 11px; }
+.scheduleBody { display: flex; flex-direction: column; overflow: hidden; }
+.scheduleBody > :not(.scheduleCards) { flex-shrink: 0; }
+.scheduleCards { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; gap: 9px; margin-top: 11px; padding: 2px; }
+.scheduleCards > * { flex-shrink: 0; }
+.scheduleCards:focus-visible { outline: 2px solid var(--axis-brand-primary); outline-offset: -2px; }
 .scheduleCard { display: flex; align-items: center; gap: 12px; padding: 13px 12px; border: 1px solid var(--axis-line-default); border-left: 3px solid var(--axis-brand-primary); border-radius: 10px; color: var(--axis-text-primary); text-decoration: none; background: var(--axis-surface-muted); }
 .scheduleCard:hover, .priorityTask:hover { border-color: var(--axis-brand-primary); background: var(--axis-brand-primary-soft); }
 .scheduleTime { display: flex; align-items: center; gap: 5px; flex-shrink: 0; color: var(--axis-brand-primary); font-size: .74rem; font-weight: 650; font-variant-numeric: tabular-nums; }
 .scheduleCard .itemContent > .muted { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .taskProgressHeading { color: var(--axis-text-secondary); }
+.taskBody { display: flex; flex-direction: column; overflow: hidden; }
+.taskBody > :not(.taskList) { flex-shrink: 0; }
+.taskList { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: 2px; }
+.taskList:focus-visible { outline: 2px solid var(--axis-brand-primary); outline-offset: -2px; }
 .taskProgressHeading > strong { color: var(--axis-text-primary); font-size: 1.4rem; line-height: 1; }
 .taskProgressHeading small { font-size: .75rem; margin-left: 3px; }
 .taskProgressBar { display: flex; gap: 2px; height: 8px; margin: 10px 0; overflow: hidden; border-radius: 99px; background: var(--axis-line-default); }
@@ -154,7 +166,6 @@ a.item:hover { color: var(--axis-brand-primary); }
   .statLabel svg { left: 8px; width: 18px; height: 18px; padding: 8px; }
   .introduction { gap: 12px; padding-inline: 14px; }
   .hierarchy { gap: 10px; padding: 14px; }
-  .workspaceIcon { flex-basis: 42px; height: 46px; border-radius: 12px; }
   .header { padding-inline: 16px; }
   .body { padding-inline: 16px; }
 }
@@ -167,6 +178,6 @@ a.item:hover { color: var(--axis-brand-primary); }
 @container (max-width: 560px) {
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .introduction { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; }
-  .hierarchy, .facts { min-height: 0; overflow-y: auto; }
+  .facts { min-height: 0; overflow-y: auto; }
   .item { gap: 8px; }
 }

@@ -107,10 +107,18 @@
   transition: all 0.15s ease;
 }
 
-.restoreButton:hover {
+.restoreButton:hover:not(:disabled) {
   background: var(--axis-status-info-soft);
   border-color: var(--axis-status-info);
   color: var(--axis-status-info);
+}
+
+/* 권한이 없어 비활성화된 복구 버튼 */
+.restoreButton:disabled {
+  border-color: var(--axis-line-default, #cbd5e1);
+  background: var(--axis-surface-muted, #f8fafc);
+  color: var(--axis-text-muted, #94a3b8);
+  cursor: not-allowed;
 }
 
 .recurringCard.recurringCardDeleted {
@@ -147,12 +155,19 @@
   transition: background 0.15s ease, transform 0.1s ease;
 }
 
-.primaryButton:hover {
+.primaryButton:hover:not(:disabled) {
   background: var(--axis-brand-primary-hover);
 }
 
-.primaryButton:active {
+.primaryButton:active:not(:disabled) {
   transform: scale(0.98);
+}
+
+/* 권한이 없어 비활성화된 버튼 */
+.primaryButton:disabled {
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-muted);
+  cursor: not-allowed;
 }
 
 .secondaryButton {

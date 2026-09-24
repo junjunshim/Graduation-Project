@@ -30,14 +30,14 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 
 -- Role Default Permissions
 -- admin => deny 비트(23) 제외 모두 1
--- manager => bit 0~6, 8~17, 20, 21 ON  -> B'001100111111111101111111'
--- member  => bit 0~4, 6, 8, 9, 16, 17, 20 ON    -> B'000100110000001101010111'
--- viewer  => bit 0, 4 ON (파일 권한 제외)       -> B'000000000000000000010001'
+-- manager => bit 0~6, 8~11, 13~17, 20, 21 ON (bit 12 NODE_INFO_CHANGE 제외) -> B'001100111110111101111111'
+-- member  => bit 0~2, 4~6, 8, 9, 16, 17, 20, 21 ON                      -> B'001100110000001101110111'
+-- viewer  => bit 0, 1, 4, 5, 16, 20, 21 ON                               -> B'001100010000000000110011'
 
 INSERT INTO role_defaults (role, default_authority) VALUES
 ('ADMIN',   B'011111111111111111111111'),
-('MANAGER', B'001100111111111101111111'),
-('MEMBER',  B'000100110000001101010111'),
-('VIEWER',  B'000000000000000000010001');
+('MANAGER', B'001100111110111101111111'),
+('MEMBER',  B'001100110000001101110111'),
+('VIEWER',  B'001100010000000000110011');
 
 UPDATE role_defaults SET is_top_role = TRUE WHERE role = 'ADMIN';

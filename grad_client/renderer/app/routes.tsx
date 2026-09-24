@@ -107,6 +107,13 @@ const router = createHashRouter([
             element: <WorkspacePage />,
           },
           {
+            path: '/workspace/move',
+            lazy: async () => {
+              const { NodeMovePage } = await import('../features/org/pages/NodeMovePage')
+              return { Component: NodeMovePage }
+            },
+          },
+          {
             path: '/setup/top-node',
             lazy: async () => {
               const { TopNodeSetupPage } = await import('../features/org/pages/TopNodeSetupPage')
@@ -148,7 +155,10 @@ const router = createHashRouter([
           },
           {
             path: '/calendar',
-            element: <ShellPlaceholderPage />,
+            lazy: async () => {
+              const { CalendarPage } = await import('../features/calendar/pages/CalendarPage')
+              return { Component: CalendarPage }
+            },
           },
           {
             path: '/documents',

@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { isPreviewableFile } from '../model/filePreview'
 import { MarkdownViewer } from './MarkdownViewer'
 import styles from './FileContentViewerModal.module.css'
 
@@ -39,7 +41,9 @@ export function FileContentViewerModal({
   const [viewMode, setViewMode] = useState<'preview' | 'raw'>('preview')
   const [copied, setCopied] = useState(false)
 
-  if (!isOpen) return null
+  const canPreview = isPreviewableFile(fileName)
+
+  if (!isOpen || typeof document === 'undefined') return null
 
   const lines = content.split('\n')
   const ext = fileName.split('.').pop()?.toLowerCase() ?? 'txt'
@@ -65,7 +69,7 @@ export function FileContentViewerModal({
     }
   }
 
-  return (
+  return createPortal(
     <div className={styles.overlay} onClick={onClose} role="dialog" aria-modal="true">
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         {/* 모달 상단 헤더 */}
@@ -82,7 +86,7 @@ export function FileContentViewerModal({
                 <div className={styles.fileMetaRow}>
                   <span>{sourceLabel}</span>
                   {fileSize ? <span>· {formatFileSize(fileSize)}</span> : null}
-                  <span>· {lines.length} lines</span>
+                  {canPreview ? <span>· {lines.length} lines</span> : null}
                   {lastModified ? <span>· {new Date(lastModified).toLocaleDateString()}</span> : null}
                 </div>
               </div>
@@ -90,35 +94,39 @@ export function FileContentViewerModal({
           </div>
 
           <div className={styles.headerRight}>
-            {/* GitHub 스타일 Preview / Raw 토글 버튼 */}
-            <div className={styles.viewToggleGroup}>
-              <button
-                type="button"
-                className={[styles.viewToggleBtn, viewMode === 'preview' ? styles.viewToggleBtnActive : ''].join(' ')}
-                onClick={() => setViewMode('preview')}
-              >
-                <Icon name="eye" size={15} />
-                Preview
-              </button>
-              <button
-                type="button"
-                className={[styles.viewToggleBtn, viewMode === 'raw' ? styles.viewToggleBtnActive : ''].join(' ')}
-                onClick={() => setViewMode('raw')}
-              >
-                <Icon name="page" size={15} />
-                Raw
-              </button>
-            </div>
+            {canPreview ? (
+              <>
+                {/* GitHub 스타일 Preview / Raw 토글 버튼 */}
+                <div className={styles.viewToggleGroup}>
+                  <button
+                    type="button"
+                    className={[styles.viewToggleBtn, viewMode === 'preview' ? styles.viewToggleBtnActive : ''].join(' ')}
+                    onClick={() => setViewMode('preview')}
+                  >
+                    <Icon name="eye" size={15} />
+                    Preview
+                  </button>
+                  <button
+                    type="button"
+                    className={[styles.viewToggleBtn, viewMode === 'raw' ? styles.viewToggleBtnActive : ''].join(' ')}
+                    onClick={() => setViewMode('raw')}
+                  >
+                    <Icon name="page" size={15} />
+                    Raw
+                  </button>
+                </div>
 
-            <button
-              type="button"
-              className={styles.actionBtn}
-              onClick={handleCopy}
-              title="내용 복사"
-            >
-              <Icon name="checkSquare" size={15} />
-              <span>{copied ? '복사됨!' : '복사'}</span>
-            </button>
+                <button
+                  type="button"
+                  className={styles.actionBtn}
+                  onClick={handleCopy}
+                  title="내용 복사"
+                >
+                  <Icon name="checkSquare" size={15} />
+                  <span>{copied ? '복사됨!' : '복사'}</span>
+                </button>
+              </>
+            ) : null}
 
             <button
               type="button"
@@ -133,7 +141,15 @@ export function FileContentViewerModal({
 
         {/* 본문 뷰어 */}
         <div className={styles.body}>
-          {isLoading ? (
+          {!canPreview ? (
+            <div className={styles.unsupportedState}>
+              <span className={styles.unsupportedIcon}>
+                <Icon name="alertTriangle" size={24} />
+              </span>
+              <p className={styles.unsupportedTitle}>지원이 안되는 형식입니다.</p>
+              <p className={styles.unsupportedHint}>다운로드 후 확인해 주세요.</p>
+            </div>
+          ) : isLoading ? (
             <div className={styles.statusState}>
               <p>파일 내용을 불러오는 중입니다...</p>
             </div>
@@ -178,6 +194,7 @@ export function FileContentViewerModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

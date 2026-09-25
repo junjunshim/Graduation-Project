@@ -23,7 +23,7 @@ services:
       dockerfile: Dockerfile.backend  # 사용할 레시피 파일 이름
     container_name: ${SERVER_CONTAINER}
     ports:
-      - "${SERVER_PORT}:8080"             # API 서버 포트 개방
+      - "127.0.0.1:${SERVER_PORT}:8080"   # 호스트 루프백에만 바인딩 (외부 노출은 nginx 담당)
     depends_on:
       - db                      # 중요: DB가 먼저 켜진 후에 서버 실행
     environment:

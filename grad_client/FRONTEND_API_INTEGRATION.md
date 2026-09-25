@@ -138,6 +138,8 @@ Base URL이 http/https URL인지 검사하고 마지막 슬래시를 제거한�
 
 안전한 예시는 .env.example에 있으며, 실행별 기본값은 .env.server에 있다.
 
+배포 환경에서는 VITE_WORKSPACE_API_BASE_URL에 https 주소(예: https://axisflow.team/api)를 넣는다. WebSocket 주소는 이 값에서 wss:// 로 파생되므로 별도 설정이 필요 없다.
+
 ### 4.2 실행
 
 1. .env.server의 VITE_WORKSPACE_API_BASE_URL을 실행 중인 API 주소로 수정한다.
@@ -185,7 +187,7 @@ renderer/features/workspace/data/server/apiClient.ts에서 다음을 공통 처�
 
 ## 6. API 엔드포인트와 프론트엔드 기능
 
-저장소의 grad_server/controllers 아래 라우트와 docs/API_SPECIFICATION.md 및 docs/api 문서를 함께 대조했다. 2026-08-30 현재 HTTP 컨트롤러의 공통 prefix는 /api이며, 실행 시 VITE_WORKSPACE_API_BASE_URL도 이 prefix를 포함해야 한다. 알림 WebSocket의 /api/v1 경로는 별도이며 이 프론트 연동 범위에 포함하지 않았다.
+저장소의 grad_server/controllers 아래 라우트와 docs/API_SPECIFICATION.md 및 docs/api 문서를 함께 대조했다. 2026-08-30 현재 HTTP 컨트롤러의 공통 prefix는 /api이며, 실행 시 VITE_WORKSPACE_API_BASE_URL도 이 prefix를 포함해야 한다. 2026-09-25 기준으로 알림 WebSocket은 /api/notification/ws 경로를 사용하며, 연결 후 첫 프레임으로 AUTH 메시지를 보내 인증한다. 인증 토큰은 URL 쿼리로 전달하지 않는다.
 
 아래 경로는 VITE_WORKSPACE_API_BASE_URL 뒤에 붙는다.
 
@@ -394,7 +396,7 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 
 사용자 확인 절차:
 
-1. 실제 서버의 외부 접근 URL과 /api/v1 prefix를 확인한다.
+1. 실제 서버의 외부 접근 URL을 확인한다. 2026-09-25 기준 운영 주소는 https://axisflow.team/api 로 확정됐다. HTTP 컨트롤러 prefix는 /api 이며 /api/v1 은 존재하지 않는다.
 2. .env.server의 Base URL을 맞춘다.
 3. npm run dev:server를 실행한다.
 4. 회원가입 또는 실제 계정 로그인을 수행한다.
@@ -429,6 +431,33 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 
 실제 서버 계정으로 다시 로그인한 뒤 `/api/context/init`에 AUTHORITY가 포함되어도 워크스페이스 화면으로 진입하는지 확인해야 한다. 이 환경에서는 서버에 재접속할 수 없어 live 응답 검증은 수행하지 못했다.
 
+### 11.6 실제 배포 HTTPS 환경 검증 (2026-09-25)
+
+운영 배포는 nginx 가 443 에서 TLS 를 종료하고 백엔드로 프록시하는 구조로 확정됐다. 클라이언트는 `.env.server` 의 `VITE_WORKSPACE_API_BASE_URL=https://axisflow.team/api` 하나로 HTTP 와 WebSocket 주소를 모두 파생한다.
+
+서버 측은 실제 요청으로 검증했고, 클라이언트 측은 이 환경에서 Electron 런타임과 실제 계정을 사용할 수 없어 미수행 상태로 남긴다. 숨겨진 성공으로 기록하지 않는다.
+
+| 항목 | 결과 |
+|---|---|
+| `curl -I http://axisflow.team/server-test` | `301 Moved Permanently` → `https://axisflow.team/server-test` |
+| `curl -s https://axisflow.team/server-test` | `TEST => Server is running` |
+| `curl -s https://axisflow.team/db-test` | `DB Connection Success!` (프록시 경유 DB 연결) |
+| WebSocket 업그레이드 (`curl --http1.1`) | `HTTP/1.1 101 Switching Protocols`, `Connection: upgrade` |
+| 인증서 | `subject=CN = axisflow.team`, `issuer=Let's Encrypt` |
+| 리스닝 포트 | nginx `0.0.0.0:80`, `0.0.0.0:443`, 백엔드 `127.0.0.1:8080` |
+
+클라이언트 확인 절차:
+
+1. `npm run build:server` 로 번들 생성 후 renderer 번들에 `https://axisflow.team/api` 문자열이 포함됐는지 확인한다.
+2. 로그인 후 localStorage `grad-client-server-access-token`, `grad-client-server-refresh-token` 두 키가 채워지는지 확인한다.
+3. `/context/init` 요청이 `https://axisflow.team/api/context/init` 으로 나가고 `Authorization: Bearer ...` 헤더가 붙는지 확인한다.
+4. WebSocket 이 `wss://axisflow.team/api/notification/ws` 로 연결되고 첫 프레임 AUTH 에 대해 `AUTH_OK` 를 받은 뒤 실시간 알림이 수신되는지 확인한다.
+5. 약 90MB 파일을 업로드해 413 없이 성공하는지 확인한다(nginx `client_max_body_size 100M`).
+6. 같은 파일을 다시 내려받아 304 캐시 응답을 확인한다.
+7. 앱을 재시작해도 2~4 가 정상 동작하는지 확인한다.
+
+> `curl` 로 WebSocket 을 점검할 때는 `--http1.1` 을 반드시 붙인다. HTTP/2 로 협상되면 `Upgrade` 헤더가 전달되지 않아 `HTTP/2 404` 가 반환된다. Chromium 의 `new WebSocket()` 은 HTTP/2 WebSocket 을 사용하지 않으므로 앱 동작에는 영향이 없다.
+
 ## 12. 제약사항, 가정, 미해결 항목과 TODO
 
 ### 12.1 프론트엔드 제약과 TODO
@@ -446,17 +475,17 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 
 1. 실제 ContextController compact 응답에는 업무 owner 사용자, description, weight, progress, start/due date, created_at이 없다. 화면에 필요한 전체 필드를 반환할지 계약 확정이 필요하다.
 2. 문서의 context 확장 응답과 실제 컨트롤러 응답의 필드명·중첩 구조가 다르다.
-3. 현재 HTTP 컨트롤러 prefix는 /api이지만 일부 기존 문서·프론트 fallback은 /api/v1을 전제로 한다. 배포 API의 최종 prefix를 명세에 고정해야 한다.
+3. 현재 HTTP 컨트롤러 prefix는 /api이지만 일부 기존 문서·프론트 fallback은 /api/v1을 전제로 한다. 배포 API의 최종 prefix를 명세에 고정해야 한다. — 2026-09-25 해결: 운영 주소를 https://axisflow.team/api 로 고정했다. 서버 라우트 prefix는 /api 이고 프론트 .env.server 도 이 값을 쓴다. grad_vscode/src/api.ts 는 아직 http://localhost:8080/api/v1 을 하드코딩하고 있어 별도 수정 대상이다.
 4. 향후 refresh token을 현재 JSON body 계약에서 HttpOnly 쿠키로 전환한다면 서버가 `Access-Control-Allow-Origin`을 정확한 프론트 Origin으로 제한하고 `Access-Control-Allow-Credentials: true`를 추가해야 한다. Electron/localhost와 원격 서버 조합에서 `SameSite`, `Secure`, Origin 정책도 함께 확정해야 한다.
 5. 업무 담당자 변경/claim 및 사용자 검색·조회 계약이 확인되지 않는다. 조직/역할 endpoint의 이메일 직접 입력은 지원하지만 사전 사용자 검색은 할 수 없다.
-6. 잘못된 JWT가 401 대신 500으로 처리될 가능성이 있어 인증 오류 규약 확인이 필요하다.
+6. 잘못된 JWT가 401 대신 500으로 처리될 가능성이 있어 인증 오류 규약 확인이 필요하다. — 2026-09-25 해결: JwtFilter::doFilter 는 Authorization 헤더 누락(:31)과 토큰 검증 실패(:66) 두 경로 모두 k401Unauthorized 와 {status:"error", code:"401"} 로 응답한다.
 7. 조직 PATCH 응답 생성 시점과 extra_info 오타(etra_info)로 보이는 서버 코드 확인이 필요하다.
-8. main.cc는 JWT_SECRET을 `custom_config.jwt_secret`에 쓰지만 AuthController/JwtFilter는 `custom_config.app.jwt_secret`을 읽는다. 환경변수 secret이 실제 토큰 발급·검증에 반영되는지 서버 측 확인이 필요하다.
-9. 서버 포트는 Docker compose의 SERVER_PORT 매핑과 컨테이너 8080 외에 체크인된 단일 실행 설정으로 확정할 수 없었다.
+8. main.cc는 JWT_SECRET을 `custom_config.jwt_secret`에 쓰지만 AuthController/JwtFilter는 `custom_config.app.jwt_secret`을 읽는다. 환경변수 secret이 실제 토큰 발급·검증에 반영되는지 서버 측 확인이 필요하다. — 2026-09-25 해결: 커밋 d6c516a 에서 AuthController, JwtFilter, NotificationWebSocketController 가 `custom_config["jwt_secret"]` 을 읽도록 수정했다. main.cc:57 이 환경변수 JWT_SECRET 을 같은 키에 덮어쓰므로 토큰 발급·검증에 동일한 secret 이 쓰인다.
+9. 서버 포트는 Docker compose의 SERVER_PORT 매핑과 컨테이너 8080 외에 체크인된 단일 실행 설정으로 확정할 수 없었다. — 2026-09-25 확정: 외부에는 nginx 가 443 만 열고 TLS 를 종료한 뒤 127.0.0.1:8080 으로 프록시한다. docker-compose.yml 의 포트 매핑도 127.0.0.1:${SERVER_PORT}:8080 로 고정되어 8080 은 외부에 열리지 않는다.
 10. 역할 열거형 VIEWER의 실제 권한 의미와 hidden 필드 사용 여부를 명세에 반영할 필요가 있다.
 11. 업무 수정 SQL은 빈 description/date를 기존 값 유지로 해석하므로 화면에서 값을 완전히 지우는 계약이 필요한지 확인해야 한다.
 12. user_id/work_item_id 발급 책임을 장기적으로 서버가 맡을지, 현재 UUID 클라이언트 생성 규약을 공식화할지 확인해야 한다.
-13. 현재 회원가입 서버/SQL은 입력 password를 password_hash 열에 그대로 저장하고 로그인도 평문 비교하는 것으로 보인다. 실제 사용자 비밀번호를 쓰기 전에 서버 측 단방향 해시와 안전한 검증을 반드시 구현·확인해야 한다.
+13. 현재 회원가입 서버/SQL은 입력 password를 password_hash 열에 그대로 저장하고 로그인도 평문 비교하는 것으로 보인다. 실제 사용자 비밀번호를 쓰기 전에 서버 측 단방향 해시와 안전한 검증을 반드시 구현·확인해야 한다. — 2026-09-25 정정: data/03_func_users.sql 은 crypt(p, gen_salt('bf', 10)) 로 bcrypt 해시해 저장하고 로그인도 crypt() 비교를 한다(:26-29, :98-99). 다만 저장값이 $2a$/$2b$ 로 시작하지 않으면 평문 비교로 폴백하는 경로가 남아 있어(:101) 기존 미해시 행은 그대로 취약하다. 신규 가입·수정 경로는 항상 해시한다.
 14. 여러 컨트롤러의 DB 예외 응답은 내부 e.base().what()을 message로 반환하고 일부는 HTTP 5xx를 지정하지 않아 200 + error envelope가 될 수 있다. 프론트는 HTTP 5xx message를 숨기지만, 서버도 일관된 5xx 상태와 정제된 공개 메시지/별도 내부 로그로 고쳐야 한다.
 15. 네트워크 단절이 서버 쓰기 처리 직후 응답 수신 전에 발생하면 프론트만으로 커밋 여부를 확정할 수 없다. 생성/변경 endpoint에 idempotency key 또는 작업 상태 조회 계약이 필요하다.
 16. 현재 context에는 USER의 user_id/name도 없어 가입 시 입력한 표시명이 로그인 후 이메일 local-part 기반 이름으로 대체된다. 사용자 식별자와 표시명 조회 계약이 필요하다.
@@ -478,3 +507,5 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 - 기존 루트 docs 문서
 
 모든 소스 변경은 grad_client 내부의 프론트엔드 코드, 프론트엔드 전용 테스트·환경 예시, 이 문서에만 있다.
+
+2026-09-25 의 HTTPS 배포 작업은 위 범위 밖에서 별도로 진행됐다. 그 작업으로 deploy/nginx/axisflow.team.conf, deploy/nginx/axisflow.team.http.conf, docker-compose.yml 의 포트 바인딩, docs/api/Get/websocket_notification.md 가 함께 변경됐다.

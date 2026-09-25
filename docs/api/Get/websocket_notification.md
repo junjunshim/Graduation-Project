@@ -8,9 +8,9 @@
 
 | Method | Protocol | URL |
 | :--- | :--- | :--- |
-| Get (Upgrade) | WebSocket | ws://{서버 url}/api/notification/ws |
+| Get (Upgrade) | WebSocket | wss://{서버 url}/api/notification/ws |
 
-- HTTPS 환경에서는 `wss://{서버 url}/api/notification/ws` 로 연결한다.
+- 운영 환경은 HTTPS 이므로 `wss://{서버 url}/api/notification/ws` 로 연결한다. 평문 HTTP 로 띄운 로컬 개발 서버에 붙을 때만 `ws://` 를 쓴다.
 - 인증 토큰은 URL 쿼리 파라미터로 전달하지 않는다. 연결 후 첫 프레임으로 전송한다.
 
 ---

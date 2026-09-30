@@ -41,14 +41,18 @@
             "parent_id" : 1,
             "title" : "개발 부서",
             "path" : [1, 4],
+            "is_deleted" : false,
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
             "type" : "WORK_ITEM",
             "id" : "WI-1101",
+            "display_id" : 1101,
             "parent_id" : "WI-110",
             "owner_node_id" : 10,
             "owner_user_id" : "U-12",
+            "owner_user_email" : "owner@example.com",
+            "owner_user_name" : "홍길동",
             "title" : "테스트 work_item",
             "description" : "테스트용 work_item",
             "category" : "FEATURE",
@@ -57,7 +61,9 @@
             "hidden" : false,
             "weight" : 1,
             "progress" : 0,
+            "computed_progress" : 0,
             "comment_count" : 2,
+            "is_deleted" : false,
             "start_date" : "2026-03-01",
             "due_date" : "2026-03-31",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
@@ -66,13 +72,27 @@
             "type" : "ROLE",
             "id" : 20,
             "node_id" : 4,
+            "user_id" : "U-12",
             "email" : "test1234@gmail.com",
+            "user_name" : "홍길동",
             "role" : "ADMIN",
+            "role_id" : 2,
+            "is_top_role" : true,
+            "updated_at" : "2026-03-19 12:29:24.745634+00"
+        },
+        {
+            "type" : "USER",
+            "id" : "U-12",
+            "email" : "test1234@gmail.com",
+            "name" : "홍길동",
+            "created_at" : "2026-03-01 00:00:00+00",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
             "type" : "AUTHORITY",
             "id" : 2,
+            "role_id" : 2,
+            "is_top_role" : true,
             "node_id" : 4,
             "role" : "ADMIN",
             "authority" : "011111111111111111111111",
@@ -83,6 +103,8 @@
             "id": 12,
             "comment_id": 101,
             "work_item_id": "WI-100",
+            "author_user_id": "U-1",
+            "author_name": "홍길동",
             "message": "홍길동님이 댓글에서 회원님을 멘션했습니다.",
             "is_read": false,
             "created_at": "2026-03-19 12:29:24.745634+00",
@@ -113,6 +135,7 @@
             "original_file_name": "architecture_diagram.png",
             "file_size": 2048576,
             "mime_type": "image/png",
+            "is_deleted": false,
             "created_at": "2026-03-19 12:20:00.000000+00",
             "updated_at": "2026-03-19 12:20:00.000000+00"
         }
@@ -132,42 +155,54 @@
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
 | server_time | String | 성공 | 서버의 현재 시간 (이후 증분 동기화 `last_synced_at` 파라미터로 사용) |
-| data | Array | 성공 | 사용자가 속한 조직 구조, 업무, 역할, 권한, 멘션 알림, 최근 활동(최대 5개), 최근 파일(최대 5개) 데이터 통합 리스트 |
+| data | Array | 성공 | 사용자가 속한 조직 구조, 업무, 역할, 사용자, 권한, 멘션 알림, 최근 활동(최대 5개), 최근 파일(최대 5개) 데이터 통합 리스트 |
 | message | String | 에러 | 요청 관련 메세지 |
 
 - Data Elements
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 (NODE, WORK_ITEM, ROLE, AUTHORITY, MENTION, ACTIVITY, FILE) |
-| id | String or Integer | 필수 | 데이터 식별 id (NODE/ROLE/AUTHORITY/MENTION/ACTIVITY/FILE: Integer, WORK_ITEM: String) |
+| type | String | 필수 | 데이터의 타입 (NODE, WORK_ITEM, ROLE, USER, AUTHORITY, MENTION, ACTIVITY, FILE) |
+| id | String or Integer | 필수 | 데이터 식별 id (NODE/ROLE/USER/AUTHORITY/MENTION/ACTIVITY/FILE: String 또는 Integer, WORK_ITEM: String) |
 | node_type | String | node | 노드의 타입 |
 | parent_id | String or Integer or Null | node, work_item | 상위 식별 id (노드는 Integer, 업무는 String) |
 | title | String | node, work_item | 노드 이름 또는 업무 제목 |
 | path | Array | node | 노드의 계층 경로 배열 |
+| is_deleted | Boolean | node, work_item, file | 삭제 여부 |
+| display_id | Integer | work_item | 노드 내 업무 표시 번호 |
 | owner_node_id | Integer | work_item | 업무 소속 노드 id |
 | owner_user_id | String | work_item | 업무 담당자 사용자 id |
+| owner_user_email | String or Null | work_item | 업무 담당자 이메일 |
+| owner_user_name | String or Null | work_item | 업무 담당자 이름 |
 | description | String or Null | work_item | 업무 설명 |
 | category | String or Null | work_item | 업무 카테고리 |
-| status | String | work_item, role, authority, node, file | 상태값 |
+| status | String | work_item | 상태값 |
 | priority | Integer | work_item | 업무 우선순위 |
 | hidden | Boolean | work_item | 업무 숨김 여부 |
 | weight | Integer | work_item | 업무 가중치 |
 | progress | Integer | work_item | 업무 진행률 |
+| computed_progress | Integer | work_item | 하위 업무를 반영한 계산 진행률 |
 | comment_count | Integer | work_item | 업무에 등록된 댓글 총 개수 |
 | start_date | String or Null | work_item | 업무 시작 일자 |
 | due_date | String or Null | work_item | 업무 마감 일자 |
 | node_id | Integer | role, authority, activity | 소속 노드의 id |
-| email | String | role | 역할이 배정된 사용자 이메일 |
+| user_id | String | role, user | 역할이 배정된 사용자 id 또는 사용자 id |
+| email | String | role, user | 사용자 이메일 |
+| name | String | user | 사용자 이름 |
+| user_name | String | role | 역할이 배정된 사용자 이름 |
 | role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
+| role_id | Integer | role, authority | 역할 정의(AUTHORITY) 식별 id |
+| is_top_role | Boolean | role, authority | 최상위 역할(ADMIN) 여부 |
 | authority | String | authority | 24비트 권한 문자열 |
 | comment_id | Integer | mention | 멘션이 발생한 댓글 식별 ID |
 | work_item_id | String | mention, file | 연관된 업무 식별 ID |
+| author_user_id | String | mention | 멘션 댓글 작성자 id |
+| author_name | String | mention | 멘션 댓글 작성자 이름 |
 | message | String | mention | 멘션 알림 메시지 내용 |
 | is_read | Boolean | mention | 알림 읽음 상태 여부 |
 | actor_user_id | String | activity | 활동을 수행한 사용자 ID |
 | actor_name | String | activity | 활동을 수행한 사용자 이름 |
-| entity_type | String | activity | 활동 대상 객체 종류 ('NODE', 'WORK_ITEM', 'ROLE', 'AUTHORITY', 'COMMENT') |
+| entity_type | String | activity | 활동 대상 객체 종류 ('NODE', 'WORK_ITEM', 'ROLE', 'AUTHORITY', 'COMMENT', 'FILE', 'RECURRING_RULE') |
 | entity_id | String | activity | 활동 대상 고유 ID |
 | target_name | String | activity | 활동 대상 명칭 (업무명, 노드명 등) |
 | action_type | String | activity | 수행된 작업 ('inserted', 'updated', 'deleted', 'restored') |
@@ -180,7 +215,7 @@
 | original_file_name | String | file | 원본 파일명 |
 | file_size | Integer | file | 파일 크기 (Bytes) |
 | mime_type | String or Null | file | 파일 MIME 타입 |
-| created_at | String | mention, activity, file | 데이터 생성 일시 |
+| created_at | String | user, mention, activity, file | 데이터 생성 일시 |
 | updated_at | String | 필수(activity 제외) | 데이터의 최신 업데이트 시간 |
 
 - 설명<br>

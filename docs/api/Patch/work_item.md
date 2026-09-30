@@ -51,6 +51,8 @@
 | parent_work_item_id | String | 선택 | 상위 업무 id. 빈 문자열이면 최상위 업무로 이동. 키 자체를 생략하면 부모를 변경하지 않음 |
 | owner_user_email | String | 선택 | 변경할 담당자 이메일. 키 자체를 생략하면 담당자를 변경하지 않음 |
 
+- `priority`, `weight`, `progress` 를 생략하거나 음수로 보내면 해당 값은 변경되지 않습니다.
+
 ---
 
 ## Response
@@ -62,6 +64,7 @@
         {
             "type" : "WORK_ITEM",
             "id" : "WI-1101",
+            "display_id" : 1101,
             "parent_id" : "WI-110",
             "owner_node_id" : 10,
             "owner_user_id" : "U-12",
@@ -73,6 +76,7 @@
             "hidden" : false,
             "weight" : 1,
             "progress" : 0,
+            "computed_progress" : 0,
             "start_date" : "2026-03-01",
             "due_date" : "2026-03-31",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
@@ -101,17 +105,19 @@
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 (WORK_ITEM) |
 | id | String | 필수 | work_item 식별 id |
+| display_id | Integer | 필수 | 노드 내 업무 표시 번호 |
 | parent_id | String or Null | 선택 | 부모 work_item의 id |
 | owner_node_id | Integer | 필수 | 소속 노드 id |
 | owner_user_id | String | 필수 | 소유자 id |
 | title | String | 필수 | work_item 이름 |
-| description | String | 필수 | work_item 설명 |
+| description | String or Null | 선택 | work_item 설명 |
 | category | String or Null | 선택 | work_item 카테고리 |
 | status | String | 필수 | work_item 상태 |
 | priority | Integer | 필수 | work_item 우선순위 |
 | hidden | Boolean | 필수 | 숨김 속성 현황 |
 | weight | Integer | 필수 | 가중치 |
 | progress | Integer | 필수 | 진행률 |
-| start_date | String | 필수 | 시작 날짜 |
-| due_date | String | 필수 | 마감 날짜 |
+| computed_progress | Integer | 필수 | 하위 업무를 반영한 계산 진행률 |
+| start_date | String or Null | 선택 | 시작 날짜 |
+| due_date | String or Null | 선택 | 마감 날짜 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

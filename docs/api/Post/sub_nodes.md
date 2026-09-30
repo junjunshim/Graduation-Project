@@ -56,11 +56,15 @@
             "node_id" : 3,
             "email" : "test1234@gmail.com",
             "role" : "ADMIN",
+            "role_id" : 2,
+            "is_top_role" : true,
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
             "type" : "AUTHORITY",
             "id" : 2,
+            "role_id" : 2,
+            "is_top_role" : true,
             "node_id" : 3,
             "role" : "ADMIN",
             "authority" : "011111111111111111111111",
@@ -89,7 +93,7 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 (NODE, ROLE, AUTHORITY) |
-| id | Integer | 필수 | 데이터 식별 id |
+| id | Integer | 필수 | 데이터 식별 id (NODE: node_id, ROLE: assignment_id, AUTHORITY: authority_id) |
 | node_type | String | node | 노드의 타입 |
 | parent_id | Integer | node | 상위 노드 id |
 | title | String | node | 노드의 이름 |
@@ -97,5 +101,7 @@
 | node_id | Integer | role or authority | 소속 노드의 id |
 | email | String | role | 역할이 배정된 사용자 이메일 |
 | role | String | role or authority | 배정된 역할 이름 (기본값: ADMIN) |
+| role_id | Integer | role or authority | 역할 정의(AUTHORITY) 식별 id |
+| is_top_role | Boolean | role or authority | 최상위 역할(ADMIN) 여부 |
 | authority | String | authority | 역할의 기본 권한 비트 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

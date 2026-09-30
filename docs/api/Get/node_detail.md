@@ -1,5 +1,5 @@
 # node 상세 조회 api
-- 특정 node의 상세 정보와 해당 node에 속한 모든 구성 요소(역할 배정 목록, 역할별 권한 정의, 소속 업무 목록, 업무에 첨부된 파일 목록, 해당 노드의 전체 활동 이력)를 통합 조회하는 api
+- 특정 node의 상세 정보와 해당 node에 속한 모든 구성 요소(역할 배정 목록, 소속 사용자, 역할별 권한 정의, 소속 업무 목록, 업무에 첨부된 파일 목록, 해당 노드의 전체 활동 이력)를 통합 조회하는 api
 ## Request
 - Request syntax
 ```json
@@ -48,13 +48,27 @@
             "type" : "ROLE",
             "id" : 209,
             "node_id" : 98,
+            "user_id" : "U-163",
+            "user_name" : "애플 기획부 팀장",
             "email" : "apple_1dept_leader@apple.com",
             "role" : "ADMIN",
+            "role_id" : 34,
+            "is_top_role" : false,
+            "updated_at" : "2026-09-02T08:54:49.604005+00:00"
+        },
+        {
+            "type" : "USER",
+            "id" : "U-163",
+            "email" : "apple_1dept_leader@apple.com",
+            "name" : "애플 기획부 팀장",
+            "created_at" : "2026-09-01T00:00:00.000000+00:00",
             "updated_at" : "2026-09-02T08:54:49.604005+00:00"
         },
         {
             "type" : "AUTHORITY",
             "id" : 389,
+            "role_id" : 389,
+            "is_top_role" : false,
             "node_id" : 98,
             "role" : "ADMIN",
             "authority" : "011111111111111111111111",
@@ -63,9 +77,12 @@
         {
             "type" : "WORK_ITEM",
             "id" : "WI-196",
+            "display_id" : 196,
             "parent_id" : "WI-194",
             "owner_node_id" : 98,
             "owner_user_id" : "U-163",
+            "owner_user_email" : "apple_1dept_leader@apple.com",
+            "owner_user_name" : "애플 기획부 팀장",
             "title" : "기획부 세부 구현 스프린트",
             "description" : "애플 기획부의 세부 마일스톤 기획 및 리소스 설계",
             "category" : "FEATURE",
@@ -74,6 +91,7 @@
             "hidden" : false,
             "weight" : 1,
             "progress" : 0,
+            "computed_progress" : 0,
             "comment_count" : 4,
             "is_deleted" : false,
             "start_date" : "2026-03-01",
@@ -124,25 +142,33 @@
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
 | status | String | 필수 | 요청 성공/실패 |
-| data | Array | 성공 | 조회 대상 노드의 메타데이터 및 소속 역할, 권한, 업무, 파일, 활동 이력 데이터 통합 리스트 |
+| data | Array | 성공 | 조회 대상 노드의 메타데이터 및 소속 역할, 사용자, 권한, 업무, 파일, 활동 이력 데이터 통합 리스트 |
 | message | String | 에러 | 요청 관련 메세지 |
 
 - Data Elements
 
 | 파라미터 | 타입 | 필수 여부 | 설명 |
 | :--- | :--- | :--- | :--- |
-| type | String | 필수 | 데이터의 타입 (NODE, ROLE, AUTHORITY, WORK_ITEM, FILE, ACTIVITY) |
-| id | String or Integer | 필수 | 데이터 식별 id (NODE/ROLE/AUTHORITY/FILE/ACTIVITY: Integer, WORK_ITEM: String) |
+| type | String | 필수 | 데이터의 타입 (NODE, ROLE, USER, AUTHORITY, WORK_ITEM, FILE, ACTIVITY) |
+| id | String or Integer | 필수 | 데이터 식별 id (NODE/ROLE/USER/AUTHORITY/FILE/ACTIVITY: String 또는 Integer, WORK_ITEM: String) |
 | node_type | String | node | 노드의 타입 |
 | parent_id | String or Integer or Null | node, work_item | 상위 식별 id (노드는 Integer, 업무는 String) |
 | title | String | node, work_item | 노드 이름 또는 업무 제목 |
 | path | Array | node | 노드의 계층 경로 배열 |
 | is_deleted | Boolean | node, work_item, file | 삭제 여부 |
-| email | String | role | 역할이 배정된 사용자 이메일 |
+| user_id | String | role, user | 역할이 배정된 사용자 id 또는 사용자 id |
+| user_name | String | role | 역할이 배정된 사용자 이름 |
+| email | String | role, user | 사용자 이메일 |
+| name | String | user | 사용자 이름 |
 | role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
+| role_id | Integer | role, authority | 역할 정의(AUTHORITY) 식별 id |
+| is_top_role | Boolean | role, authority | 최상위 역할(ADMIN) 여부 |
 | authority | String | authority | 24비트 권한 문자열 |
+| display_id | Integer | work_item | 노드 내 업무 표시 번호 |
 | owner_node_id | Integer | work_item | 업무 소속 노드 id |
 | owner_user_id | String | work_item | 업무 담당자 사용자 id |
+| owner_user_email | String or Null | work_item | 업무 담당자 이메일 |
+| owner_user_name | String or Null | work_item | 업무 담당자 이름 |
 | description | String or Null | work_item | 업무 설명 |
 | category | String or Null | work_item | 업무 카테고리 |
 | status | String | work_item | 업무 상태값 |
@@ -150,6 +176,7 @@
 | hidden | Boolean | work_item | 업무 숨김 여부 |
 | weight | Integer | work_item | 업무 가중치 |
 | progress | Integer | work_item | 업무 진행률 |
+| computed_progress | Integer | work_item | 하위 업무를 반영한 계산 진행률 |
 | comment_count | Integer | work_item | 업무 댓글 수 |
 | start_date | String or Null | work_item | 업무 시작 일자 |
 | due_date | String or Null | work_item | 업무 마감 일자 |
@@ -163,12 +190,20 @@
 | node_id | Integer | role, authority, activity | 소속 노드 ID |
 | actor_user_id | String | activity | 활동 수행자 ID |
 | actor_name | String | activity | 활동 수행자 이름 |
-| entity_type | String | activity | 활동 대상 객체 종류 ('NODE', 'WORK_ITEM', 'ROLE', 'AUTHORITY', 'COMMENT') |
+| entity_type | String | activity | 활동 대상 객체 종류 ('NODE', 'WORK_ITEM', 'ROLE', 'AUTHORITY', 'COMMENT', 'FILE', 'RECURRING_RULE') |
 | entity_id | String | activity | 활동 대상 객체 ID |
 | target_name | String | activity | 대상 객체 명칭 |
 | action_type | String | activity | 활동 종류 ('inserted', 'updated', 'deleted', 'restored') |
 | field_name | String or Null | activity | 변경된 필드명 |
 | old_value | String or Null | activity | 변경 이전 값 |
 | new_value | String or Null | activity | 변경 이후 값 |
-| created_at | String | file, activity | 생성 일시 |
-| updated_at | String | node, role, authority, work_item, file | 최신 수정 일시 |
+| created_at | String | user, file, activity | 생성 일시 |
+| updated_at | String | node, role, user, authority, work_item, file | 최신 수정 일시 |
+
+## 정책
+- 요청자는 대상 노드에 `NODE_INFO_VIEW` 권한이 있어야 한다.
+- ROLE/USER 는 `NODE_MEMBERS_VIEW` 권한이 있거나 본인 항목인 경우에만 반환된다.
+- WORK_ITEM 은 `WI_PUBLIC_VIEW`(공개 업무), `WI_HIDDEN_VIEW`(숨김 업무), 본인 담당 업무 기준으로 반환된다.
+- FILE 은 `FILE_VIEW` 권한이 있거나 담당자 본인 업무의 파일인 경우 반환된다.
+- ACTIVITY 는 `HISTORY_ALL_VIEW`/`HISTORY_PERSONAL_VIEW` 권한에 따라 반환 범위가 결정된다.
+- 삭제된 노드도 조회할 수 있다.

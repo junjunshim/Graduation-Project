@@ -42,6 +42,7 @@
         {
             "type" : "WORK_ITEM",
             "id" : "WI-104",
+            "display_id" : 104,
             "parent_id" : "WI-100",
             "owner_node_id" : 98,
             "owner_user_id" : "U-163",
@@ -53,6 +54,7 @@
             "hidden" : false,
             "weight" : 1,
             "progress" : 0,
+            "computed_progress" : 0,
             "comment_count" : 2,
             "is_deleted" : false,
             "start_date" : "2026-03-01",
@@ -83,6 +85,7 @@
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 (WORK_ITEM) |
 | id | String | 필수 | 업무 식별 id |
+| display_id | Integer | work_item | 노드 내 업무 표시 번호 |
 | parent_id | String or Null | work_item | 상위 부모 업무 식별 id |
 | owner_node_id | Integer | work_item | 업무 소속 노드 id |
 | owner_user_id | String | work_item | 업무 담당자 사용자 id |
@@ -94,6 +97,7 @@
 | hidden | Boolean | work_item | 업무 숨김 여부 |
 | weight | Integer | work_item | 업무 가중치 |
 | progress | Integer | work_item | 업무 진행률 |
+| computed_progress | Integer | work_item | 하위 업무를 반영한 계산 진행률 |
 | comment_count | Integer | work_item | 업무 댓글 수 |
 | is_deleted | Boolean | work_item | 삭제 여부 (false) |
 | start_date | String or Null | work_item | 업무 시작 일자 |

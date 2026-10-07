@@ -9,6 +9,7 @@ namespace api
 // GitHub 저장소 연동 컨트롤러 (TASK_11).
 // 저장소 연결/해제(+서버 로컬 clone), 디렉터리 트리 조회, 파일 내용, 브랜치 목록,
 // 사용자 PAT 자격증명 등록/조회/해제를 담당한다.
+// 앱 → VSCode 확장 핸드오프 코드 발급과 확장 세션(토큰 교환·갱신)도 여기서 맡는다 (§3.4).
 // 실시간 협업(/api/collab/*)과 제어 소켓(/api/github/ws)은 별도 컨트롤러가 맡는다.
 class GithubController : public drogon::HttpController<GithubController>
 {
@@ -42,6 +43,13 @@ class GithubController : public drogon::HttpController<GithubController>
     ADD_METHOD_TO(GithubController::getCredentialStatus,  "/api/github/credentials", Get,    "JwtFilter");
     ADD_METHOD_TO(GithubController::registerCredential,   "/api/github/credentials", Post,   "JwtFilter");
     ADD_METHOD_TO(GithubController::disconnectCredential, "/api/github/credentials", Delete, "JwtFilter");
+
+    // --- 앱 → 확장 핸드오프 / 확장 세션 (§3.4, §12.1) ---
+    ADD_METHOD_TO(GithubController::createHandoffCode,    "/api/github/handoff",            Post, "JwtFilter");
+    // 아래 두 라우트는 확장이 아직 토큰을 받기 전에 호출하므로 JwtFilter 를 걸지 않는다.
+    // 인증 대신 1회용 핸드오프 코드(P0811)와 리프레시 토큰(P0812)으로만 검증한다.
+    ADD_METHOD_TO(GithubController::exchangeSession,      "/api/github/sessions",           Post);
+    ADD_METHOD_TO(GithubController::refreshSession,       "/api/github/sessions/refresh",   Post);
     METHOD_LIST_END
 
     void connectRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
@@ -65,5 +73,9 @@ class GithubController : public drogon::HttpController<GithubController>
     void getCredentialStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void registerCredential(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void disconnectCredential(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+
+    void createHandoffCode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void exchangeSession(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void refreshSession(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

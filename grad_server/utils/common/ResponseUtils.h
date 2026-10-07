@@ -90,6 +90,8 @@ enum class DbErrorCode {
     RepoCloneFailed,            // P0808 저장소 clone 실패
     BranchHasPresence,          // P0809 브랜치에 작업 중인 사용자가 있음
     BranchHasLocalChanges,      // P0810 브랜치에 커밋되지 않은 변경이 있음
+    HandoffCodeInvalid,         // P0811 핸드오프 코드가 없거나 만료/재사용됨
+    ExtensionTokenInvalid,      // P0812 확장 리프레시 토큰이 없거나 만료/이미 회전됨
     Unknown                     // 알 수 없는 에러
 };
 

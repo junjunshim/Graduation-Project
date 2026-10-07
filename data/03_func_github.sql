@@ -5,7 +5,7 @@
 --   - 저장소 연결/해제: 해당 노드 NODE_INFO_CHANGE (ADMIN 계열 — MANAGER 는 bit 12 가 없다)
 --   - 브랜치 생성·삭제·커밋: WI_PERSONAL_CHANGE (작업자 이상 — VIEWER 는 불가)
 --
--- 오류 코드 (P0801 ~ P0808) — P04xx 는 역할, P03xx 는 노드가 이미 쓰고 있어 대역을 분리했다.
+-- 오류 코드 (P0801 ~ P0812) — P04xx 는 역할, P03xx 는 노드가 이미 쓰고 있어 대역을 분리했다.
 --   P0801 저장소(또는 브랜치)가 연결되어 있지 않음
 --   P0802 GitHub 자격증명이 없거나 무효
 --   P0803 GitHub 토큰 스코프 부족 (컨트롤러가 GitHub API 응답으로 판정)
@@ -14,7 +14,10 @@
 --   P0806 GitHub 자격증명 암호화 키 미설정
 --   P0807 저장소/자격증명 처리 실패 (기타)
 --   P0808 저장소 clone 실패 (컨트롤러 판정)
---   (브랜치 삭제 가드 P0209/P0210 은 컨트롤러가 판정한다.)
+--   P0809 브랜치에 작업 중인 사용자가 있음 (컨트롤러 판정)
+--   P0810 브랜치에 커밋되지 않은 변경이 있음 (컨트롤러 판정)
+--   P0811 핸드오프 코드가 없거나 만료·이미 사용됨
+--   P0812 확장 리프레시 토큰이 없거나 만료·이미 회전됨
 --
 -- access_token 은 어떤 응답에도 담지 않는다. 복호화를 돌려주는 함수는 get_github_user_token 하나뿐이며,
 -- 그 반환값도 API 응답·로그·에러 메시지에 넣지 않는다 (§3.1 (5), §5).
@@ -1105,6 +1108,217 @@ BEGIN
             RAISE;
         WHEN OTHERS THEN
             RAISE EXCEPTION '[P0807]Failed to delete github credential: %, (REASON: %)', p_requester_email, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- GitHubController::createHandoffCode (§3.4 — 앱 → VSCode 확장 1회용 코드)
+-- 토큰을 vscode:// URI 에 싣지 않기 위해, 앱이 로그인 세션으로 60초짜리 1회용 코드만 발급한다.
+-- 확장은 이 코드를 POST /api/github/sessions 로 교환해 자기 토큰을 받는다.
+CREATE OR REPLACE FUNCTION create_github_handoff_code(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE,
+    p_repo_id github_repositories.repo_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_repo_node_id organization_nodes.node_id%TYPE;
+    v_code github_handoff_codes.code%TYPE;
+    v_expires_at github_handoff_codes.expires_at%TYPE;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 저장소 확인 + 앱이 보고 있는 노드와 일치하는지 확인
+    --    (다른 워크스페이스의 저장소로 코드를 만들면 URI 의 node/repo 가 어긋난다)
+    SELECT node_id INTO v_repo_node_id
+    FROM github_repositories
+    WHERE repo_id = p_repo_id AND is_deleted = FALSE;
+
+    IF NOT FOUND OR v_repo_node_id <> p_node_id THEN
+        RAISE EXCEPTION '[P0801]Repository is not connected to this node: % (node %)', p_repo_id, p_node_id
+        USING ERRCODE = 'P0801';
+    END IF;
+
+    -- 3. 권한 확인 (확장도 노드를 조회할 수 있어야 세션을 받는다 — 조회 권한 기준)
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_INFO_VIEW') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have NODE_INFO_VIEW permission on node: %', p_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 만료된 코드 정리 (TTL 60초·1회용이라 지난 행은 남길 이유가 없다)
+    DELETE FROM github_handoff_codes WHERE expires_at <= CURRENT_TIMESTAMP;
+
+    -- 5. 코드 발급 — 256비트 난수(hex). 토큰이 아니라 1회용 값이므로 해시 저장하지 않는다.
+    v_code := encode(gen_random_bytes(32), 'hex');
+    v_expires_at := CURRENT_TIMESTAMP + INTERVAL '60 seconds';
+
+    INSERT INTO github_handoff_codes (code, user_email, node_id, repo_id, expires_at)
+    VALUES (v_code, p_requester_email, p_node_id, p_repo_id, v_expires_at);
+
+    -- 6. 결과 반환 (access token 은 여기서 만들지 않는다 — 교환 단계에서 C++ 가 발급한다)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_HANDOFF',
+        'code', v_code,
+        'node_id', p_node_id,
+        'repo_id', p_repo_id,
+        'expires_at', v_expires_at,
+        'expires_in', 60
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to create handoff code: %, (REASON: %)', p_requester_email, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- GitHubController::exchangeSession (§3.4 — 1회용 코드 → 확장 세션)
+-- **인증 없는 엔드포인트에서 호출된다.** 그래서 요청자 이메일을 받지 않고 코드만으로 사용자를 식별한다.
+-- JWT 발급은 C++ 가 한다 — 이 함수는 "누구인지"만 확정한다.
+CREATE OR REPLACE FUNCTION consume_github_handoff_code(
+    p_code github_handoff_codes.code%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user_email users.email%TYPE;
+    v_node_id organization_nodes.node_id%TYPE;
+    v_repo_id github_repositories.repo_id%TYPE;
+BEGIN
+    -- 1. 코드 소비 (UPDATE ... RETURNING 이 원자적이라 동시 요청 중 하나만 성공한다)
+    UPDATE github_handoff_codes
+    SET consumed_at = CURRENT_TIMESTAMP
+    WHERE code = p_code
+      AND consumed_at IS NULL
+      AND expires_at > CURRENT_TIMESTAMP
+    RETURNING user_email, node_id, repo_id
+    INTO v_user_email, v_node_id, v_repo_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0811]Handoff code is invalid, expired or already used'
+        USING ERRCODE = 'P0811';
+    END IF;
+
+    -- 2. 코드를 발급한 뒤 탈퇴했을 수 있다
+    IF NOT EXISTS (SELECT 1 FROM users WHERE email = v_user_email AND is_deleted = FALSE) THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', v_user_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 3. 결과 반환 (user_name 은 확장의 기본 커밋 이름으로 쓴다 — 앱 프로필과 같은 값)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_HANDOFF',
+        'user_email', v_user_email,
+        'user_name', u.name,
+        'node_id', v_node_id,
+        'repo_id', v_repo_id
+    )::jsonb AS out_data
+    FROM users u
+    WHERE u.email = v_user_email;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0811' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to consume handoff code, (REASON: %)', SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- GitHubController::exchangeSession (확장 리프레시 토큰 저장, §12.1)
+-- 앱의 user_refresh_tokens 와 분리된 확장 전용 테이블에 저장한다(앱 세션을 무효화하지 않기 위해서).
+-- 여러 기기 동시 로그인을 허용하려고 사용자당 여러 행을 둔다.
+CREATE OR REPLACE FUNCTION create_github_extension_token(
+    p_user_email users.email%TYPE,
+    p_refresh_token github_extension_tokens.refresh_token%TYPE,
+    p_expires_at github_extension_tokens.expires_at%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user_id users.user_id%TYPE;
+BEGIN
+    -- 1. 사용자 확인
+    SELECT user_id INTO v_user_id FROM users WHERE email = p_user_email AND is_deleted = FALSE;
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_user_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 만료된 토큰 정리
+    DELETE FROM github_extension_tokens WHERE expires_at <= CURRENT_TIMESTAMP;
+
+    -- 3. 저장 (같은 값이 이미 있으면 만료만 갱신 — 같은 초에 재시도해도 안전하다)
+    INSERT INTO github_extension_tokens (user_email, refresh_token, expires_at)
+    VALUES (p_user_email, p_refresh_token, p_expires_at)
+    ON CONFLICT (refresh_token) DO UPDATE SET
+        expires_at = EXCLUDED.expires_at,
+        updated_at = CURRENT_TIMESTAMP;
+
+    -- 4. 결과 반환 (토큰 값은 돌려주지 않는다 — C++ 가 이미 응답에 담았다)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_EXTENSION_SESSION',
+        'user_email', p_user_email,
+        'expires_at', p_expires_at
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to store extension token: %, (REASON: %)', p_user_email, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- GitHubController::refreshSession (§12.1 — 확장 토큰 자동 갱신)
+-- **인증 없는 엔드포인트에서 호출된다.** 리프레시 토큰 자체가 자격증명이다(앱의 /api/users/refresh 와 같은 방식).
+-- 회전은 원자적이다: 같은 토큰으로 동시에 두 번 갱신하면 하나만 성공한다(P0812).
+CREATE OR REPLACE FUNCTION rotate_github_extension_token(
+    p_old_refresh_token github_extension_tokens.refresh_token%TYPE,
+    p_new_refresh_token github_extension_tokens.refresh_token%TYPE,
+    p_expires_at github_extension_tokens.expires_at%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user_email users.email%TYPE;
+BEGIN
+    -- 1. 회전 (행 잠금 후 WHERE 재평가 — 재사용·만료·불일치는 0행이 된다)
+    UPDATE github_extension_tokens
+    SET refresh_token = p_new_refresh_token,
+        expires_at = p_expires_at,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE refresh_token = p_old_refresh_token
+      AND expires_at > CURRENT_TIMESTAMP
+    RETURNING user_email INTO v_user_email;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0812]Extension refresh token is invalid, expired or already rotated'
+        USING ERRCODE = 'P0812';
+    END IF;
+
+    -- 2. 결과 반환 (토큰 값은 돌려주지 않는다)
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_EXTENSION_SESSION',
+        'user_email', v_user_email,
+        'expires_at', p_expires_at
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0812' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to rotate extension token, (REASON: %)', SQLERRM
             USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;

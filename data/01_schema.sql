@@ -429,3 +429,37 @@ CREATE TABLE IF NOT EXISTS github_user_credentials (
 CREATE UNIQUE INDEX unique_credential_per_user ON github_user_credentials(user_email) WHERE NOT is_deleted;
 CREATE INDEX idx_github_credentials_is_deleted ON github_user_credentials(is_deleted);
 
+-- 19. GitHub 확장 토큰 테이블 (VSCode 확장 전용 리프레시 토큰)
+-- 앱의 user_refresh_tokens 는 user_email 이 PK 라 사용자당 1개뿐이다.
+-- 확장이 같은 테이블을 쓰면 앱과 서로의 세션을 무효화하므로 확장 전용으로 분리한다.
+-- 여러 기기에서 동시에 로그인할 수 있도록 사용자당 여러 행을 허용하고, 갱신(rotate)은
+-- refresh_token 값으로 행을 찾아 원자적으로 회전시킨다.
+CREATE TABLE IF NOT EXISTS github_extension_tokens (
+    token_id SERIAL PRIMARY KEY,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    refresh_token TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX unique_github_extension_token ON github_extension_tokens(refresh_token);
+CREATE INDEX idx_github_extension_tokens_user_email ON github_extension_tokens(user_email);
+CREATE INDEX idx_github_extension_tokens_expires_at ON github_extension_tokens(expires_at);
+
+-- 20. GitHub 핸드오프 코드 테이블 (앱 → VSCode 확장 1회용 코드, TTL 60초)
+-- 토큰을 vscode:// URI 에 싣지 않기 위한 우회 경로다 (§3.4).
+-- 소비는 UPDATE ... WHERE consumed_at IS NULL 로 원자적이라 동시 요청 중 하나만 성공한다.
+CREATE TABLE IF NOT EXISTS github_handoff_codes (
+    code_id SERIAL PRIMARY KEY,
+    code VARCHAR(128) NOT NULL,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
+    repo_id INTEGER NOT NULL REFERENCES github_repositories(repo_id) ON DELETE CASCADE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    consumed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX unique_github_handoff_code ON github_handoff_codes(code);
+CREATE INDEX idx_github_handoff_codes_expires_at ON github_handoff_codes(expires_at);
+CREATE INDEX idx_github_handoff_codes_user_email ON github_handoff_codes(user_email);
+

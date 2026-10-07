@@ -3,6 +3,7 @@
 #include "ValidationUtils.h"
 #include "GitRunner.h"
 #include "GithubWebSocketController.h"
+#include "AuthController.h"
 
 #include <drogon/HttpClient.h>
 #include <json/json.h>
@@ -178,6 +179,11 @@ std::string treeishOf(const std::string &ref, const std::string &path) {
 std::string credentialKey() {
     const char *value = std::getenv("GITHUB_TOKEN_KEY");
     return (value != nullptr) ? std::string(value) : std::string();
+}
+
+// 확장에 알려 줄 액세스 토큰 수명(초). AuthController::generateToken 이 쓰는 설정과 같은 값이다.
+int accessTokenExpirySeconds() {
+    return app().getCustomConfig()["access_token_expiry"].asInt();
 }
 
 // §3.2: clone 경로는 repository/<node_id>/<repo_name>.
@@ -1515,5 +1521,128 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         }
         return successResponse(data, "커밋은 로컬에 저장했지만 원격 push 에 실패했습니다: " + pushReasonLabel(pushReason),
                                k201Created);
+    });
+}
+
+// ===========================================================================
+// 앱 → 확장 핸드오프 / 확장 세션 (§3.4, §12.1)
+// ===========================================================================
+
+// POST /api/github/handoff — 앱이 VSCode 확장에 넘길 1회용 코드를 발급한다 (§3.4).
+// 토큰을 vscode:// URI 에 싣지 않기 위한 우회로이고, 실제 토큰은 확장이 교환 단계에서 받는다.
+void GithubController::createHandoffCode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "node_id", "repo_id")) {
+        callback(errorResponse("400", "필수 파라미터(node_id, repo_id)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    const int nodeId = (*jsonPtr)["node_id"].asInt();
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+
+    runOffLoop(std::move(callback), [requester, nodeId, repoId]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+        // 권한·저장소-노드 일치 검사는 SQL 함수가 수행한다(불일치면 P0801).
+        auto result = db->execSqlSync("SELECT * FROM create_github_handoff_code($1, $2, $3)",
+                                      requester, nodeId, repoId);
+        return successResponse(rowsToArray(result), "확장에서 사용할 1회용 코드를 발급했습니다.", k201Created);
+    });
+}
+
+// POST /api/github/sessions — 1회용 코드를 확장 전용 토큰으로 교환한다 (§3.4, §12.1).
+// 인증 없는 라우트다(JwtFilter 미적용) — 확장은 이 호출로 토큰을 처음 받기 때문이다.
+void GithubController::exchangeSession(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateStrings(jsonPtr, "code")) {
+        callback(errorResponse("400", "필수 파라미터(code)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string code = (*jsonPtr)["code"].asString();
+
+    runOffLoop(std::move(callback), [code]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        // 1) 1회용 코드를 소비한다(원자적 — 동시 요청 중 하나만 성공한다).
+        //    여기서 실패하면 토큰을 만들지 않는다.
+        Json::Value handoff;
+        if (!singleRow(db->execSqlSync("SELECT * FROM consume_github_handoff_code($1)", code), handoff)) {
+            return errorResponse("P0811", "확장 연결 코드가 유효하지 않거나 만료되었습니다. 앱에서 다시 시도해 주세요.",
+                                 k401Unauthorized);
+        }
+        const std::string email = handoff["user_email"].asString();
+
+        // 2) 앱과 같은 JWT 규격으로 발급한다 — JwtFilter 와 제어 소켓이 그대로 검증한다.
+        Json::Value tokens = AuthController::generateToken(email);
+
+        // 3) 리프레시 토큰만 확장 전용 테이블에 남긴다.
+        //    앱의 user_refresh_tokens 와 분리해야 서로의 세션을 무효화하지 않는다(§12.1).
+        db->execSqlSync("SELECT * FROM create_github_extension_token($1, $2, $3)",
+                        email, tokens["refresh_token"].asString(), tokens["refresh_token_expiry"].asString());
+
+        // 4) 응답 조립. 토큰은 이 응답에서만 나가고 로그·에러 메시지에는 넣지 않는다(§5).
+        //    user_name 은 확장이 커밋 이름 기본값으로 쓴다(커밋 이메일은 서버가 계정 이메일로 강제한다).
+        Json::Value item;
+        item["access_token"] = tokens["access_token"];
+        item["refresh_token"] = tokens["refresh_token"];
+        item["expires_in"] = accessTokenExpirySeconds();
+        item["user_email"] = email;
+        item["user_name"] = handoff["user_name"];
+        item["node_id"] = handoff["node_id"];
+        item["repo_id"] = handoff["repo_id"];
+
+        Json::Value data(Json::arrayValue);
+        data.append(item);
+        return successResponse(data, "확장 세션을 발급했습니다.");
+    });
+}
+
+// POST /api/github/sessions/refresh — 확장 토큰 자동 갱신 (§12.1).
+// 앱의 /api/users/refresh 와 같은 방식이되, 확장 전용 테이블만 본다(앱 세션과 분리).
+void GithubController::refreshSession(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateStrings(jsonPtr, "refresh_token")) {
+        callback(errorResponse("400", "필수 파라미터(refresh_token)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string refreshToken = (*jsonPtr)["refresh_token"].asString();
+
+    runOffLoop(std::move(callback), [refreshToken]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        // 1) 이 토큰의 주인을 먼저 찾는다. 만료된 토큰은 여기서 걸러진다.
+        auto owner = db->execSqlSync(
+            "SELECT user_email FROM github_extension_tokens WHERE refresh_token = $1 AND expires_at > CURRENT_TIMESTAMP",
+            refreshToken);
+        if (owner.empty()) {
+            return errorResponse("P0812", "확장 세션이 만료되었습니다. 앱에서 다시 연결해 주세요.", k401Unauthorized);
+        }
+        const std::string email = owner[0]["user_email"].as<std::string>();
+
+        // 2) 새 토큰 세트를 만든다(회전 후 값을 저장해야 하므로 먼저 발급한다).
+        Json::Value tokens = AuthController::generateToken(email);
+
+        // 3) 회전. 같은 토큰으로 동시에 두 번 오면 DB 가 하나만 통과시킨다(P0812).
+        Json::Value rotated;
+        if (!singleRow(db->execSqlSync("SELECT * FROM rotate_github_extension_token($1, $2, $3)",
+                                       refreshToken, tokens["refresh_token"].asString(),
+                                       tokens["refresh_token_expiry"].asString()),
+                       rotated)) {
+            return errorResponse("P0812", "확장 세션이 만료되었습니다. 앱에서 다시 연결해 주세요.", k401Unauthorized);
+        }
+
+        // 4) 응답 조립 (토큰은 이 응답에서만 나간다)
+        Json::Value item;
+        item["access_token"] = tokens["access_token"];
+        item["refresh_token"] = tokens["refresh_token"];
+        item["expires_in"] = accessTokenExpirySeconds();
+        item["user_email"] = email;
+        item["expires_at"] = rotated["expires_at"];
+
+        Json::Value data(Json::arrayValue);
+        data.append(item);
+        return successResponse(data, "확장 세션을 갱신했습니다.");
     });
 }

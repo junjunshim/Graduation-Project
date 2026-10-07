@@ -161,6 +161,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0808") != std::string::npos) return DbErrorCode::RepoCloneFailed;
     else if (errMsg.find("P0809") != std::string::npos) return DbErrorCode::BranchHasPresence;
     else if (errMsg.find("P0810") != std::string::npos) return DbErrorCode::BranchHasLocalChanges;
+    else if (errMsg.find("P0811") != std::string::npos) return DbErrorCode::HandoffCodeInvalid;
+    else if (errMsg.find("P0812") != std::string::npos) return DbErrorCode::ExtensionTokenInvalid;
     else return DbErrorCode::Unknown;
 }
 
@@ -596,6 +598,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::BranchHasLocalChanges:{
             ret["message"] = "이 브랜치에 커밋되지 않은 변경이 있습니다. 확인해 주세요.";
             ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::HandoffCodeInvalid:{
+            ret["message"] = "확장 연결 코드가 유효하지 않거나 만료되었습니다. 앱에서 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k401Unauthorized;
+            break;
+        }
+        case DbErrorCode::ExtensionTokenInvalid:{
+            ret["message"] = "확장 세션이 만료되었습니다. 앱에서 다시 연결해 주세요.";
+            ret["http_code"] = drogon::k401Unauthorized;
             break;
         }        default:{
             ret["message"] = "알 수 없는 데이터베이스 에러가 발생했습니다.";

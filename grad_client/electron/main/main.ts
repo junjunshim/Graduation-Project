@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import type { BrowserWindow as BrowserWindowType } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { watchDownloadCompletion } from './downloads'
+import { registerOpenExternalHandlers } from './openExternal'
 import {
   registerWindowControlHandlers,
   sendWindowMaximizeState,
@@ -35,6 +36,7 @@ let win: BrowserWindowType | null
 const isWindows = process.platform === 'win32'
 
 registerWindowControlHandlers()
+registerOpenExternalHandlers()
 
 function createWindow() {
   win = new BrowserWindow({

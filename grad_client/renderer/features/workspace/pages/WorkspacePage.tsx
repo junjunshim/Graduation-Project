@@ -4,6 +4,7 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceFilesTab } from '../components/WorkspaceFilesTab'
+import { WorkspaceGithubTab } from '../components/WorkspaceGithubTab'
 import { WorkspaceMembersTab } from '../components/WorkspaceMembersTab'
 import { WorkspaceRolesTab } from '../components/WorkspaceRolesTab'
 import { WorkspaceSchedulesTab } from '../components/WorkspaceSchedulesTab'
@@ -27,7 +28,15 @@ import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
 import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
 import styles from './WorkspacePage.module.css'
 
-type WorkspaceView = 'overview' | 'tasks' | 'timeline' | 'schedules' | 'files' | 'members' | 'roles'
+type WorkspaceView =
+  | 'overview'
+  | 'tasks'
+  | 'timeline'
+  | 'schedules'
+  | 'files'
+  | 'github'
+  | 'members'
+  | 'roles'
 
 type WorkspaceTab = {
   label: string
@@ -41,6 +50,7 @@ const workspaceTabs: WorkspaceTab[] = [
   { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
   { label: '일정', to: '/workspace?view=schedules', view: 'schedules' },
   { label: '파일', to: '/workspace?view=files', view: 'files' },
+  { label: 'GitHub', to: '/workspace?view=github', view: 'github' },
   { label: '사용자', to: '/workspace?view=members', view: 'members' },
   { label: '역할/권한', to: '/workspace?view=roles', view: 'roles' },
   { label: '설정', to: '/settings' },
@@ -64,6 +74,7 @@ export function WorkspacePage() {
     requestedView === 'timeline' ||
     requestedView === 'schedules' ||
     requestedView === 'files' ||
+    requestedView === 'github' ||
     requestedView === 'members' ||
     requestedView === 'roles'
       ? requestedView
@@ -298,6 +309,7 @@ export function WorkspacePage() {
         activeView === 'tasks' ? styles.tasksPage : '',
         activeView === 'schedules' ? styles.schedulesPage : '',
         activeView === 'files' ? styles.filesPage : '',
+        activeView === 'github' ? styles.githubPage : '',
         activeView === 'members' ? styles.membersPage : '',
         activeView === 'roles' ? styles.rolesPage : '',
       ]
@@ -392,6 +404,10 @@ export function WorkspacePage() {
           nodeId={overview.rootNode ? overview.rootNode.id : (activeWorkspaceRootId ? Number(activeWorkspaceRootId) : 1)}
           workItems={overview.visibleWorkItems}
           files={overview.allFiles ?? overview.files}
+        />
+      ) : activeView === 'github' ? (
+        <WorkspaceGithubTab
+          nodeId={overview.rootNode ? overview.rootNode.id : (activeWorkspaceRootId ? Number(activeWorkspaceRootId) : 1)}
         />
       ) : activeView === 'members' ? (
         <WorkspaceMembersTab

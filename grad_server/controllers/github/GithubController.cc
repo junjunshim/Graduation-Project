@@ -179,6 +179,27 @@ std::string treeishOf(const std::string &ref, const std::string &path) {
     return clean.empty() ? ref : (ref + ":" + clean);
 }
 
+// 브랜치 이름을 clone 안에 실제로 존재하는 tree-ish 로 해석한다.
+// clone 은 기본 브랜치만 로컬 브랜치로 만들기 때문에, 등록하지 않은 브랜치는
+// 원격 추적 참조(origin/<name>)로만 있다. 그대로 쓰면 "fatal: Not a valid object name" 이다.
+// 로컬 브랜치가 있으면 그것을 쓴다(worktree 에 쌓인 로컬 커밋까지 보여야 하므로).
+// 둘 다 없으면 빈 문자열을 돌려준다.
+std::string resolveTreeish(const std::string &localPath, const std::string &branch) {
+    if (branch.empty()) {
+        return "";
+    }
+
+    if (GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/heads/" + branch}).ok()) {
+        return branch;
+    }
+
+    if (GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/remotes/origin/" + branch}).ok()) {
+        return "origin/" + branch;
+    }
+
+    return "";
+}
+
 // ---------------------------------------------------------------------------
 // 환경/설정
 // ---------------------------------------------------------------------------
@@ -690,7 +711,12 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
         }
 
         const std::string localPath = repoRow["local_path"].asString();
-        const std::string ref = branch.empty() ? repoRow["default_branch"].asString() : branch;
+        const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
+        const std::string ref = resolveTreeish(localPath, requested);
+
+        if (ref.empty()) {
+            return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
+        }
 
         // 디렉터리 단위 lazy 조회 (§12.3): 요청한 경로의 한 단계만 받는다.
         auto tree = GitRunner::lsTree(localPath, ref, path, true);
@@ -762,7 +788,13 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         }
 
         const std::string localPath = repoRow["local_path"].asString();
-        const std::string ref = branch.empty() ? repoRow["default_branch"].asString() : branch;
+        const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
+        const std::string ref = resolveTreeish(localPath, requested);
+
+        if (ref.empty()) {
+            return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
+        }
+
         const std::string spec = treeishOf(ref, path);
 
         // 이 파일이 마지막으로 바뀐 시각. 내용을 작업 트리가 아니라 커밋된 트리(git show)에서 읽으므로

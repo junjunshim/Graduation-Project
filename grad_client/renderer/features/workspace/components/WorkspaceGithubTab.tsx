@@ -321,6 +321,9 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
       return
     }
 
+    // 새로고침은 캐시를 버리는 동작이다. 열려 있는 파일도 다음 클릭에서 서버 검증을 다시 거친다.
+    fileCache.current.clear()
+
     await reloadBranches(selectedRepoId, currentBranchRef.current || undefined)
     setDetailRefreshToken((token) => token + 1)
   }
@@ -330,12 +333,19 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
       return
     }
 
-    fileRequestId.current += 1
-    const requestId = fileRequestId.current
     const repoId = selectedRepoId
     const branch = currentBranch
     const cacheKey = fileCacheKey(repoId, branch, entry.path)
     const cached = fileCache.current.get(cacheKey)
+
+    // 이미 열려 있고 내용도 들고 있으면 다시 받지 않는다. 클릭할 때마다 API 를 부르면
+    // 서버 왕복과 로딩 표시가 매번 발생한다. (새로고침은 캐시를 비워 이 검사를 통과시킨다)
+    if (entry.path === previewPath && previewFile && !fileError && cached) {
+      return
+    }
+
+    fileRequestId.current += 1
+    const requestId = fileRequestId.current
 
     setPreviewPath(entry.path)
     setPreviewFile(null)

@@ -248,15 +248,19 @@ void GithubController::connectRepository(const HttpRequestPtr &req, std::functio
     const int nodeId = (*jsonPtr)["node_id"].asInt();
     const std::string owner = (*jsonPtr)["owner_login"].asString();
     const std::string repo = (*jsonPtr)["repo_name"].asString();
-    std::string defaultBranch = (*jsonPtr)["default_branch"].isNull() ? "" : (*jsonPtr)["default_branch"].asString();
+    const std::string requestedBranch = (*jsonPtr)["default_branch"].isNull() ? "" : (*jsonPtr)["default_branch"].asString();
     const std::string givenUrl = (*jsonPtr)["clone_url"].isNull() ? "" : (*jsonPtr)["clone_url"].asString();
 
-    runOffLoop(std::move(callback), [requester, nodeId, owner, repo, defaultBranch, givenUrl]() -> HttpResponsePtr {
+    runOffLoop(std::move(callback), [requester, nodeId, owner, repo, requestedBranch, givenUrl]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         const std::string url = givenUrl.empty()
                                     ? ("https://github.com/" + owner + "/" + repo + ".git")
                                     : givenUrl;
         const std::string localPath = localPathFor(nodeId, repo);
+
+        // clone 이 체크아웃한 브랜치를 기본 브랜치로 채택할 수 있으므로 로컬 사본을 쓴다.
+        // (값으로 캡처한 requestedBranch 는 람다 안에서 const 라 그대로 대입할 수 없다)
+        std::string defaultBranch = requestedBranch;
 
         // 1) 토큰이 있으면 clone/fetch 에 쓴다(비공개 저장소). 없으면 익명으로 시도한다.
         GitRunner::Auth auth;
@@ -533,12 +537,19 @@ void GithubController::getBranches(const HttpRequestPtr &req, std::function<void
             }
         }
 
-        // 이름순 정렬 (DB 순서와 원격 순서가 섞이지 않게)
-        std::sort(branches.begin(), branches.end(), [](const Json::Value &a, const Json::Value &b) {
+        // 이름순 정렬 (DB 순서와 원격 순서가 섞이지 않게).
+        // Json::Value 의 반복자는 양방향이라 std::sort 를 쓸 수 없다. vector 로 옮겨 정렬한 뒤 다시 배열로 만든다.
+        std::vector<Json::Value> ordered(branches.begin(), branches.end());
+        std::sort(ordered.begin(), ordered.end(), [](const Json::Value &a, const Json::Value &b) {
             return a["name"].asString() < b["name"].asString();
         });
 
-        return successResponse(branches, "브랜치 목록을 조회했습니다.");
+        Json::Value sorted(Json::arrayValue);
+        for (const auto &item : ordered) {
+            sorted.append(item);
+        }
+
+        return successResponse(sorted, "브랜치 목록을 조회했습니다.");
     });
 }
 

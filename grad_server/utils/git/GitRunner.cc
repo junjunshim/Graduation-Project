@@ -19,9 +19,11 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-namespace {
-
+// libc 가 제공하는 환경변수 배열. execve 에 넘길 envp 를 만들 때 쓴다.
+// 익명 네임스페이스 안에 두면 내부 링키지가 되어 링크 에러가 나므로 전역에 둔다.
 extern char **environ;
+
+namespace {
 
 // git 이 자격 증명을 물어볼 때 실행하는 스크립트.
 // 프롬프트 문자열에 따라 아이디와 토큰을 구분해 돌려주고, 토큰은 환경변수로만 전달한다

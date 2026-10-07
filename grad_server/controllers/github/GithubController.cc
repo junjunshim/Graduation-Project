@@ -2,6 +2,7 @@
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
 #include "GitRunner.h"
+#include "GithubWebSocketController.h"
 
 #include <drogon/HttpClient.h>
 #include <json/json.h>
@@ -1021,6 +1022,13 @@ void GithubController::createBranch(const HttpRequestPtr &req, std::function<voi
             }
         }
 
+        // 브랜치 생성은 같은 저장소의 모든 접속자에게 알린다(§1.3-5).
+        Json::Value created;
+        created["type"] = "branch_created";
+        created["repo_id"] = repoId;
+        created["branch"] = name;
+        GithubWebSocketController::broadcastToRepository(repoId, created);
+
         return successResponse(branchRow, "브랜치를 만들었습니다.", k201Created);
     });
 }
@@ -1122,6 +1130,15 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
         }
 
         auto result = db->execSqlSync("SELECT * FROM delete_github_branch($1, $2, $3)", requester, repoId, name);
+
+        // 삭제 확정을 같은 저장소 전체에 알린다. 그 브랜치에 있던 사용자는 클라이언트가 기본 브랜치로 옮긴다(§1.3-10).
+        Json::Value deleted;
+        deleted["type"] = "branch_deleted";
+        deleted["repo_id"] = repoId;
+        deleted["branch"] = name;
+        deleted["default_branch"] = defaultBranch;
+        GithubWebSocketController::broadcastToRepository(repoId, deleted);
+
         return successResponse(rowsToArray(result), "브랜치를 삭제했습니다.");
     });
 }
@@ -1372,10 +1389,18 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             return failure;
         }
 
-        // 3) 같은 저장소의 커밋은 직렬화한다(§12.11: git index.lock 경합 방지).
+        // 3) 커밋 시작을 같은 브랜치 접속자에게 알린다(§1.3-7). 확장은 이때 입력을 잠근다.
+        Json::Value started;
+        started["type"] = "commit_started";
+        started["repo_id"] = repoId;
+        started["branch"] = branch;
+        started["email"] = requester;
+        GithubWebSocketController::broadcastToBranch(repoId, branch, started);
+
+        // 4) 같은 저장소의 커밋은 직렬화한다(§12.11: git index.lock 경합 방지).
         std::lock_guard<std::mutex> commitGuard(*repoLock(repoId));
 
-        // 4) 커밋 대상 스테이징 → 커밋.
+        // 5) 커밋 대상 스테이징 → 커밋.
         //    주의: 실제 'git add' 는 그 브랜치의 collab flush 가 끝난 뒤에 해야 한다(§12.11).
         // TODO(M3): collab 연결 후 이 지점 앞에 POST /internal/collab/flush { repo_id, branch } 를 넣는다.
         auto staged = paths.empty() ? GitRunner::run(workDir, {"add", "-A"})
@@ -1403,7 +1428,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         }
         const std::string sha = trim(shaResult.out);
 
-        // 5) push 는 요청 사용자의 자격증명으로만 한다(§6-4).
+        // 6) push 는 요청 사용자의 자격증명으로만 한다(§6-4).
         //    자격증명이 없거나 실패하면 커밋만 로컬에 남기고 pushed=false 로 기록한다(§12.11).
         GitRunner::Auth auth;
         const GitRunner::Auth *authPtr = nullptr;
@@ -1428,7 +1453,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             }
         }
 
-        // 6) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다(§12.11).
+        // 7) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다(§12.11).
         Json::Value commitRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM create_github_commit_log($1, $2, $3, $4, $5, $6, $7)",
                                        requester, repoId, branch, sha, authorEmail, message, pushed),
@@ -1436,7 +1461,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             return errorResponse("P0807", "커밋 기록을 저장하지 못했습니다.", k500InternalServerError);
         }
 
-        // 7) 매칭된 업무가 아직 'todo' 면 첫 커밋으로 보고 'in_progress' 로 전환한다.
+        // 8) 매칭된 업무가 아직 'todo' 면 첫 커밋으로 보고 'in_progress' 로 전환한다.
         //    전환은 강제가 아니며, 실패해도 커밋 자체는 성공으로 둔다(§12.11).
         Json::Value transition(Json::objectValue);
         transition["applied"] = false;
@@ -1456,7 +1481,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             }
         }
 
-        // 8) 응답 조립(§3.2). push 실패는 커밋이 로컬에 남았으므로 성공 응답에 실어 보낸다.
+        // 9) 응답 조립(§3.2). push 실패는 커밋이 로컬에 남았으므로 성공 응답에 실어 보낸다.
         commitRow["pushed"] = pushed;
         commitRow["push_failed"] = !pushed;
         if (!pushed) {
@@ -1471,6 +1496,19 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
 
         Json::Value data(Json::arrayValue);
         data.append(commitRow);
+
+        // 커밋 결과를 같은 브랜치 접속자에게 알린다(§1.3-7). 확장은 이때 입력 잠금을 풀고 트리를 새로 고친다.
+        Json::Value finished;
+        finished["type"] = "commit_finished";
+        finished["repo_id"] = repoId;
+        finished["branch"] = branch;
+        finished["sha"] = sha;
+        finished["email"] = requester;
+        finished["pushed"] = pushed;
+        if (!pushed) {
+            finished["reason"] = pushReason;
+        }
+        GithubWebSocketController::broadcastToBranch(repoId, branch, finished);
 
         if (pushed) {
             return successResponse(data, "커밋하고 원격에 push 했습니다.", k201Created);

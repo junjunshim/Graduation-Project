@@ -7,7 +7,7 @@ using namespace drogon;
 namespace api
 {
 // GitHub 저장소 연동 컨트롤러 (TASK_11).
-// 저장소 연결/해제(+서버 로컬 clone), 디렉터리 트리 조회, 파일 내용, 브랜치 목록,
+// 저장소 연결/해제(+서버 로컬 clone), 디렉터리 트리 조회, 파일 내용, 브랜치 목록, 커밋 그래프,
 // 사용자 PAT 자격증명 등록/조회/해제를 담당한다.
 // 앱 → VSCode 확장 핸드오프 코드 발급과 확장 세션(토큰 교환·갱신)도 여기서 맡는다 (§3.4).
 // 실시간 협업(/api/collab/*)과 제어 소켓(/api/github/ws)은 별도 컨트롤러가 맡는다.
@@ -23,6 +23,7 @@ class GithubController : public drogon::HttpController<GithubController>
     // --- 서버 로컬 저장소 조회 ---
     ADD_METHOD_TO(GithubController::getRepositoryTree,    "/api/github/repos/tree",     Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryFile,    "/api/github/repos/file",     Get, "JwtFilter");
+    ADD_METHOD_TO(GithubController::getRepositoryCommits, "/api/github/repos/commits",  Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getBranches,          "/api/github/repos/branches", Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getPresence,          "/api/github/repos/presence", Get, "JwtFilter");
 
@@ -58,6 +59,7 @@ class GithubController : public drogon::HttpController<GithubController>
 
     void getRepositoryTree(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryFile(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void getRepositoryCommits(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getBranches(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getPresence(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 

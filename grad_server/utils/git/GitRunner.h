@@ -52,6 +52,9 @@ public:
     static GitResult lsTree(const std::string &repoDir, const std::string &ref, const std::string &path,
                          bool withSize = false);
     static GitResult lsFiles(const std::string &worktreeDir, std::vector<std::string> extraArgs = {});
+    // 커밋 그래프용 로그. 부모 SHA 까지 있어야 레인을 배치할 수 있다.
+    // 필드 구분자(US, 0x1f)·레코드 구분자(RS, 0x1e)로 받아 제목에 구분자가 있어도 안전하다.
+    static GitResult logWithParents(const std::string &repoDir, const std::string &ref, int limit);
     static GitResult status(const std::string &worktreeDir);
     static GitResult worktreeList(const std::string &repoDir);
     // startPoint 가 비면 이미 있는 브랜치를 붙이고, 있으면 -b 로 새로 만든다

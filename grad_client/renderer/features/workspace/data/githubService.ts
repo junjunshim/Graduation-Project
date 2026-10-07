@@ -62,6 +62,18 @@ export type GithubBranch = {
   presence: GithubBranchPresence[]
 }
 
+export type GithubCommit = {
+  sha: string
+  /** 부모 SHA. 2개 이상이면 머지 커밋이라 그래프가 레인을 나눈다. */
+  parents: string[]
+  subject: string
+  author_name: string
+  author_email: string
+  authored_at: string
+  /** "HEAD -> main", "origin/main", "tag: v1" 같은 장식. 서버가 git 을 그대로 옮긴다. */
+  refs: string[]
+}
+
 export type GithubCredentialStatus = {
   has_credential: boolean
   github_login?: string | null
@@ -239,6 +251,33 @@ export async function fetchBranches(repoId: number): Promise<GithubBranch[]> {
     return allItems<GithubBranch>(response, '브랜치 목록을 불러오지 못했습니다.')
   } catch (error) {
     throw toServiceError(error, '브랜치 목록을 불러오지 못했습니다.')
+  }
+}
+
+/**
+ * 커밋 그래프. 서버 로컬 clone 의 실제 git 이력이라 GitHub 자격증명이 필요 없다.
+ * limit 은 서버가 1~200 으로 자른다(기본 50).
+ */
+export async function fetchRepositoryCommits(input: {
+  repoId: number
+  branch: string
+  limit?: number
+}): Promise<GithubCommit[]> {
+  const query = new URLSearchParams({ repo_id: String(input.repoId) })
+
+  if (input.branch) {
+    query.set('branch', input.branch)
+  }
+
+  if (input.limit) {
+    query.set('limit', String(input.limit))
+  }
+
+  try {
+    const response = await apiRequest<unknown>(`/github/repos/commits?${query.toString()}`)
+    return allItems<GithubCommit>(response, '커밋 기록을 불러오지 못했습니다.')
+  } catch (error) {
+    throw toServiceError(error, '커밋 기록을 불러오지 못했습니다.')
   }
 }
 

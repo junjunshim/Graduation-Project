@@ -382,6 +382,14 @@ GitResult GitRunner::lsTree(const std::string &repoDir, const std::string &ref, 
     return run(repoDir, args);
 }
 
+GitResult GitRunner::logWithParents(const std::string &repoDir, const std::string &ref, int limit) {
+    // 커밋 그래프는 부모 SHA 가 있어야 레인을 배치할 수 있다.
+    // 제목에 어떤 문자가 있어도 파싱이 깨지지 않도록 필드 구분자(US)·레코드 구분자(RS)를 쓴다.
+    // --topo-order 는 브랜치별 커밋을 뭉쳐 두어 그래프가 세로로 흩어지지 않게 한다.
+    const std::string pretty = "--pretty=format:%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1e";
+    return run(repoDir, {"log", "--topo-order", "-n", std::to_string(limit), pretty, ref});
+}
+
 GitResult GitRunner::lsFiles(const std::string &worktreeDir, std::vector<std::string> extraArgs) {
     // -z 로 경로를 NUL 구분해 받는다 (공백·개행이 있는 파일명 안전)
     std::vector<std::string> args = {"ls-files", "-z"};

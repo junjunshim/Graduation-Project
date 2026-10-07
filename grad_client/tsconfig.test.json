@@ -22,6 +22,7 @@
     "renderer/features/workspace/data/githubService.ts",
     "renderer/features/workspace/data/server/contextAdapter.ts",
     "renderer/features/workspace/model/vscodeLink.ts",
+    "renderer/features/workspace/model/gitGraph.ts",
     "tests/**/*.ts"
   ]
 }

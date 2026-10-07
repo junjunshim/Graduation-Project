@@ -8,7 +8,7 @@
   min-width: 0;
 }
 
-/* 좌측: 저장소 목록 + 자격증명 */
+/* 좌측: 저장소 목록 + 커밋 기록 */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -148,22 +148,6 @@
   color: var(--text-muted);
   font-size: 0.72rem;
   line-height: 1.5;
-}
-
-.credentialRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.credentialLogin {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-primary);
-  font-size: 0.8rem;
-  font-weight: 700;
 }
 
 /* 우측: 저장소 상세 */

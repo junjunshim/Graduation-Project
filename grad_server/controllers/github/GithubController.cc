@@ -163,6 +163,26 @@ std::vector<std::string> splitNul(const std::string &text) {
     return items;
 }
 
+// git log 의 US(필드)·RS(레코드) 구분자. 커밋 제목에 어떤 문자가 와도 파싱이 깨지지 않게 쓴다.
+constexpr char kFieldSeparator = '\x1f';
+constexpr char kRecordSeparator = '\x1e';
+
+// 구분자 한 글자로 나눈다. 빈 조각도 그대로 남긴다(git 출력은 위치로 필드를 구분한다).
+std::vector<std::string> splitBy(const std::string &text, char separator) {
+    std::vector<std::string> items;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t end = text.find(separator, start);
+        if (end == std::string::npos) {
+            items.push_back(text.substr(start));
+            break;
+        }
+        items.push_back(text.substr(start, end - start));
+        start = end + 1;
+    }
+    return items;
+}
+
 std::string normalizePath(std::string path) {
     while (!path.empty() && path.front() == '/') {
         path.erase(path.begin());
@@ -936,6 +956,104 @@ void GithubController::getBranches(const HttpRequestPtr &req, std::function<void
         }
 
         return successResponse(sorted, "브랜치 목록을 조회했습니다.");
+    });
+}
+
+// GET /api/github/repos/commits?repo_id=3&branch=main&limit=50 — 커밋 그래프
+// 서버 로컬 clone 의 실제 git 이력이다. 읽기 전용이라 GitHub 자격증명이 필요 없다.
+void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string branch = req->getParameter("branch");
+
+    // 그래프 한 번 그리는 비용 = 읽는 커밋 수다. 임의로 큰 값을 막으려고 상한을 둔다.
+    constexpr int kDefaultLimit = 50;
+    constexpr int kMaxLimit = 200;
+    int limit = kDefaultLimit;
+    const std::string rawLimit = req->getParameter("limit");
+    if (!rawLimit.empty() && !parseInt(rawLimit, limit)) {
+        limit = kDefaultLimit;
+    }
+    if (limit < 1) {
+        limit = 1;
+    }
+    if (limit > kMaxLimit) {
+        limit = kMaxLimit;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch, limit]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+
+        const std::string localPath = repoRow["local_path"].asString();
+        const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
+        const std::string ref = resolveTreeish(localPath, requested);
+
+        if (ref.empty()) {
+            return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
+        }
+
+        auto logResult = GitRunner::logWithParents(localPath, ref, limit);
+        if (!logResult.ok()) {
+            LOG_WARN << "커밋 로그 조회 실패 (" << ref << "): " << trim(logResult.err);
+            return errorResponse("P0807", "커밋 기록을 읽지 못했습니다: " + trim(logResult.err),
+                                 k500InternalServerError);
+        }
+
+        Json::Value items(Json::arrayValue);
+        for (std::string record : splitBy(logResult.out, kRecordSeparator)) {
+            // git 은 레코드 사이에 개행을 넣는다(첫 레코드 앞은 없음). 앞쪽 개행만 걷어낸다.
+            while (!record.empty() && (record.front() == '\n' || record.front() == '\r')) {
+                record.erase(record.begin());
+            }
+            if (record.empty()) {
+                continue;
+            }
+
+            // %H %P %an %ae %aI %D %s — 순서가 곧 계약이다.
+            const std::vector<std::string> fields = splitBy(record, kFieldSeparator);
+            if (fields.size() < 7) {
+                continue;
+            }
+
+            Json::Value item;
+            item["sha"] = fields[0];
+            item["author_name"] = fields[2];
+            item["author_email"] = fields[3];
+            item["authored_at"] = fields[4];
+            item["subject"] = fields[6];
+
+            // 부모가 2개 이상이면 머지 커밋이다. 클라이언트가 레인을 나누는 데 쓴다.
+            Json::Value parents(Json::arrayValue);
+            for (const std::string &parent : splitBy(fields[1], ' ')) {
+                if (!parent.empty()) {
+                    parents.append(parent);
+                }
+            }
+            item["parents"] = parents;
+
+            // %D 는 "HEAD -> main, origin/main, tag: v1" 형태다. 쉼표로만 나누고 조각은 그대로 둔다.
+            Json::Value refs(Json::arrayValue);
+            for (const std::string &decoration : splitBy(fields[5], ',')) {
+                const std::string label = trim(decoration);
+                if (!label.empty()) {
+                    refs.append(label);
+                }
+            }
+            item["refs"] = refs;
+
+            items.append(item);
+        }
+
+        return successResponse(items, "커밋 기록을 조회했습니다.");
     });
 }
 

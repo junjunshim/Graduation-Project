@@ -4,16 +4,14 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import {
   connectRepository,
   createHandoffCode,
-  disconnectCredential,
   disconnectRepository,
   fetchBranches,
-  fetchCredentialStatus,
   fetchRepositories,
+  fetchRepositoryCommits,
   fetchRepositoryFile,
   fetchRepositoryTree,
-  registerCredential,
   type GithubBranch,
-  type GithubCredentialStatus,
+  type GithubCommit,
   type GithubFileContent,
   type GithubRepository,
   type GithubTreeEntry,
@@ -26,6 +24,7 @@ import {
   describeVscodeWarning,
   getVscodeScheme,
 } from '../model/vscodeLink'
+import { GithubCommitGraph } from './GithubCommitGraph'
 import styles from './WorkspaceGithubTab.module.css'
 
 type WorkspaceGithubTabProps = {
@@ -85,7 +84,7 @@ function pickBranch(branches: GithubBranch[], preferred?: string) {
 
 /**
  * 워크스페이스 상세의 GitHub 탭 (TASK_11 §1.3-1~3, §4.2).
- * 저장소 연결/해제, 서버 로컬 저장소 자세히 보기(구조·브랜치), PAT 자격증명,
+ * 저장소 연결/해제, 서버 로컬 저장소 자세히 보기(구조·브랜치·커밋 그래프),
  * "VSCode 로 실시간 편집" 핸드오프까지를 맡는다. 편집·커밋은 확장이 한다.
  */
 export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
@@ -104,11 +103,10 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
 
-  // PAT 자격증명
-  const [credential, setCredential] = useState<GithubCredentialStatus | null>(null)
-  const [patInput, setPatInput] = useState('')
-  const [isSavingPat, setIsSavingPat] = useState(false)
-  const [credentialError, setCredentialError] = useState<string | null>(null)
+  // 커밋 기록(그래프)
+  const [commits, setCommits] = useState<GithubCommit[]>([])
+  const [isLoadingCommits, setIsLoadingCommits] = useState(false)
+  const [commitsError, setCommitsError] = useState<string | null>(null)
 
   // 저장소 상세(브랜치·구조)
   const [branches, setBranches] = useState<GithubBranch[]>([])
@@ -132,6 +130,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   // 브랜치 비교에 쓰려고 최신 값을 ref 로도 들고 있는다(콜백 재생성 방지).
   const currentBranchRef = useRef('')
   const fileRequestId = useRef(0)
+  const commitRequestId = useRef(0)
 
   // 받아 둔 파일 내용. 서버가 시각으로 검증하므로 낡은 값이 그대로 화면에 남지 않는다.
   const fileCache = useRef<Map<string, CachedFile>>(new Map())
@@ -178,28 +177,6 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   useEffect(() => {
     void reloadRepositories()
   }, [reloadRepositories])
-
-  useEffect(() => {
-    let isSubscribed = true
-
-    void fetchCredentialStatus()
-      .then((status) => {
-        if (isSubscribed) {
-          setCredential(status)
-          setCredentialError(null)
-        }
-      })
-      .catch((error) => {
-        if (isSubscribed) {
-          setCredential(null)
-          setCredentialError(errorMessage(error, 'GitHub 자격증명 상태를 불러오지 못했습니다.'))
-        }
-      })
-
-    return () => {
-      isSubscribed = false
-    }
-  }, [])
 
   const reloadBranches = useCallback(async (repoId: number, preferred?: string) => {
     setDetailError(null)
@@ -281,6 +258,43 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
     }
   }, [selectedRepoId, currentBranch, currentPath, detailRefreshToken])
 
+  // 커밋 그래프는 브랜치 단위로 읽는다. 브랜치가 바뀌면 통째로 다시 그린다.
+  const reloadCommits = useCallback(async () => {
+    if (selectedRepoId === null || !currentBranch) {
+      setCommits([])
+      setCommitsError(null)
+      return
+    }
+
+    commitRequestId.current += 1
+    const requestId = commitRequestId.current
+
+    setIsLoadingCommits(true)
+    setCommitsError(null)
+
+    try {
+      const list = await fetchRepositoryCommits({ repoId: selectedRepoId, branch: currentBranch })
+
+      // 브랜치를 빠르게 바꾸면 먼저 보낸 요청이 나중에 도착할 수 있다. 최신 요청만 반영한다.
+      if (requestId === commitRequestId.current) {
+        setCommits(list)
+      }
+    } catch (error) {
+      if (requestId === commitRequestId.current) {
+        setCommits([])
+        setCommitsError(errorMessage(error, '커밋 기록을 불러오지 못했습니다.'))
+      }
+    } finally {
+      if (requestId === commitRequestId.current) {
+        setIsLoadingCommits(false)
+      }
+    }
+  }, [selectedRepoId, currentBranch])
+
+  useEffect(() => {
+    void reloadCommits()
+  }, [reloadCommits])
+
   const handleSelectRepository = (repoId: number) => {
     if (repoId === selectedRepoId) {
       return
@@ -325,6 +339,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
     fileCache.current.clear()
 
     await reloadBranches(selectedRepoId, currentBranchRef.current || undefined)
+    void reloadCommits()
     setDetailRefreshToken((token) => token + 1)
   }
 
@@ -436,42 +451,6 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
       setReposError(errorMessage(error, '저장소 연결을 해제하지 못했습니다.'))
     } finally {
       setIsDisconnecting(false)
-    }
-  }
-
-  const handleSavePat = async () => {
-    const token = patInput.trim()
-
-    if (!token) {
-      setCredentialError('토큰을 입력해 주세요.')
-      return
-    }
-
-    setIsSavingPat(true)
-    setCredentialError(null)
-
-    try {
-      const status = await registerCredential(token)
-      setCredential(status)
-      setPatInput('')
-    } catch (error) {
-      setCredentialError(errorMessage(error, 'GitHub 자격증명을 등록하지 못했습니다.'))
-    } finally {
-      setIsSavingPat(false)
-    }
-  }
-
-  const handleDisconnectCredential = async () => {
-    setIsSavingPat(true)
-    setCredentialError(null)
-
-    try {
-      await disconnectCredential()
-      setCredential({ has_credential: false })
-    } catch (error) {
-      setCredentialError(errorMessage(error, 'GitHub 자격증명 연결을 해제하지 못했습니다.'))
-    } finally {
-      setIsSavingPat(false)
     }
   }
 
@@ -635,50 +614,31 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
         <section className={styles.sidebarSection}>
           <div className={styles.sectionTitle}>
-            <span>GitHub 자격증명</span>
+            <span>커밋 기록</span>
+            <Button
+              variant="icon"
+              aria-label="커밋 기록 새로고침"
+              onClick={() => void reloadCommits()}
+              disabled={isLoadingCommits}
+            >
+              <Icon name="rotateCcw" size={15} />
+            </Button>
           </div>
 
-          {credential?.has_credential ? (
-            <>
-              <div className={styles.credentialRow}>
-                <span className={styles.credentialLogin}>
-                  <Icon name="checkCircle" size={14} />
-                  {credential.github_login || '연결됨'}
-                </span>
-                <Button variant="secondary" onClick={() => void handleDisconnectCredential()} disabled={isSavingPat}>
-                  해제
-                </Button>
-              </div>
-              <p className={styles.mutedText}>
-                {credential.scopes ? `스코프: ${credential.scopes}` : '스코프 정보 없음'}
-                {credential.expires_at ? ` · 만료: ${credential.expires_at}` : ''}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className={styles.mutedText}>
-                PAT(personal access token)를 등록하면 비공개 저장소 clone 과 push 가 가능합니다. &quot;repo&quot; 스코프가 필요합니다.
-              </p>
-              <label className={styles.field}>
-                <span className={styles.fieldLabel}>Personal access token</span>
-                <input
-                  className={styles.input}
-                  type="password"
-                  value={patInput}
-                  onChange={(event) => setPatInput(event.target.value)}
-                  placeholder="ghp_..."
-                  autoComplete="off"
-                />
-              </label>
-              <div className={styles.formActions}>
-                <Button variant="primary" onClick={() => void handleSavePat()} disabled={isSavingPat}>
-                  {isSavingPat ? '등록 중…' : '등록'}
-                </Button>
-              </div>
-            </>
-          )}
+          {!selectedRepository ? (
+            <p className={styles.mutedText}>저장소를 선택하면 커밋 기록을 보여줍니다.</p>
+          ) : null}
+          {selectedRepository && isLoadingCommits ? (
+            <p className={styles.mutedText}>커밋 기록을 불러오는 중…</p>
+          ) : null}
+          {selectedRepository && !isLoadingCommits && commitsError ? (
+            <p className={styles.errorText}>{commitsError}</p>
+          ) : null}
+          {selectedRepository && !isLoadingCommits && !commitsError && commits.length === 0 ? (
+            <p className={styles.mutedText}>표시할 커밋이 없습니다.</p>
+          ) : null}
 
-          {credentialError ? <p className={styles.errorText}>{credentialError}</p> : null}
+          {commits.length > 0 ? <GithubCommitGraph commits={commits} /> : null}
         </section>
       </aside>
 

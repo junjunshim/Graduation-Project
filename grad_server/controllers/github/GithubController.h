@@ -35,6 +35,9 @@ class GithubController : public drogon::HttpController<GithubController>
     ADD_METHOD_TO(GithubController::unstagePaths,         "/api/github/repos/stage",    Delete, "JwtFilter");
     ADD_METHOD_TO(GithubController::fetchRepository,      "/api/github/repos/fetch",    Post,   "JwtFilter");
 
+    // --- 커밋 (+push) (§1.3-7, §12.11) ---
+    ADD_METHOD_TO(GithubController::commitPaths,          "/api/github/repos/commits",  Post,   "JwtFilter");
+
     // --- 사용자 GitHub 자격증명 (PAT) ---
     ADD_METHOD_TO(GithubController::getCredentialStatus,  "/api/github/credentials", Get,    "JwtFilter");
     ADD_METHOD_TO(GithubController::registerCredential,   "/api/github/credentials", Post,   "JwtFilter");
@@ -57,6 +60,7 @@ class GithubController : public drogon::HttpController<GithubController>
     void stagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void unstagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void fetchRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void commitPaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 
     void getCredentialStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void registerCredential(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);

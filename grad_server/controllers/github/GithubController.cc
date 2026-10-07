@@ -10,7 +10,9 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -428,6 +430,76 @@ Json::Value readWorktreeStatus(const std::string &workDir, GitResult &out) {
         return Json::Value(Json::arrayValue);
     }
     return parseStatusPorcelain(out.out);
+}
+
+// 확장이 실패 사유를 프로그램으로 구분할 수 있게 data 에 reason 만 담는다.
+Json::Value reasonData(const std::string &reason) {
+    Json::Value data;
+    data["reason"] = reason;
+    return data;
+}
+
+// work_item_id 같은 식별자는 VARCHAR 이지만 숫자로 와도 문자열로 맞춰 준다.
+std::string idAsString(const Json::Value &value) {
+    if (value.isString()) {
+        return value.asString();
+    }
+    if (value.isInt() || value.isInt64() || value.isUInt() || value.isUInt64()) {
+        return std::to_string(value.asInt64());
+    }
+    return "";
+}
+
+// 같은 저장소에서 커밋이 겹치면 git 이 index.lock 으로 실패한다.
+// 저장소 단위 뮤텍스를 돌려주어 커밋 구간을 직렬화한다 (§12.11).
+std::shared_ptr<std::mutex> repoLock(int repoId) {
+    static std::mutex tableGuard;
+    static std::map<int, std::shared_ptr<std::mutex>> table;
+
+    std::lock_guard<std::mutex> guard(tableGuard);
+    std::shared_ptr<std::mutex> &entry = table[repoId];
+    if (!entry) {
+        entry = std::make_shared<std::mutex>();
+    }
+    return entry;
+}
+
+// push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다 (§12.11).
+std::string classifyPushFailure(const std::string &detail) {
+    if (detail.find("Authentication failed") != std::string::npos ||
+        detail.find("could not read Username") != std::string::npos ||
+        detail.find("Support for password authentication") != std::string::npos ||
+        detail.find("terminal prompts disabled") != std::string::npos) {
+        return "credential_invalid";
+    }
+    if (detail.find("403") != std::string::npos ||
+        detail.find("denied") != std::string::npos ||
+        detail.find("protected branch") != std::string::npos) {
+        return "denied";
+    }
+    if (detail.find("non-fast-forward") != std::string::npos ||
+        detail.find("fetch first") != std::string::npos ||
+        detail.find("rejected") != std::string::npos) {
+        return "non_fast_forward";
+    }
+    return "other";
+}
+
+// 사유를 사용자에게 보여 줄 한 줄로 바꾼다.
+std::string pushReasonLabel(const std::string &reason) {
+    if (reason == "credential_missing") {
+        return "GitHub 자격증명이 연결되어 있지 않음";
+    }
+    if (reason == "credential_invalid") {
+        return "GitHub 자격증명이 무효·만료됨";
+    }
+    if (reason == "denied") {
+        return "이 저장소에 push 권한이 없음";
+    }
+    if (reason == "non_fast_forward") {
+        return "원격이 앞서 있음(non-fast-forward)";
+    }
+    return "원인을 알 수 없음";
 }
 }  // namespace
 
@@ -903,6 +975,10 @@ void GithubController::createBranch(const HttpRequestPtr &req, std::function<voi
     const int repoId = (*jsonPtr)["repo_id"].asInt();
     const std::string name = trim((*jsonPtr)["name"].asString());
     const std::string baseBranch = (*jsonPtr)["base_branch"].isString() ? trim((*jsonPtr)["base_branch"].asString()) : "";
+    if (name.empty()) {
+        callback(errorResponse("400", "브랜치 이름이 비어 있습니다.", k400BadRequest));
+        return;
+    }
 
     runOffLoop(std::move(callback), [requester, repoId, name, baseBranch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
@@ -1104,6 +1180,10 @@ void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(
     const std::string requester = requesterEmail(req);
     const int repoId = (*jsonPtr)["repo_id"].asInt();
     const std::string branch = trim((*jsonPtr)["branch"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
 
     runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
@@ -1140,6 +1220,10 @@ void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<voi
     const std::string requester = requesterEmail(req);
     const int repoId = (*jsonPtr)["repo_id"].asInt();
     const std::string branch = trim((*jsonPtr)["branch"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
 
     runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
@@ -1217,5 +1301,181 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
             data["branch"] = branch;
         }
         return successResponse(data, "원격 저장소를 최신으로 맞췄습니다.");
+    });
+}
+// ===========================================================================
+// 커밋 (§3.2 POST /api/github/repos/commits, §12.11 커밋 파이프라인)
+// ===========================================================================
+
+// POST /api/github/repos/commits — 커밋(+push)
+void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "message")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch, message)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string message = trim((*jsonPtr)["message"].asString());
+    if (message.empty()) {
+        callback(errorResponse("400", "커밋 메시지가 비어 있습니다.", k400BadRequest));
+        return;
+    }
+
+    // paths 를 생략하면 커밋되지 않은 변경 전체를 커밋한다(§3.2).
+    const std::vector<std::string> paths = jsonStringArray((*jsonPtr)["paths"]);
+
+    // identity 는 '검증만' 한다(§2.4). 실제 작성자는 서버가 확정한다.
+    std::string identityName;
+    std::string identityEmail;
+    const Json::Value &identity = (*jsonPtr)["identity"];
+    if (identity.isObject()) {
+        if (identity["name"].isString()) {
+            identityName = trim(identity["name"].asString());
+        }
+        if (identity["email"].isString()) {
+            identityEmail = trim(identity["email"].asString());
+        }
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback),
+               [requester, repoId, branch, message, paths, identityName, identityEmail]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        // 1) 로그인 계정에서 작성자를 확정한다(요청 바디를 신뢰하지 않는다, §12.11).
+        Json::Value userRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_user_profile($1, $2)", requester, requester), userRow)) {
+            return errorResponse("P0001", "로그인 사용자를 찾을 수 없습니다.", k404NotFound);
+        }
+        const std::string accountName = userRow["name"].asString();
+        const std::string accountEmail = userRow["email"].asString();
+
+        // 커밋 이메일은 항상 계정 이메일이다. 다른 이메일을 지정하면 거부한다.
+        if (!identityEmail.empty() && lowerCopy(identityEmail) != lowerCopy(accountEmail)) {
+            return errorResponse("403", "커밋 이메일이 로그인 계정과 다릅니다: " + identityEmail, k403Forbidden);
+        }
+        // 이름은 확장의 user.name 을 쓰되 비어 있으면 계정 이름으로 대체한다.
+        const std::string authorName = identityName.empty() ? accountName : identityName;
+        const std::string authorEmail = accountEmail;
+
+        // 2) 브랜치의 작업 디렉터리를 확정한다(없으면 worktree 를 만든다).
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        // 3) 같은 저장소의 커밋은 직렬화한다(§12.11: git index.lock 경합 방지).
+        std::lock_guard<std::mutex> commitGuard(*repoLock(repoId));
+
+        // 4) 커밋 대상 스테이징 → 커밋.
+        //    주의: 실제 'git add' 는 그 브랜치의 collab flush 가 끝난 뒤에 해야 한다(§12.11).
+        // TODO(M3): collab 연결 후 이 지점 앞에 POST /internal/collab/flush { repo_id, branch } 를 넣는다.
+        auto staged = paths.empty() ? GitRunner::run(workDir, {"add", "-A"})
+                                    : GitRunner::stageAdd(workDir, paths);
+        if (!staged.ok()) {
+            return errorResponse("P0807", "변경 사항을 스테이징하지 못했습니다: " + trim(staged.err),
+                                 k500InternalServerError);
+        }
+
+        auto committed = GitRunner::commit(workDir, message, authorName, authorEmail);
+        if (!committed.ok()) {
+            const std::string detail = trim(committed.err);
+            // 커밋할 변경이 없는 경우는 오류가 아니라 사용자에게 그대로 알린다.
+            if (detail.find("nothing to commit") != std::string::npos ||
+                detail.find("no changes added to commit") != std::string::npos) {
+                return errorResponse("P0807", "커밋할 변경 사항이 없습니다.", k409Conflict);
+            }
+            return errorResponse("P0807", "커밋하지 못했습니다: " + detail, k500InternalServerError);
+        }
+
+        auto shaResult = GitRunner::headSha(workDir);
+        if (!shaResult.ok()) {
+            return errorResponse("P0807", "커밋 SHA 를 읽지 못했습니다: " + trim(shaResult.err),
+                                 k500InternalServerError);
+        }
+        const std::string sha = trim(shaResult.out);
+
+        // 5) push 는 요청 사용자의 자격증명으로만 한다(§6-4).
+        //    자격증명이 없거나 실패하면 커밋만 로컬에 남기고 pushed=false 로 기록한다(§12.11).
+        GitRunner::Auth auth;
+        const GitRunner::Auth *authPtr = nullptr;
+        const std::string token = userToken(db, requester);
+        if (!token.empty()) {
+            auth.login = "x-access-token";
+            auth.token = token;
+            authPtr = &auth;
+        }
+
+        bool pushed = false;
+        std::string pushReason;
+        if (authPtr == nullptr) {
+            pushReason = "credential_missing";
+        } else {
+            auto pushedResult = GitRunner::push(workDir, branch, authPtr);
+            if (pushedResult.ok()) {
+                pushed = true;
+            } else {
+                pushReason = classifyPushFailure(pushedResult.err);
+                LOG_WARN << "push 실패 (" << branch << "): " << trim(pushedResult.err);
+            }
+        }
+
+        // 6) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다(§12.11).
+        Json::Value commitRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM create_github_commit_log($1, $2, $3, $4, $5, $6, $7)",
+                                       requester, repoId, branch, sha, authorEmail, message, pushed),
+                       commitRow)) {
+            return errorResponse("P0807", "커밋 기록을 저장하지 못했습니다.", k500InternalServerError);
+        }
+
+        // 7) 매칭된 업무가 아직 'todo' 면 첫 커밋으로 보고 'in_progress' 로 전환한다.
+        //    전환은 강제가 아니며, 실패해도 커밋 자체는 성공으로 둔다(§12.11).
+        Json::Value transition(Json::objectValue);
+        transition["applied"] = false;
+        const std::string matchedId = idAsString(commitRow["matched_work_item_id"]);
+        if (!matchedId.empty() && commitRow["matched_work_item_status"].asString() == "todo") {
+            try {
+                db->execSqlSync(
+                    "SELECT * FROM update_work_item($1, $2, NULL, NULL, NULL, NULL, 'in_progress',"
+                    " -1, -1, -1, NULL, NULL, NULL, FALSE, NULL, FALSE)",
+                    requester, matchedId);
+                transition["applied"] = true;
+                transition["work_item_id"] = matchedId;
+                transition["from"] = "todo";
+                transition["to"] = "in_progress";
+            } catch (const orm::DrogonDbException &e) {
+                transition["reason"] = std::string(e.base().what());
+            }
+        }
+
+        // 8) 응답 조립(§3.2). push 실패는 커밋이 로컬에 남았으므로 성공 응답에 실어 보낸다.
+        commitRow["pushed"] = pushed;
+        commitRow["push_failed"] = !pushed;
+        if (!pushed) {
+            commitRow["reason"] = pushReason;
+            commitRow["reason_label"] = pushReasonLabel(pushReason);
+            // 자격증명 문제는 확장이 연결 안내를 띄울 수 있게 코드로도 알려 준다(§12.12).
+            if (pushReason == "credential_invalid") {
+                commitRow["code"] = "P0802";
+            }
+        }
+        commitRow["status_transition"] = transition;
+
+        Json::Value data(Json::arrayValue);
+        data.append(commitRow);
+
+        if (pushed) {
+            return successResponse(data, "커밋하고 원격에 push 했습니다.", k201Created);
+        }
+        return successResponse(data, "커밋은 로컬에 저장했지만 원격 push 에 실패했습니다: " + pushReasonLabel(pushReason),
+                               k201Created);
     });
 }

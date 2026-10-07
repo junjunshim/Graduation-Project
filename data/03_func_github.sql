@@ -854,6 +854,7 @@ BEGIN
         'pushed_by_email', cl.pushed_by_email,
         'matched_work_item_id', cl.matched_work_item_id,
         'matched_display_id', w.display_id,
+        'matched_work_item_status', w.status,
         'pushed', cl.pushed,
         'created_at', cl.created_at
     )::jsonb AS out_data

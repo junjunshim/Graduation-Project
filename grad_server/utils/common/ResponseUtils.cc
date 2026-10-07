@@ -149,6 +149,18 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
     else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
     else if (errMsg.find("P0703") != std::string::npos) return DbErrorCode::LogActivityFailed;
+
+    // --- GitHub 저장소 연동 (P08xx) ---
+    else if (errMsg.find("P0801") != std::string::npos) return DbErrorCode::RepoNotConnected;
+    else if (errMsg.find("P0802") != std::string::npos) return DbErrorCode::GithubCredentialInvalid;
+    else if (errMsg.find("P0803") != std::string::npos) return DbErrorCode::GithubScopeInsufficient;
+    else if (errMsg.find("P0804") != std::string::npos) return DbErrorCode::GithubPushDenied;
+    else if (errMsg.find("P0805") != std::string::npos) return DbErrorCode::GitNonFastForward;
+    else if (errMsg.find("P0806") != std::string::npos) return DbErrorCode::GithubKeyNotConfigured;
+    else if (errMsg.find("P0807") != std::string::npos) return DbErrorCode::GithubOperationFailed;
+    else if (errMsg.find("P0808") != std::string::npos) return DbErrorCode::RepoCloneFailed;
+    else if (errMsg.find("P0809") != std::string::npos) return DbErrorCode::BranchHasPresence;
+    else if (errMsg.find("P0810") != std::string::npos) return DbErrorCode::BranchHasLocalChanges;
     else return DbErrorCode::Unknown;
 }
 
@@ -534,7 +546,58 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
-        default:{
+
+        // --- GitHub 저장소 연동 (P08xx) ---
+        case DbErrorCode::RepoNotConnected:{
+            ret["message"] = "연결된 저장소나 브랜치를 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::GithubCredentialInvalid:{
+            ret["message"] = "GitHub 자격증명이 없거나 무효합니다. 다시 등록해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::GithubScopeInsufficient:{
+            ret["message"] = "GitHub 토큰에 repo 스코프가 필요합니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::GithubPushDenied:{
+            ret["message"] = "이 저장소에 push 권한이 없습니다.";
+            ret["http_code"] = drogon::k403Forbidden;
+            break;
+        }
+        case DbErrorCode::GitNonFastForward:{
+            ret["message"] = "원격 저장소가 앞서 있어 push할 수 없습니다. fetch 후 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::GithubKeyNotConfigured:{
+            ret["message"] = "GitHub 자격증명 암호화 키가 설정되지 않았습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::GithubOperationFailed:{
+            ret["message"] = "GitHub 저장소 작업에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RepoCloneFailed:{
+            ret["message"] = "저장소를 clone하지 못했습니다. 저장소 존재 여부와 접근 권한을 확인해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::BranchHasPresence:{
+            ret["message"] = "이 브랜치에서 작업 중인 사용자가 있습니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::BranchHasLocalChanges:{
+            ret["message"] = "이 브랜치에 커밋되지 않은 변경이 있습니다. 확인해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }        default:{
             ret["message"] = "알 수 없는 데이터베이스 에러가 발생했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;

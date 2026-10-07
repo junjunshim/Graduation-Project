@@ -5,12 +5,16 @@
 --   - 저장소 연결/해제: 해당 노드 NODE_INFO_CHANGE (ADMIN 계열 — MANAGER 는 bit 12 가 없다)
 --   - 브랜치 생성·삭제·커밋: WI_PERSONAL_CHANGE (작업자 이상 — VIEWER 는 불가)
 --
--- 오류 코드 (P0401 ~ P0405)
---   P0401 저장소(또는 브랜치)가 연결되어 있지 않음
---   P0402 GitHub 자격증명이 없거나 무효
---   P0403 GitHub 토큰 스코프 부족 (컨트롤러가 GitHub API 응답으로 판정)
---   P0404 예약
---   P0405 저장소/자격증명 처리 실패 (기타)
+-- 오류 코드 (P0801 ~ P0808) — P04xx 는 역할, P03xx 는 노드가 이미 쓰고 있어 대역을 분리했다.
+--   P0801 저장소(또는 브랜치)가 연결되어 있지 않음
+--   P0802 GitHub 자격증명이 없거나 무효
+--   P0803 GitHub 토큰 스코프 부족 (컨트롤러가 GitHub API 응답으로 판정)
+--   P0804 GitHub push 권한 없음 (컨트롤러 판정)
+--   P0805 non-fast-forward (컨트롤러 판정)
+--   P0806 GitHub 자격증명 암호화 키 미설정
+--   P0807 저장소/자격증명 처리 실패 (기타)
+--   P0808 저장소 clone 실패 (컨트롤러 판정)
+--   (브랜치 삭제 가드 P0209/P0210 은 컨트롤러가 판정한다.)
 --
 -- access_token 은 어떤 응답에도 담지 않는다. 복호화를 돌려주는 함수는 get_github_user_token 하나뿐이며,
 -- 그 반환값도 API 응답·로그·에러 메시지에 넣지 않는다 (§3.1 (5), §5).
@@ -62,8 +66,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Repository is not connected: %', p_repo_id
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 3. 권한 확인 (연결된 노드를 볼 수 있어야 한다)
@@ -91,11 +95,11 @@ BEGIN
     WHERE r.repo_id = p_repo_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to get github repository: %, (REASON: %)', p_repo_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to get github repository: %, (REASON: %)', p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -206,8 +210,8 @@ BEGIN
         WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to connect github repository: %/%, (REASON: %)', p_owner_login, p_repo_name, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to connect github repository: %/%, (REASON: %)', p_owner_login, p_repo_name, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -263,8 +267,8 @@ BEGIN
         WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0002' OR SQLSTATE 'P0103' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to get github repositories of node: %, (REASON: %)', p_node_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to get github repositories of node: %, (REASON: %)', p_node_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -295,8 +299,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Repository is not connected: %', p_repo_id
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 3. 권한 확인 (해제도 연결과 같은 ADMIN 계열)
@@ -348,11 +352,11 @@ BEGIN
     WHERE r.repo_id = p_repo_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to disconnect github repository: %, (REASON: %)', p_repo_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to disconnect github repository: %, (REASON: %)', p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -390,8 +394,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Repository is not connected: %', p_repo_id
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 3. 권한 확인 (브랜치 생성은 작업자 이상)
@@ -453,11 +457,11 @@ BEGIN
     WHERE b.branch_id = v_branch_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to create github branch: % (repo %), (REASON: %)', p_name, p_repo_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to create github branch: % (repo %), (REASON: %)', p_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -485,8 +489,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Repository is not connected: %', p_repo_id
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 3. 권한 확인
@@ -534,11 +538,11 @@ BEGIN
     ORDER BY b.name;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to get github branches (repo %), (REASON: %)', p_repo_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to get github branches (repo %), (REASON: %)', p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -569,8 +573,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Repository is not connected: %', p_repo_id
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 3. 권한 확인 (브랜치 삭제도 작업자 이상)
@@ -585,8 +589,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND name = p_name AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Branch is not registered on this repository: %', p_name
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Branch is not registered on this repository: %', p_name
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 5. 접속자 정리 (휘발성 캐시)
@@ -613,11 +617,11 @@ BEGIN
     WHERE b.branch_id = v_branch_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to delete github branch: % (repo %), (REASON: %)', p_name, p_repo_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to delete github branch: % (repo %), (REASON: %)', p_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -649,8 +653,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Repository is not connected: %', p_repo_id
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 3. 권한 확인 (노드를 볼 수 있으면 접속 자체는 가능하다 — 읽기 전용 접속자도 목록에 남는다)
@@ -665,8 +669,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND name = p_branch_name AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Branch is not registered on this repository: %', p_branch_name
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Branch is not registered on this repository: %', p_branch_name
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 5. 접속 등록 (있으면 브랜치 이동 + heartbeat, 없으면 삽입)
@@ -700,11 +704,11 @@ BEGIN
     ORDER BY gp.connected_at;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to register branch presence: % (repo %), (REASON: %)', p_branch_name, p_repo_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to register branch presence: % (repo %), (REASON: %)', p_branch_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -758,8 +762,8 @@ BEGIN
         WHEN SQLSTATE 'P0001' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to release branch presence: %, (REASON: %)', p_connection_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to release branch presence: %, (REASON: %)', p_connection_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -797,8 +801,8 @@ BEGIN
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0401]Repository is not connected: %', p_repo_id
-        USING ERRCODE = 'P0401';
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
     END IF;
 
     -- 3. 권한 확인 (커밋은 작업자 이상)
@@ -858,11 +862,11 @@ BEGIN
     WHERE cl.commit_log_id = v_commit_log_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to record github commit: % (repo %), (REASON: %)', p_sha, p_repo_id, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to record github commit: % (repo %), (REASON: %)', p_sha, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -892,13 +896,13 @@ BEGIN
 
     -- 2. 암호화 키와 토큰은 비어 있으면 안 된다 (키가 없으면 평문 저장으로 흘러가므로 거부한다)
     IF p_enc_key IS NULL OR p_enc_key = '' THEN
-        RAISE EXCEPTION '[P0405]Encryption key is not configured'
-        USING ERRCODE = 'P0405';
+        RAISE EXCEPTION '[P0806]Encryption key is not configured'
+        USING ERRCODE = 'P0806';
     END IF;
 
     IF p_token IS NULL OR p_token = '' THEN
-        RAISE EXCEPTION '[P0402]GitHub token is empty for user: %', p_requester_email
-        USING ERRCODE = 'P0402';
+        RAISE EXCEPTION '[P0802]GitHub token is empty for user: %', p_requester_email
+        USING ERRCODE = 'P0802';
     END IF;
 
     -- 3. 사용자당 활성 자격증명 1개 — 있으면 갱신, 없으면 삽입
@@ -947,11 +951,11 @@ BEGIN
     WHERE c.credential_id = v_credential_id;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0402' OR SQLSTATE 'P0405' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0802' OR SQLSTATE 'P0806' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to save github credential: %, (REASON: %)', p_requester_email, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to save github credential: %, (REASON: %)', p_requester_email, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1002,8 +1006,8 @@ BEGIN
         WHEN SQLSTATE 'P0001' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to get github credential: %, (REASON: %)', p_requester_email, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to get github credential: %, (REASON: %)', p_requester_email, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1027,8 +1031,8 @@ BEGIN
 
     -- 2. 암호화 키 확인
     IF p_enc_key IS NULL OR p_enc_key = '' THEN
-        RAISE EXCEPTION '[P0405]Encryption key is not configured'
-        USING ERRCODE = 'P0405';
+        RAISE EXCEPTION '[P0806]Encryption key is not configured'
+        USING ERRCODE = 'P0806';
     END IF;
 
     -- 3. 활성 자격증명 확인
@@ -1039,20 +1043,20 @@ BEGIN
     LIMIT 1;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0402]GitHub credential is not registered: %', p_requester_email
-        USING ERRCODE = 'P0402';
+        RAISE EXCEPTION '[P0802]GitHub credential is not registered: %', p_requester_email
+        USING ERRCODE = 'P0802';
     END IF;
 
     -- 4. 복호화해 반환
     RETURN pgp_sym_decrypt(decode(v_access_token, 'base64'), p_enc_key);
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0402' OR SQLSTATE 'P0405' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0802' OR SQLSTATE 'P0806' THEN
             RAISE;
         WHEN OTHERS THEN
             -- SQLERRM 에는 토큰 값이 들어가지 않는다. 파라미터를 메시지에 넣지 않는 이유이기도 하다.
-            RAISE EXCEPTION '[P0405]Failed to decrypt github credential: %, (REASON: %)', p_requester_email, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to decrypt github credential: %, (REASON: %)', p_requester_email, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1083,8 +1087,8 @@ BEGIN
     WHERE user_email = p_requester_email AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0402]GitHub credential is not registered: %', p_requester_email
-        USING ERRCODE = 'P0402';
+        RAISE EXCEPTION '[P0802]GitHub credential is not registered: %', p_requester_email
+        USING ERRCODE = 'P0802';
     END IF;
 
     -- 3. 결과 반환
@@ -1096,10 +1100,10 @@ BEGIN
     )::jsonb AS out_data;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0402' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0802' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to delete github credential: %, (REASON: %)', p_requester_email, SQLERRM
-            USING ERRCODE = 'P0405';
+            RAISE EXCEPTION '[P0807]Failed to delete github credential: %, (REASON: %)', p_requester_email, SQLERRM
+            USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;

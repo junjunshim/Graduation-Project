@@ -80,6 +80,16 @@ enum class DbErrorCode {
     InvalidParentHierarchy,     // P0620 부모 업무를 자기 자신/하위 업무로 지정
     ParentNodeOutOfScope,       // P0621 부모 업무가 현재 노드/직속 상위 노드 범위 밖
     LogActivityFailed,          // P0703 활동 로그 기록 실패
+    RepoNotConnected,           // P0801 저장소나 브랜치가 연결되어 있지 않음
+    GithubCredentialInvalid,    // P0802 GitHub 자격증명이 없거나 무효
+    GithubScopeInsufficient,    // P0803 GitHub 토큰 스코프 부족
+    GithubPushDenied,           // P0804 GitHub push 권한 없음
+    GitNonFastForward,          // P0805 non-fast-forward
+    GithubKeyNotConfigured,     // P0806 GitHub 자격증명 암호화 키 미설정
+    GithubOperationFailed,      // P0807 저장소/자격증명 처리 실패
+    RepoCloneFailed,            // P0808 저장소 clone 실패
+    BranchHasPresence,          // P0809 브랜치에 작업 중인 사용자가 있음
+    BranchHasLocalChanges,      // P0810 브랜치에 커밋되지 않은 변경이 있음
     Unknown                     // 알 수 없는 에러
 };
 

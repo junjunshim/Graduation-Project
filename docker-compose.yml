@@ -36,11 +36,19 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       # 추가적으로 필요한 환경변수들을 여기에 정의
       API_KEY: ${API_KEY}
+      # GitHub 자격증명(PAT) 암호화 키 - 서버 전용, 절대 커밋/로그 금지
+      GITHUB_TOKEN_KEY: ${GITHUB_TOKEN_KEY}
       JWT_SECRET: ${JWT_SECRET}
       ACCESS_TOKEN_EXPIRY: ${ACCESS_TOKEN_EXPIRY}
       REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY}
     volumes:
       - .:/app                  # 로컬 소스 수정을 컨테이너에 즉시 반영 (개발용)
+      # 저장소 clone/worktree 전용 마운트.
+      # 서버는 `cd /app/grad_server/build && ./grad_server` 로 뜬다(uploads 와 같은 CWD).
+      # 따라서 CWD 기준 ./repository = /app/grad_server/build/repository 이고, 볼륨도 여기에 붙여야 한다.
+      # (.:/app 안에 그냥 두면 clone/worktree 가 호스트 소스트리에 섞여 들어간다)
+      - repository_data:/app/grad_server/build/repository
 
 volumes:
   postgres_data:                # DB 데이터 보존용 볼륨 정의
+  repository_data:              # 서버 로컬 저장소(clone + 브랜치 worktree) 보존용 볼륨

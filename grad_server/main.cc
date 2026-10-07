@@ -11,6 +11,9 @@ int main() {
     try {
         std::filesystem::create_directories("./uploads/work_items");
         std::filesystem::create_directories("./uploads/recurring_rules");
+        // 서버 로컬 저장소 루트 (저장소 clone + 브랜치 worktree).
+        // docker-compose 의 repository_data 볼륨이 이 위치에 붙는다 (uploads 와 같은 CWD 기준 규칙).
+        std::filesystem::create_directories("./repository");
     } catch (const std::exception& e) {
         LOG_ERROR << "Failed to initialize uploads directory: " << e.what();
     }

@@ -199,6 +199,17 @@ std::string userToken(const orm::DbClientPtr &db, const std::string &email) {
         return "";
     }
     try {
+        // 자격증명이 없는 것은 정상 상태(익명 clone)다. 먼저 존재를 확인해 예외(P0802)로
+        // PostgreSQL 로그를 채우지 않는다. 실제로 문제인 경우(복호화 실패 등)만 예외가 난다.
+        Json::Value status;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_user_credential($1)", email), status)) {
+            return "";
+        }
+        const Json::Value hasCredential = status["has_credential"];
+        if (!hasCredential.isBool() || !hasCredential.asBool()) {
+            return "";
+        }
+
         auto result = db->execSqlSync("SELECT get_github_user_token($1, $2) AS token", email, key);
         if (result.empty()) {
             return "";
@@ -563,7 +574,11 @@ void GithubController::connectRepository(const HttpRequestPtr &req, std::functio
                                            authenticated ? &auth : nullptr);
             if (!cloned.ok()) {
                 LOG_WARN << "git clone 실패 (" << url << "): " << trim(cloned.err);
-                return errorResponse("P0808", "저장소를 clone 하지 못했습니다. 주소와 접근 권한을 확인해 주세요.", k502BadGateway);
+                // 익명 clone 은 공개 저장소만 된다. 자격증명이 없을 때는 원인을 짚어 준다.
+                return errorResponse("P0808",
+                                     authenticated ? "저장소를 clone 하지 못했습니다. 주소와 접근 권한을 확인해 주세요."
+                                                   : "저장소를 clone 하지 못했습니다. 비공개 저장소라면 GitHub 자격증명(PAT)을 먼저 등록해 주세요.",
+                                     k502BadGateway);
             }
             // clone 이 체크아웃한 브랜치가 곧 기본 브랜치다.
             auto branch = GitRunner::currentBranch(localPath);

@@ -239,7 +239,10 @@ GitResult GitRunner::run(const std::string &workDir,
             ::alarm(static_cast<unsigned int>(timeoutSec));
         }
 
-        ::execvp("git", argv.data());
+        // 반드시 execvpe(envp) 로 실행한다. execvp 는 위에서 구성한 envp 를 버리고 부모의
+        // environ 을 그대로 쓰기 때문에 GIT_TERMINAL_PROMPT=0 · GIT_ASKPASS 가 적용되지 않아
+        // git 이 아이디/비밀번호를 대화형으로 물어보며 멈춘다.
+        ::execvpe("git", argv.data(), envp.data());
         ::_exit(127);  // exec 실패
     }
 

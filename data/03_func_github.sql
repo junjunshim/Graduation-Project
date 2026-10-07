@@ -537,7 +537,7 @@ BEGIN
         WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0401' THEN
             RAISE;
         WHEN OTHERS THEN
-            RAISE EXCEPTION '[P0405]Failed to get github branches: % (repo %), (REASON: %)', p_repo_id, SQLERRM
+            RAISE EXCEPTION '[P0405]Failed to get github branches (repo %), (REASON: %)', p_repo_id, SQLERRM
             USING ERRCODE = 'P0405';
 END;
 $$ LANGUAGE plpgsql;

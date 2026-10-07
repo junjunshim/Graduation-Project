@@ -230,6 +230,205 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
     worker.detach();
 }
 
+// ---------------------------------------------------------------------------
+// 작업 트리 헬퍼 (§2.3: 브랜치 격리 = git worktree)
+// ---------------------------------------------------------------------------
+
+// git worktree 는 작업 디렉터리에 '.git' 파일을 만든다. 그것으로 준비 여부를 판단한다.
+bool worktreeReady(const std::string &worktreePath) {
+    if (worktreePath.empty()) {
+        return false;
+    }
+    std::error_code ec;
+    return std::filesystem::exists(worktreePath + "/.git", ec);
+}
+
+// 브랜치의 작업 디렉터리를 준비한다(이미 있으면 그대로 쓴다).
+//  - 로컬에 브랜치가 있으면 그대로 붙인다
+//  - 원격에만 있으면 origin/<branch> 에서 추적 브랜치를 만들어 붙인다
+//  - 둘 다 없으면 기준 브랜치에서 새로 만든다
+GitResult ensureWorktree(const std::string &localPath, const std::string &worktreePath,
+                         const std::string &branch, const std::string &baseBranch,
+                         const GitRunner::Auth *auth) {
+    if (worktreeReady(worktreePath)) {
+        GitResult ready;
+        ready.exitCode = 0;
+        return ready;
+    }
+
+    // 원격에만 있는 브랜치·기준 커밋을 쓰려면 먼저 원격을 최신화한다.
+    auto fetched = GitRunner::fetchAll(localPath, auth);
+    if (!fetched.ok()) {
+        LOG_WARN << "worktree 준비 전 fetch 실패 (" << branch << "): " << trim(fetched.err);
+    }
+
+    if (GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/heads/" + branch}).ok()) {
+        return GitRunner::worktreeAdd(localPath, worktreePath, branch);
+    }
+    if (GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/remotes/origin/" + branch}).ok()) {
+        return GitRunner::worktreeAdd(localPath, worktreePath, branch, "origin/" + branch);
+    }
+    return GitRunner::worktreeAdd(localPath, worktreePath, branch, baseBranch.empty() ? "HEAD" : baseBranch);
+}
+
+// 요청한 브랜치가 실제로 checkout 되어 있는 작업 디렉터리를 확정한다.
+// 기본 브랜치는 clone 디렉터리 자체가 작업 트리이고, 나머지는 등록된 worktree 를 쓴다.
+// 실패하면 outError 에 응답을 담고 false 를 돌려준다.
+bool resolveWorkDir(const std::string &requester, int repoId, const std::string &requestedBranch,
+                    std::string &outWorkDir, HttpResponsePtr &outError) {
+    auto db = app().getDbClient();
+
+    Json::Value repoRow;
+    if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+        outError = errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        return false;
+    }
+
+    const std::string localPath = repoRow["local_path"].asString();
+    const std::string defaultBranch = repoRow["default_branch"].asString();
+    const std::string branch = requestedBranch.empty() ? defaultBranch : requestedBranch;
+
+    if (branch == defaultBranch) {
+        outWorkDir = localPath;
+        return true;
+    }
+
+    // 등록된 브랜치여야 worktree 경로를 알 수 있다.
+    // (원격에만 있는 브랜치는 먼저 POST /api/github/repos/branches 로 등록한다)
+    Json::Value target;
+    bool found = false;
+    Json::Value branches = rowsToArray(db->execSqlSync("SELECT * FROM get_github_branches($1, $2)", requester, repoId));
+    for (const auto &item : branches) {
+        if (item["name"].asString() == branch) {
+            target = item;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        outError = errorResponse("P0801", "등록되지 않은 브랜치입니다: " + branch, k404NotFound);
+        return false;
+    }
+
+    const std::string worktreePath = target["worktree_path"].asString();
+    if (worktreePath.empty()) {
+        outError = errorResponse("P0807", "브랜치 작업 디렉터리 정보가 없습니다: " + branch, k500InternalServerError);
+        return false;
+    }
+
+    GitRunner::Auth auth;
+    const GitRunner::Auth *authPtr = nullptr;
+    const std::string token = userToken(db, requester);
+    if (!token.empty()) {
+        auth.login = "x-access-token";
+        auth.token = token;
+        authPtr = &auth;
+    }
+
+    auto ready = ensureWorktree(localPath, worktreePath, branch, target["base_branch"].asString(), authPtr);
+    if (!ready.ok()) {
+        LOG_WARN << "worktree 준비 실패 (" << branch << "): " << trim(ready.err);
+        outError = errorResponse("P0807", "브랜치 작업 디렉터리를 준비하지 못했습니다: " + trim(ready.err),
+                                 k500InternalServerError);
+        return false;
+    }
+
+    outWorkDir = worktreePath;
+    return true;
+}
+
+// JSON 배열에서 비어 있지 않은 문자열만 순서대로 모은다.
+std::vector<std::string> jsonStringArray(const Json::Value &value) {
+    std::vector<std::string> items;
+    if (!value.isArray()) {
+        return items;
+    }
+    for (const auto &item : value) {
+        if (item.isString() && !item.asString().empty()) {
+            items.push_back(item.asString());
+        }
+    }
+    return items;
+}
+
+// porcelain XY 코드를 응답용 상태 문자열로 옮긴다.
+bool porcelainState(char code, std::string &state) {
+    switch (code) {
+        case 'A': state = "added";      return true;
+        case 'M': state = "modified";   return true;
+        case 'D': state = "deleted";    return true;
+        case 'R': state = "renamed";    return true;
+        case 'C': state = "copied";     return true;
+        case 'T': state = "typechange"; return true;
+        case 'U': state = "conflicted"; return true;
+        default:  return false;
+    }
+}
+
+// 'git status --porcelain=v1 --untracked-files=all -z' 결과를
+// 확장 SCM 뷰가 그대로 쓰는 [{path, state, staged}] 로 바꾼다 (§3.2).
+// X 는 index(staged), Y 는 작업 트리 쪽 변경이라 둘 다 있으면 두 항목으로 나눈다.
+Json::Value parseStatusPorcelain(const std::string &text) {
+    Json::Value entries(Json::arrayValue);
+    const std::vector<std::string> tokens = splitNul(text);
+
+    std::size_t index = 0;
+    while (index < tokens.size()) {
+        const std::string token = tokens[index++];
+        if (token.size() < 3 || token[2] != ' ') {
+            continue;
+        }
+        const std::string xy = token.substr(0, 2);
+        const std::string path = token.substr(3);
+
+        // 이름변경/복사는 -z 에서 'XY <to>\0<from>\0' 순서로 온다.
+        std::string from;
+        if (xy[0] == 'R' || xy[0] == 'C' || xy[1] == 'R' || xy[1] == 'C') {
+            if (index < tokens.size()) {
+                from = tokens[index++];
+            }
+        }
+
+        auto append = [&entries, &path](const std::string &state, bool staged, const std::string &origin) {
+            Json::Value entry;
+            entry["path"] = path;
+            entry["state"] = state;
+            entry["staged"] = staged;
+            if (!origin.empty()) {
+                entry["from"] = origin;
+            }
+            entries.append(entry);
+        };
+
+        if (xy == "??") {
+            append("untracked", false, "");
+            continue;
+        }
+        if (xy.find('U') != std::string::npos) {
+            // 병합 충돌(UU/AA/DD/...)은 한 항목으로만 보여 준다.
+            append("conflicted", false, "");
+            continue;
+        }
+
+        std::string state;
+        if (xy[0] != ' ' && porcelainState(xy[0], state)) {
+            append(state, true, from);
+        }
+        if (xy[1] != ' ' && porcelainState(xy[1], state)) {
+            append(state, false, from);
+        }
+    }
+    return entries;
+}
+
+// 작업 트리 상태를 읽는다. 실패하면 out.ok() 가 false 다.
+Json::Value readWorktreeStatus(const std::string &workDir, GitResult &out) {
+    out = GitRunner::run(workDir, {"status", "--porcelain=v1", "--untracked-files=all", "-z"});
+    if (!out.ok()) {
+        return Json::Value(Json::arrayValue);
+    }
+    return parseStatusPorcelain(out.out);
+}
 }  // namespace
 
 // ===========================================================================
@@ -659,5 +858,364 @@ void GithubController::disconnectCredential(const HttpRequestPtr &req, std::func
         auto db = app().getDbClient();
         auto result = db->execSqlSync("SELECT * FROM delete_github_user_credential($1)", requester);
         return successResponse(rowsToArray(result), "GitHub 자격증명 연결을 해제했습니다.");
+    });
+}
+
+// ===========================================================================
+// 브랜치 접속자 / 수명주기 (§1.3-5, §1.3-10)
+// ===========================================================================
+
+// GET /api/github/repos/presence?repo_id=3 — 브랜치별 접속자
+void GithubController::getPresence(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+        // get_github_branches 가 저장소 존재·권한까지 확인한다.
+        Json::Value branches = rowsToArray(db->execSqlSync("SELECT * FROM get_github_branches($1, $2)", requester, repoId));
+
+        Json::Value data(Json::arrayValue);
+        for (const auto &branch : branches) {
+            Json::Value node;
+            node["name"] = branch["name"];
+            node["is_default"] = branch["is_default"];
+            node["presence"] = branch["presence"].isArray() ? branch["presence"] : Json::Value(Json::arrayValue);
+            data.append(node);
+        }
+        return successResponse(data, "브랜치별 접속자를 조회했습니다.");
+    });
+}
+
+// POST /api/github/repos/branches — 브랜치 생성(+worktree)
+void GithubController::createBranch(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "name")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, name)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string name = trim((*jsonPtr)["name"].asString());
+    const std::string baseBranch = (*jsonPtr)["base_branch"].isString() ? trim((*jsonPtr)["base_branch"].asString()) : "";
+
+    runOffLoop(std::move(callback), [requester, repoId, name, baseBranch]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        // 1) 브랜치 행을 먼저 만든다(멱등). 저장소·권한 확인과 worktree 경로 계산은 SQL 이 맡는다.
+        Json::Value branchRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM create_github_branch($1, $2, $3, $4)",
+                                       requester, repoId, name, baseBranch),
+                       branchRow)) {
+            return errorResponse("P0807", "브랜치를 만들지 못했습니다: " + name, k500InternalServerError);
+        }
+
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+
+        const std::string localPath = repoRow["local_path"].asString();
+        const std::string defaultBranch = repoRow["default_branch"].asString();
+        const std::string worktreePath = branchRow["worktree_path"].asString();
+
+        // 2) worktree 를 만든다. 기본 브랜치는 clone 디렉터리 자체가 작업 트리라 만들지 않는다.
+        //    (git 은 같은 브랜치를 두 worktree 에서 동시에 checkout 하는 것을 거부한다.)
+        if (name != defaultBranch && !worktreeReady(worktreePath)) {
+            GitRunner::Auth auth;
+            const GitRunner::Auth *authPtr = nullptr;
+            const std::string token = userToken(db, requester);
+            if (!token.empty()) {
+                auth.login = "x-access-token";
+                auth.token = token;
+                authPtr = &auth;
+            }
+
+            auto added = ensureWorktree(localPath, worktreePath, name, branchRow["base_branch"].asString(), authPtr);
+            if (!added.ok()) {
+                LOG_WARN << "worktree 생성 실패 (" << name << "): " << trim(added.err);
+                // DB 행은 남긴다. 같은 요청을 다시 보내면(멱등) worktree 만 다시 만든다.
+                return errorResponse("P0807", "브랜치 작업 디렉터리를 만들지 못했습니다: " + trim(added.err),
+                                     k500InternalServerError);
+            }
+        }
+
+        return successResponse(branchRow, "브랜치를 만들었습니다.", k201Created);
+    });
+}
+
+// DELETE /api/github/repos/branches — 브랜치 삭제(접속자·미커밋 변경이 있으면 거부)
+void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    // DELETE 는 본문을 못 쓰는 클라이언트가 있어 쿼리 파라미터도 받는다.
+    Json::Value body;
+    if (auto jsonPtr = req->getJsonObject()) {
+        body = *jsonPtr;
+    }
+
+    int repoId = 0;
+    if (body["repo_id"].isInt()) {
+        repoId = body["repo_id"].asInt();
+    } else if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string name = trim(body["name"].isString() ? body["name"].asString() : req->getParameter("name"));
+    if (name.empty()) {
+        callback(errorResponse("400", "필수 파라미터(name)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    // force 는 '커밋되지 않은 변경' 확인만 건너뛴다. 접속자가 있으면 force 로도 삭제하지 않는다.
+    const bool force = body["force"].isBool() ? body["force"].asBool() : (req->getParameter("force") == "true");
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, name, force]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+        const std::string localPath = repoRow["local_path"].asString();
+        const std::string defaultBranch = repoRow["default_branch"].asString();
+        const bool isDefault = (name == defaultBranch);
+
+        Json::Value target;
+        bool found = false;
+        Json::Value branches = rowsToArray(db->execSqlSync("SELECT * FROM get_github_branches($1, $2)", requester, repoId));
+        for (const auto &branch : branches) {
+            if (branch["name"].asString() == name) {
+                target = branch;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return errorResponse("P0801", "등록된 브랜치가 아닙니다: " + name, k404NotFound);
+        }
+
+        // 1) 접속자가 있으면 거부한다 (P0809). 작업 중인 사용자를 강제로 밀어내지 않는다.
+        const Json::Value presence = target["presence"];
+        if (presence.isArray() && !presence.empty()) {
+            return errorResponse("P0809", "이 브랜치에서 작업 중인 사용자가 있습니다.", k409Conflict, presence);
+        }
+
+        const std::string worktreePath = target["worktree_path"].asString();
+
+        // 2) 커밋되지 않은 변경이 있으면 거부한다 (P0810). force 면 건너뛴다.
+        if (!isDefault && !force && worktreeReady(worktreePath)) {
+            GitResult statusResult;
+            const Json::Value entries = readWorktreeStatus(worktreePath, statusResult);
+            if (!statusResult.ok()) {
+                return errorResponse("P0807", "브랜치 상태를 확인하지 못했습니다: " + trim(statusResult.err),
+                                     k500InternalServerError);
+            }
+            if (!entries.empty()) {
+                return errorResponse("P0810",
+                                     "이 브랜치에 커밋되지 않은 변경(staged/modified/untracked)이 있습니다. 확인해 주세요.",
+                                     k409Conflict, entries);
+            }
+        }
+
+        // 3) 작업 디렉터리 → 로컬 브랜치 → DB 행 순서로 정리한다.
+        if (!isDefault && worktreeReady(worktreePath)) {
+            auto removed = GitRunner::worktreeRemove(localPath, worktreePath, force);
+            if (!removed.ok()) {
+                // git 관리 정보만 남은 경우가 있어 prune 한 뒤 한 번 더 확인한다.
+                GitRunner::run(localPath, {"worktree", "prune"});
+                if (worktreeReady(worktreePath)) {
+                    LOG_WARN << "worktree 제거 실패 (" << name << "): " << trim(removed.err);
+                    return errorResponse("P0807", "브랜치 작업 디렉터리를 정리하지 못했습니다: " + trim(removed.err),
+                                         k500InternalServerError);
+                }
+            }
+        }
+
+        if (!isDefault) {
+            auto deleted = GitRunner::deleteBranch(localPath, name, force);
+            if (!deleted.ok()) {
+                // 원격에만 있고 아직 로컬 브랜치를 만들지 않은 경우엔 지울 것이 없다.
+                LOG_WARN << "로컬 브랜치 삭제 건너뜀 (" << name << "): " << trim(deleted.err);
+            }
+        }
+
+        auto result = db->execSqlSync("SELECT * FROM delete_github_branch($1, $2, $3)", requester, repoId, name);
+        return successResponse(rowsToArray(result), "브랜치를 삭제했습니다.");
+    });
+}
+
+// ===========================================================================
+// 작업 트리: 상태 / 스테이징 / 수동 fetch (§1.3-8, §1.4)
+// ===========================================================================
+
+// GET /api/github/repos/status?repo_id=3&branch=WI-101-login — 커밋 직전 상태
+void GithubController::getStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string branch = trim(req->getParameter("branch"));
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        GitResult statusResult;
+        const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+        if (!statusResult.ok()) {
+            return errorResponse("P0807", "작업 트리 상태를 읽지 못했습니다: " + trim(statusResult.err),
+                                 k500InternalServerError);
+        }
+        return successResponse(entries, "작업 트리 상태를 조회했습니다.");
+    });
+}
+
+// POST /api/github/repos/stage — 커밋 대상 표시.
+// 실제 'git add' 는 커밋 시점에 flush 뒤에 다시 한다(§12.11). 여기서는 표시만 바꾼다.
+void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::vector<std::string> paths = jsonStringArray((*jsonPtr)["paths"]);
+    if (paths.empty()) {
+        callback(errorResponse("400", "필수 파라미터(paths)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+
+    runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        auto staged = GitRunner::stageAdd(workDir, paths);
+        if (!staged.ok()) {
+            return errorResponse("P0807", "스테이징하지 못했습니다: " + trim(staged.err), k500InternalServerError);
+        }
+
+        GitResult statusResult;
+        const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+        return successResponse(entries, "스테이징했습니다.");
+    });
+}
+
+// DELETE /api/github/repos/stage — 스테이징 해제
+void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::vector<std::string> paths = jsonStringArray((*jsonPtr)["paths"]);
+    if (paths.empty()) {
+        callback(errorResponse("400", "필수 파라미터(paths)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+
+    runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        auto unstaged = GitRunner::stageRemove(workDir, paths);
+        if (!unstaged.ok()) {
+            return errorResponse("P0807", "스테이징을 해제하지 못했습니다: " + trim(unstaged.err), k500InternalServerError);
+        }
+
+        GitResult statusResult;
+        const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+        return successResponse(entries, "스테이징을 해제했습니다.");
+    });
+}
+
+// POST /api/github/repos/fetch — 수동 fetch --all --prune.
+// 자동 fetch 만 두면 push 가 non-fast-forward 로 막히므로 수동 트리거를 반드시 둔다(§1.4).
+void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    Json::Value body;
+    if (auto jsonPtr = req->getJsonObject()) {
+        body = *jsonPtr;
+    }
+
+    int repoId = 0;
+    if (body["repo_id"].isInt()) {
+        repoId = body["repo_id"].asInt();
+    } else if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string branch = body["branch"].isString() ? trim(body["branch"].asString()) : trim(req->getParameter("branch"));
+    const std::string requester = requesterEmail(req);
+
+    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+        const std::string localPath = repoRow["local_path"].asString();
+
+        GitRunner::Auth auth;
+        const GitRunner::Auth *authPtr = nullptr;
+        const std::string token = userToken(db, requester);
+        if (!token.empty()) {
+            auth.login = "x-access-token";
+            auth.token = token;
+            authPtr = &auth;
+        }
+
+        auto fetched = GitRunner::fetchAll(localPath, authPtr);
+        if (!fetched.ok()) {
+            const std::string detail = trim(fetched.err);
+            LOG_WARN << "fetch 실패 (" << localPath << "): " << detail;
+            // 인증 문제는 사용자가 조치할 수 있도록 따로 알려 준다.
+            if (detail.find("Authentication failed") != std::string::npos ||
+                detail.find("could not read Username") != std::string::npos ||
+                detail.find("403") != std::string::npos) {
+                return errorResponse("P0802", "GitHub 자격증명이 유효하지 않거나 이 저장소에 접근할 수 없습니다.",
+                                     k401Unauthorized);
+            }
+            return errorResponse("P0807", "원격 저장소를 가져오지 못했습니다: " + detail, k502BadGateway);
+        }
+
+        // 갱신된 브랜치 목록을 함께 돌려준다(확장이 브랜치 목록을 새로 고칠 수 있게).
+        Json::Value data;
+        data["branches"] = rowsToArray(db->execSqlSync("SELECT * FROM get_github_branches($1, $2)", requester, repoId));
+        if (!branch.empty()) {
+            data["branch"] = branch;
+        }
+        return successResponse(data, "원격 저장소를 최신으로 맞췄습니다.");
     });
 }

@@ -23,6 +23,17 @@ class GithubController : public drogon::HttpController<GithubController>
     ADD_METHOD_TO(GithubController::getRepositoryTree,    "/api/github/repos/tree",     Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryFile,    "/api/github/repos/file",     Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getBranches,          "/api/github/repos/branches", Get, "JwtFilter");
+    ADD_METHOD_TO(GithubController::getPresence,          "/api/github/repos/presence", Get, "JwtFilter");
+
+    // --- 브랜치 수명주기 (§1.3-5, §1.3-10) ---
+    ADD_METHOD_TO(GithubController::createBranch,         "/api/github/repos/branches", Post,   "JwtFilter");
+    ADD_METHOD_TO(GithubController::deleteBranch,         "/api/github/repos/branches", Delete, "JwtFilter");
+
+    // --- 작업 트리: 커밋 직전 상태 확인 / 스테이징 / 수동 fetch (§1.3-8, §1.4) ---
+    ADD_METHOD_TO(GithubController::getStatus,            "/api/github/repos/status",   Get,    "JwtFilter");
+    ADD_METHOD_TO(GithubController::stagePaths,           "/api/github/repos/stage",    Post,   "JwtFilter");
+    ADD_METHOD_TO(GithubController::unstagePaths,         "/api/github/repos/stage",    Delete, "JwtFilter");
+    ADD_METHOD_TO(GithubController::fetchRepository,      "/api/github/repos/fetch",    Post,   "JwtFilter");
 
     // --- 사용자 GitHub 자격증명 (PAT) ---
     ADD_METHOD_TO(GithubController::getCredentialStatus,  "/api/github/credentials", Get,    "JwtFilter");
@@ -37,6 +48,15 @@ class GithubController : public drogon::HttpController<GithubController>
     void getRepositoryTree(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryFile(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getBranches(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void getPresence(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+
+    void createBranch(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void deleteBranch(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+
+    void getStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void stagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void unstagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void fetchRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 
     void getCredentialStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void registerCredential(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);

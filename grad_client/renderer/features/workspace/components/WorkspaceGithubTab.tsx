@@ -63,6 +63,17 @@ function pathSegments(path: string) {
   return path.split('/').filter(Boolean)
 }
 
+/** 파일 캐시 키. 브랜치가 다르면 같은 경로라도 다른 내용이다. */
+function fileCacheKey(repoId: number, branch: string, path: string) {
+  return `${repoId}:${branch}:${path}`
+}
+
+type CachedFile = {
+  file: GithubFileContent
+  /** 서버가 준 마지막 수정 시각. 다음 조회에 이 값을 그대로 since 로 돌려보낸다. */
+  modifiedAt: string
+}
+
 /** 표시할 브랜치를 고른다. 지정 브랜치가 없으면 기본 브랜치, 그다음 첫 브랜치. */
 function pickBranch(branches: GithubBranch[], preferred?: string) {
   if (preferred && branches.some((branch) => branch.name === preferred)) {
@@ -121,6 +132,9 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   // 브랜치 비교에 쓰려고 최신 값을 ref 로도 들고 있는다(콜백 재생성 방지).
   const currentBranchRef = useRef('')
   const fileRequestId = useRef(0)
+
+  // 받아 둔 파일 내용. 서버가 시각으로 검증하므로 낡은 값이 그대로 화면에 남지 않는다.
+  const fileCache = useRef<Map<string, CachedFile>>(new Map())
 
   useEffect(() => {
     currentBranchRef.current = currentBranch
@@ -318,17 +332,50 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
     fileRequestId.current += 1
     const requestId = fileRequestId.current
+    const repoId = selectedRepoId
+    const branch = currentBranch
+    const cacheKey = fileCacheKey(repoId, branch, entry.path)
+    const cached = fileCache.current.get(cacheKey)
 
     setPreviewPath(entry.path)
     setPreviewFile(null)
     setFileError(null)
     setIsLoadingFile(true)
 
-    try {
-      const file = await fetchRepositoryFile({ repoId: selectedRepoId, branch: currentBranch, path: entry.path })
+    // 검증 토큰은 서버가 준 시각을 그대로 쓴다(클라이언트 시계 오차가 끼지 않게).
+    const applyFile = (file: GithubFileContent) => {
+      fileCache.current.set(cacheKey, { file, modifiedAt: file.modified_at ?? '' })
+      setPreviewFile(file)
+    }
 
-      if (fileRequestId.current === requestId) {
-        setPreviewFile(file)
+    try {
+      const result = await fetchRepositoryFile({
+        repoId,
+        branch,
+        path: entry.path,
+        since: cached?.modifiedAt,
+      })
+
+      if (fileRequestId.current !== requestId) {
+        return
+      }
+
+      if (result.changed) {
+        applyFile(result.file)
+        return
+      }
+
+      if (cached) {
+        // 서버가 "안 바뀌었다" 고 했으므로 받아 둔 내용을 그대로 보여준다.
+        setPreviewFile(cached.file)
+        return
+      }
+
+      // 예외 경로: 서버는 "안 바뀜" 인데 우리에게 캐시가 없다(캐시 유실). 이때만 since 없이 한 번 더 받는다.
+      const fresh = await fetchRepositoryFile({ repoId, branch, path: entry.path })
+
+      if (fileRequestId.current === requestId && fresh.changed) {
+        applyFile(fresh.file)
       }
     } catch (error) {
       if (fileRequestId.current === requestId) {

@@ -32,7 +32,14 @@ export type GithubFileContent = {
   reason?: string
   content?: string
   eol?: string
+  /** 이 파일이 마지막으로 바뀐 시각(ISO 8601). 다음 조회의 캐시 검증 토큰으로 그대로 되돌려 보낸다. */
+  modified_at?: string | null
+  /** false 면 서버가 내용을 생략한 캐시 응답이다(내용이 바뀌지 않았다는 뜻). */
+  changed?: boolean
 }
+
+/** 파일 조회 결과. changed=false 는 "캐시가 최신이라 내용을 보내지 않았다" 는 뜻이다. */
+export type GithubFileFetchResult = { changed: true; file: GithubFileContent } | { changed: false }
 
 export type GithubBranchPresence = {
   email: string
@@ -194,12 +201,18 @@ export async function fetchRepositoryFile(input: {
   repoId: number
   branch: string
   path: string
-}): Promise<GithubFileContent> {
+  /** 직전 응답의 modified_at. 서버는 이 시각과 같으면 내용을 생략하고 changed=false 만 돌려준다. */
+  since?: string | null
+}): Promise<GithubFileFetchResult> {
   const query = new URLSearchParams({
     repo_id: String(input.repoId),
     branch: input.branch,
     path: input.path,
   })
+
+  if (input.since) {
+    query.set('since', input.since)
+  }
 
   try {
     const response = await apiRequest<unknown>(`/github/repos/file?${query.toString()}`)
@@ -209,7 +222,11 @@ export async function fetchRepositoryFile(input: {
       throw new GithubServiceError('파일 내용을 확인하지 못했습니다.')
     }
 
-    return file
+    if (file.changed === false) {
+      return { changed: false }
+    }
+
+    return { changed: true, file }
   } catch (error) {
     throw toServiceError(error, '파일 내용을 불러오지 못했습니다.')
   }

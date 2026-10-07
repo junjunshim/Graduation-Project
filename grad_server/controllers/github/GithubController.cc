@@ -80,6 +80,14 @@ Json::Value rowsToArray(const orm::Result &result) {
     return parseIntegratedDataResult(result)["data"];
 }
 
+// 응답 규격은 항상 {status, data[], message} 다. 결과가 1건뿐인 API(파일 조회 등)는
+// 객체를 그대로 넣지 말고 이 배열로 감싼다 — 그러지 않으면 클라이언트 파서가 data 를 배열로 요구해 실패한다.
+Json::Value singleItemArray(const Json::Value &item) {
+    Json::Value array(Json::arrayValue);
+    array.append(item);
+    return array;
+}
+
 // 단건 조회 결과에서 첫 행만 꺼낸다.
 bool singleRow(const orm::Result &result, Json::Value &out) {
     Json::Value rows = parseIntegratedDataResult(result)["data"];
@@ -742,8 +750,11 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         return;
     }
 
+    // 클라이언트가 캐시한 시각(직전 응답의 modified_at). 같으면 내용을 다시 보내지 않는다.
+    const std::string since = req->getParameter("since");
+
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
+    runOffLoop(std::move(callback), [requester, repoId, branch, path, since]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         Json::Value repoRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
@@ -753,6 +764,22 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         const std::string localPath = repoRow["local_path"].asString();
         const std::string ref = branch.empty() ? repoRow["default_branch"].asString() : branch;
         const std::string spec = treeishOf(ref, path);
+
+        // 이 파일이 마지막으로 바뀐 시각. 내용을 작업 트리가 아니라 커밋된 트리(git show)에서 읽으므로
+        // 커밋 시각이 곧 그 파일의 버전이고, 캐시 검증 토큰으로 쓰기에 충분하다.
+        auto logResult = GitRunner::run(localPath, {"log", "-1", "--format=%cI", ref, "--", path});
+        const std::string modifiedAt = logResult.ok() ? trim(logResult.out) : "";
+
+        // 캐시 검증: 클라이언트가 들고 있는 시각과 같으면 버전이 바뀌지 않았다는 뜻이므로 내용을 생략한다.
+        if (!since.empty() && !modifiedAt.empty() && since == modifiedAt) {
+            Json::Value unchanged;
+            unchanged["repo_id"] = repoId;
+            unchanged["branch"] = ref;
+            unchanged["path"] = path;
+            unchanged["changed"] = false;
+            unchanged["modified_at"] = modifiedAt;
+            return successResponse(singleItemArray(unchanged), "이미 받은 내용이 최신입니다.");
+        }
 
         // 1) 존재·크기 확인
         auto sizeResult = GitRunner::run(localPath, {"cat-file", "-s", spec});
@@ -774,12 +801,14 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         data["encoding"] = "utf-8";
         data["read_only"] = false;
         data["content"] = "";
+        data["changed"] = true;
+        data["modified_at"] = modifiedAt;
 
         // 2) 상한 초과는 읽기 전용 (§12.6)
         if (size > kMaxTextFileBytes) {
             data["read_only"] = true;
             data["reason"] = "too_large";
-            return successResponse(data, "파일이 너무 커서 읽기 전용으로 표시했습니다.");
+            return successResponse(singleItemArray(data), "파일이 너무 커서 읽기 전용으로 표시했습니다.");
         }
 
         auto content = GitRunner::run(localPath, {"show", spec});
@@ -792,12 +821,12 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
             data["read_only"] = true;
             data["reason"] = "binary";
             data["encoding"] = "binary";
-            return successResponse(data, "바이너리 파일이라 읽기 전용으로 표시했습니다.");
+            return successResponse(singleItemArray(data), "바이너리 파일이라 읽기 전용으로 표시했습니다.");
         }
 
         data["content"] = content.out;
         data["eol"] = (content.out.find("\r\n") != std::string::npos) ? "crlf" : "lf";
-        return successResponse(data, "파일을 조회했습니다.");
+        return successResponse(singleItemArray(data), "파일을 조회했습니다.");
     });
 }
 
@@ -855,10 +884,17 @@ void GithubController::getBranches(const HttpRequestPtr &req, std::function<void
             }
         }
 
-        // 이름순 정렬 (DB 순서와 원격 순서가 섞이지 않게).
+        // 기본 브랜치를 맨 앞에 두고, 그다음 이름순으로 정렬한다 (DB 순서와 원격 순서가 섞이지 않게).
+        // 기본 브랜치 이름은 main/master 로 고정할 수 없다(저장소마다 다르다).
+        // SQL 이 default_branch 와 비교해 넣어 준 is_default 만 보고 판단한다.
         // Json::Value 의 반복자는 양방향이라 std::sort 를 쓸 수 없다. vector 로 옮겨 정렬한 뒤 다시 배열로 만든다.
         std::vector<Json::Value> ordered(branches.begin(), branches.end());
         std::sort(ordered.begin(), ordered.end(), [](const Json::Value &a, const Json::Value &b) {
+            const bool aDefault = a["is_default"].asBool();
+            const bool bDefault = b["is_default"].asBool();
+            if (aDefault != bDefault) {
+                return aDefault;
+            }
             return a["name"].asString() < b["name"].asString();
         });
 

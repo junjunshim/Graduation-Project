@@ -132,18 +132,43 @@ int main() {
             "SELECT * FROM cleanup_expired_deleted_data()",
             [](const drogon::orm::Result &result) {
                 size_t deletedCount = 0;
-                for (const auto &row : result) {
-                    std::string filePath = row["deleted_file_path"].as<std::string>();
-                    if (!filePath.empty() && std::filesystem::exists(filePath)) {
-                        std::error_code ec;
-                        if (std::filesystem::remove(filePath, ec)) {
-                            deletedCount++;
-                        } else {
-                            LOG_WARN << "[Scheduler] Failed to remove physical file: " << filePath << " (" << ec.message() << ")";
-                        }
+
+                // 서버가 관리하는 경로만 지운다. DB 값이 오염돼도 이 접두사 밖은 건드리지 않는다.
+                // 업무 첨부는 업로드 당시 상대 경로를 그대로 저장해 './uploads/...' 로 들어오고,
+                // 저장소 회수 경로는 'repository/...' 다. 앞의 './' 만 떼고 접두사를 본다.
+                const auto isManagedPath = [](std::string path) {
+                    if (path.rfind("./", 0) == 0) {
+                        path.erase(0, 2);
                     }
+                    return path.rfind("uploads/", 0) == 0 || path.rfind("repository/", 0) == 0;
+                };
+
+                for (const auto &row : result) {
+                    // 회수 대상에는 업무 첨부 파일과 저장소 clone/worktree 디렉터리가 섞여 있다.
+                    // remove_all 은 파일이면 그대로, 디렉터리면 하위까지 지운다.
+                    const std::string entryPath = row["deleted_file_path"].as<std::string>();
+                    if (entryPath.empty()) {
+                        continue;
+                    }
+
+                    if (!isManagedPath(entryPath)) {
+                        LOG_WARN << "[Scheduler] Skipped unexpected cleanup path: " << entryPath;
+                        continue;
+                    }
+
+                    std::error_code ec;
+                    if (!std::filesystem::exists(entryPath, ec) || ec) {
+                        continue;
+                    }
+
+                    std::filesystem::remove_all(entryPath, ec);
+                    if (ec) {
+                        LOG_WARN << "[Scheduler] Failed to remove path: " << entryPath << " (" << ec.message() << ")";
+                        continue;
+                    }
+                    deletedCount++;
                 }
-                LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed physical files: " << deletedCount;
+                LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed paths: " << deletedCount;
             },
             [](const drogon::orm::DrogonDbException &e) {
                 LOG_ERROR << "[Scheduler] Expired data cleanup DB error: " << e.base().what();

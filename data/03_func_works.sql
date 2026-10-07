@@ -1466,6 +1466,30 @@ BEGIN
       AND f.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
       AND f.file_path IS NOT NULL AND f.file_path <> '';
 
+    -- 1-2. 15일 지난 저장소 연결 해제 + 이번 실행에서 하드 삭제될 노드의 저장소 → clone/worktree 경로 수집
+    --      (github_repositories.node_id 는 ON DELETE CASCADE 라, 노드 행이 지워지면 경로를 되찾을 수 없다.
+    --       그래서 삭제보다 반드시 먼저 모은다. worktree 는 clone 옆 형제 디렉터리다: <local_path>.worktrees)
+    RETURN QUERY
+    WITH doomed_repo AS (
+        SELECT r.local_path
+        FROM github_repositories r
+        WHERE r.is_deleted = TRUE
+          AND r.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
+        UNION
+        SELECT r.local_path
+        FROM github_repositories r
+        JOIN organization_nodes n ON n.node_id = r.node_id
+        WHERE n.is_deleted = TRUE
+          AND n.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
+    )
+    SELECT p.path::VARCHAR(500)
+    FROM (
+        SELECT local_path AS path FROM doomed_repo
+        UNION
+        SELECT local_path || '.worktrees' AS path FROM doomed_repo
+    ) p
+    WHERE p.path IS NOT NULL AND p.path <> '';
+
     -- 2. 15일 지난 파일 DB 레코드 영구 삭제
     DELETE FROM work_item_files
     WHERE is_deleted = TRUE 
@@ -1476,7 +1500,12 @@ BEGIN
     WHERE is_deleted = TRUE 
       AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
 
-    -- 4. 15일 지난 노드 DB 레코드 영구 삭제 (연관 역할, 권한, 업무는 ON DELETE CASCADE로 함께 영구 삭제)
+    -- 4. 15일 지난 저장소 연결 해제 레코드 영구 삭제 (브랜치·접속자·커밋 기록은 CASCADE 로 함께 삭제)
+    DELETE FROM github_repositories
+    WHERE is_deleted = TRUE
+      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
+
+    -- 5. 15일 지난 노드 DB 레코드 영구 삭제 (연관 역할, 권한, 업무는 ON DELETE CASCADE로 함께 영구 삭제)
     DELETE FROM organization_nodes
     WHERE is_deleted = TRUE 
       AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');

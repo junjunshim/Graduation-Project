@@ -519,6 +519,18 @@ std::string pushReasonLabel(const std::string &reason) {
     }
     return "원인을 알 수 없음";
 }
+
+// 원격 접근 실패를 두 갈래로 나눈다: 저장소가 없거나 권한이 없는 경우 vs 그 밖(네트워크 등).
+// GitHub 은 접근 권한이 없는 비공개 저장소도 "not found" 로 답하므로 둘을 구분하지 않는다.
+bool isRemoteAccessDenied(const std::string &detail) {
+    return detail.find("could not read Username") != std::string::npos ||
+           detail.find("terminal prompts disabled") != std::string::npos ||
+           detail.find("Authentication failed") != std::string::npos ||
+           detail.find("Repository not found") != std::string::npos ||
+           detail.find("does not exist") != std::string::npos ||
+           detail.find("403") != std::string::npos ||
+           detail.find("401") != std::string::npos;
+}
 }  // namespace
 
 // ===========================================================================
@@ -569,15 +581,28 @@ void GithubController::connectRepository(const HttpRequestPtr &req, std::functio
                 LOG_WARN << "git fetch 실패 (" << localPath << "): " << trim(fetched.err);
             }
         } else {
+            // clone 은 저장소 크기만큼 오래 걸린다. 없는 저장소·권한 없는 저장소에 대고 clone 을
+            // 시도하지 않도록 원격 접근만 먼저 확인한다 (ref 광고만 받는 싼 점검).
+            auto probe = GitRunner::lsRemote(url, authenticated ? &auth : nullptr);
+            if (!probe.ok()) {
+                LOG_WARN << "git ls-remote 실패 (" << url << "): " << trim(probe.err);
+                if (isRemoteAccessDenied(probe.err)) {
+                    return errorResponse("P0808",
+                                         authenticated
+                                             ? "저장소를 찾을 수 없거나 접근 권한이 없습니다. 소유자·이름을 확인해 주세요."
+                                             : "저장소를 찾을 수 없거나 접근 권한이 없습니다. 비공개 저장소라면 GitHub 자격증명(PAT)을 먼저 등록해 주세요.",
+                                         k404NotFound);
+                }
+                return errorResponse("P0808", "GitHub 저장소에 연결하지 못했습니다. 네트워크와 주소를 확인해 주세요.",
+                                     k502BadGateway);
+            }
+
             std::filesystem::create_directories("repository/" + std::to_string(nodeId), ec);
             auto cloned = GitRunner::clone("repository/" + std::to_string(nodeId), url, repo,
                                            authenticated ? &auth : nullptr);
             if (!cloned.ok()) {
                 LOG_WARN << "git clone 실패 (" << url << "): " << trim(cloned.err);
-                // 익명 clone 은 공개 저장소만 된다. 자격증명이 없을 때는 원인을 짚어 준다.
-                return errorResponse("P0808",
-                                     authenticated ? "저장소를 clone 하지 못했습니다. 주소와 접근 권한을 확인해 주세요."
-                                                   : "저장소를 clone 하지 못했습니다. 비공개 저장소라면 GitHub 자격증명(PAT)을 먼저 등록해 주세요.",
+                return errorResponse("P0808", "저장소를 clone 하지 못했습니다. 잠시 후 다시 시도해 주세요.",
                                      k502BadGateway);
             }
             // clone 이 체크아웃한 브랜치가 곧 기본 브랜치다.

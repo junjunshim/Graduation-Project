@@ -345,6 +345,12 @@ GitResult GitRunner::clone(const std::string &parentDir, const std::string &url,
     return run(parentDir, {"clone", "--quiet", url, destDir}, auth, 600);
 }
 
+GitResult GitRunner::lsRemote(const std::string &url, const Auth *auth) {
+    // ref 광고만 받는다. clone 처럼 오브젝트를 내려받지 않으므로 접근 가능 여부만 싸게 본다.
+    // HEAD 패턴으로 출력을 줄이고, --exit-code 는 쓰지 않는다(빈 저장소도 정상이므로).
+    return run("", {"ls-remote", "--quiet", url, "HEAD"}, auth, 60);
+}
+
 GitResult GitRunner::fetchAll(const std::string &repoDir, const Auth *auth) {
     return run(repoDir, {"fetch", "--all", "--prune"}, auth, 300);
 }

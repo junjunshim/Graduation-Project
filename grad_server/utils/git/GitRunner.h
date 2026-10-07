@@ -43,6 +43,9 @@ public:
     // --- 자주 쓰는 명령 래퍼 (그 외는 run 으로 직접 조합한다) ---
     static GitResult clone(const std::string &parentDir, const std::string &url,
                            const std::string &destDir, const Auth *auth = nullptr);
+    // clone 전에 원격 접근만 확인한다 (ref 광고만 받으므로 clone 보다 훨씬 싸다).
+    // 없는 저장소·권한 없는 저장소에 대고 clone 을 시도하지 않기 위한 사전 점검용이다.
+    static GitResult lsRemote(const std::string &url, const Auth *auth = nullptr);
     static GitResult fetchAll(const std::string &repoDir, const Auth *auth = nullptr);
     static GitResult listRefs(const std::string &repoDir);
     // withSize=true 면 ls-tree -l 로 파일 크기까지 받는다 (파일은 크기, 디렉터리는 '-')

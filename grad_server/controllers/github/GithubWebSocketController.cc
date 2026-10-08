@@ -559,7 +559,7 @@ void GithubWebSocketController::enterRoom(const WebSocketConnectionPtr &wsConnPt
     session->branch = branch;
     addToRoom(roomKeyOf(repo_id, branch), wsConnPtr);
 
-    // 3. 이전 방에도 목록이 바뀌었음을 알린다(조회 실패해도 입장 자체는 성공으로 둔다).
+    // 3. 이전 브랜치의 목록도 바뀌었다고 알린다(조회 실패해도 입장 자체는 성공으로 둔다).
     if (moved)
     {
         Json::Value left = presenceEvent(previousRepo, previousBranch, Json::Value(Json::arrayValue));
@@ -571,11 +571,13 @@ void GithubWebSocketController::enterRoom(const WebSocketConnectionPtr &wsConnPt
         {
             LOG_WARN << "이전 브랜치 접속자 목록 조회 실패: " << e.base().what();
         }
-        broadcastToBranch(previousRepo, previousBranch, left);
+        broadcastToRepository(previousRepo, left);
     }
 
-    // 4. 새 방의 접속자 목록을 그 방 전체에 알린다(요청자 포함).
-    broadcastToBranch(repo_id, branch, presenceEvent(repo_id, branch, presence));
+    // 4. 새 접속자 목록을 저장소 전체에 알린다(요청자 포함).
+    //    Editing 뷰가 접속자를 브랜치별로 보여 주려면(§15.5) 방 하나가 아니라 저장소의 모든 방이
+    //    이 목록을 알아야 한다. `presence_updated` 는 자기 branch 를 담으므로 받는 쪽이 구분한다.
+    broadcastToRepository(repo_id, presenceEvent(repo_id, branch, presence));
 }
 
 bool GithubWebSocketController::removePresenceAndNotify(const std::shared_ptr<WsSession> &session)
@@ -611,7 +613,7 @@ bool GithubWebSocketController::removePresenceAndNotify(const std::shared_ptr<Ws
         return true;
     }
 
-    // 남은 접속자 목록을 만들어 그 방에 알린다.
+    // 남은 접속자 목록을 만들어 저장소 전체에 알린다.
     Json::Value left = presenceEvent(repoId, branch, Json::Value(Json::arrayValue));
     try
     {
@@ -621,7 +623,7 @@ bool GithubWebSocketController::removePresenceAndNotify(const std::shared_ptr<Ws
     {
         LOG_WARN << "브랜치 접속자 목록 조회 실패: " << e.base().what();
     }
-    broadcastToBranch(repoId, branch, left);
+    broadcastToRepository(repoId, left);
     return true;
 }
 

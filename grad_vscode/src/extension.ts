@@ -19,7 +19,7 @@ import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider'
  *   src/repo/repoTreeProvider.ts   Repository 트리 — 브랜치별 lazy 조회(§15.3)
  *   src/repo/branchPicker.ts       브랜치 전환·생성·삭제(§15.4)
  *   src/repo/controlSocket.ts      제어 소켓 — presence·브랜치·커밋 이벤트(§3.3)
- *   src/repo/presenceProvider.ts   Editing 뷰 — 브랜치 접속자(§15.5)
+ *   src/repo/presenceProvider.ts   Editing 뷰 — 브랜치별 접속자(§15.5)
  *   src/repo/userColors.ts         사용자 색 배정(§15.8)
  *
  * 다음 단계에서 만들 모듈(§15.11):

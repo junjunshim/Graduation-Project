@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { getServerBaseUrl } from '../api';
+import { apiRequest, getServerBaseUrl } from '../api';
 import {
     getCurrentBranch,
     getSession,
@@ -17,8 +17,9 @@ import {
  *
  * 서버 구현과 문서가 다른 지점 두 가지를 여기에 남긴다:
  *   1. 제어 소켓에는 `joined` 프레임이 없다. 서버는 `join` 을 받으면 접속자 행을 upsert 한 뒤
- *      그 방 전체에 `presence_updated` 를 보낸다(요청자 포함). 그래서 "내가 요청한 방" 의
- *      `presence_updated` 를 입장 완료(§10.2 `joining` → `active`) 신호로 쓴다.
+ *      저장소의 모든 방에 `presence_updated` 를 보낸다(요청자 포함). 그래서 "내가 요청한 방" 의
+ *      `presence_updated` 를 입장 완료(§10.2 `joining` → `active`) 신호로 쓰고, 나머지는
+ *      브랜치별 접속자 표에 쌓는다(§15.5).
  *   2. 인증은 첫 프레임 전용이다(쿼리 토큰 없음). 토큰을 URL·프록시 로그에 남기지 않으려는
  *      §3.4 와 같은 이유다.
  *
@@ -36,6 +37,13 @@ export type PresenceEntry = {
     connection_id?: string;
     connected_at?: string;
     last_seen_at?: string;
+};
+
+/** `GET /api/github/repos/presence?repo_id=` 응답 행(§3.2). 방 입장 시 저장소 전체 접속자를 한 번 받는다. */
+type PresenceBranchRow = {
+    name: string;
+    is_default?: boolean;
+    presence?: PresenceEntry[];
 };
 
 /** 서버 이벤트를 뷰가 쓰기 좋은 모양으로 옮긴 것. 원본은 `raw` 에 그대로 담는다. */
@@ -98,8 +106,23 @@ let requestedBranch: string | undefined;
 let joinedRepoId: number | undefined;
 let joinedBranch: string | undefined;
 
-/** 현재 브랜치의 접속자 목록. */
-let presence: PresenceEntry[] = [];
+/**
+ * 서버가 입장을 거부한 방(P0103 권한 없음, P0801 등록되지 않은 브랜치).
+ * 같은 방을 계속 다시 보내면 "거부 → 경고 → 재시도" 가 반복되므로 기억해 두고 보내지 않는다.
+ * 브랜치가 바뀌거나 새로 인증하면(AUTH_OK) 해제된다(§3.3).
+ */
+let blockedRepoId: number | undefined;
+let blockedBranch: string | undefined;
+
+/**
+ * 브랜치별 접속자 목록(저장소 전체, §15.5). 서버가 `presence_updated` 를 저장소의 모든 방에
+ * 보내므로 내 브랜치뿐 아니라 같은 저장소의 다른 브랜치 접속자도 여기에 쌓인다.
+ * 0명이 된 브랜치는 지운다 — 뷰가 빈 브랜치를 그리지 않게 하려는 것이다.
+ */
+let presenceByBranch = new Map<string, PresenceEntry[]>();
+
+/** 위 표가 어느 저장소의 것인지. 앱에서 다른 저장소를 열면 표를 버린다. */
+let presenceRepoId: number | undefined;
 
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let openTimer: ReturnType<typeof setTimeout> | undefined;
@@ -124,13 +147,16 @@ export function getControlState(): ControlState {
     return state;
 }
 
+/** `getPresenceByBranch` 의 빈 결과. 매 호출마다 새 Map 을 만들지 않는다. */
+const EMPTY_PRESENCE: ReadonlyMap<string, PresenceEntry[]> = new Map();
+
 /**
- * 현재 브랜치의 접속자 목록(§15.5).
- * 아직 방에 들어가지 않았으면(인증 전·브랜치 이동 중) 빈 배열이다 — 이전 브랜치의 목록을
- * 새 브랜치의 것으로 잘못 보여 주지 않기 위해서다.
+ * 브랜치별 접속자 목록(저장소 전체, §15.5). Editing 뷰가 브랜치별로 나눠 그린다.
+ * 아직 방에 들어가지 않았으면(인증 전·브랜치 이동 중) 빈 표다 — 이전 저장소·브랜치의 값을
+ * 새 것으로 잘못 보여 주지 않기 위해서다.
  */
-export function getBranchPresence(): readonly PresenceEntry[] {
-    return state === 'joined' ? presence : [];
+export function getPresenceByBranch(): ReadonlyMap<string, PresenceEntry[]> {
+    return state === 'joined' ? presenceByBranch : EMPTY_PRESENCE;
 }
 
 /** 세션 변화에 맞춰 소켓 수명을 묶는다. `extension.ts` activate 에서 한 번 부른다. */
@@ -156,34 +182,48 @@ export function stopControlSocket(): void {
     started = false;
     clearReconnectTimer();
     teardownSocket();
+    // 거부 기록도 함께 버린다 — 다음에 시작할 때는 다시 시도해야 한다.
+    blockedRepoId = undefined;
+    blockedBranch = undefined;
     setState('disconnected');
 }
 
 /**
  * 세션·브랜치가 바뀔 때마다 소켓이 할 일을 정한다.
- * 세션이 사라지면 정리하고, 없으면 열고, 이미 들어가 있으면 방을 맞춘다.
+ * 세션이 사라지면 정리하고, 없으면 열고, 열려 있으면 방을 맞춘다.
  */
 function syncConnection(): void {
     if (!started) {
         return;
     }
 
-    if (!getSession() || !getCurrentBranch()) {
+    const session = getSession();
+    if (!session || !getCurrentBranch()) {
         clearReconnectTimer();
         teardownSocket();
         setState('disconnected');
         return;
     }
 
-    if (state === 'joined') {
-        syncRoom();
-        return;
+    // 앱에서 다른 저장소를 열었으면 이전 저장소의 접속자 표를 버린다.
+    if (presenceRepoId !== session.repoId) {
+        presenceByBranch.clear();
+        presenceRepoId = session.repoId;
     }
 
     if (!socket) {
-        connect();
+        // 인증 중이면 connect 가 이미 소켓을 만드는 중이다(중복 연결·백오프 우회 방지).
+        if (state !== 'authenticating') {
+            connect();
+        }
+        return;
     }
-    // authenticating / joining 이면 인증·입장 응답을 받은 뒤에 방을 맞춘다.
+
+    // 소켓이 열려 있으면 방을 맞춘다. `joining` 에서도 보내야 한다 —
+    // 서버가 입장을 거부하면 응답 대신 `err` 가 오므로 그 상태에 갇히기 때문이다(2026-10-08 수정).
+    if (state !== 'authenticating') {
+        syncRoom();
+    }
 }
 
 /** 소켓을 새로 연다. 이전 소켓과 타이머는 먼저 정리한다. */
@@ -295,6 +335,9 @@ function handleFrame(text: string): void {
             // 인증이 끝났다. 이제 방에 들어간다(§10.2 joining).
             authFailures = 0;
             reconnectDelayMs = RECONNECT_MIN_MS;
+            // 새 인증은 새 시도다 — 거부됐던 방도 한 번은 다시 보내 본다(반복은 blocked 가 막는다).
+            blockedRepoId = undefined;
+            blockedBranch = undefined;
             sendJoinFrame();
             return;
         case 'AUTH_FAILED':
@@ -326,6 +369,12 @@ function sendJoinFrame(): void {
         return;
     }
 
+    // 거부된 방이면 보내지 않는다. 여기서 다시 보내면 "실패 → 재연결 → 실패" 가 반복된다.
+    if (blockedRepoId === session.repoId && blockedBranch === branch) {
+        setState('disconnected');
+        return;
+    }
+
     if (!send({ type: 'join', repo_id: session.repoId, branch })) {
         return;
     }
@@ -343,12 +392,26 @@ function syncRoom(): void {
         return;
     }
 
-    if (joinedRepoId === session.repoId && joinedBranch === branch) {
+    // 다른 방으로 가려는 것이면 거부 기록은 의미가 없다. 지우고 새로 시도한다.
+    if (blockedRepoId !== undefined && (blockedRepoId !== session.repoId || blockedBranch !== branch)) {
+        blockedRepoId = undefined;
+        blockedBranch = undefined;
+    }
+
+    // 서버가 확인해 준 방에 이미 들어가 있을 때만 보낼 것이 없다.
+    // `joined` 가 아닌데 방이 같다면(입장 거부·끊김으로 풀린 경우) 다시 확인받아야 한다 —
+    // 그래야 이전 브랜치로 돌아왔을 때 접속자 목록이 되살아난다.
+    if (state === 'joined' && joinedRepoId === session.repoId && joinedBranch === branch) {
         return;
     }
 
     if (requestedRepoId === session.repoId && requestedBranch === branch) {
         // 같은 이동을 이미 보내고 응답을 기다리는 중이다.
+        return;
+    }
+
+    if (blockedRepoId === session.repoId && blockedBranch === branch) {
+        // 서버가 거부한 방이다. 사용자가 브랜치를 바꿀 때까지 다시 보내지 않는다.
         return;
     }
 
@@ -370,15 +433,27 @@ function handlePresence(payload: Record<string, unknown>): void {
     const branch = asString(payload.branch);
     const list = asPresence(payload.presence);
 
+    // 저장소 전체 접속자 표를 먼저 갱신한다(내 브랜치 + 다른 브랜치, §15.5).
+    // 서버가 저장소의 모든 방에 보내므로 다른 브랜치 인원도 여기서 따라온다.
+    if (repoId !== undefined && branch && repoId === getSession()?.repoId) {
+        if (list.length > 0) {
+            presenceByBranch.set(branch, list);
+        } else {
+            presenceByBranch.delete(branch);
+        }
+    }
+
     if (repoId !== undefined && branch && repoId === requestedRepoId && branch === requestedBranch) {
         const entering = state !== 'joined' || joinedBranch !== branch;
         joinedRepoId = repoId;
         joinedBranch = branch;
-        presence = list;
         setState('joined');
         startHeartbeat();
         if (entering) {
             log(`제어 소켓 입장 완료: ${getSession()?.userEmail ?? ''} → ${branch} (접속자 ${list.length}명)`);
+            // 내가 들어오기 전부터 다른 브랜치에 있던 접속자는 이벤트가 오지 않았다.
+            // 저장소 전체 접속자를 한 번 받아 표를 채운다(§3.2 GET /repos/presence).
+            void seedPresenceSnapshot(repoId);
         }
         emitEvent(payload, 'presence_updated');
 
@@ -388,6 +463,37 @@ function handlePresence(payload: Record<string, unknown>): void {
     }
 
     emitEvent(payload, 'presence_updated');
+}
+
+/**
+ * 저장소 전체 접속자를 한 번 받아 접속자 표를 채운다(§3.2 `GET /repos/presence`, §15.5).
+ * 소켓은 앞으로의 변화만 알려 주므로, 입장 시점에 이미 있던 다른 브랜치 접속자는 이 조회로 채운다.
+ * 실패해도 치명적이지 않다 — 그 브랜치의 다음 `presence_updated` 가 다시 채운다.
+ */
+async function seedPresenceSnapshot(repoId: number): Promise<void> {
+    try {
+        const rows = await apiRequest<PresenceBranchRow[]>(`/github/repos/presence?repo_id=${repoId}`);
+        // 받는 사이에 저장소가 바뀌었거나 방을 떠났으면 버린다.
+        if (getSession()?.repoId !== repoId || state !== 'joined') {
+            return;
+        }
+
+        for (const row of rows) {
+            const list = asPresence(row.presence);
+            if (!row.name) {
+                continue;
+            }
+            if (list.length > 0) {
+                presenceByBranch.set(row.name, list);
+            } else {
+                presenceByBranch.delete(row.name);
+            }
+        }
+        presenceRepoId = repoId;
+        emitEvent({ type: 'presence_updated' }, 'presence_updated');
+    } catch (error) {
+        log(`저장소 전체 접속자 목록을 받지 못했습니다: ${describe(error)}`);
+    }
 }
 
 /** 브랜치 삭제 전파(§1.3-10). 삭제된 브랜치에 있던 사용자는 기본 브랜치로 옮긴다. */
@@ -416,6 +522,22 @@ function handleServerError(payload: Record<string, unknown>): void {
     const roomFailure = code === 'P0103' || code === 'P0801' || code === 'P0401';
     if (state !== 'joined' || roomFailure) {
         void vscode.window.showWarningMessage(`Axis Share: ${message}${code ? ` (${code})` : ''}`);
+    }
+
+    if (roomFailure) {
+        // 서버가 방을 거부했다(P0103 권한 없음, P0801 등록되지 않은 브랜치).
+        // 여기서 상태를 풀지 않으면 "응답 대기(joining)" 에 갇힌다 — 그 상태에서는
+        // syncRoom 이 요청을 보내지 않아, 브랜치를 되돌려도 접속자 목록이 돌아오지 않는다(2026-10-08 수정).
+        if (requestedRepoId !== undefined && requestedBranch) {
+            blockedRepoId = requestedRepoId;
+            blockedBranch = requestedBranch;
+        }
+        requestedRepoId = undefined;
+        requestedBranch = undefined;
+        presenceByBranch.clear();
+        setState('disconnected');
+        // 거부된 방이 아닌 곳(이전 브랜치 등)을 가리키고 있으면 곧바로 다시 맞춘다.
+        syncConnection();
     }
 
     emitEvent(payload, 'err');
@@ -474,7 +596,8 @@ function teardownSocket(): void {
     requestedBranch = undefined;
     joinedRepoId = undefined;
     joinedBranch = undefined;
-    presence = [];
+    presenceByBranch.clear();
+    presenceRepoId = undefined;
     setContextKey(false);
 }
 

@@ -17,6 +17,11 @@ import { getCurrentBranch, getSession, setCurrentBranch, type RepoSession } from
 export type RepoBranch = {
     name: string;
     is_default: boolean;
+    /**
+     * 서버 `github_branches` 에 행이 있는가(§3.2). `false` 는 원격에만 있는 브랜치로,
+     * 트리 조회는 되지만 접속자·편집 방을 열려면 먼저 등록해야 한다(§2.3).
+     */
+    is_registered?: boolean;
     base_branch?: string | null;
     worktree_path?: string;
     work_item_display_id?: string | null;
@@ -42,7 +47,10 @@ const STATE_LABELS: Record<string, string> = {
     untracked: '추적 안 됨'
 };
 
-type PickAction = { kind: 'switch'; branch: string } | { kind: 'create' } | { kind: 'delete'; branch: string };
+type PickAction =
+    | { kind: 'switch'; branch: string; registered: boolean }
+    | { kind: 'create' }
+    | { kind: 'delete'; branch: string };
 type BranchPickItem = vscode.QuickPickItem & { action?: PickAction };
 
 /** §15.4 이름 규칙: 앞뒤 공백을 없애고, 남은 공백은 '-' 로 바꾼다. */
@@ -106,12 +114,15 @@ export async function showBranchPicker(): Promise<void> {
     }
 
     const current = getCurrentBranch();
-    const items: BranchPickItem[] = branches.map((branch) => ({
-        label: `${branch.name === current ? '$(check) ' : ''}${branch.name}`,
-        description: describeBranch(branch, current),
-        detail: branch.work_item_display_id ? `업무 WI-${branch.work_item_display_id}` : undefined,
-        action: { kind: 'switch', branch: branch.name }
-    }));
+    const items: BranchPickItem[] = branches.map((branch) => {
+        const unregistered = branch.is_registered === false;
+        return {
+            label: `${branch.name === current ? '$(check) ' : ''}${branch.name}`,
+            description: describeBranch(branch, current),
+            detail: describeBranchDetail(branch, unregistered),
+            action: { kind: 'switch', branch: branch.name, registered: !unregistered }
+        };
+    });
 
     if (items.length === 0) {
         void vscode.window.showWarningMessage('사용할 수 있는 브랜치가 없습니다.');
@@ -139,7 +150,7 @@ export async function showBranchPicker(): Promise<void> {
     }
 
     if (action.kind === 'switch') {
-        switchBranch(action.branch);
+        await switchBranch(session, action.branch, action.registered);
         return;
     }
 
@@ -154,10 +165,28 @@ export async function showBranchPicker(): Promise<void> {
 /**
  * 브랜치를 전환한다. 로컬 상태를 바꾸면 repoSession 이벤트로 트리가 다시 그려진다(§15.10).
  * 같은 브랜치를 다시 고른 경우에는 아무 일도 일어나지 않는다.
+ *
+ * 원격에만 있는 브랜치(`is_registered === false`)는 **먼저 서버에 등록한다.**
+ * 브랜치 목록은 원격 ref 를 합쳐 보여 주지만, 접속자(presence)·편집 방은 `github_branches` 행이
+ * 있어야 열린다(§2.3, §3.2). 등록은 그 원격 브랜치를 그대로 받아오므로 새로 만들어지지 않는다.
+ * 이 등록을 건너뛰면 제어 소켓 `join` 이 P0801 로 거부되어 Editing 뷰가 비어 버린다(2026-10-08).
  */
-function switchBranch(branch: string): void {
+async function switchBranch(session: RepoSession, branch: string, registered: boolean): Promise<void> {
     if (getCurrentBranch() === branch) {
         return;
+    }
+
+    if (!registered) {
+        try {
+            // 멱등하다 — 이미 등록돼 있으면 작업 디렉터리만 확인하고 그대로 돌아온다.
+            await apiRequest('/github/repos/branches', {
+                method: 'POST',
+                body: { repo_id: session.repoId, name: branch }
+            });
+        } catch (error) {
+            showFailureMessage(`'${branch}' 브랜치를 열지 못했습니다.`, error);
+            return;
+        }
     }
 
     setCurrentBranch(branch);
@@ -286,7 +315,7 @@ async function requestDeleteBranch(session: RepoSession, branch: string, force: 
     void vscode.window.showInformationMessage(`'${branch}' 브랜치를 삭제했습니다.`);
 }
 
-/** 브랜치 한 줄 설명: 기본 브랜치 · 현재 · 접속자(§15.3 피커 표기). */
+/** 브랜치 한 줄 설명: 기본 브랜치 · 현재 · 원격에만 있음 · 접속자(§15.3 피커 표기). */
 function describeBranch(branch: RepoBranch, current: string | undefined): string {
     const parts: string[] = [];
     if (branch.is_default) {
@@ -294,6 +323,9 @@ function describeBranch(branch: RepoBranch, current: string | undefined): string
     }
     if (branch.name === current) {
         parts.push('현재');
+    }
+    if (branch.is_registered === false) {
+        parts.push('원격에만 있음');
     }
 
     const presence = Array.isArray(branch.presence) ? branch.presence : [];
@@ -308,6 +340,19 @@ function describeBranch(branch: RepoBranch, current: string | undefined): string
     }
 
     return parts.join(' · ');
+}
+
+/** 피커 상세줄: 업무 연결과 "아직 등록하지 않은 브랜치" 안내를 함께 보여 준다. */
+function describeBranchDetail(branch: RepoBranch, unregistered: boolean): string | undefined {
+    const parts: string[] = [];
+    if (branch.work_item_display_id) {
+        parts.push(`업무 WI-${branch.work_item_display_id}`);
+    }
+    if (unregistered) {
+        parts.push('선택하면 서버에 등록하고 작업 디렉터리를 만듭니다');
+    }
+
+    return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
 /** 생성 응답은 단일 객체다. 배열로 와도 받아 주도록 방어한다. */

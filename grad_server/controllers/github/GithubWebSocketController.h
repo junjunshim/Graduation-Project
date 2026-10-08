@@ -31,7 +31,7 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
     // 같은 브랜치 방의 접속자에게 보낸다 (commit_started / commit_finished 등). 보낸 대상이 있으면 true.
     static bool broadcastToBranch(int repo_id, const std::string &branch, const Json::Value &event);
 
-    // 같은 저장소의 모든 브랜치 접속자에게 보낸다 (branch_created / branch_deleted).
+    // 같은 저장소의 모든 브랜치 접속자에게 보낸다 (branch_created / branch_deleted / presence_updated).
     static bool broadcastToRepository(int repo_id, const Json::Value &event);
 
   private:

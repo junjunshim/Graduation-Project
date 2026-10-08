@@ -13,7 +13,7 @@ import {
 } from './docSocket';
 import { getSession } from './repoSession';
 import { normalizeEol, toNormalizedOffset, toRawOffset } from './text';
-import { userColor, userSelectionColor } from './userColors';
+import { userColorHex, userSelectionHex } from './userColors';
 
 /**
  * [TASK_11 §4.3-9 / §12.8] 원격 커서·선택 영역 렌더러.
@@ -47,8 +47,11 @@ const DEDUPE_WINDOW_MS = 200;
 /** 수신 커서를 다시 그리는 디바운스(ms). 한 파일에 여러 커서가 몰려도 한 번만 그린다(§12.8). */
 const RENDER_DEBOUNCE_MS = 40;
 
-/** 같은 자리에 이름표가 겹칠 때 한 줄씩 내리는 간격(em). */
-const BADGE_STACK_EM = 1.1;
+/** 이름표를 커서 위로 띄우는 기본 간격(em). 레퍼런스(`CursorManager`)와 같은 값이다. */
+const BADGE_BASE_EM = 1.4;
+
+/** 같은 자리에 이름표가 겹칠 때 한 줄씩 더 내리는 간격(em). 레퍼런스와 같은 값이다. */
+const BADGE_STACK_EM = 1.5;
 
 /** 한 사용자의 최신 커서. 사용자당 하나만 둔다 — 탭을 여럿 열어도 커서는 하나로 보이면 된다(§8.10). */
 type PeerCursor = {
@@ -117,6 +120,8 @@ class CursorRenderer implements vscode.Disposable {
                     this.scheduleRender(open.path);
                 }
             }),
+            // 테마가 바뀌면 위에서 고른 hex 색이 낡는다 — 데코레이션을 버리고 다시 그린다.
+            vscode.window.onDidChangeActiveColorTheme(() => this.onThemeChanged()),
             onDidChangeOpenDocs(() => this.onOpenDocsChanged()),
             onDidReceiveCursor((frame) => this.onRemoteCursor(frame)),
             // 서버는 커서 제거를 따로 알리지 않는다 — 파일을 떠난 사용자의 커서를 이 신호로 지운다(§9.5).
@@ -251,6 +256,17 @@ class CursorRenderer implements vscode.Disposable {
         this.scheduleRender(frame.path);
     }
 
+    /** 테마(라이트/다크/고대비)가 바뀌면 색을 다시 고르고 다시 그린다. */
+    private onThemeChanged(): void {
+        for (const email of [...this.decorations.keys()]) {
+            this.disposeDecoration(email);
+        }
+
+        for (const open of listOpenDocs()) {
+            this.scheduleRender(open.path);
+        }
+    }
+
     /** 열려 있는 파일 목록이 바뀌면 더 이상 보지 않는 파일의 커서를 버리고 나머지를 다시 그린다. */
     private onOpenDocsChanged(): void {
         const paths = new Set(listOpenDocs().map((open) => open.path));
@@ -375,9 +391,15 @@ class CursorRenderer implements vscode.Disposable {
         };
     }
 
-    /** 사용자 데코레이션 타입. 색·이름표·적층 위치가 그대로면 만들어 둔 것을 재사용한다. */
+    /**
+     * 사용자 데코레이션 타입. 색·이름표·적층 위치가 그대로면 만들어 둔 것을 재사용한다.
+     * 배지 모양은 레퍼런스(`CursorManager.applyPeerDecorationWithPositions`)를 그대로 가져왔다 —
+     * 흰 글자 + 어두운 외곽선(text-shadow)이라 배경색이 무엇이든, 배경이 적용되지 않아도 읽힌다.
+     */
     private decorationFor(email: string, peer: PeerCursor, rank: number): PeerDecoration {
-        const key = `${displayName(email, peer.userName)}|${rank}`;
+        const name = displayName(email, peer.userName);
+        const badgeFontSize = badgeFontSizePx();
+        const key = `${name}|${rank}|${badgeFontSize}`;
         const cached = this.decorations.get(email);
         if (cached && cached.key === key) {
             return cached;
@@ -387,7 +409,7 @@ class CursorRenderer implements vscode.Disposable {
             cached.selection.dispose();
         }
 
-        const color = userColor(email);
+        const color = userColorHex(email);
         const decoration: PeerDecoration = {
             cursor: vscode.window.createTextEditorDecorationType({
                 // 자리 표시는 왼쪽 2px 막대(레퍼런스와 같다).
@@ -397,16 +419,22 @@ class CursorRenderer implements vscode.Disposable {
                 overviewRulerColor: color,
                 overviewRulerLane: vscode.OverviewRulerLane.Right,
                 after: {
-                    contentText: displayName(email, peer.userName),
+                    contentText: name,
                     backgroundColor: color,
-                    // 이름표 글자는 에디터 배경색 — 어두운 테마 팔레트는 밝은 색이라 어두운 글자가,
-                    // 밝은 테마 팔레트는 어두운 색이라 밝은 글자가 되어 양쪽 모두에서 읽힌다(§15.8).
-                    color: new vscode.ThemeColor('editor.background'),
-                    margin: `${(rank * BADGE_STACK_EM).toFixed(2)}em 0 0 0`
+                    color: '#ffffff',
+                    fontWeight: 'bold',
+                    // 적층 순위만큼 아래로 내려 이름표가 서로 가리지 않게 한다.
+                    margin: `${BADGE_BASE_EM + rank * BADGE_STACK_EM}em 0 0 0`,
+                    textDecoration:
+                        `none; font-size: ${badgeFontSize}px; padding: 1px 4px; border-radius: 3px;` +
+                        ` position: absolute; z-index: ${1000 - rank}; white-space: nowrap; line-height: 1;` +
+                        ' box-shadow: 0 2px 4px rgba(0,0,0,0.3);' +
+                        ' text-shadow: -1px -1px 0 rgba(0,0,0,0.8), 1px -1px 0 rgba(0,0,0,0.8),' +
+                        ' -1px 1px 0 rgba(0,0,0,0.8), 1px 1px 0 rgba(0,0,0,0.8);'
                 }
             }),
             // 선택 영역은 같은 색의 반투명 변형 — 글자를 가리지 않는다.
-            selection: vscode.window.createTextEditorDecorationType({ backgroundColor: userSelectionColor(email) }),
+            selection: vscode.window.createTextEditorDecorationType({ backgroundColor: userSelectionHex(email) }),
             key
         };
         this.decorations.set(email, decoration);
@@ -455,6 +483,12 @@ function toPosition(document: vscode.TextDocument, raw: string, lfIndex: number,
 function findDocument(uri: vscode.Uri): vscode.TextDocument | undefined {
     const key = uri.toString();
     return vscode.workspace.textDocuments.find((document) => document.uri.toString() === key);
+}
+
+/** 이름표 글꼴 크기(px). 레퍼런스와 같이 에디터 글꼴의 80%, 최소 9px. */
+function badgeFontSizePx(): number {
+    const fontSize = vscode.workspace.getConfiguration('editor').get<number>('fontSize') ?? 14;
+    return Math.max(9, Math.round(fontSize * 0.8));
 }
 
 /** 이름표 글자. 이름이 없으면 이메일 앞부분(사이드바와 같은 규칙, §15.5). */

@@ -6,6 +6,7 @@
 import { CollabSession } from './auth';
 import { DocRegistry } from './docRegistry';
 import { log } from './logger';
+import { notifyWorktreeChanged } from './notify';
 import { PresenceRegistry } from './presence';
 import { ResolvedRepo } from './repoResolver';
 
@@ -30,6 +31,8 @@ export class Room {
 
   constructor(readonly repo: ResolvedRepo) {
     this.docs = new DocRegistry(repo.worktreeDir, repo.collabDir);
+    // 파일이 flush 될 때마다 backend 에 알려, 같은 브랜치 접속자(Changes 뷰)가 즉시 갱신되게 한다(§9.9).
+    this.docs.setFlushListener((filePath) => notifyWorktreeChanged(repo.repoId, repo.branch, filePath));
   }
 
   get key(): string {

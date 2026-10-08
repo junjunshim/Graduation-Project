@@ -29,10 +29,14 @@ class CollabController : public drogon::HttpController<CollabController>
     //   worktree 경로의 진실은 DB(github_branches.worktree_path)에 있고, 그 값을 아는 것은 C++ 뿐이다.
     //   collab 은 여기서 받은 볼륨 상대 경로만 보고 파일을 읽고 쓴다.
     ADD_METHOD_TO(CollabController::resolvePath, "/internal/collab/resolve", Post);
+    // collab → C++: worktree 파일 flush 알림 (내부 전용, §9.9).
+    //   collab 이 파일을 내려쓴 직후 부른다. C++ 은 같은 브랜치 방에 worktree_changed 를 중계한다.
+    ADD_METHOD_TO(CollabController::notifyWorktreeChanged, "/internal/collab/worktree-changed", Post);
     METHOD_LIST_END
 
     void issueTicket(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void consumeTicket(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void resolvePath(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void notifyWorktreeChanged(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

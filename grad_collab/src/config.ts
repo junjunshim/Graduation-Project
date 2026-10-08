@@ -14,6 +14,8 @@ export interface CollabConfig {
   docIdleUnloadMs: number;
   /** 열린 doc 을 주기적으로 파일에 내려쓰는 간격(§9.4 ④). */
   autosaveIntervalMs: number;
+  /** worktree 변경을 backend 에 알릴 때 묶어 보내는 디바운스(§9.9). */
+  notifyDebounceMs: number;
   /** 동시 편집을 허용하는 파일 크기 상한(§6-10, 512KB). */
   maxDocBytes: number;
 }
@@ -36,5 +38,6 @@ export const config: CollabConfig = {
   flushDebounceMs: readPositiveInt(process.env.FLUSH_DEBOUNCE_MS, 2000),
   docIdleUnloadMs: readPositiveInt(process.env.DOC_IDLE_UNLOAD_MS, 30_000),
   autosaveIntervalMs: readPositiveInt(process.env.AUTOSAVE_INTERVAL_MS, 30_000),
+  notifyDebounceMs: readPositiveInt(process.env.WORKTREE_NOTIFY_DEBOUNCE_MS, 400),
   maxDocBytes: readPositiveInt(process.env.MAX_DOC_BYTES, 512 * 1024),
 };

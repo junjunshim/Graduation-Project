@@ -1,4 +1,5 @@
 #include "CollabController.h"
+#include "GithubWebSocketController.h"
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
 
@@ -468,4 +469,58 @@ void CollabController::resolvePath(const HttpRequestPtr &req,
         item["collab_rel"] = localRel + ".collab/" + branchSlug;
         return successResponse(singleItemArray(item), "브랜치 작업 디렉터리를 확인했습니다.");
     });
+}
+
+// ===========================================================================
+// collab → C++ : worktree 변경 알림 (내부 전용, §9.9 / §15.10)
+// ===========================================================================
+
+// collab 이 worktree 파일을 실제로 내려쓴 직후 부른다. 여기서는 그 브랜치 방의 접속자에게
+// worktree_changed 를 중계하기만 한다 — 같은 브랜치의 Changes 뷰가 즉시 다시 그린다(§15.10).
+// flush 는 collab 이 이미 끝냈으므로 DB·git 을 건드리지 않는다(순수 브로드캐스트).
+// 아무도 듣고 있지 않으면 중계는 no-op 이지만 실패는 아니다.
+void CollabController::notifyWorktreeChanged(const HttpRequestPtr &req,
+                                             std::function<void(const HttpResponsePtr &)> &&callback) {
+    // 1) 내부 인증 — 다른 /internal/collab/* 와 같은 규칙(fail-closed).
+    const std::string configured = internalToken();
+    const std::string presented = req->getHeader(kInternalTokenHeader);
+    if (configured.empty() || presented.empty() || !constantTimeEquals(configured, presented)) {
+        LOG_WARN << "worktree 변경 알림 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.";
+        callback(errorResponse("401", "내부 인증에 실패했습니다.", k401Unauthorized));
+        return;
+    }
+
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = (*jsonPtr)["branch"].asString();
+
+    // 2) paths 는 안내용 목록이다(확장은 전체 status 를 다시 받는다). 문자열만 골라 담는다.
+    Json::Value paths(Json::arrayValue);
+    const Json::Value &rawPaths = (*jsonPtr)["paths"];
+    if (rawPaths.isArray()) {
+        for (const auto &path : rawPaths) {
+            if (path.isString()) {
+                paths.append(path.asString());
+            }
+        }
+    }
+
+    // 3) 그 브랜치 방의 접속자에게 중계한다.
+    Json::Value event;
+    event["type"] = "worktree_changed";
+    event["repo_id"] = repoId;
+    event["branch"] = branch;
+    event["paths"] = paths;
+    GithubWebSocketController::broadcastToBranch(repoId, branch, event);
+
+    Json::Value item;
+    item["repo_id"] = repoId;
+    item["branch"] = branch;
+    item["notified"] = static_cast<Json::Int>(paths.size());
+    callback(successResponse(singleItemArray(item), "worktree 변경을 알렸습니다."));
 }

@@ -66,6 +66,7 @@ export class DocRegistry {
   private readonly docs = new Map<string, DocEntry>();
   private lastFlush: number | null = null;
   private readonly autosave: NodeJS.Timeout;
+  private flushListener: ((filePath: string) => void) | undefined;
 
   constructor(
     private readonly worktreeDir: string,
@@ -75,6 +76,14 @@ export class DocRegistry {
       void this.flushDirty();
     }, config.autosaveIntervalMs);
     this.autosave.unref();
+  }
+
+  /**
+   * worktree 파일이 실제로 내려써진 순간 불릴 콜백을 등록한다(§9.9).
+   * 방(Room)이 자기 (저장소, 브랜치)를 붙여 backend 에 알리는 데 쓴다.
+   */
+  setFlushListener(listener: (filePath: string) => void): void {
+    this.flushListener = listener;
   }
 
   get openCount(): number {
@@ -342,6 +351,14 @@ export class DocRegistry {
     } catch (error) {
       log('error', 'flush 실패', { path: entry.filePath, reason: (error as Error).message });
       throw error;
+    }
+
+    // worktree 파일이 실제로 바뀐 순간이다. 방이 이 신호로 backend 에 알린다(§9.9).
+    // 리스너는 알림만 예약하므로 실패해도 flush 결과에는 영향을 주지 않는다.
+    try {
+      this.flushListener?.(entry.filePath);
+    } catch (error) {
+      log('warn', 'flush 리스너 실패', { path: entry.filePath, reason: (error as Error).message });
     }
     entry.dirty = false;
     entry.mismatch = false;

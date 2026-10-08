@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { apiRequest } from '../api';
 import { getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
 import { NO_SESSION_MESSAGE } from './repoTreeProvider';
-import { getSyncInfo, onDidChangeStatus } from './repoStatus';
+import { getSyncInfo, onDidChangeCommitList, onDidChangeStatus } from './repoStatus';
 
 /**
  * [TASK_11 §15.14] Graph 뷰 — 현재 브랜치의 커밋 현황과 원격 위치.
@@ -296,6 +296,8 @@ export function createGraphView(context: vscode.ExtensionContext): {
         provider,
         onDidChangeSession(() => provider.refresh()),
         onDidChangeStatus(() => provider.redraw()),
+        // 커밋·push 는 이력을 바꾼다 — 목록·원격 위치를 다시 받는다(§15.14). 상태 변경(redraw)과 다르다.
+        onDidChangeCommitList(() => provider.refresh()),
         view.onDidChangeVisibility((event) => {
             if (event.visible) {
                 provider.refresh();

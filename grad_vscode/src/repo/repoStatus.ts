@@ -133,6 +133,11 @@ const commitStateEmitter = new vscode.EventEmitter<void>();
 /** 커밋 진행 상태나 커밋 사용자 설정이 바뀌었다. Changes 뷰가 안내 문구를 다시 그린다(§15.12). */
 export const onDidChangeCommitState = commitStateEmitter.event;
 
+const commitListEmitter = new vscode.EventEmitter<void>();
+
+/** 커밋 이력이 바뀌었다(내/다른 사용자의 커밋·push). Graph 뷰가 이 이벤트로 목록을 다시 받는다(§15.14). */
+export const onDidChangeCommitList = commitListEmitter.event;
+
 /**
  * 현재 작업 트리 상태(§3.2). Changes 뷰(§15.3)와 배지 provider 가 같은 값을 읽는다 — 출처는 하나다.
  */
@@ -349,6 +354,7 @@ export async function pushBranch(): Promise<void> {
         });
         reportPushResult(Array.isArray(rows) ? rows[0] : undefined);
         await refreshStatus();
+        commitListEmitter.fire(); // 원격 위치(origin/<branch>)가 바뀌었다 — Graph 뷰를 다시 받는다(§15.14).
     } catch (error) {
         showError('원격에 push 하지 못했습니다.', error);
     }
@@ -479,6 +485,7 @@ export async function commitInteractive(): Promise<void> {
         });
         reportCommitResult(Array.isArray(rows) ? rows[0] : undefined);
         await refreshStatus();
+        commitListEmitter.fire(); // 새 커밋이 생겼다 — Graph 뷰를 다시 받는다(§15.14).
         await offerPushAfterCommit();
     } catch (error) {
         showError('커밋하지 못했습니다.', error);
@@ -601,6 +608,8 @@ export async function refreshStatus(): Promise<void> {
 }
 
 function clearStatus(): void {
+    // 브랜치·저장소가 바뀌었다 — 이전 브랜치의 worktree 알림이 뒤늦게 돌지 않게 취소한다(§9.9).
+    cancelWorktreeRefresh();
     statusKey = undefined;
     syncInfo = { has_upstream: false, ahead: 0, behind: 0 };
     setStatus([]);
@@ -690,17 +699,49 @@ function onControlEvent(event: ControlEvent): void {
         return;
     }
 
+    if (event.type === 'worktree_changed') {
+        // 같은 브랜치의 누군가(나 포함)가 worktree 파일을 내려썼다 — 변경 목록을 다시 받는다(§9.9, §15.10).
+        scheduleWorktreeRefresh();
+        return;
+    }
+
     if (event.type === 'commit_finished') {
         remoteCommitting = false;
         commitStateEmitter.fire();
         void refreshStatus(); // 뷰와 파일 배지를 다시 그린다(§15.10).
+        commitListEmitter.fire(); // 새 커밋이 생겼다 — Graph 뷰도 다시 받는다(§15.14).
         return;
     }
 
     if (event.type === 'push_finished') {
         // 같은 브랜치의 다른 사용자가 원격으로 올렸다 — 원격 대비 위치가 바뀌었다(§15.10).
         void refreshStatus();
+        commitListEmitter.fire(); // 원격 위치가 바뀌었다 — Graph 뷰도 다시 받는다(§15.14).
     }
+}
+
+/**
+ * `worktree_changed` 는 파일마다 따로 올 수 있다(같은 브랜치의 여러 편집자). 잠깐 모아 한 번만
+ * 다시 조회한다 — 파일 열 개가 동시에 flush 돼도 조회는 한 번이다(§9.9).
+ */
+const WORKTREE_REFRESH_DEBOUNCE_MS = 300;
+let worktreeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+function cancelWorktreeRefresh(): void {
+    if (worktreeRefreshTimer) {
+        clearTimeout(worktreeRefreshTimer);
+        worktreeRefreshTimer = undefined;
+    }
+}
+
+function scheduleWorktreeRefresh(): void {
+    if (worktreeRefreshTimer) {
+        clearTimeout(worktreeRefreshTimer);
+    }
+    worktreeRefreshTimer = setTimeout(() => {
+        worktreeRefreshTimer = undefined;
+        void refreshStatus();
+    }, WORKTREE_REFRESH_DEBOUNCE_MS);
 }
 
 // ---------------------------------------------------------------------------

@@ -36,3 +36,19 @@ export function userColorId(email: string): string {
 export function userColor(email: string): vscode.ThemeColor {
     return new vscode.ThemeColor(userColorId(email));
 }
+
+/**
+ * 같은 색의 반투명 변형 id(`axis-share.user.N.sel`, 알파 30%).
+ * `ThemeColor` 는 등록된 색 id 만 참조할 수 있고 알파를 코드에서 붙일 수 없어서, 선택 영역용으로 따로 등록해 둔다.
+ */
+export function userSelectionColorId(email: string): string {
+    return `axis-share.user.${userColorIndex(email)}.sel`;
+}
+
+/**
+ * 원격 선택 영역 배경색. 글자를 가리지 않도록 반투명이다 —
+ * 커서 막대·이름표는 불투명 `userColor` 를 쓴다(§12.8).
+ */
+export function userSelectionColor(email: string): vscode.ThemeColor {
+    return new vscode.ThemeColor(userSelectionColorId(email));
+}

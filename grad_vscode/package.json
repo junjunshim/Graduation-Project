@@ -294,6 +294,45 @@
                 "defaults": { "dark": "#9aa4b2", "light": "#455a64", "highContrast": "#b6c0cc" }
             },
             {
+                "id": "axis-share.user.0.sel",
+                "description": "협업 사용자 색 0 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#e06c754D", "light": "#c628284D", "highContrast": "#ff8b944D" }
+            },
+            {
+                "id": "axis-share.user.1.sel",
+                "description": "협업 사용자 색 1 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#e5c07b4D", "light": "#9a67004D", "highContrast": "#f0d38a4D" }
+            },
+            {
+                "id": "axis-share.user.2.sel",
+                "description": "협업 사용자 색 2 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#98c3794D", "light": "#2e7d324D", "highContrast": "#a9d99a4D" }
+            },
+            {
+                "id": "axis-share.user.3.sel",
+                "description": "협업 사용자 색 3 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#56b6c24D", "light": "#00695c4D", "highContrast": "#6fd0dc4D" }
+            },
+            {
+                "id": "axis-share.user.4.sel",
+                "description": "협업 사용자 색 4 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#61afef4D", "light": "#1565c04D", "highContrast": "#7cc0ff4D" }
+            },
+            {
+                "id": "axis-share.user.5.sel",
+                "description": "협업 사용자 색 5 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#c678dd4D", "light": "#6a1b9a4D", "highContrast": "#d495ea4D" }
+            },
+            {
+                "id": "axis-share.user.6.sel",
+                "description": "협업 사용자 색 6 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#ff8a654D", "light": "#d843154D", "highContrast": "#ffa5854D" }
+            },
+            {
+                "id": "axis-share.user.7.sel",
+                "description": "협업 사용자 색 7 — 원격 선택 영역(반투명)",
+                "defaults": { "dark": "#9aa4b24D", "light": "#455a644D", "highContrast": "#b6c0cc4D" }
+            },            {
                 "id": "axis-share.deco.typo",
                 "description": "리뷰 데코레이션 — 오타",
                 "defaults": { "dark": "#f28b82", "light": "#d9534f", "highContrast": "#ff9e94" }

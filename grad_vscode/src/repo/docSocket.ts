@@ -4,6 +4,7 @@ import * as Y from 'yjs';
 import { ApiError, apiRequest, getServerBaseUrl } from '../api';
 import { getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
 import { branchSlug } from './repoTreeProvider';
+import { diffRange, normalizeEol, toRawOffset } from './text';
 
 /**
  * [TASK_11 §12.4 / §12.7] 문서 소켓(`/collab/`) 클라이언트 — 파일 열기와 실시간 텍스트 동기화.
@@ -65,6 +66,32 @@ type Watching = {
     saveTimer: ReturnType<typeof setTimeout> | undefined;
 };
 
+/** 열려 있는 파일의 읽기용 뷰. 커서 모듈이 Y.Text 로 상대좌표를 만들고 해석한다(§12.8). */
+export type OpenDoc = {
+    readonly path: string;
+    readonly uri: vscode.Uri;
+    readonly doc: Y.Doc;
+    readonly text: Y.Text;
+    readonly canWrite: boolean;
+    readonly attached: boolean;
+};
+
+/** 서버가 중계한 원격 커서 프레임(§9.5). 상대좌표는 해석하지 않고 그대로 넘긴다(§8.10). */
+export type RemoteCursorFrame = {
+    path: string;
+    userEmail: string;
+    userName?: string;
+    startRel: unknown;
+    endRel: unknown;
+    activeRel: unknown;
+};
+
+/** 다른 사용자가 파일에서 나갔다(§9.5). 그 사용자의 커서를 지우는 유일한 신호다. */
+export type FilePeerLeave = {
+    path: string;
+    userEmail: string;
+};
+
 let extensionContext: vscode.ExtensionContext | undefined;
 let started = false;
 
@@ -97,6 +124,19 @@ const watching = new Map<string, Watching>();
 
 /** 같은 오류를 반복해 알리지 않는다(§9.8). */
 const warnedCodes = new Set<string>();
+
+const openDocsEmitter = new vscode.EventEmitter<void>();
+const cursorEmitter = new vscode.EventEmitter<RemoteCursorFrame>();
+const peerLeaveEmitter = new vscode.EventEmitter<FilePeerLeave>();
+
+/** 열려 있는 문서 목록이 바뀌었다(열림·닫힘·브랜치 전환). 커서 렌더러가 이 이벤트로 다시 그린다. */
+export const onDidChangeOpenDocs = openDocsEmitter.event;
+
+/** 원격 커서 수신(§12.8). 커서 모듈이 상대좌표를 해석해 화면에 그린다. */
+export const onDidReceiveCursor = cursorEmitter.event;
+
+/** 파일 참여자 이탈(§9.5). 서버는 커서 제거를 따로 알리지 않으므로 커서 모듈이 이 신호로 지운다. */
+export const onDidReceivePeerLeave = peerLeaveEmitter.event;
 
 // ---------------------------------------------------------------------------
 // 수명주기
@@ -148,6 +188,7 @@ function onSessionChanged(): void {
 async function retireAll(): Promise<void> {
     const uris = [...watching.values()].map((entry) => entry.uri);
     watching.clear();
+    emitOpenDocsChange();
 
     await teardown();
 
@@ -223,6 +264,7 @@ async function materialize(repoId: number, branch: string, opened: OpenedFrame):
         saveTimer: undefined
     };
     watching.set(opened.path, entry);
+    emitOpenDocsChange();
 
     const onDisk = opened.eol === 'crlf' ? text.toString().replace(/\n/g, '\r\n') : text.toString();
     await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
@@ -313,6 +355,7 @@ function onDocumentClosed(document: vscode.TextDocument): void {
     }
 
     watching.delete(entry.path);
+    emitOpenDocsChange();
     if (entry.saveTimer) {
         clearTimeout(entry.saveTimer);
     }
@@ -585,9 +628,15 @@ function handleFrame(text: string): void {
         case 'err':
             handleServerError(frame);
             return;
+        case 'cursor':
+            handleCursorFrame(frame);
+            return;
+        case 'peer_leave':
+            handlePeerLeave(frame);
+            return;
         default:
-            // `cursor` / `deco` / `deco_del` / `peer_join` / `peer_leave` / `flushed` 는
-            // 커서·데코레이션·파일 참여자(§12.8, §15.5)를 다루는 다음 단계에서 쓴다.
+            // `deco` / `deco_del` 은 리뷰 데코레이션(다음 단계), `peer_join` 은 Editing 뷰의
+            // 파일 그룹(§15.5), `flushed` 는 커밋 파이프라인(§12.11)에서 쓴다.
             return;
     }
 }
@@ -705,6 +754,61 @@ async function teardown(): Promise<void> {
     }
 }
 
+/** 서버가 중계한 원격 커서(§9.5). 이 모듈은 좌표를 해석하지 않는다 — 커서 모듈이 한다(§8.10). */
+function handleCursorFrame(frame: Record<string, unknown>): void {
+    const path = asString(frame.path);
+    const userEmail = asString(frame.userEmail);
+    if (path === undefined || userEmail === undefined) {
+        return;
+    }
+
+    cursorEmitter.fire({
+        path,
+        userEmail,
+        userName: asString(frame.userName),
+        startRel: frame.startRel,
+        endRel: frame.endRel,
+        activeRel: frame.activeRel
+    });
+}
+
+/** 다른 사용자가 파일에서 나갔다(§9.5). 서버는 커서 제거를 따로 보내지 않는다 — 이 신호로 지운다. */
+function handlePeerLeave(frame: Record<string, unknown>): void {
+    const path = asString(frame.path);
+    const userEmail = asString(frame.userEmail);
+    if (path === undefined || userEmail === undefined) {
+        return;
+    }
+
+    peerLeaveEmitter.fire({ path, userEmail });
+}
+
+// ---------------------------------------------------------------------------
+// 열려 있는 문서 / 커서 (커서·데코 모듈이 쓰는 창구)
+// ---------------------------------------------------------------------------
+
+/** 지금 열려 있는 파일들. 커서 렌더러가 경로·Y.Text 를 얻는 유일한 창구다. */
+export function listOpenDocs(): OpenDoc[] {
+    return [...watching.values()];
+}
+
+/** 로컬 사본 URI 로 열려 있는 문서를 찾는다 — 커서 모듈이 에디터 → doc 을 잇는 데 쓴다. */
+export function getOpenDocByUri(uri: vscode.Uri): OpenDoc | undefined {
+    return entryForUri(uri);
+}
+
+/** 내 커서를 방에 알린다. 좌표는 Yjs 상대좌표(JSON)라 상대가 편집해도 위치가 유지된다(§12.8). */
+export function sendCursorFrame(
+    path: string,
+    rels: { startRel: unknown; endRel: unknown; activeRel: unknown }
+): boolean {
+    return send({ type: 'cursor', path, ...rels });
+}
+
+function emitOpenDocsChange(): void {
+    openDocsEmitter.fire();
+}
+
 /** 프레임을 보낸다. 소켓이 없거나 닫혀 있으면 false. */
 function send(payload: Record<string, unknown>): boolean {
     if (!socket || socket.readyState !== socket.OPEN) {
@@ -778,56 +882,6 @@ function entryForUri(uri: vscode.Uri): Watching | undefined {
     }
 
     return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// 텍스트 유틸
-// ---------------------------------------------------------------------------
-
-/** Yjs 텍스트는 LF 다(§9.4). 원본 CRLF 는 worktree 로 내려쓸 때만 되돌린다. */
-function normalizeEol(text: string): string {
-    return text.includes('\r\n') ? text.replace(/\r\n/g, '\n') : text;
-}
-
-/** LF 정규화 오프셋을 원본(CRLF 가능) 오프셋으로 되돌린다 — `\r\n` 하나가 정규화에서 한 글자다. */
-function toRawOffset(raw: string, normalizedOffset: number): number {
-    if (!raw.includes('\r')) {
-        return normalizedOffset;
-    }
-
-    let rawIndex = 0;
-    for (let count = 0; count < normalizedOffset; count += 1) {
-        rawIndex += raw.charCodeAt(rawIndex) === 13 && raw.charCodeAt(rawIndex + 1) === 10 ? 2 : 1;
-    }
-
-    return rawIndex;
-}
-
-/**
- * 두 문자열의 최소 교체 구간을 찾는다(§12.7 최소 범위 diff).
- * 앞뒤로 같은 부분을 걷어내고 가운데만 바꾼다 — 전체 교체보다 커서가 덜 흔들린다.
- */
-function diffRange(current: string, target: string): { index: number; remove: number; insert: string } {
-    const maxPrefix = Math.min(current.length, target.length);
-    let prefix = 0;
-    while (prefix < maxPrefix && current.charCodeAt(prefix) === target.charCodeAt(prefix)) {
-        prefix += 1;
-    }
-
-    const maxSuffix = Math.min(current.length - prefix, target.length - prefix);
-    let suffix = 0;
-    while (
-        suffix < maxSuffix &&
-        current.charCodeAt(current.length - 1 - suffix) === target.charCodeAt(target.length - 1 - suffix)
-    ) {
-        suffix += 1;
-    }
-
-    return {
-        index: prefix,
-        remove: current.length - prefix - suffix,
-        insert: target.slice(prefix, target.length - suffix)
-    };
 }
 
 function b64ToBytes(value: string): Uint8Array {

@@ -92,6 +92,11 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
         item.iconPath = new vscode.ThemeIcon(iconFor(entry.type));
         item.contextValue = isDir ? 'axisDir' : 'axisFile';
 
+        if (!isDir) {
+            // 탐색기처럼 한 번 클릭으로 연다. 내용은 collab 의 open/opened 로만 받는다(§12.4).
+            item.command = { command: 'axis-share.openFile', title: '열기', arguments: [entry] };
+        }
+
         const size = formatSize(entry.size);
         item.tooltip = size ? `${entry.path} · ${size}` : entry.path;
 

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { ApiError } from './api';
 import { showBranchPicker } from './repo/branchPicker';
 import { CONTEXT_HAS_REPO_SESSION, startControlSocket, stopControlSocket } from './repo/controlSocket';
+import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
 import { createPresenceView } from './repo/presenceProvider';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
 import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider';
@@ -20,6 +21,7 @@ import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider'
  *   src/repo/branchPicker.ts       브랜치 전환·생성·삭제(§15.4)
  *   src/repo/controlSocket.ts      제어 소켓 — presence·브랜치·커밋 이벤트(§3.3)
  *   src/repo/presenceProvider.ts   Editing 뷰 — 브랜치별 접속자(§15.5)
+ *   src/repo/docSocket.ts          문서 소켓 — 파일 열기·Yjs 텍스트 동기화(§12.4, §12.7)
  *   src/repo/userColors.ts         사용자 색 배정(§15.8)
  *
  * 다음 단계에서 만들 모듈(§15.11):
@@ -166,11 +168,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     //    세션 컨텍스트 키(§15.2)를 켠다 — key 관리도 controlSocket 한 곳에서 한다(§15.10).
     startControlSocket(context);
 
+    // 3-1) 문서 소켓(§12.4). 파일 열기와 실시간 텍스트 동기화를 맡는다. 세션·브랜치가 바뀌면
+    //      스스로 접고, 다음 파일 열기에서 새 방으로 다시 붙는다(§10.3).
+    startDocSocket(context);
+
     // 4) 커맨드 등록(§15.11). 구현한 것만 실제 핸들러를 붙이고 나머지는 자리표시자로 남긴다.
     const implementedCommands: Record<string, () => void> = {
         'axis-share.refresh': () => repoTree.provider.refresh(),
         'axis-share.switchBranch': () => {
             void showBranchPicker();
+        },
+        'axis-share.openFile': (entry?: unknown) => {
+            void openRepoFile(entry);
         }
     };
 
@@ -198,4 +207,5 @@ export function deactivate(): void {
     // 소켓을 먼저 끊어 서버가 접속자 행을 정리하게 한다(§3.3).
     // 토큰은 남기지만 다음 창이 자동으로 붙지는 않는다 — 다음 창도 앱의 핸드오프로 세션을 세운다(§12.2).
     stopControlSocket();
+    stopDocSocket();
 }

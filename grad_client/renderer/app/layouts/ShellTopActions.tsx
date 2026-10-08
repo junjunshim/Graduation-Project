@@ -1,9 +1,9 @@
 // 각 페이지의 상단 액션(알림, 프로필 등) 관리
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button } from '../../design-system/primitives/Button'
 import { Icon } from '../../design-system/primitives/Icon'
 import { SearchField } from '../../design-system/primitives/SearchField'
+import { UserMenuPopover } from '../../features/account/ui/UserMenuPopover'
 import { NotificationPopover } from '../../features/notification/ui/NotificationPopover'
 import styles from './ShellTopActions.module.css'
 
@@ -159,14 +159,11 @@ export function ShellTopActions({
               buttonClassName={styles.shellIconButton}
             />
 
-            <Button
-              variant="icon"
-              className={styles.shellProfileButton}
-              aria-label="User menu"
-              title={`${currentUser.name} (${currentUser.userId})`}
-            >
-              <Icon name="user" size={20} />
-            </Button>
+            <UserMenuPopover
+              userId={currentUser.userId}
+              name={currentUser.name}
+              buttonClassName={styles.shellProfileButton}
+            />
           </div>
         </div>
       ) : null}

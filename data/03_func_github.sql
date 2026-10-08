@@ -191,7 +191,36 @@ BEGIN
         p_owner_login || '/' || p_repo_name
     );
 
-    -- 9. 저장소 정보 반환 (토큰은 들어가지 않는다)
+    -- 9. 기본 브랜치를 "등록된 브랜치"로 남긴다.
+    --    접속자(presence)·브랜치 목록·브랜치 판정이 모두 github_branches 행을 전제로 한다.
+    --    특히 제어 소켓 join 은 upsert_github_branch_presence 로 들어오는데, 기본 브랜치 행이 없으면
+    --    [P0801] 로 거부되어 접속자 목록(Editing 뷰)이 늘 비어 버린다 (2026-10-08 수정).
+    --    기본 브랜치는 worktree 를 만들지 않는다 — clone 디렉터리 자체가 작업 트리이므로
+    --    worktree_path 에는 그 경로를 넣어 둔다 (§2.3).
+    IF NOT EXISTS (
+        SELECT 1 FROM github_branches
+        WHERE repo_id = v_repo_id AND name = p_default_branch AND is_deleted = FALSE
+    ) THEN
+        -- 소프트 삭제된 같은 이름 행이 있으면 되살린다 (새로 만들면 접속자 행이 끊긴다)
+        UPDATE github_branches
+        SET is_deleted = FALSE,
+            worktree_path = v_local_path,
+            base_branch = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE branch_id = (
+            SELECT branch_id FROM github_branches
+            WHERE repo_id = v_repo_id AND name = p_default_branch
+            ORDER BY branch_id
+            LIMIT 1
+        );
+
+        IF NOT FOUND THEN
+            INSERT INTO github_branches (repo_id, name, base_branch, worktree_path, created_by_email)
+            VALUES (v_repo_id, p_default_branch, NULL, v_local_path, p_requester_email);
+        END IF;
+    END IF;
+
+    -- 10. 저장소 정보 반환 (토큰은 들어가지 않는다)
     RETURN QUERY
     SELECT jsonb_build_object(
         'type', 'GITHUB_REPOSITORY',
@@ -1322,3 +1351,19 @@ BEGIN
             USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ---------------------------------------------------------------------------
+-- 기존 연결 저장소 보정 (2026-10-08)
+--   위 9번 수정 이전에 연결된 저장소는 기본 브랜치 행이 없다. 그 상태로는 제어 소켓 join 이
+--   [P0801] 로 거부되어 Editing 뷰에 아무도 뜨지 않는다. 이 파일을 다시 적용하면 빠진 행만
+--   채운다(NOT EXISTS 라 여러 번 실행해도 안전하다).
+-- ---------------------------------------------------------------------------
+INSERT INTO github_branches (repo_id, name, base_branch, worktree_path, created_by_email)
+SELECT r.repo_id, r.default_branch, NULL, r.local_path, NULL
+FROM github_repositories r
+WHERE r.is_deleted = FALSE
+  AND NOT EXISTS (
+      SELECT 1 FROM github_branches b
+      WHERE b.repo_id = r.repo_id AND b.name = r.default_branch AND b.is_deleted = FALSE
+  );

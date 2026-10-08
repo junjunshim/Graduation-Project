@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 
 import { ApiError } from './api';
 import { showBranchPicker } from './repo/branchPicker';
+import { CONTEXT_HAS_REPO_SESSION, startControlSocket, stopControlSocket } from './repo/controlSocket';
+import { createPresenceView } from './repo/presenceProvider';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
 import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider';
 
@@ -16,25 +18,21 @@ import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider'
  *   src/repo/repoSession.ts        세션 상태·토큰 저장·자동 갱신(§12.1)
  *   src/repo/repoTreeProvider.ts   Repository 트리 — 브랜치별 lazy 조회(§15.3)
  *   src/repo/branchPicker.ts       브랜치 전환·생성·삭제(§15.4)
+ *   src/repo/controlSocket.ts      제어 소켓 — presence·브랜치·커밋 이벤트(§3.3)
+ *   src/repo/presenceProvider.ts   Editing 뷰 — 브랜치 접속자(§15.5)
+ *   src/repo/userColors.ts         사용자 색 배정(§15.8)
  *
  * 다음 단계에서 만들 모듈(§15.11):
- *   src/repo/presenceProvider.ts         Editing 트리(§15.5)
  *   src/repo/decorationProvider.ts       Reviews 트리(§15.6)
  *   src/repo/repoFileDecorations.ts      git 상태 배지(FileDecorationProvider)
- *   src/repo/userColors.ts               사용자 색(§15.8)
  *   src/repo/scmProvider.ts              SCM provider(§15.7)
- *   src/repo/controlSocket.ts            제어 소켓(/api/github/ws, §3.3)
  */
-
-/** `axis-share-files`(Repository)는 repoTreeProvider 가 자기 뷰로 등록한다(§15.3). */
-const VIEW_PEOPLE = 'axis-share-people';
-const VIEW_REVIEWS = 'axis-share-reviews';
 
 /**
- * 세션 보유 여부 컨텍스트 키(§15.2). 뷰 안 커맨드의 when 조건이 이 값만 쓴다.
- * 제어 소켓의 `joined` 를 받은 시점에 true 가 된다(§15.10) — 지금은 소켓이 없으므로 항상 false 다.
+ * 뷰 id 는 각자 자기 모듈이 등록한다 — `axis-share-files`(Repository)는 repoTreeProvider(§15.3),
+ * `axis-share-people`(Editing)는 presenceProvider(§15.5). 여기에는 아직 자리표시자인 Reviews 만 남는다.
  */
-const CONTEXT_HAS_REPO_SESSION = 'axis-share:hasRepoSession';
+const VIEW_REVIEWS = 'axis-share-reviews';
 
 /** package.json 에 선언한 커맨드 전체(§15.11, §15.3 컨텍스트 메뉴 포함). */
 const COMMANDS: readonly string[] = [
@@ -154,17 +152,19 @@ async function handleHandoffUri(uri: vscode.Uri): Promise<void> {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-    // 1) 세션 모듈 초기화 — 저장된 토큰/세션을 읽고 api.ts 에 토큰 공급자를 꽂는다(§3.5, §12.1).
+    // 1) 세션 모듈 초기화 — api.ts 에 토큰 공급자를 꽂는다. 저장된 세션은 되살리지 않는다(§12.2):
+    //    이 창이 앱의 핸드오프 URI 를 받기 전까지 트리·접속자 뷰는 비어 있다.
     await initRepoSession(context);
 
-    // 2) 뷰 등록(§15.2). Repository 는 실제 트리를, Editing·Reviews 는 아직 자리표시자를 쓴다.
+    // 2) 뷰 등록(§15.2). Repository·Editing 은 실제 데이터를 그린다. Reviews 는 collab(리뷰 인덱스)이
+    //    있어야 하므로 그때까지 자리표시자를 쓴다.
     const repoTree = createRepoTreeView(context);
-    for (const viewId of [VIEW_PEOPLE, VIEW_REVIEWS]) {
-        registerEmptyView(context, viewId);
-    }
+    createPresenceView(context);
+    registerEmptyView(context, VIEW_REVIEWS);
 
-    // 3) 세션 컨텍스트 키(§15.2). 제어 소켓의 join 이 성공해야 true 가 된다(§15.10 — 소켓 단계).
-    void vscode.commands.executeCommand('setContext', CONTEXT_HAS_REPO_SESSION, false);
+    // 3) 제어 소켓(§3.3). 세션·브랜치 변화를 구독해 스스로 붙고, 방 입장이 끝나면
+    //    세션 컨텍스트 키(§15.2)를 켠다 — key 관리도 controlSocket 한 곳에서 한다(§15.10).
+    startControlSocket(context);
 
     // 4) 커맨드 등록(§15.11). 구현한 것만 실제 핸들러를 붙이고 나머지는 자리표시자로 남긴다.
     const implementedCommands: Record<string, () => void> = {
@@ -195,5 +195,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-    // 전역 상태를 두지 않는다. 소켓·세션 정리는 repoSession 구현이 담당한다.
+    // 소켓을 먼저 끊어 서버가 접속자 행을 정리하게 한다(§3.3).
+    // 토큰은 남기지만 다음 창이 자동으로 붙지는 않는다 — 다음 창도 앱의 핸드오프로 세션을 세운다(§12.2).
+    stopControlSocket();
 }

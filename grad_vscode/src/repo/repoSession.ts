@@ -10,7 +10,11 @@ import { ApiError, apiRequest, setAccessTokenProvider } from '../api';
  *
  * 저장 위치를 둘로 나눈 이유:
  *   - 토큰 → context.secrets. 창 상태·설정과 함께 평문으로 저장되지 않는다.
- *   - 나머지 → context.globalState. 재접속 때 "어느 저장소였는지"를 기억한다(§12.2).
+ *   - 나머지 → context.globalState. 마지막 세션 기록(연결 이력·표시용).
+ *
+ * 세션은 **창마다 새로 부착(attach)한다.** activate 는 저장된 세션을 되살리지 않는다.
+ * 화면과 서버 연결은 이 창이 앱의 핸드오프 URI 를 받아 세션을 세운 뒤에야 살아난다 —
+ * 그래야 F5·창 재로드에서 지난 연결의 내용이 그대로 남지 않는다(§12.2).
  */
 
 /** 시크릿 키. 삭제된 이전 확장의 grad-at/grad-rt 는 승계하지 않는다(§3.4). */
@@ -133,7 +137,11 @@ export function getSessionRepoId(): number | undefined {
 
 /**
  * 세션 모듈을 초기화한다. activate 에서 한 번 부른다.
- * 같은 컨텍스트로 다시 불러도 저장된 세션을 다시 읽을 뿐이라 무해하다(멱등).
+ * 같은 컨텍스트로 다시 불러도 하는 일이 없어 무해하다(멱등).
+ *
+ * **저장된 세션을 되살리지 않는다.** 이 창은 "미부착" 상태로 시작하고, 앱이 보낸
+ * 핸드오프 URI(startSessionFromHandoff)로만 세션이 선다(§12.2). 그래서 앱을 거치지 않은
+ * F5·창 재로드에서는 트리·접속자 뷰가 비어 있고 서버로 나가는 요청도 없다.
  */
 export async function initRepoSession(context: vscode.ExtensionContext): Promise<void> {
     if (extensionContext && extensionContext === context) {
@@ -141,18 +149,11 @@ export async function initRepoSession(context: vscode.ExtensionContext): Promise
     }
 
     extensionContext = context;
-    session = context.globalState.get<RepoSession>(SESSION_STATE_KEY);
-    currentBranch = session?.defaultBranch;
+    session = undefined;
+    currentBranch = undefined;
 
     // api.ts 는 세션을 몰라야 하므로(순환 참조) 토큰 공급자를 여기서 꽂는다.
     setAccessTokenProvider(getValidAccessToken);
-
-    // 기본 브랜치가 없는 세션(이 기능 이전에 저장된 값)은 이름·브랜치를 받아 채운다.
-    // 그래야 창을 다시 열어도 트리가 곧바로 뜬다.
-    if (session && session.defaultBranch === undefined) {
-        const identity = await fetchRepositoryIdentity(session.repoId, session.nodeId);
-        await persistSession(identity ? { ...session, ...identity } : session);
-    }
 }
 
 function requireContext(): vscode.ExtensionContext {
@@ -179,7 +180,7 @@ async function storeTokens(accessToken: string, refreshToken: string, next: Repo
     session = next;
 }
 
-/** 세션을 globalState 에 남긴다 — 창을 다시 열어도 저장소 맥락을 잃지 않는다(§12.2). */
+/** 마지막 세션을 globalState 에 남긴다(연결 이력·표시용). 다음 창이 자동으로 붙지는 않는다 — 부착은 핸드오프로만(§12.2). */
 async function persistSession(next: RepoSession): Promise<void> {
     const repoChanged = session?.repoId !== next.repoId;
     session = next;
@@ -317,11 +318,18 @@ async function performRefresh(): Promise<boolean> {
 }
 
 /**
- * api.ts 의 토큰 공급자(요청 인터셉터, §3.5).
+ * api.ts 의 토큰 공급자(요청 인터셉터, §3.5)이자 제어 소켓의 인증 토큰 공급자다(§3.3).
  * 만료가 임박했으면 먼저 갱신한다. 갱신에 실패해도 만료된 토큰을 그대로 넘긴다 —
  * 서버가 401 로 판정하게 두고, "다시 연결" 안내는 호출부가 결정한다(§12.2).
+ *
+ * 창이 부착되지 않았으면(핸드오프 전·세션 끊김) `undefined` 다. secrets 에 지난 토큰이
+ * 남아 있어도 이 창이 세운 세션 없이는 서버로 나가는 요청에 인증이 실리지 않는다(§12.2).
  */
-async function getValidAccessToken(): Promise<string | undefined> {
+export async function getValidAccessToken(): Promise<string | undefined> {
+    if (!session) {
+        return undefined;
+    }
+
     const context = requireContext();
     const accessToken = await context.secrets.get(ACCESS_TOKEN_KEY);
     if (!accessToken) {

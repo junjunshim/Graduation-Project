@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { ApiError } from './api';
+import { showBranchPicker } from './repo/branchPicker';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
 import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider';
 
@@ -14,9 +15,9 @@ import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider'
  *   src/api.ts                     서버 REST 클라이언트(토큰 인터셉터, §3.5)
  *   src/repo/repoSession.ts        세션 상태·토큰 저장·자동 갱신(§12.1)
  *   src/repo/repoTreeProvider.ts   Repository 트리 — 브랜치별 lazy 조회(§15.3)
+ *   src/repo/branchPicker.ts       브랜치 전환·생성·삭제(§15.4)
  *
  * 다음 단계에서 만들 모듈(§15.11):
- *   src/repo/branchPicker.ts             브랜치 전환·생성·삭제(§15.4)
  *   src/repo/presenceProvider.ts         Editing 트리(§15.5)
  *   src/repo/decorationProvider.ts       Reviews 트리(§15.6)
  *   src/repo/repoFileDecorations.ts      git 상태 배지(FileDecorationProvider)
@@ -165,18 +166,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // 3) 세션 컨텍스트 키(§15.2). 제어 소켓의 join 이 성공해야 true 가 된다(§15.10 — 소켓 단계).
     void vscode.commands.executeCommand('setContext', CONTEXT_HAS_REPO_SESSION, false);
 
-    // 4) 커맨드 등록(§15.11). 새로 고침만 트리 재조회를 붙이고 나머지는 아직 자리표시자다.
-    for (const commandId of COMMANDS) {
-        if (commandId !== 'axis-share.refresh') {
-            registerStubCommand(context, commandId);
+    // 4) 커맨드 등록(§15.11). 구현한 것만 실제 핸들러를 붙이고 나머지는 자리표시자로 남긴다.
+    const implementedCommands: Record<string, () => void> = {
+        'axis-share.refresh': () => repoTree.provider.refresh(),
+        'axis-share.switchBranch': () => {
+            void showBranchPicker();
         }
-    }
+    };
 
-    context.subscriptions.push(
-        vscode.commands.registerCommand('axis-share.refresh', () => {
-            repoTree.provider.refresh();
-        })
-    );
+    for (const commandId of COMMANDS) {
+        const handler = implementedCommands[commandId];
+        if (handler) {
+            context.subscriptions.push(vscode.commands.registerCommand(commandId, handler));
+            continue;
+        }
+
+        registerStubCommand(context, commandId);
+    }
 
     // 5) 핸드오프 URI 수신(§3.4). activationEvents 의 onUri 가 이 경로로 확장을 깨운다.
     context.subscriptions.push(

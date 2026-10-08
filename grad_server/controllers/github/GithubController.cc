@@ -304,12 +304,50 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
 // ---------------------------------------------------------------------------
 
 // git worktree 는 작업 디렉터리에 '.git' 파일을 만든다. 그것으로 준비 여부를 판단한다.
+// DB 의 worktree_path 는 서버 프로세스 CWD 기준 상대 경로이고, git 에는 같은 값을 절대 경로로
+// 바꿔 넘기므로(GitRunner::worktreeAdd) 두 기준이 일치한다. 여기서도 같은 기준으로 맞춘다.
 bool worktreeReady(const std::string &worktreePath) {
     if (worktreePath.empty()) {
         return false;
     }
     std::error_code ec;
-    return std::filesystem::exists(worktreePath + "/.git", ec);
+    const auto root = std::filesystem::absolute(worktreePath, ec);
+    if (ec) {
+        return false;
+    }
+    return std::filesystem::exists(root / ".git", ec);
+}
+
+// git 이 기억하는 worktree 중 해당 로컬 브랜치를 checkout 하고 있는 경로를 찾는다.
+//   git worktree list --porcelain 은 빈 줄로 구분된 블록을 내놓고, 블록마다
+//   "worktree <절대 경로>" 와 "branch refs/heads/<브랜치>" 줄이 들어간다.
+// DB 의 worktree_path 와 어긋난 worktree(과거 상대 경로 버그로 저장소 안쪽에 만들어진 것)를
+// 찾아내는 용도다. 찾으면 outPath 에 절대 경로를 담고 true 를 돌려준다.
+bool findWorktreeForBranch(const std::string &repoDir, const std::string &branch, std::string &outPath) {
+    auto listed = GitRunner::worktreeList(repoDir);
+    if (!listed.ok()) {
+        return false;
+    }
+
+    const std::string wanted = "branch refs/heads/" + branch;
+    std::string current;
+    std::istringstream stream(listed.out);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = trim(line);
+        if (line.rfind("worktree ", 0) == 0) {
+            current = trim(line.substr(std::string("worktree ").size()));
+            continue;
+        }
+        if (line == wanted) {
+            if (current.empty()) {
+                return false;
+            }
+            outPath = current;
+            return true;
+        }
+    }
+    return false;
 }
 
 // 브랜치의 작업 디렉터리를 준비한다(이미 있으면 그대로 쓴다).
@@ -1324,10 +1362,16 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
 
         const std::string worktreePath = target["worktree_path"].asString();
 
+        // git 이 기억하는 실제 worktree 경로를 우선한다. DB 의 worktree_path 와 어긋난 worktree
+        // (과거 상대 경로 버그로 저장소 안쪽에 만들어진 것)도 이 경로로 찾아낼 수 있다.
+        std::string registeredWorktree;
+        const bool hasRegisteredWorktree = findWorktreeForBranch(localPath, name, registeredWorktree);
+        const std::string gitWorktreePath = hasRegisteredWorktree ? registeredWorktree : worktreePath;
+
         // 2) 커밋되지 않은 변경이 있으면 거부한다 (P0810). force 면 건너뛴다.
-        if (!isDefault && !force && worktreeReady(worktreePath)) {
+        if (!isDefault && !force && worktreeReady(gitWorktreePath)) {
             GitResult statusResult;
-            const Json::Value entries = readWorktreeStatus(worktreePath, statusResult);
+            const Json::Value entries = readWorktreeStatus(gitWorktreePath, statusResult);
             if (!statusResult.ok()) {
                 return errorResponse("P0807", "브랜치 상태를 확인하지 못했습니다: " + trim(statusResult.err),
                                      k500InternalServerError);
@@ -1340,16 +1384,17 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
         }
 
         // 3) 작업 디렉터리 → 로컬 브랜치 → DB 행 순서로 정리한다.
-        if (!isDefault && worktreeReady(worktreePath)) {
-            auto removed = GitRunner::worktreeRemove(localPath, worktreePath, force);
+        //    worktree 를 여기서 지우지 못하면 아래 branch -d 가 'already checked out' 으로 거부당한다.
+        if (!isDefault && (hasRegisteredWorktree || worktreeReady(gitWorktreePath))) {
+            auto removed = GitRunner::worktreeRemove(localPath, gitWorktreePath, force);
             if (!removed.ok()) {
-                // git 관리 정보만 남은 경우가 있어 prune 한 뒤 한 번 더 확인한다.
+                // 디렉터리만 먼저 사라지고 등록 정보가 남은 경우가 있어 prune 한 뒤 한 번 더 확인한다.
                 GitRunner::run(localPath, {"worktree", "prune"});
-                if (worktreeReady(worktreePath)) {
-                    LOG_WARN << "worktree 제거 실패 (" << name << "): " << trim(removed.err);
-                    return errorResponse("P0807", "브랜치 작업 디렉터리를 정리하지 못했습니다: " + trim(removed.err),
-                                         k500InternalServerError);
-                }
+            }
+            if (worktreeReady(gitWorktreePath)) {
+                LOG_WARN << "worktree 제거 실패 (" << name << "): " << trim(removed.err);
+                return errorResponse("P0807", "브랜치 작업 디렉터리를 정리하지 못했습니다: " + trim(removed.err),
+                                     k500InternalServerError);
             }
         }
 

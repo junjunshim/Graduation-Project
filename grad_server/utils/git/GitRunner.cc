@@ -109,6 +109,23 @@ std::string firstLine(const std::string &text) {
     return pos == std::string::npos ? text : text.substr(0, pos);
 }
 
+// git 은 workDir 로 chdir 한 뒤 실행되므로(§run), 인자로 넘긴 상대 경로는 repo 디렉터리 기준으로
+// 해석된다. 예를 들어 worktree add 에 DB 의 상대 경로(repository/2/A.worktrees/x)를 그대로 넘기면
+// 저장소 안쪽에 repository/2/A.worktrees/x 가 만들어져 버린다.
+// git 에 넘기기 직전에 프로세스 CWD 기준 절대 경로로 바꿔, DB 값의 기준과 git 의 해석 기준을 맞춘다.
+// (DB 에는 상대 경로를 그대로 둔다. main.cc 의 관리 경로 접두사 검사가 상대 경로를 전제로 한다.)
+std::string absoluteFsPath(const std::string &path) {
+    if (path.empty()) {
+        return path;
+    }
+    std::error_code ec;
+    const auto resolved = std::filesystem::absolute(path, ec);
+    if (ec) {
+        return path;
+    }
+    return resolved.lexically_normal().string();
+}
+
 }  // namespace
 
 namespace app_utils {
@@ -415,20 +432,24 @@ GitResult GitRunner::worktreeList(const std::string &repoDir) {
 
 GitResult GitRunner::worktreeAdd(const std::string &repoDir, const std::string &worktreeDir,
                                  const std::string &branch, const std::string &startPoint) {
+    // 경로는 반드시 절대 경로로 넘긴다. 상대 경로면 repoDir 기준으로 해석되어 저장소 안쪽에
+    // worktree 가 만들어지고, DB 의 worktree_path(프로세스 CWD 기준)와 어긋나 버린다.
+    const std::string target = absoluteFsPath(worktreeDir);
     if (startPoint.empty()) {
         // 이미 있는 브랜치를 붙인다
-        return run(repoDir, {"worktree", "add", worktreeDir, branch});
+        return run(repoDir, {"worktree", "add", target, branch});
     }
     // 기준 브랜치에서 새로 만든다
-    return run(repoDir, {"worktree", "add", "-b", branch, worktreeDir, startPoint});
+    return run(repoDir, {"worktree", "add", "-b", branch, target, startPoint});
 }
 
 GitResult GitRunner::worktreeRemove(const std::string &repoDir, const std::string &worktreeDir, bool force) {
+    // worktreeAdd 와 같은 이유로 절대 경로를 넘긴다.
     std::vector<std::string> args = {"worktree", "remove"};
     if (force) {
         args.push_back("--force");
     }
-    args.push_back(worktreeDir);
+    args.push_back(absoluteFsPath(worktreeDir));
     return run(repoDir, args);
 }
 

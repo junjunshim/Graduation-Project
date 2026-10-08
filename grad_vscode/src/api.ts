@@ -24,12 +24,18 @@ export class ApiError extends Error {
     readonly code?: string | number;
     /** HTTP 상태 코드. 응답을 받지 못한 실패는 undefined 다. */
     readonly status?: number;
+    /**
+     * 오류와 함께 온 `data`. 서버가 실패 사유를 구조로 돌려주는 경우가 있다 —
+     * P0809 는 브랜치 접속자 목록, P0810 은 커밋되지 않은 변경 목록(§3.2, §15.4).
+     */
+    readonly data?: unknown;
 
-    constructor(message: string, options: { code?: string | number; status?: number } = {}) {
+    constructor(message: string, options: { code?: string | number; status?: number; data?: unknown } = {}) {
         super(message);
         this.name = 'ApiError';
         this.code = options.code;
         this.status = options.status;
+        this.data = options.data;
     }
 }
 
@@ -67,8 +73,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** 실패 본문에서 code/message 만 뽑는다. JSON 이 아니면(프록시 502 등) null. */
-function readFailure(payload: unknown): { code?: string | number; message?: string } | null {
+/** 실패 본문에서 code/message/data 를 뽑는다. JSON 이 아니면(프록시 502 등) null. */
+function readFailure(payload: unknown): { code?: string | number; message?: string; data?: unknown } | null {
     if (!isRecord(payload)) {
         return null;
     }
@@ -77,7 +83,8 @@ function readFailure(payload: unknown): { code?: string | number; message?: stri
     const message = payload.message;
     return {
         code: typeof code === 'string' || typeof code === 'number' ? code : undefined,
-        message: typeof message === 'string' ? message : undefined
+        message: typeof message === 'string' ? message : undefined,
+        data: payload.data
     };
 }
 
@@ -135,7 +142,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
         const failure = readFailure(payload);
         throw new ApiError(failure?.message ?? `서버 요청이 실패했습니다 (HTTP ${response.status}).`, {
             code: failure?.code,
-            status: response.status
+            status: response.status,
+            data: failure?.data
         });
     }
 

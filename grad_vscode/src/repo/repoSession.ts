@@ -49,12 +49,14 @@ type RepositoryRow = {
     repo_id?: number;
     owner_login?: string;
     repo_name?: string;
+    default_branch?: string;
 };
 
-/** 저장소 표시 이름만 추린 값. */
+/** 세션에 붙일 저장소 정보. 이름은 표시용, 기본 브랜치는 트리 조회의 시작점이다(§15.3). */
 export type RepositoryIdentity = {
     ownerLogin?: string;
     repoName?: string;
+    defaultBranch?: string;
 };
 
 /** 현재 세션. 토큰 자체는 담지 않는다 — 토큰은 secrets 에만 있다. */
@@ -69,6 +71,8 @@ export type RepoSession = {
      */
     ownerLogin?: string;
     repoName?: string;
+    /** 저장소 기본 브랜치. 트리 조회의 시작 브랜치다(§15.3). */
+    defaultBranch?: string;
     /** access token 만료 시각(epoch ms). 이 시각이 지나면 먼저 갱신한다. */
     accessTokenExpiresAt: number;
 };
@@ -87,9 +91,39 @@ let session: RepoSession | undefined;
 /** 동시 요청이 겹쳐도 토큰 회전은 한 번만 일어나게 합친다 — 리프레시 토큰은 1회용이다(§12.1). */
 let refreshInFlight: Promise<boolean> | undefined;
 
-/** 현재 세션(없으면 undefined). 다음 단계(제어 소켓·트리 조회)가 저장소·브랜치 맥락으로 쓴다. */
+/**
+ * 현재 작업 브랜치. 저장소를 연결하면 기본 브랜치로 시작하고, 브랜치 전환(§15.4)이 바꾼다.
+ * 트리·상태·커밋이 모두 이 값을 보므로 세션과 함께 여기서 관리한다.
+ */
+let currentBranch: string | undefined;
+
+const sessionChangeEmitter = new vscode.EventEmitter<void>();
+
+/** 세션·브랜치 변경 알림. 뷰들(Repository 트리·SCM)이 이 이벤트로 다시 그린다(§15.10). */
+export const onDidChangeSession = sessionChangeEmitter.event;
+
+function emitSessionChange(): void {
+    sessionChangeEmitter.fire();
+}
+
+/** 현재 세션(없으면 undefined). 다음 단계(제어 소켓·파일 조회)가 저장소 맥락으로 쓴다. */
 export function getSession(): RepoSession | undefined {
     return session;
+}
+
+/** 현재 작업 브랜치. 세션 전이면 undefined. */
+export function getCurrentBranch(): string | undefined {
+    return currentBranch;
+}
+
+/** 브랜치를 전환한다(§15.4). 열린 파일 정리·문서 탭 정리는 전환 절차를 맡는 쪽이 한다(§10.3). */
+export function setCurrentBranch(branch: string | undefined): void {
+    if (currentBranch === branch) {
+        return;
+    }
+
+    currentBranch = branch;
+    emitSessionChange();
 }
 
 /** 저장소 id(1-based). 세션이 없으면 undefined. */
@@ -108,9 +142,17 @@ export async function initRepoSession(context: vscode.ExtensionContext): Promise
 
     extensionContext = context;
     session = context.globalState.get<RepoSession>(SESSION_STATE_KEY);
+    currentBranch = session?.defaultBranch;
 
     // api.ts 는 세션을 몰라야 하므로(순환 참조) 토큰 공급자를 여기서 꽂는다.
     setAccessTokenProvider(getValidAccessToken);
+
+    // 기본 브랜치가 없는 세션(이 기능 이전에 저장된 값)은 이름·브랜치를 받아 채운다.
+    // 그래야 창을 다시 열어도 트리가 곧바로 뜬다.
+    if (session && session.defaultBranch === undefined) {
+        const identity = await fetchRepositoryIdentity(session.repoId, session.nodeId);
+        await persistSession(identity ? { ...session, ...identity } : session);
+    }
 }
 
 function requireContext(): vscode.ExtensionContext {
@@ -139,8 +181,17 @@ async function storeTokens(accessToken: string, refreshToken: string, next: Repo
 
 /** 세션을 globalState 에 남긴다 — 창을 다시 열어도 저장소 맥락을 잃지 않는다(§12.2). */
 async function persistSession(next: RepoSession): Promise<void> {
+    const repoChanged = session?.repoId !== next.repoId;
     session = next;
+
+    // 저장소가 바뀌었거나 아직 브랜치가 없을 때만 기본 브랜치로 맞춘다.
+    // (토큰 갱신도 이 함수를 지나므로, 사용자가 고른 브랜치를 덮어쓰면 안 된다.)
+    if (currentBranch === undefined || repoChanged) {
+        currentBranch = next.defaultBranch;
+    }
+
     await requireContext().globalState.update(SESSION_STATE_KEY, next);
+    emitSessionChange();
 }
 
 /**
@@ -159,7 +210,7 @@ async function fetchRepositoryIdentity(repoId: number, nodeId?: number): Promise
             return undefined;
         }
 
-        return { ownerLogin: row.owner_login, repoName: row.repo_name };
+        return { ownerLogin: row.owner_login, repoName: row.repo_name, defaultBranch: row.default_branch };
     } catch {
         // 조회 실패·권한 없음이 연결을 막지는 않는다. 이름이 없으면 화면이 저장소 id 로 대체한다.
         return undefined;
@@ -291,7 +342,9 @@ async function getValidAccessToken(): Promise<string | undefined> {
 /** 세션을 버린다 — 로그아웃, 앱에서 연결 해제, 리프레시 토큰 회전 실패(§12.1). */
 export async function clearSession(): Promise<void> {
     session = undefined;
+    currentBranch = undefined;
     refreshInFlight = undefined;
+    emitSessionChange();
 
     const context = extensionContext;
     if (!context) {

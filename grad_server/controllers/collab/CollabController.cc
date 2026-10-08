@@ -10,6 +10,7 @@
 #include <cctype>
 #include <ctime>
 #include <cstdlib>
+#include <filesystem>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -165,6 +166,43 @@ std::string randomToken() {
         token.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
     }
     return token;
+}
+
+// ---------------------------------------------------------------------------
+// 경로 유틸 (§9.4 / §13.3.1)
+// ---------------------------------------------------------------------------
+
+// 서버 CWD 기준 저장소 경로의 접두사. DB 가 만드는 local_path 는 항상 이 값으로 시작한다.
+constexpr char kRepositoryPrefix[] = "repository/";
+constexpr std::size_t kRepositoryPrefixLen = sizeof(kRepositoryPrefix) - 1;
+
+// DB 의 CWD 기준 경로("repository/<node>/<repo>[.worktrees/<slug>]")를
+// 볼륨 루트 기준 상대 경로("<node>/<repo>[.worktrees/<slug>]")로 바꾼다.
+//
+// collab 컨테이너는 같은 물리 볼륨을 REPO_ROOT 로 마운트한다. 두 컨테이너가 같은 파일을
+// 가리키려면 절대 경로가 아니라 "볼륨 루트 기준" 상대 경로로 넘겨야 한다. 접두사가 없거나
+// 상위 탈출("..")·역슬래시가 섞여 있으면 false 를 돌려주고 호출자가 거부한다.
+bool toVolumeRelative(const std::string &dbPath, std::string &out) {
+    if (dbPath.compare(0, kRepositoryPrefixLen, kRepositoryPrefix) != 0) {
+        return false;
+    }
+    const std::string rest = dbPath.substr(kRepositoryPrefixLen);
+    if (rest.empty() || rest.front() == '/' || rest.find("..") != std::string::npos ||
+        rest.find('\\') != std::string::npos) {
+        return false;
+    }
+    out = rest;
+    return true;
+}
+
+// 작업 디렉터리가 실제로 준비됐는지 확인한다. 없으면 collab 이 flush 할 곳이 없다.
+bool directoryReady(const std::string &cwdRelativePath) {
+    std::error_code ec;
+    const auto absolute = std::filesystem::absolute(cwdRelativePath, ec);
+    if (ec) {
+        return false;
+    }
+    return std::filesystem::is_directory(absolute, ec);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,4 +371,101 @@ void CollabController::consumeTicket(const HttpRequestPtr &req,
     item["node_id"] = ticket.nodeId;
     item["can_write"] = ticket.canWrite;
     callback(successResponse(singleItemArray(item), "티켓을 확인했습니다."));
+}
+// ===========================================================================
+// collab → C++ : 브랜치 작업 디렉터리 해석 (내부 전용, §9.4 / §13.3.1)
+// ===========================================================================
+
+// collab 은 DB 도 git 도 모른다. 문서 소켓이 방에 들어갈 때 이 API 로 (저장소, 브랜치)의
+// 작업 디렉터리와 `.ydoc` 영속화 디렉터리를 물어본다. 경로의 진실은 DB 한 곳에 두고,
+// 여기서는 형태(접두사·상위 탈출)와 "실제로 존재하는가"만 검증해 볼륨 상대 경로로 바꿔 준다.
+void CollabController::resolvePath(const HttpRequestPtr &req,
+                                   std::function<void(const HttpResponsePtr &)> &&callback) {
+    // 1) 내부 인증 — 티켓 소비와 같은 규칙(fail-closed).
+    const std::string configured = internalToken();
+    const std::string presented = req->getHeader(kInternalTokenHeader);
+    if (configured.empty() || presented.empty() || !constantTimeEquals(configured, presented)) {
+        LOG_WARN << "collab 경로 해석 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.";
+        callback(errorResponse("401", "내부 인증에 실패했습니다.", k401Unauthorized));
+        return;
+    }
+
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = (*jsonPtr)["branch"].asString();
+
+    runOffLoop(std::move(callback), [repoId, branch]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        // 2) 저장소 + 브랜치를 한 번에 읽는다. 기본 브랜치도 github_branches 행이 있으므로
+        //    (create_github_repository 가 등록해 둔다) 여기서 함께 조회된다.
+        //    행이 없으면 "등록되지 않은 브랜치"이고 collab 은 그 브랜치를 열 수 없다.
+        auto rows = db->execSqlSync(
+            "SELECT r.node_id, r.local_path, r.default_branch, b.worktree_path, "
+            "       github_branch_slug(b.name) AS branch_slug "
+            "FROM github_repositories r "
+            "JOIN github_branches b ON b.repo_id = r.repo_id "
+            "  AND b.name = $2 AND b.is_deleted = FALSE "
+            "WHERE r.repo_id = $1 AND r.is_deleted = FALSE",
+            repoId, branch);
+        if (rows.empty()) {
+            return errorResponse("P0801", "등록되지 않은 저장소 또는 브랜치입니다: " + branch, k404NotFound);
+        }
+
+        const auto &row = rows[0];
+        const std::string localPath = row["local_path"].as<std::string>();
+        const std::string defaultBranch = row["default_branch"].as<std::string>();
+        const std::string worktreePath = row["worktree_path"].as<std::string>();
+        const std::string branchSlug = row["branch_slug"].as<std::string>();
+        const int nodeId = row["node_id"].as<int>();
+
+        std::string localRel;
+        std::string worktreeRel;
+        const bool localOk = toVolumeRelative(localPath, localRel);
+        const bool worktreeOk = toVolumeRelative(worktreePath, worktreeRel);
+        if (!localOk || !worktreeOk || branchSlug.empty()) {
+            LOG_ERROR << "저장소 경로 형태가 예상과 다릅니다. repo=" << repoId
+                      << " local=" << localPath << " worktree=" << worktreePath;
+            return errorResponse("P0807", "저장소 경로 정보가 올바르지 않습니다.", k500InternalServerError);
+        }
+
+        // 3) DB 불변식을 한 번 더 확인한다. 기본 브랜치는 clone 디렉터리 자체가 작업 트리이고,
+        //    나머지는 `.worktrees/<slug>` 를 쓴다(§2.3). 어긋나면 collab 에 엉뚱한 경로를 주게 된다.
+        const bool isDefault = (branch == defaultBranch);
+        if (isDefault) {
+            if (worktreePath != localPath) {
+                LOG_ERROR << "기본 브랜치 worktree 경로 불일치. repo=" << repoId
+                          << " local=" << localPath << " worktree=" << worktreePath;
+                return errorResponse("P0807", "저장소 경로 정보가 올바르지 않습니다.", k500InternalServerError);
+            }
+        } else if (worktreePath != localPath + ".worktrees/" + branchSlug) {
+            LOG_ERROR << "브랜치 worktree 경로 불일치. repo=" << repoId << " branch=" << branch
+                      << " worktree=" << worktreePath;
+            return errorResponse("P0807", "저장소 경로 정보가 올바르지 않습니다.", k500InternalServerError);
+        }
+
+        // 4) 작업 디렉터리가 실제로 있어야 collab 이 파일을 읽고 flush 할 수 있다.
+        //    트리 조회가 먼저 돌면서 worktree 를 만들어 두지만, 없으면 원인을 분명히 알려 준다.
+        //    (GithubController 의 같은 실패 경로와 동일하게 P0807 + 500 을 쓴다)
+        if (!directoryReady(worktreePath)) {
+            return errorResponse("P0807", "브랜치 작업 디렉터리가 준비되지 않았습니다: " + branch,
+                                 k500InternalServerError);
+        }
+
+        // 5) 볼륨 상대 경로로 돌려준다. collab 은 REPO_ROOT 만 붙여 그대로 쓴다.
+        Json::Value item;
+        item["repo_id"] = repoId;
+        item["node_id"] = nodeId;
+        item["branch"] = branch;
+        item["default_branch"] = defaultBranch;
+        item["is_default"] = isDefault;
+        item["worktree_rel"] = worktreeRel;
+        item["collab_rel"] = localRel + ".collab/" + branchSlug;
+        return successResponse(singleItemArray(item), "브랜치 작업 디렉터리를 확인했습니다.");
+    });
 }

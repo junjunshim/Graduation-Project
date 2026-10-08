@@ -41,6 +41,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ACCESS_TOKEN_EXPIRY: ${ACCESS_TOKEN_EXPIRY}
       REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY}
+      # collab 사이드카와의 내부 인증 토큰 (backend <-> collab). .env 에만 두고 커밋하지 않는다.
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
     volumes:
       - .:/app                  # 로컬 소스 수정을 컨테이너에 즉시 반영 (개발용)
       # 저장소 clone/worktree 전용 마운트.
@@ -48,6 +50,36 @@ services:
       # 따라서 CWD 기준 ./repository = /app/grad_server/build/repository 이고, 볼륨도 여기에 붙여야 한다.
       # (.:/app 안에 그냥 두면 clone/worktree 가 호스트 소스트리에 섞여 들어간다)
       - repository_data:/app/grad_server/build/repository
+
+  # 3. 협업 문서 서버 (Node.js + Yjs, TASK_11 §9 / §13.2)
+  #    텍스트의 진실(Y.Doc)과 worktree 파일 flush 를 담당한다. git 은 backend(C++) 만 한다.
+  collab:
+    build:
+      context: .                # 빌드 컨텍스트는 루트다(Dockerfile 이 grad_collab/ 아래에 있다)
+      dockerfile: grad_collab/Dockerfile.collab
+    container_name: ${COLLAB_CONTAINER:-grad_collab}
+    restart: always
+    depends_on:
+      - backend                 # 티켓 소비·세션 확정을 backend 내부 API 에 물어본다
+    ports:
+      - "127.0.0.1:${COLLAB_PORT:-3000}:3000"   # 호스트 루프백에만 바인딩 (외부 노출은 nginx /collab/ 담당)
+    environment:
+      PORT: 3000
+      # compose 내부 네트워크에서는 서비스 이름이 호스트명이다.
+      API_BASE: http://backend:8080
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      # 저장소 볼륨 마운트 지점. backend 와 같은 물리 볼륨을 다른 경로로 본다(§13.3.1).
+      REPO_ROOT: /app/repository
+    healthcheck:
+      # 이미지에 curl 이 없으므로 node 의 fetch 로 확인한다.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      # 저장소는 DB 와 같은 수명을 갖는다(§13.3.1) — down -v 면 둘 다 사라진다.
+      - repository_data:/app/repository
 
 volumes:
   postgres_data:                # DB 데이터 보존용 볼륨 정의

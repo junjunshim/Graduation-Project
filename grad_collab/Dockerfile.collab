@@ -1,0 +1,22 @@
+# Axis Share 협업 문서 서버(collab) 이미지 — TASK_11 §13.2 / §14.1
+#
+# 빌드 컨텍스트는 저장소 루트다(docker-compose 의 build.context: .).
+# 소스만 복사한다 — 로컬 node_modules 를 함께 넣으면 플랫폼이 다른 바이너리가 섞인다.
+FROM node:20-bookworm-slim
+
+ENV NODE_ENV=production
+WORKDIR /app/grad_collab
+
+# 락파일까지 복사해 버전을 고정한다(npm ci). package.json 을 바꾸면 락파일도 함께 갱신해야 한다.
+COPY grad_collab/package.json grad_collab/package-lock.json ./
+# 타입스크립트 빌드에 devDependencies 가 필요하므로 먼저 전부 설치한다.
+RUN npm ci --no-audit --no-fund
+
+COPY grad_collab/tsconfig.json ./
+COPY grad_collab/src ./src
+RUN npm run build && npm prune --omit=dev
+
+EXPOSE 3000
+
+# 리스닝 포트는 compose 에서 호스트 루프백(127.0.0.1)에만 바인딩한다. 외부 노출은 nginx /collab/ 뿐이다.
+CMD ["node", "dist/server.js"]

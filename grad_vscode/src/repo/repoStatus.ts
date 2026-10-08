@@ -20,8 +20,10 @@ import { repoResourceUri } from './repoTreeProvider';
  * 지키는 규칙 셋(§15.7, §12.11):
  *   1. 스테이징은 "커밋 대상 표시" 다. 진짜 `git add` 는 커밋 시점에 서버가 다시 한다.
  *   2. `user.name` / `user.email` 이 없으면 커밋을 시작하지 않는다 — 커밋 자격은 그 둘이 정한다(§1.3-9).
- *   3. 커밋 순서(제어 소켓 `commit_started` → collab flush → git add/commit/push)는 서버가 정한다.
+ *   3. 커밋 순서(제어 소켓 `commit_started` → collab flush → git add/commit)는 서버가 정한다.
  *      UI 는 그 순서에 끼어들지 않고, `commit_started` / `commit_finished` 로 잠금만 맞춘다.
+ *   4. 커밋과 원격 전송(push)은 분리한다(2026-10-09). 커밋은 서버 로컬에만 남고 push 는 별도
+ *      커맨드(`axis-share.push`)로 사용자가 원할 때만 한다 — 로컬에만 쌓아 두는 흐름을 허용한다.
  */
 
 /** 커밋 메시지 입력창 안내(§15.7). 업무 코드를 넣으면 서버가 업무 상태를 전환한다(§2.6). */
@@ -66,21 +68,33 @@ const PUSH_GUIDE: Record<string, string> = {
     credential_missing: '앱 상단의 사용자 아이콘에서 GitHub PAT 자격증명을 등록해 주세요.',
     credential_invalid: 'GitHub 자격증명이 유효하지 않습니다. 앱에서 PAT 를 다시 등록해 주세요.',
     denied: '이 GitHub 계정에 push 권한이 없습니다. 저장소 권한을 확인해 주세요.',
-    non_forward: '원격에 새 커밋이 있습니다. ⟳ 로 가져온 뒤 다시 커밋해 주세요.',
+    non_fast_forward: '원격에 새 커밋이 있습니다. ⟳ 로 가져온 뒤 다시 push 해 주세요.',
     other: '원격 저장소 상태를 확인한 뒤 다시 시도해 주세요.'
 };
 
-/** `POST /api/github/repos/commits` 응답의 `data[0]` 중 확장이 쓰는 필드(§3.2, §12.11). */
+/** 커밋·push 응답의 `data[0]` 중 확장이 쓰는 필드(§3.2, §12.11). */
 type CommitResultRow = {
     sha?: string;
     message?: string;
     pushed?: boolean;
-    push_failed?: boolean;
     reason?: string;
     reason_label?: string;
+    code?: string;
+    ahead?: number;
+    behind?: number;
+    has_upstream?: boolean;
     matched_work_item_id?: string | null;
     matched_display_id?: number | null;
     status_transition?: { applied?: boolean; from?: string; to?: string };
+};
+
+/** `GET /api/github/repos/sync` 응답의 `data[0]`(§3.2). 커밋·push 뱃지와 graph 뷰가 쓴다. */
+export type SyncInfo = {
+    has_upstream: boolean;
+    head_sha?: string;
+    origin_sha?: string;
+    ahead: number;
+    behind: number;
 };
 
 let started = false;
@@ -106,6 +120,9 @@ let remoteCommitting = false;
 /** 마지막으로 띄운 조회 오류 문구. 같은 오류로 알림이 반복되지 않게 한다. */
 let lastStatusError: string | undefined;
 
+/** 원격 대비 위치(§3.2 sync). `ahead` 가 push 대기 커밋 수다 — 커밋과 push 를 분리했기 때문에 필요하다. */
+let syncInfo: SyncInfo = { has_upstream: false, ahead: 0, behind: 0 };
+
 const statusEmitter = new vscode.EventEmitter<void>();
 
 /** 작업 트리 상태가 바뀌었다. Changes 뷰와 파일 배지가 이 이벤트로 다시 그린다(§15.10). */
@@ -121,6 +138,11 @@ export const onDidChangeCommitState = commitStateEmitter.event;
  */
 export function getStatusEntries(): readonly RepoStatusEntry[] {
     return statusEntries;
+}
+
+/** 원격 대비 위치(§3.2 sync). Changes 뷰 뱃지와 push 안내가 쓴다. */
+export function getSyncInfo(): SyncInfo {
+    return syncInfo;
 }
 
 /** 상태 문자열 → 파일 배지 글자. 배지 provider(§15.3)가 같은 함수를 쓴다. */
@@ -157,6 +179,26 @@ export function commitBlockedReason(): string | undefined {
     const identity = readIdentity();
     if (identity.name.length === 0 || identity.email.length === 0) {
         return '커밋하려면 커밋 사용자(user.name / user.email)를 설정해 주세요.';
+    }
+
+    return undefined;
+}
+
+/**
+ * Changes 뷰 문구용 — 지금 push 할 수 없는 이유(§15.12). 없으면 undefined.
+ * 커밋·push 를 분리했으므로 "올릴 커밋이 없음" 도 여기서 알린다.
+ */
+export function pushBlockedReason(): string | undefined {
+    if (committing) {
+        return '커밋 중입니다…';
+    }
+
+    if (remoteCommitting) {
+        return '같은 브랜치의 다른 사용자가 커밋 중입니다…';
+    }
+
+    if (syncInfo.ahead === 0) {
+        return '원격에 올릴 커밋이 없습니다.';
     }
 
     return undefined;
@@ -281,6 +323,56 @@ export async function fetchRemote(): Promise<void> {
 }
 
 /**
+ * 커밋한 내용을 원격으로 올린다(§3.2 `POST /api/github/repos/push`, §12.11).
+ *
+ * 커밋과 분리된 별도 동작이다 — 커밋은 서버 로컬에만 남고, push 는 사용자가 원할 때만 한다.
+ * 그래서 로컬에만 쌓아 두고 나중에 한 번에 올리는 흐름도 가능하다.
+ */
+export async function pushBranch(): Promise<void> {
+    const session = getSession();
+    const branch = getCurrentBranch();
+    if (!session || !branch) {
+        void vscode.window.showWarningMessage('저장소에 연결되어 있지 않습니다. 앱에서 저장소를 연결해 주세요.');
+        return;
+    }
+
+    const blocked = pushBlockedReason();
+    if (blocked) {
+        void vscode.window.showWarningMessage(`Axis Share: ${blocked}`);
+        return;
+    }
+
+    try {
+        const rows = await apiRequest<CommitResultRow[]>('/github/repos/push', {
+            method: 'POST',
+            body: { repo_id: session.repoId, branch }
+        });
+        reportPushResult(Array.isArray(rows) ? rows[0] : undefined);
+        await refreshStatus();
+    } catch (error) {
+        showError('원격에 push 하지 못했습니다.', error);
+    }
+}
+
+/** push 결과를 사용자에게 알린다(§12.11 — 실패 사유와 다음 행동을 함께 보여 준다). */
+function reportPushResult(row: CommitResultRow | undefined): void {
+    if (row?.pushed) {
+        void vscode.window.showInformationMessage('Axis Share: 원격에 push 했습니다.');
+        return;
+    }
+
+    const reason = typeof row?.reason === 'string' ? row.reason : 'other';
+    if (reason === 'nothing_to_push') {
+        void vscode.window.showInformationMessage('Axis Share: 원격에 올릴 커밋이 없습니다.');
+        return;
+    }
+
+    const label = typeof row?.reason_label === 'string' ? row.reason_label : 'push 실패';
+    const guide = PUSH_GUIDE[reason] ?? PUSH_GUIDE.other;
+    void vscode.window.showWarningMessage(`Axis Share: 원격 push 를 하지 못했습니다 (${label}). ${guide}`);
+}
+
+/**
  * 스테이징 / 스테이징 해제(§15.7). Changes 뷰의 인라인 `$(add)` / `$(remove)` 버튼이 부른다.
  * 여러 개를 고르면 VS Code 가 인자를 여러 개로 넘기므로 평평하게 펴서 한 번에 보낸다.
  */
@@ -329,6 +421,9 @@ async function stagePaths(stage: boolean, paths: readonly string[]): Promise<voi
 
 /**
  * 커밋한다(§15.7 → §12.11). Changes 뷰 타이틀의 `$(check)` 가 부른다. 커밋 메시지는 여기서 입력받는다.
+ *
+ * 커밋은 서버 로컬 저장소에만 남는다(2026-10-09) — 원격 전송은 별도 `axis-share.push` 가 맡는다.
+ * 커밋 직후 올릴 것이 남아 있으면 "지금 push" 를 한 번 권한다(자동으로 올리지는 않는다).
  *
  * 순서: 아이덴티티 확인 → 커밋 대상 정하기 → 메시지 입력 → 서버 커밋.
  * 메시지를 먼저 받지 않는 이유는 "대상 정하기" 가 "전체 커밋" 확인 모달을 띄울 수 있어서다 —
@@ -384,6 +479,7 @@ export async function commitInteractive(): Promise<void> {
         });
         reportCommitResult(Array.isArray(rows) ? rows[0] : undefined);
         await refreshStatus();
+        await offerPushAfterCommit();
     } catch (error) {
         showError('커밋하지 못했습니다.', error);
     } finally {
@@ -418,28 +514,37 @@ async function resolveCommitPaths(): Promise<string[] | undefined> {
     return answer === '전체 커밋' ? all : undefined;
 }
 
-/** 커밋 결과를 사용자에게 알린다(§12.11 — push 실패·매칭 실패를 배지/알림으로 구분해 보여 준다). */
+/**
+ * 커밋 결과를 사용자에게 알린다(§12.11 — 업무 매칭 결과와 남은 push 대기 수를 함께 보여 준다).
+ * 커밋은 로컬에만 남으므로 push 실패를 여기서 다루지 않는다 — push 결과는 `reportPushResult` 가 맡는다.
+ */
 function reportCommitResult(row: CommitResultRow | undefined): void {
-    if (!row) {
-        void vscode.window.showInformationMessage('Axis Share: 커밋했습니다.');
+    const shortSha = typeof row?.sha === 'string' ? row.sha.slice(0, 8) : '';
+    const head = shortSha ? `${shortSha} 커밋됨` : '커밋했습니다';
+    const workItem = row ? describeWorkItem(row) : '';
+
+    const ahead = typeof row?.ahead === 'number' ? row.ahead : syncInfo.ahead;
+    const pending = ahead > 0 ? ` (원격에 아직 ${ahead}개)` : '';
+    void vscode.window.showInformationMessage(`Axis Share: ${head}${pending}${workItem}.`);
+}
+
+/**
+ * 커밋 직후 push 를 권한다(§15.7). 자동으로 올리지 않는 이유는 "로컬에만 쌓아 두기" 를 허용하기 위해서다 —
+ * 사용자가 "지금 push" 를 고를 때만 원격으로 보낸다.
+ */
+async function offerPushAfterCommit(): Promise<void> {
+    const ahead = syncInfo.ahead;
+    if (ahead <= 0) {
         return;
     }
 
-    const shortSha = typeof row.sha === 'string' ? row.sha.slice(0, 8) : '';
-    const head = shortSha ? `${shortSha} 커밋됨` : '커밋됨';
-
-    if (row.pushed === false) {
-        const reason = typeof row.reason === 'string' ? row.reason : 'other';
-        const label = typeof row.reason_label === 'string' ? row.reason_label : 'push 실패';
-        const guide = PUSH_GUIDE[reason] ?? PUSH_GUIDE.other;
-        void vscode.window.showWarningMessage(
-            `Axis Share: ${head}, 원격 push 는 실패했습니다 (${label}). 커밋은 서버에 남아 있습니다. ${guide}`
-        );
-        return;
+    const answer = await vscode.window.showInformationMessage(
+        `Axis Share: 원격에 아직 ${ahead}개 커밋이 있습니다. 지금 push 할까요?`,
+        '지금 push'
+    );
+    if (answer === '지금 push') {
+        await pushBranch();
     }
-
-    const workItem = describeWorkItem(row);
-    void vscode.window.showInformationMessage(`Axis Share: ${head}, 원격에 push 했습니다${workItem}.`);
 }
 
 function describeWorkItem(row: CommitResultRow): string {
@@ -479,6 +584,7 @@ export async function refreshStatus(): Promise<void> {
 
         lastStatusError = undefined;
         setStatus(Array.isArray(rows) ? rows.filter(isStatusEntry) : []);
+        void refreshSync(key);
     } catch (error) {
         if (statusKey !== key) {
             return;
@@ -496,6 +602,7 @@ export async function refreshStatus(): Promise<void> {
 
 function clearStatus(): void {
     statusKey = undefined;
+    syncInfo = { has_upstream: false, ahead: 0, behind: 0 };
     setStatus([]);
 }
 
@@ -503,6 +610,45 @@ function clearStatus(): void {
 function setStatus(entries: readonly RepoStatusEntry[]): void {
     statusEntries = entries;
     statusByUri = buildUriIndex(entries);
+    statusEmitter.fire();
+}
+
+/**
+ * 원격 대비 위치를 받아 온다(§3.2 sync). 상태 조회와 함께 불러 push 버튼·뱃지를 맞춘다.
+ * 보조 정보라 실패해도 알림을 띄우지 않는다 — 상태 조회 자체는 이미 성공했다.
+ */
+async function refreshSync(key: string): Promise<void> {
+    const session = getSession();
+    const branch = getCurrentBranch();
+    if (!session || !branch) {
+        return;
+    }
+
+    try {
+        const rows = await apiRequest<SyncInfo[]>(
+            `/github/repos/sync?repo_id=${session.repoId}&branch=${encodeURIComponent(branch)}`
+        );
+        if (statusKey !== key) {
+            return; // 그 사이 저장소·브랜치가 바뀌었다 — 낡은 응답은 버린다.
+        }
+        const info = Array.isArray(rows) ? rows[0] : undefined;
+        if (info) {
+            setSync(info);
+        }
+    } catch {
+        // sync 실패는 무시한다(위 주석). 다음 조회에서 다시 시도한다.
+    }
+}
+
+/** 원격 대비 위치를 갈아 끼우고 뷰 뱃지를 다시 그린다. */
+function setSync(info: SyncInfo): void {
+    syncInfo = {
+        has_upstream: info.has_upstream === true,
+        head_sha: info.head_sha,
+        origin_sha: info.origin_sha,
+        ahead: Number.isFinite(info.ahead) ? info.ahead : 0,
+        behind: Number.isFinite(info.behind) ? info.behind : 0
+    };
     statusEmitter.fire();
 }
 
@@ -548,6 +694,12 @@ function onControlEvent(event: ControlEvent): void {
         remoteCommitting = false;
         commitStateEmitter.fire();
         void refreshStatus(); // 뷰와 파일 배지를 다시 그린다(§15.10).
+        return;
+    }
+
+    if (event.type === 'push_finished') {
+        // 같은 브랜치의 다른 사용자가 원격으로 올렸다 — 원격 대비 위치가 바뀌었다(§15.10).
+        void refreshStatus();
     }
 }
 

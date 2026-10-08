@@ -569,6 +569,58 @@ std::shared_ptr<std::mutex> repoLock(int repoId) {
     return entry;
 }
 
+// 현재 브랜치가 원격보다 얼마나 앞섰는지/뒤처졌는지 (§3.2 GET /api/github/repos/sync).
+// 커밋과 push 가 분리되어 있어(§12.11) 둘이 같은 계산을 공유한다.
+struct SyncState {
+    bool hasUpstream = false;   // origin/<branch> 추적 ref 가 있는가
+    std::string headSha;        // 로컬 HEAD
+    std::string originSha;      // origin/<branch> (없으면 빈 값)
+    int ahead = 0;              // push 하면 올라갈 커밋 수
+    int behind = 0;             // 원격이 앞선 커밋 수
+};
+
+SyncState readSyncState(const std::string &workDir, const std::string &branch) {
+    SyncState state;
+
+    if (auto head = GitRunner::headSha(workDir); head.ok()) {
+        state.headSha = trim(head.out);
+    }
+
+    // 아직 한 번도 push 하지 않은 브랜치는 원격 추적 ref 가 없다. 그때는 전체 커밋을 '올라갈 양' 으로 본다.
+    const std::string remoteRef = "origin/" + branch;
+    auto origin = GitRunner::resolveRef(workDir, remoteRef);
+    if (!origin.ok()) {
+        int total = 0;
+        if (auto all = GitRunner::revListCount(workDir, "HEAD"); all.ok() && parseInt(trim(all.out), total)) {
+            state.ahead = total;
+        }
+        return state;
+    }
+
+    state.hasUpstream = true;
+    state.originSha = trim(origin.out);
+    int count = 0;
+    if (auto ahead = GitRunner::revListCount(workDir, remoteRef + "..HEAD"); ahead.ok() && parseInt(trim(ahead.out), count)) {
+        state.ahead = count;
+    }
+    if (auto behind = GitRunner::revListCount(workDir, "HEAD.." + remoteRef); behind.ok() && parseInt(trim(behind.out), count)) {
+        state.behind = count;
+    }
+    return state;
+}
+
+Json::Value syncToJson(const SyncState &state) {
+    Json::Value out;
+    out["has_upstream"] = state.hasUpstream;
+    out["head_sha"] = state.headSha;
+    if (state.hasUpstream) {
+        out["origin_sha"] = state.originSha;
+    }
+    out["ahead"] = state.ahead;
+    out["behind"] = state.behind;
+    return out;
+}
+
 // push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다 (§12.11).
 std::string classifyPushFailure(const std::string &detail) {
     if (detail.find("Authentication failed") != std::string::npos ||
@@ -1705,30 +1757,9 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         }
         const std::string sha = trim(shaResult.out);
 
-        // 6) push 는 요청 사용자의 자격증명으로만 한다(§6-4).
-        //    자격증명이 없거나 실패하면 커밋만 로컬에 남기고 pushed=false 로 기록한다(§12.11).
-        GitRunner::Auth auth;
-        const GitRunner::Auth *authPtr = nullptr;
-        const std::string token = userToken(db, requester);
-        if (!token.empty()) {
-            auth.login = "x-access-token";
-            auth.token = token;
-            authPtr = &auth;
-        }
-
-        bool pushed = false;
-        std::string pushReason;
-        if (authPtr == nullptr) {
-            pushReason = "credential_missing";
-        } else {
-            auto pushedResult = GitRunner::push(workDir, branch, authPtr);
-            if (pushedResult.ok()) {
-                pushed = true;
-            } else {
-                pushReason = classifyPushFailure(pushedResult.err);
-                LOG_WARN << "push 실패 (" << branch << "): " << trim(pushedResult.err);
-            }
-        }
+        // 6) 커밋은 로컬에만 남긴다(§12.11). 원격 전송은 별도 push(POST /api/github/repos/push)가 맡는다.
+        //    그래서 커밋 로그는 pushed=false 로 남고, push 가 성공하면 mark_github_branch_pushed 가 뒤집는다.
+        const bool pushed = false;
 
         // 7) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다(§12.11).
         Json::Value commitRow;
@@ -1758,17 +1789,13 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             }
         }
 
-        // 9) 응답 조립(§3.2). push 실패는 커밋이 로컬에 남았으므로 성공 응답에 실어 보낸다.
-        commitRow["pushed"] = pushed;
-        commitRow["push_failed"] = !pushed;
-        if (!pushed) {
-            commitRow["reason"] = pushReason;
-            commitRow["reason_label"] = pushReasonLabel(pushReason);
-            // 자격증명 문제는 확장이 연결 안내를 띄울 수 있게 코드로도 알려 준다(§12.12).
-            if (pushReason == "credential_invalid") {
-                commitRow["code"] = "P0802";
-            }
-        }
+        // 9) 응답 조립(§3.2). 커밋은 로컬에만 남으므로 pushed=false 이고, 남은 push 대기 수(ahead)를 함께 알린다.
+        //    원격 전송은 별도 push 커맨드가 맡는다(§12.11) — 여기서는 push 하지 않는다.
+        const SyncState sync = readSyncState(workDir, branch);
+        commitRow["pushed"] = false;
+        commitRow["ahead"] = sync.ahead;
+        commitRow["behind"] = sync.behind;
+        commitRow["has_upstream"] = sync.hasUpstream;
         commitRow["status_transition"] = transition;
 
         Json::Value data(Json::arrayValue);
@@ -1781,17 +1808,140 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         finished["branch"] = branch;
         finished["sha"] = sha;
         finished["email"] = requester;
-        finished["pushed"] = pushed;
-        if (!pushed) {
-            finished["reason"] = pushReason;
-        }
+        finished["pushed"] = false;
+        finished["ahead"] = sync.ahead;
         GithubWebSocketController::broadcastToBranch(repoId, branch, finished);
 
-        if (pushed) {
-            return successResponse(data, "커밋하고 원격에 push 했습니다.", k201Created);
+        return successResponse(data, "커밋했습니다. 원격 전송은 push 로 따로 합니다.", k201Created);
+    });
+}
+
+// GET /api/github/repos/sync?repo_id=3&branch=main — 현재 브랜치가 원격보다 얼마나 앞섰는지 (§3.2).
+// 커밋·push 버튼의 상태와 graph 뷰(§15.13)의 "원격 위치" 표시가 이 값을 쓴다.
+void GithubController::getSync(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string branch = trim(req->getParameter("branch"));
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
         }
-        return successResponse(data, "커밋은 로컬에 저장했지만 원격 push 에 실패했습니다: " + pushReasonLabel(pushReason),
-                               k201Created);
+
+        const SyncState state = readSyncState(workDir, branch);
+        return successResponse(singleItemArray(syncToJson(state)), "원격 대비 상태를 조회했습니다.");
+    });
+}
+
+// POST /api/github/repos/push — 커밋한 내용을 원격으로 올린다 (§3.2, §12.11).
+// 커밋(로컬 저장)과 분리된 별도 동작이다 — 로컬에만 쌓아 두고 싶은 경우를 위해 push 를 따로 둔다.
+// push 는 요청한 사용자의 자격증명으로만 하며(§6-4), 성공하면 그 브랜치의 미push 커밋 로그를 확정한다.
+void GithubController::pushRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        const SyncState before = readSyncState(workDir, branch);
+        if (before.ahead == 0) {
+            Json::Value data = syncToJson(before);
+            data["pushed"] = false;
+            data["reason"] = "nothing_to_push";
+            data["reason_label"] = "원격에 올릴 커밋이 없습니다";
+            return successResponse(singleItemArray(data), "원격에 올릴 커밋이 없습니다.");
+        }
+
+        // 자격증명이 없으면 커밋은 그대로 두고 사유만 알린다(§12.11).
+        GitRunner::Auth auth;
+        const GitRunner::Auth *authPtr = nullptr;
+        const std::string token = userToken(db, requester);
+        if (!token.empty()) {
+            auth.login = "x-access-token";
+            auth.token = token;
+            authPtr = &auth;
+        }
+
+        if (authPtr == nullptr) {
+            Json::Value data = syncToJson(before);
+            data["pushed"] = false;
+            data["reason"] = "credential_missing";
+            data["reason_label"] = pushReasonLabel("credential_missing");
+            data["code"] = "P0802";
+            return successResponse(singleItemArray(data), "GitHub 자격증명이 없어 push 하지 못했습니다.");
+        }
+
+        // 같은 저장소의 커밋·push 는 직렬화한다(§12.11: index.lock 경합 방지).
+        std::lock_guard<std::mutex> pushGuard(*repoLock(repoId));
+
+        auto pushedResult = GitRunner::push(workDir, branch, authPtr);
+        if (!pushedResult.ok()) {
+            const std::string reason = classifyPushFailure(pushedResult.err);
+            LOG_WARN << "push 실패 (" << branch << "): " << trim(pushedResult.err);
+
+            Json::Value data = syncToJson(before);
+            data["pushed"] = false;
+            data["reason"] = reason;
+            data["reason_label"] = pushReasonLabel(reason);
+            if (reason == "credential_invalid") {
+                data["code"] = "P0802";
+            }
+            return successResponse(singleItemArray(data), "원격 push 에 실패했습니다: " + pushReasonLabel(reason));
+        }
+
+        // 성공: 그 브랜치의 미push 커밋 로그를 확정한다(pushed_by_email = 요청자).
+        Json::Value data = syncToJson(readSyncState(workDir, branch));
+        data["pushed"] = true;
+        try {
+            Json::Value markRow;
+            if (singleRow(db->execSqlSync("SELECT * FROM mark_github_branch_pushed($1, $2, $3)",
+                                          requester, repoId, branch),
+                          markRow)) {
+                data["pushed_commit_count"] = markRow["pushed_commit_count"];
+            }
+        } catch (const orm::DrogonDbException &e) {
+            // push 는 이미 성공했다. 기록 실패로 사용자 작업을 되돌리지 않고 로그만 남긴다.
+            LOG_WARN << "push 완료 기록 실패 (" << branch << "): " << e.base().what();
+        }
+
+        Json::Value finished;
+        finished["type"] = "push_finished";
+        finished["repo_id"] = repoId;
+        finished["branch"] = branch;
+        finished["email"] = requester;
+        finished["pushed"] = true;
+        finished["ahead"] = data["ahead"];
+        GithubWebSocketController::broadcastToBranch(repoId, branch, finished);
+
+        return successResponse(singleItemArray(data), "원격에 push 했습니다.");
     });
 }
 

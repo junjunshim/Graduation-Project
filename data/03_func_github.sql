@@ -903,6 +903,78 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- GitHubController::push — push 성공 시 그 브랜치의 미push 커밋 로그를 'pushed' 로 확정한다.
+-- 커밋(create_github_commit_log)은 pushed=FALSE 로 남기고, push 가 성공한 시점에 여기서 한 번에 뒤집는다 (§12.11).
+CREATE OR REPLACE FUNCTION mark_github_branch_pushed(
+    p_requester_email users.email%TYPE,
+    p_repo_id github_repositories.repo_id%TYPE,
+    p_branch_name github_branches.name%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_node_id organization_nodes.node_id%TYPE;
+    v_branch_id github_branches.branch_id%TYPE;
+    v_updated INTEGER := 0;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 저장소 존재 확인
+    SELECT node_id INTO v_node_id
+    FROM github_repositories
+    WHERE repo_id = p_repo_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
+    END IF;
+
+    -- 3. 권한 확인 (push 는 커밋과 같은 작업자 이상)
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'WI_PERSONAL_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', v_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 브랜치 행을 찾아 미push 커밋을 한 번에 확정한다 (없으면 갱신 0건으로 정상 종료)
+    SELECT branch_id INTO v_branch_id
+    FROM github_branches
+    WHERE repo_id = p_repo_id AND name = p_branch_name AND is_deleted = FALSE;
+
+    IF v_branch_id IS NOT NULL THEN
+        UPDATE github_commit_logs
+        SET pushed = TRUE,
+            pushed_by_email = p_requester_email
+        WHERE repo_id = p_repo_id
+          AND branch_id = v_branch_id
+          AND pushed = FALSE;
+        GET DIAGNOSTICS v_updated = ROW_COUNT;
+    END IF;
+
+    -- 5. 결과 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_PUSH',
+        'repo_id', p_repo_id,
+        'branch', p_branch_name,
+        'branch_id', v_branch_id,
+        'pushed', TRUE,
+        'pushed_commit_count', v_updated,
+        'pushed_by_email', p_requester_email
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to mark github branch pushed: % (repo %), (REASON: %)', p_branch_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
 
 -- GitHubController::registerCredential (§6-11: PAT 직접 입력)
 -- access_token 은 pgp_sym_encrypt 로 암호화해 저장한다. 이 함수는 토큰을 돌려주지 않는다.

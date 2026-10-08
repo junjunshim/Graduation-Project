@@ -35,6 +35,10 @@
                     "name": "Changes"
                 },
                 {
+                    "id": "axis-share-graph",
+                    "name": "Graph"
+                },
+                {
                     "id": "axis-share-people",
                     "name": "Editing"
                 },
@@ -134,6 +138,11 @@
                 "command": "axis-share.commit",
                 "title": "Axis Share: 커밋",
                 "icon": "$(check)"
+            },
+            {
+                "command": "axis-share.push",
+                "title": "Axis Share: 원격으로 push",
+                "icon": "$(cloud-upload)"
             }
         ],
         "menus": {
@@ -164,29 +173,39 @@
                     "group": "navigation@1"
                 },
                 {
-                    "command": "axis-share.stageAll",
+                    "command": "axis-share.push",
                     "when": "view == axis-share-changes",
                     "group": "navigation@2"
                 },
                 {
-                    "command": "axis-share.unstageAll",
+                    "command": "axis-share.stageAll",
                     "when": "view == axis-share-changes",
                     "group": "navigation@3"
                 },
                 {
-                    "command": "axis-share.identitySettings",
+                    "command": "axis-share.unstageAll",
                     "when": "view == axis-share-changes",
                     "group": "navigation@4"
                 },
                 {
-                    "command": "axis-share.fetch",
+                    "command": "axis-share.identitySettings",
                     "when": "view == axis-share-changes",
                     "group": "navigation@5"
                 },
                 {
-                    "command": "axis-share.refresh",
+                    "command": "axis-share.fetch",
                     "when": "view == axis-share-changes",
                     "group": "navigation@6"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@7"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-graph",
+                    "group": "navigation@1"
                 },
                 {
                     "command": "axis-share.toggleDecorations",

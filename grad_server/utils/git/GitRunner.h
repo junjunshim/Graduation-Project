@@ -67,6 +67,10 @@ public:
     static GitResult commit(const std::string &worktreeDir, const std::string &message,
                             const std::string &authorName, const std::string &authorEmail);
     static GitResult headSha(const std::string &worktreeDir);
+    // range 의 커밋 수를 센다. push 대상(ahead)·뒤처진 커밋(behind) 계산에 쓴다.
+    static GitResult revListCount(const std::string &repoDir, const std::string &range);
+    // ref 를 SHA 로 확정한다. 없는 ref 는 exit 1 (--verify --quiet 로 조용히 실패).
+    static GitResult resolveRef(const std::string &repoDir, const std::string &ref);
     static GitResult push(const std::string &worktreeDir, const std::string &branch, const Auth *auth);
     static GitResult currentBranch(const std::string &worktreeDir);
 

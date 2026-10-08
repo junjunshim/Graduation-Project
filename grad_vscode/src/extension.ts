@@ -6,6 +6,7 @@ import { createChangesView } from './repo/changesProvider';
 import { CONTEXT_HAS_REPO_SESSION, startControlSocket, stopControlSocket } from './repo/controlSocket';
 import { startCursorRenderer, stopCursorRenderer } from './repo/cursorRenderer';
 import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
+import { createGraphView } from './repo/graphProvider';
 import { createPresenceView } from './repo/presenceProvider';
 import { createRepoFileDecorations } from './repo/repoFileDecorations';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
@@ -15,6 +16,7 @@ import {
     applyStageAll,
     commitInteractive,
     fetchRemote,
+    pushBranch,
     refreshStatus,
     showIdentitySettings,
     startRepoStatus,
@@ -39,7 +41,8 @@ import {
  *   src/repo/userColors.ts         사용자 색 배정(§15.8)
  *   src/repo/repoStatus.ts         작업 트리 상태 + 스테이징·커밋(§15.7)
  *   src/repo/repoFileDecorations.ts git 상태 파일 배지(§15.3)
- *   src/repo/changesProvider.ts    Changes 뷰 — 작업 트리 상태 전용 탭(§15.3)
+ *   src/repo/changesProvider.ts    Changes 뷰 — 작업 트리 상태 + 커밋 탭(§15.3)
+ *   src/repo/graphProvider.ts      Graph 뷰 — 커밋 현황과 원격 위치(§15.14)
  *
  * 다음 단계에서 만들 모듈(§15.11):
  *   src/repo/decorationProvider.ts       Reviews 트리(§15.6)
@@ -70,6 +73,7 @@ const COMMANDS: readonly string[] = [
     'axis-share.identitySettings',
     'axis-share.fetch',
     'axis-share.commit',
+    'axis-share.push',
     'axis-share.stageAll',
     'axis-share.unstageAll'
 ];
@@ -182,6 +186,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     //    있어야 하므로 그때까지 자리표시자를 쓴다.
     const repoTree = createRepoTreeView(context);
     createChangesView(context);
+    const graphView = createGraphView(context);
     createPresenceView(context);
     registerEmptyView(context, VIEW_REVIEWS);
 
@@ -209,6 +214,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // 새로 고침은 트리와 작업 트리 상태(Changes)를 함께 다시 받는다.
         'axis-share.refresh': () => {
             repoTree.provider.refresh();
+            graphView.provider.refresh();
             void refreshStatus();
         },
         'axis-share.switchBranch': () => {
@@ -234,6 +240,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // Changes 뷰 타이틀의 $(check). 메시지 입력은 이 커맨드가 직접 띄운다(§15.7).
         'axis-share.commit': () => {
             void commitInteractive();
+        },
+        // Changes 뷰 타이틀의 $(cloud-upload). 커밋한 내용을 원격으로 올린다(§12.11 — 커밋과 분리).
+        'axis-share.push': () => {
+            void pushBranch();
         },
         // Changes 뷰 타이틀의 ⚙ / ⟳ (§15.7).
         'axis-share.identitySettings': () => {

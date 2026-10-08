@@ -426,6 +426,14 @@ GitResult GitRunner::headSha(const std::string &worktreeDir) {
     return run(worktreeDir, {"rev-parse", "HEAD"});
 }
 
+GitResult GitRunner::revListCount(const std::string &repoDir, const std::string &range) {
+    return run(repoDir, {"rev-list", "--count", range});
+}
+
+GitResult GitRunner::resolveRef(const std::string &repoDir, const std::string &ref) {
+    return run(repoDir, {"rev-parse", "--verify", "--quiet", ref});
+}
+
 GitResult GitRunner::worktreeList(const std::string &repoDir) {
     return run(repoDir, {"worktree", "list", "--porcelain"});
 }

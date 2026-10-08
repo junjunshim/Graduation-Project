@@ -5,6 +5,7 @@ import { NO_SESSION_MESSAGE, repoResourceUri } from './repoTreeProvider';
 import {
     commitBlockedReason,
     getStatusEntries,
+    getSyncInfo,
     labelForState,
     onDidChangeCommitState,
     onDidChangeStatus,
@@ -112,15 +113,27 @@ export class ChangesTreeProvider implements vscode.TreeDataProvider<ChangesItem>
         view.description = branch;
 
         if (!session || !branch) {
+            view.badge = undefined;
             view.message = NO_SESSION_MESSAGE;
             return;
         }
 
+        // push 대기 커밋 수는 뷰 뱃지로 알린다(커밋과 push 를 분리했으므로 남은 양을 눈에 띄게 둔다).
+        const ahead = getSyncInfo().ahead;
+        view.badge =
+            ahead > 0
+                ? { value: ahead, tooltip: `원격에 올리지 않은 커밋 ${ahead}개` }
+                : undefined;
+
         // 우선순위: 변경 없음 → 커밋할 수 없는 이유. 둘 다 아니면 문구를 지운다(§15.12).
-        view.message =
-            getStatusEntries().length === 0
-                ? '현재 브랜치에 커밋되지 않은 변경이 없습니다.'
-                : commitBlockedReason();
+        const entries = getStatusEntries();
+        if (entries.length > 0) {
+            view.message = commitBlockedReason();
+        } else if (ahead > 0) {
+            view.message = `커밋되지 않은 변경은 없습니다. 원격에 올리지 않은 커밋이 ${ahead}개 있습니다.`;
+        } else {
+            view.message = '현재 브랜치에 커밋되지 않은 변경이 없습니다.';
+        }
     }
 }
 

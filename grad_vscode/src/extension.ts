@@ -1,29 +1,37 @@
 import * as vscode from 'vscode';
 
+import { ApiError } from './api';
+import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
+
 /**
  * [TASK_11] Axis Share — 서버 로컬 저장소 기반 VSCode 실시간 협업 편집 확장(guest 클라이언트).
  *
- * 이 파일은 뼈대다. 실제 동작은 `.antigravitycli/agent/tasks/TASK_11_SERVER_LOCAL_REPO_VSCODE.md`
- * 를 그대로 따라 구현한다. 뷰·커맨드는 이미 package.json 에 선언되어 있으므로 여기서는
- * "선언된 것을 등록만" 하고, 로직은 다음 단계에서 채운다.
+ * 구현 기준은 `.antigravitycli/agent/tasks/TASK_11_SERVER_LOCAL_REPO_VSCODE.md` 다.
+ * 이 파일은 뷰·커맨드 선언을 등록하고 배선만 한다. 상태는 repoSession(repo/)이 모은다(§15.11).
+ *
+ * 완료:
+ *   src/api.ts                     서버 REST 클라이언트(토큰 인터셉터, §3.5)
+ *   src/repo/repoSession.ts        세션 상태·토큰 저장·자동 갱신(§12.1)
  *
  * 다음 단계에서 만들 모듈(§15.11):
- *   src/api.ts                           서버 REST 클라이언트(토큰 인터셉터)
  *   src/repo/repoTreeProvider.ts         Repository 트리(§15.3)
  *   src/repo/branchPicker.ts             브랜치 전환·생성·삭제(§15.4)
  *   src/repo/presenceProvider.ts         Editing 트리(§15.5)
  *   src/repo/decorationProvider.ts       Reviews 트리(§15.6)
  *   src/repo/repoFileDecorations.ts      git 상태 배지(FileDecorationProvider)
  *   src/repo/userColors.ts               사용자 색(§15.8)
- *   src/repo/repoSession.ts              세션 상태 + 소켓 이벤트 배선(§15.10)
  *   src/repo/scmProvider.ts              SCM provider(§15.7)
+ *   src/repo/controlSocket.ts            제어 소켓(/api/github/ws, §3.3)
  */
 
 const VIEW_FILES = 'axis-share-files';
 const VIEW_PEOPLE = 'axis-share-people';
 const VIEW_REVIEWS = 'axis-share-reviews';
 
-/** 세션 보유 여부 컨텍스트 키(§15.2). 뷰 안 커맨드의 when 조건이 이 값을 쓴다. */
+/**
+ * 세션 보유 여부 컨텍스트 키(§15.2). 뷰 안 커맨드의 when 조건이 이 값만 쓴다.
+ * 제어 소켓의 `joined` 를 받은 시점에 true 가 된다(§15.10) — 지금은 소켓이 없으므로 항상 false 다.
+ */
 const CONTEXT_HAS_REPO_SESSION = 'axis-share:hasRepoSession';
 
 const NO_SESSION_MESSAGE = '앱에서 저장소를 연결하고 "VSCode 로 실시간 편집" 을 눌러 주세요.';
@@ -88,11 +96,22 @@ function registerStubCommand(context: vscode.ExtensionContext, commandId: string
     );
 }
 
+/** 쿼리 문자열 → 양의 정수. 없거나 형식이 틀리면 undefined. */
+function toPositiveInt(value: string | null): number | undefined {
+    if (!value) {
+        return undefined;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 /**
  * 핸드오프 URI 수신(§3.4).
  *
  * 앱이 여는 형태: vscode://junjunshim.axis-share/auth?repo=<repo_id>&node=<node_id>&code=<1회용>
- * 토큰은 URI 로 오지 않는다. 1회용 코드만 오고, 확장이 서버와 교환한다.
+ * 토큰은 URI 로 오지 않는다. 1회용 코드만 오고, 확장이 서버와 교환한다(§12.1).
+ * 제어 소켓 연결·collab 티켓·트리 조회는 다음 단계에서 이어 붙인다(§12.2).
  */
 async function handleHandoffUri(uri: vscode.Uri): Promise<void> {
     if (uri.path !== '/auth') {
@@ -101,40 +120,57 @@ async function handleHandoffUri(uri: vscode.Uri): Promise<void> {
 
     const params = new URLSearchParams(uri.query);
     const code = params.get('code');
-    const repoId = params.get('repo');
-    const nodeId = params.get('node');
-
-    if (!code || !repoId) {
-        void vscode.window.showWarningMessage('Axis Share: 핸드오프 URI 에 repo 또는 code 가 없습니다.');
+    if (!code) {
+        void vscode.window.showWarningMessage(
+            'Axis Share: 핸드오프 URI 에 연결 코드가 없습니다. 앱에서 다시 시도해 주세요.'
+        );
         return;
     }
 
-    // TODO(§3.4, §12.1): 다음 순서로 이어 붙인다.
-    //   1) POST /api/github/sessions { code } → access/refresh token 교환
-    //      → context.secrets 에 axis-share.at / axis-share.rt 로 저장 (grad-at/grad-rt 는 쓰지 않는다)
-    //   2) wss://<host>/api/github/ws 에 JWT 로 붙어 join(repo, branch)  ← 제어 소켓
-    //   3) POST /api/collab/tickets 로 1회용 티켓을 받아 wss://<host>/collab/?ticket=... 연결
-    //   4) 트리·Editing·Reviews 초기 조회 후 axis-share:hasRepoSession 을 true 로 설정
-    void vscode.window.showInformationMessage(
-        `Axis Share: 저장소 ${repoId} (node ${nodeId ?? '-'}) 핸드오프를 받았습니다. 세션 연결은 다음 단계에서 구현됩니다.`
-    );
+    try {
+        const session = await startSessionFromHandoff({
+            code,
+            repoId: toPositiveInt(params.get('repo')),
+            nodeId: toPositiveInt(params.get('node'))
+        });
+
+        const who = session.userName ? `${session.userName} (${session.userEmail})` : session.userEmail;
+        // 저장소 이름을 못 받았을 때만 id 로 대체한다(§3.2 조회 실패·권한 없음).
+        const target = getRepositoryDisplayName(session) ?? `저장소 ${session.repoId}`;
+        void vscode.window.showInformationMessage(
+            `Axis Share: ${who} 님으로 ${target} 에 연결했습니다. 저장소 구조는 다음 단계에서 표시됩니다.`
+        );
+    } catch (error) {
+        // 서버가 코드를 준 실패(P0811 코드 무효·만료, P0812 세션 만료)는 원인이 분명하므로 문구를 그대로 쓴다.
+        if (error instanceof ApiError && error.code !== undefined) {
+            void vscode.window.showWarningMessage(`Axis Share: ${error.message}`);
+            return;
+        }
+
+        void vscode.window.showErrorMessage(
+            `Axis Share에서 세션을 시작하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
 }
 
-export function activate(context: vscode.ExtensionContext): void {
-    // 1) 뷰 3개 등록(§15.2).
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    // 1) 세션 모듈 초기화 — 저장된 토큰/세션을 읽고 api.ts 에 토큰 공급자를 꽂는다(§3.5, §12.1).
+    await initRepoSession(context);
+
+    // 2) 뷰 3개 등록(§15.2).
     for (const viewId of [VIEW_FILES, VIEW_PEOPLE, VIEW_REVIEWS]) {
         registerEmptyView(context, viewId);
     }
 
-    // 2) 세션 컨텍스트 키(§15.2). 값은 repoSession 모듈이 갱신한다.
+    // 3) 세션 컨텍스트 키(§15.2). 제어 소켓의 join 이 성공해야 true 가 된다(§15.10 — 소켓 단계).
     void vscode.commands.executeCommand('setContext', CONTEXT_HAS_REPO_SESSION, false);
 
-    // 3) 커맨드 등록(§15.11).
+    // 4) 커맨드 등록(§15.11).
     for (const commandId of COMMANDS) {
         registerStubCommand(context, commandId);
     }
 
-    // 4) 핸드오프 URI 수신(§3.4). activationEvents 의 onUri 가 이 경로로 확장을 깨운다.
+    // 5) 핸드오프 URI 수신(§3.4). activationEvents 의 onUri 가 이 경로로 확장을 깨운다.
     context.subscriptions.push(
         vscode.window.registerUriHandler({
             handleUri(uri: vscode.Uri): void {

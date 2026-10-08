@@ -31,6 +31,10 @@
                     "name": "Repository"
                 },
                 {
+                    "id": "axis-share-changes",
+                    "name": "Changes"
+                },
+                {
                     "id": "axis-share-people",
                     "name": "Editing"
                 },
@@ -105,6 +109,31 @@
                 "command": "axis-share.fetch",
                 "title": "Axis Share: 원격에서 가져오기 (fetch)",
                 "icon": "$(sync)"
+            },
+            {
+                "command": "axis-share.stage",
+                "title": "Axis Share: 스테이징",
+                "icon": "$(add)"
+            },
+            {
+                "command": "axis-share.unstage",
+                "title": "Axis Share: 스테이징 해제",
+                "icon": "$(remove)"
+            },
+            {
+                "command": "axis-share.stageAll",
+                "title": "Axis Share: 모두 스테이징",
+                "icon": "$(add)"
+            },
+            {
+                "command": "axis-share.unstageAll",
+                "title": "Axis Share: 모두 스테이징 해제",
+                "icon": "$(remove)"
+            },
+            {
+                "command": "axis-share.commit",
+                "title": "Axis Share: 커밋",
+                "icon": "$(check)"
             }
         ],
         "menus": {
@@ -128,6 +157,36 @@
                     "command": "axis-share.refresh",
                     "when": "view == axis-share-files",
                     "group": "navigation@4"
+                },
+                {
+                    "command": "axis-share.commit",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.stageAll",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "axis-share.unstageAll",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "axis-share.identitySettings",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "axis-share.fetch",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@5"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@6"
                 },
                 {
                     "command": "axis-share.toggleDecorations",
@@ -192,6 +251,26 @@
                     "group": "3_copy@1"
                 },
                 {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.stage",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.unstage",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "inline@1"
+                },
+                {
                     "command": "axis-share.jumpToDecoration",
                     "when": "view == axis-share-reviews && viewItem == axisDeco",
                     "group": "1_open@1"
@@ -207,16 +286,22 @@
                     "group": "1_open@1"
                 }
             ],
-            "scm/title": [
+            "commandPalette": [
                 {
-                    "command": "axis-share.identitySettings",
-                    "when": "scmProvider == axis-share",
-                    "group": "navigation@1"
+                    "command": "axis-share.stage",
+                    "when": "false"
                 },
                 {
-                    "command": "axis-share.fetch",
-                    "when": "scmProvider == axis-share",
-                    "group": "navigation@2"
+                    "command": "axis-share.unstage",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.stageAll",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.unstageAll",
+                    "when": "false"
                 }
             ],
             "editor/context": [

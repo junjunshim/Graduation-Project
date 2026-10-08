@@ -103,7 +103,7 @@ let currentBranch: string | undefined;
 
 const sessionChangeEmitter = new vscode.EventEmitter<void>();
 
-/** 세션·브랜치 변경 알림. 뷰들(Repository 트리·SCM)이 이 이벤트로 다시 그린다(§15.10). */
+/** 세션·브랜치 변경 알림. 뷰들(Repository 트리·Changes)이 이 이벤트로 다시 그린다(§15.10). */
 export const onDidChangeSession = sessionChangeEmitter.event;
 
 function emitSessionChange(): void {

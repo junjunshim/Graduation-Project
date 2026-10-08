@@ -105,7 +105,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
         if (session && branch) {
             // 배지·열기 대상이 globalStorage 의 실제 경로 규칙에 의존하지 않도록 가상 URI 를 준다(§15.3).
             item.id = `${branch}|${entry.path}`;
-            item.resourceUri = toResourceUri(session.repoId, branch, entry.path);
+            item.resourceUri = repoResourceUri(session.repoId, branch, entry.path);
         } else {
             item.id = entry.path;
         }
@@ -185,7 +185,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
 }
 
 /** 트리 아이템의 가상 URI. 경로 조각마다 인코딩해 공백·한글이 섞여도 깨지지 않게 한다. */
-function toResourceUri(repoId: number, branch: string, path: string): vscode.Uri {
+export function repoResourceUri(repoId: number, branch: string, path: string): vscode.Uri {
     const encodedPath = path.split('/').map(encodeURIComponent).join('/');
     return vscode.Uri.parse(`${REPO_TREE_SCHEME}://${repoId}/${branchSlug(branch)}/${encodedPath}`);
 }

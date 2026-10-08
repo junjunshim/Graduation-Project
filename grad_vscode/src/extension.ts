@@ -2,12 +2,24 @@ import * as vscode from 'vscode';
 
 import { ApiError } from './api';
 import { showBranchPicker } from './repo/branchPicker';
+import { createChangesView } from './repo/changesProvider';
 import { CONTEXT_HAS_REPO_SESSION, startControlSocket, stopControlSocket } from './repo/controlSocket';
 import { startCursorRenderer, stopCursorRenderer } from './repo/cursorRenderer';
 import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
 import { createPresenceView } from './repo/presenceProvider';
+import { createRepoFileDecorations } from './repo/repoFileDecorations';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
 import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider';
+import {
+    applyStage,
+    applyStageAll,
+    commitInteractive,
+    fetchRemote,
+    refreshStatus,
+    showIdentitySettings,
+    startRepoStatus,
+    stopRepoStatus
+} from './repo/repoStatus';
 
 /**
  * [TASK_11] Axis Share — 서버 로컬 저장소 기반 VSCode 실시간 협업 편집 확장(guest 클라이언트).
@@ -25,11 +37,12 @@ import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider'
  *   src/repo/docSocket.ts          문서 소켓 — 파일 열기·Yjs 텍스트 동기화(§12.4, §12.7)
  *   src/repo/cursorRenderer.ts     원격 커서·선택 영역 렌더(§12.8)
  *   src/repo/userColors.ts         사용자 색 배정(§15.8)
+ *   src/repo/repoStatus.ts         작업 트리 상태 + 스테이징·커밋(§15.7)
+ *   src/repo/repoFileDecorations.ts git 상태 파일 배지(§15.3)
+ *   src/repo/changesProvider.ts    Changes 뷰 — 작업 트리 상태 전용 탭(§15.3)
  *
  * 다음 단계에서 만들 모듈(§15.11):
  *   src/repo/decorationProvider.ts       Reviews 트리(§15.6)
- *   src/repo/repoFileDecorations.ts      git 상태 배지(FileDecorationProvider)
- *   src/repo/scmProvider.ts              SCM provider(§15.7)
  */
 
 /**
@@ -41,6 +54,8 @@ const VIEW_REVIEWS = 'axis-share-reviews';
 /** package.json 에 선언한 커맨드 전체(§15.11, §15.3 컨텍스트 메뉴 포함). */
 const COMMANDS: readonly string[] = [
     'axis-share.switchBranch',
+    'axis-share.stage',
+    'axis-share.unstage',
     'axis-share.newFile',
     'axis-share.newFolder',
     'axis-share.renameEntry',
@@ -53,7 +68,10 @@ const COMMANDS: readonly string[] = [
     'axis-share.deleteDecoration',
     'axis-share.toggleDecorations',
     'axis-share.identitySettings',
-    'axis-share.fetch'
+    'axis-share.fetch',
+    'axis-share.commit',
+    'axis-share.stageAll',
+    'axis-share.unstageAll'
 ];
 
 /**
@@ -163,6 +181,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // 2) 뷰 등록(§15.2). Repository·Editing 은 실제 데이터를 그린다. Reviews 는 collab(리뷰 인덱스)이
     //    있어야 하므로 그때까지 자리표시자를 쓴다.
     const repoTree = createRepoTreeView(context);
+    createChangesView(context);
     createPresenceView(context);
     registerEmptyView(context, VIEW_REVIEWS);
 
@@ -178,14 +197,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     //      좌표 해석은 클라이언트만 할 수 있으므로 서버(collab)는 손대지 않는다(§8.10).
     startCursorRenderer(context);
 
+    // 3-3) 작업 트리 상태(§15.7). Changes 뷰와 파일 배지가 함께 읽는 상태를 여기서 한 번만 조회한다.
+    //      네이티브 소스 제어(SCM)는 쓰지 않는다 — 상태도 커밋도 Changes 뷰 한 곳에서 다룬다(§15.7).
+    startRepoStatus(context);
+
+    // 3-4) 파일 상태 배지(§15.3). Repository 트리와 Changes 뷰 아이템에 같은 배지를 붙인다.
+    createRepoFileDecorations(context);
+
     // 4) 커맨드 등록(§15.11). 구현한 것만 실제 핸들러를 붙이고 나머지는 자리표시자로 남긴다.
-    const implementedCommands: Record<string, () => void> = {
-        'axis-share.refresh': () => repoTree.provider.refresh(),
+    const implementedCommands: Record<string, (...args: unknown[]) => void> = {
+        // 새로 고침은 트리와 작업 트리 상태(Changes)를 함께 다시 받는다.
+        'axis-share.refresh': () => {
+            repoTree.provider.refresh();
+            void refreshStatus();
+        },
         'axis-share.switchBranch': () => {
             void showBranchPicker();
         },
         'axis-share.openFile': (entry?: unknown) => {
             void openRepoFile(entry);
+        },
+        // Changes 뷰 아이템의 인라인 $(add)/$(remove) 와 컨텍스트 메뉴가 부른다(§15.7).
+        'axis-share.stage': (...args: unknown[]) => {
+            void applyStage(true, args);
+        },
+        'axis-share.unstage': (...args: unknown[]) => {
+            void applyStage(false, args);
+        },
+        // Changes 뷰 타이틀의 $(add)/$(remove) — 현재 브랜치의 모든 변경을 한 번에 옮긴다.
+        'axis-share.stageAll': () => {
+            void applyStageAll(true);
+        },
+        'axis-share.unstageAll': () => {
+            void applyStageAll(false);
+        },
+        // Changes 뷰 타이틀의 $(check). 메시지 입력은 이 커맨드가 직접 띄운다(§15.7).
+        'axis-share.commit': () => {
+            void commitInteractive();
+        },
+        // Changes 뷰 타이틀의 ⚙ / ⟳ (§15.7).
+        'axis-share.identitySettings': () => {
+            void showIdentitySettings();
+        },
+        'axis-share.fetch': () => {
+            void fetchRemote();
         }
     };
 
@@ -215,4 +270,5 @@ export function deactivate(): void {
     stopControlSocket();
     stopDocSocket();
     stopCursorRenderer();
+    stopRepoStatus();
 }

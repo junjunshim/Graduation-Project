@@ -246,7 +246,7 @@ async function openFile(path: string): Promise<void> {
 
 /** `opened` 를 받아 Y.Doc 을 만들고, 로컬 사본을 쓴 뒤 에디터로 연다(§12.4 열기 순서 5~6). */
 async function materialize(repoId: number, branch: string, opened: OpenedFrame): Promise<void> {
-    const uri = localUri(repoId, branch, opened.path);
+    const uri = localCopyUri(repoId, branch, opened.path);
 
     const doc = new Y.Doc();
     Y.applyUpdate(doc, b64ToBytes(opened.state), 'remote');
@@ -286,8 +286,11 @@ async function materialize(repoId: number, branch: string, opened: OpenedFrame):
     }
 }
 
-/** 로컬 작업 사본 경로(§10.1): `globalStorage/repo-<id>/branch-<slug>/<path>`. */
-function localUri(repoId: number, branch: string, path: string): vscode.Uri {
+/**
+ * 로컬 작업 사본 경로(§10.1): `globalStorage/repo-<id>/branch-<slug>/<path>`.
+ * 문서 소켓이 만들고 에디터에 열린 문서가 이 경로를 쓴다 — 규칙은 이 한 곳에만 둔다.
+ */
+export function localCopyUri(repoId: number, branch: string, path: string): vscode.Uri {
     const root = extensionContext?.globalStorageUri;
     if (!root) {
         throw new Error('확장 저장 경로를 알 수 없습니다. 창을 다시 열어 주세요.');

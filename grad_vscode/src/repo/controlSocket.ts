@@ -139,7 +139,7 @@ const eventEmitter = new vscode.EventEmitter<ControlEvent>();
 /** 소켓 상태 변경(입장 완료 시점 포함, §15.10). 뷰·상태 표시가 이 이벤트로 갱신한다. */
 export const onDidChangeControlState = stateEmitter.event;
 
-/** 서버 이벤트 전달. 소비자(트리·SCM)가 `type` 으로 분기한다(§15.10). */
+/** 서버 이벤트 전달. 소비자(트리·Changes 뷰)가 `type` 으로 분기한다(§15.10). */
 export const onDidReceiveControlEvent = eventEmitter.event;
 
 /** 현재 소켓 상태. `joined` 라야 그 브랜치에 편집 세션이 있다고 볼 수 있다(§10.2). */

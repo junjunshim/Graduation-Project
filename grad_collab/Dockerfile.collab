@@ -9,8 +9,9 @@ WORKDIR /app/grad_collab
 
 # 락파일까지 복사해 버전을 고정한다(npm ci). package.json 을 바꾸면 락파일도 함께 갱신해야 한다.
 COPY grad_collab/package.json grad_collab/package-lock.json ./
-# 타입스크립트 빌드에 devDependencies 가 필요하므로 먼저 전부 설치한다.
-RUN npm ci --no-audit --no-fund
+# 주의: ENV NODE_ENV=production 상태에서는 npm 이 devDependencies 를 건너뛰어
+#       typescript(tsc) 가 설치되지 않는다. 빌드용으로는 --include=dev 를 명시한다.
+RUN npm ci --include=dev --no-audit --no-fund
 
 COPY grad_collab/tsconfig.json ./
 COPY grad_collab/src ./src

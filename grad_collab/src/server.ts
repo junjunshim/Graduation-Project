@@ -518,6 +518,10 @@ async function handleResetRequest(req: http.IncomingMessage, res: http.ServerRes
         });
         applied += 1;
       }
+      // 되돌린 내용을 디스크에 내려놓을 때까지 기다린다. 응답을 받은 C++ 이 곧바로 git 체크아웃을 돌리는데,
+      // git 은 그 경로가 비어 있다고 본 뒤 O_CREAT|O_EXCL 로 만든다 — 여기서 기다리지 않으면 이 쓰기와 겹쳐
+      // `unable to create file <path>: File exists` 로 죽는다(§12.11.1).
+      await room.docs.flush(file.path).catch(() => undefined);
     }
   }
 

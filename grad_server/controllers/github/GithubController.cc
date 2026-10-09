@@ -10,8 +10,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <future>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -634,12 +636,19 @@ Json::Value syncToJson(const SyncState &state) {
     return out;
 }
 
-// 되돌리기를 collab 에 알린다 (§12.11.1). collab 이 열고 있는 doc 을 되돌린 내용으로 맞춰야
-// 뒤늦은 flush 가 되돌린 파일을 덮어쓰지 않는다. 응답은 기다리지 않는다(fire-and-forget) —
-// collab 이 죽어 있어도 되돌리기 자체는 성공해야 한다. 그때는 메모리에 doc 이 없으므로 되돌릴 것도 없다.
-void notifyCollabReset(int repoId, const std::string &branch, const Json::Value &files) {
+// collab 이 되돌린 내용을 디스크에 내려놓을 때까지 기다리는 상한(초). 같은 호스트 안이라 짧아도 충분하고,
+// 이 시간을 넘기면 collab 이 죽었다고 보고 그냥 진행한다.
+constexpr int kCollabResetWaitSeconds = 3;
+
+// 되돌리기를 collab 에 알리고 **끝날 때까지 기다린다** (§12.11.1).
+//
+// 왜 기다리는가: git 은 체크아웃할 때 그 경로가 비어 있다고 본 뒤 O_CREAT|O_EXCL 로 새로 만든다(entry.c).
+// 그 사이에 collab 이 같은 경로를 쓰면 git 이 `unable to create file <path>: File exists` 로 죽는다(실측).
+// 그래서 collab 이 되돌린 내용을 디스크에 내려놓고 응답할 때까지 기다린 뒤에 git 을 돌린다.
+// collab 이 없거나 제때 응답하지 않으면 기다리지 않고 진행한다 — 되돌리기 자체는 실패시키지 않는다.
+bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &files) {
     if (files.empty()) {
-        return;
+        return true; // 되돌릴 doc 이 없다 — 맞출 것도 없다.
     }
 
     const char *baseValue = std::getenv("COLLAB_BASE");
@@ -647,7 +656,7 @@ void notifyCollabReset(int repoId, const std::string &branch, const Json::Value 
     const std::string collabBase = (baseValue != nullptr) ? std::string(baseValue) : std::string();
     const std::string token = (tokenValue != nullptr) ? std::string(tokenValue) : std::string();
     if (collabBase.empty() || token.empty()) {
-        return;
+        return false;
     }
 
     Json::Value body;
@@ -655,25 +664,34 @@ void notifyCollabReset(int repoId, const std::string &branch, const Json::Value 
     body["branch"] = branch;
     body["files"] = files;
 
-    // HttpClient 는 생성한 루프에서 호출해야 한다. 우리는 작업 스레드에 있으므로 메인 루프로 올린다.
-    app().getLoop()->queueInLoop([collabBase, token, body, repoId]() {
+    // HttpClient 는 생성한 루프에서 호출해야 한다. 우리는 작업 스레드에 있으므로 메인 루프로 올리고,
+    // 이 스레드는 promise 로 응답을 기다린다 — 기다리지 않으면 collab 의 쓰기와 git 의 체크아웃이 겹친다.
+    auto done = std::make_shared<std::promise<bool>>();
+    std::future<bool> future = done->get_future();
+    app().getLoop()->queueInLoop([collabBase, token, body, repoId, done]() {
         auto client = HttpClient::newHttpClient(collabBase, app().getLoop());
         auto request = HttpRequest::newHttpJsonRequest(body);
         request->setMethod(Post);
         request->setPath("/internal/collab/files/reset");
         request->addHeader("X-Internal-Token", token);
 
-        client->sendRequest(request, [client, repoId](ReqResult result, const HttpResponsePtr &response) {
-            if (result != ReqResult::Ok || response == nullptr) {
-                LOG_WARN << "collab 되돌리기 통보 실패(무시). repo=" << repoId;
-                return;
+        client->sendRequest(request, [client, repoId, done](ReqResult result, const HttpResponsePtr &response) {
+            const bool ok = (result == ReqResult::Ok && response != nullptr &&
+                             response->getStatusCode() == k200OK);
+            if (!ok) {
+                LOG_WARN << "collab 되돌리기 통보 실패. repo=" << repoId
+                         << " result=" << static_cast<int>(result)
+                         << " status=" << ((response == nullptr) ? 0 : static_cast<int>(response->getStatusCode()));
             }
-            if (response->getStatusCode() != k200OK) {
-                LOG_WARN << "collab 되돌리기 통보 거부. repo=" << repoId
-                         << " status=" << static_cast<int>(response->getStatusCode());
-            }
+            done->set_value(ok);
         });
     });
+
+    if (future.wait_for(std::chrono::seconds(kCollabResetWaitSeconds)) != std::future_status::ready) {
+        LOG_WARN << "collab 되돌리기 통보 응답 없음(기다리지 않고 진행). repo=" << repoId;
+        return false;
+    }
+    return future.get();
 }
 
 // push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다 (§12.11).
@@ -1718,12 +1736,20 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
             files.append(file);
         }
 
-        // 2) collab 을 먼저 맞춘다. 열려 있는 doc 이 옛 텍스트를 그대로 들고 있으면 다음 flush 가 되돌리기를 무른다.
-        notifyCollabReset(repoId, branch, files);
+        // 2) collab 을 먼저 맞추고 **끝날 때까지 기다린다**. 열려 있는 doc 이 옛 텍스트를 그대로 들고 있으면
+        //    다음 flush 가 되돌리기를 무르고, 늦게 도착한 그 쓰기가 아래 git 체크아웃과 겹치면 `File exists` 로 죽는다.
+        resetCollabDocs(repoId, branch, files);
 
         // 3) 작업 트리와 인덱스를 되돌린다.
         for (const auto &path : tracked) {
             auto restored = GitRunner::run(workDir, {"restore", "--source=HEAD", "--staged", "--worktree", "--", path});
+            if (!restored.ok()) {
+                // git 체크아웃은 그 경로가 비어 있다고 본 뒤 O_CREAT|O_EXCL 로 새로 만든다(entry.c). 위에서 collab 을
+                // 기다렸어도 그 사이 누가 그 경로를 만들면 `File exists` 로 죽는다 — 경로를 비우고 한 번 더 시도한다.
+                std::error_code ignored;
+                std::filesystem::remove(workDir + "/" + path, ignored);
+                restored = GitRunner::run(workDir, {"restore", "--source=HEAD", "--staged", "--worktree", "--", path});
+            }
             if (!restored.ok()) {
                 return errorResponse("P0807", "되돌리지 못했습니다: " + trim(restored.err), k500InternalServerError);
             }

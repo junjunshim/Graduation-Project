@@ -427,6 +427,7 @@ function handleFrame(client: RoomClient, frame: ClientFrame): Promise<void> | vo
 // 되돌리기 통보(§12.11.1). C++ 이 HEAD 내용(또는 "지워라")을 만들어 넘기면, 열려 있는 doc 을 그 내용으로 맞춘다.
 // nginx 는 /internal/* 를 404 로 막고, collab 은 compose 내부망에서만 닿는다. 그 위에 토큰까지 본다.
 const RESET_PATH = '/internal/collab/files/reset';
+const FLUSH_PATH = '/internal/collab/flush';
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 /** 내부 토큰을 상수 시간으로 비교한다(fail-closed — 토큰이 없으면 아무 요청도 받지 않는다). */
@@ -529,6 +530,66 @@ async function handleResetRequest(req: http.IncomingMessage, res: http.ServerRes
   sendJson(res, 200, { status: 'success', data: [{ applied, deleted }], message: '되돌렸습니다.' });
 }
 
+/**
+ * 강제 flush(§12.11). C++ 이 커밋·스테이징 **직전**에 부른다 — 편집은 디바운스(기본 2초) 뒤에
+ * 파일로 내려가므로, 기다리지 않고 git 을 돌리면 마지막 편집이 커밋·인덱스에서 빠진다. 응답은
+ * "이 브랜치의 열린 doc 을 전부 내려쓰려고 시도했다" 는 뜻이고, 파일별 실패는 여기 로그에 남는다
+ * (호출자를 막지는 않는다).
+ */
+async function handleFlushRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!internalAuthorized(req)) {
+    log('warn', 'flush 요청 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.');
+    sendJson(res, 401, { status: 'error', code: '401', message: '내부 인증에 실패했습니다.' });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readBody(req));
+  } catch (error) {
+    sendJson(res, 400, { status: 'error', code: '400', message: `요청 본문을 읽지 못했습니다: ${(error as Error).message}` });
+    return;
+  }
+
+  const body = parsed as { repo_id?: unknown; branch?: unknown };
+  const repoId = typeof body.repo_id === 'number' ? body.repo_id : Number.NaN;
+  const branch = typeof body.branch === 'string' ? body.branch : '';
+  if (!Number.isInteger(repoId) || branch.length === 0) {
+    sendJson(res, 400, { status: 'error', code: '400', message: 'repo_id 와 branch 가 필요합니다.' });
+    return;
+  }
+
+  const room = rooms.get(repoId, branch);
+  if (!room) {
+    // 열린 doc 이 없다 — 파일은 이미 최신이므로 내려쓸 것도 없다.
+    sendJson(res, 200, { status: 'success', data: [{ flushed: 0, failed: 0 }], message: '열린 문서가 없습니다.' });
+    return;
+  }
+
+  const paths = room.docs.paths();
+  const failed: string[] = [];
+  for (const filePath of paths) {
+    try {
+      await room.docs.flush(filePath);
+    } catch (error) {
+      // 파일 하나가 실패해도 나머지는 계속 내려쓴다(호출자가 로그로 확인한다).
+      failed.push(filePath);
+      log('error', '강제 flush 실패', { path: filePath, reason: (error as Error).message });
+    }
+  }
+
+  if (failed.length > 0) {
+    log('warn', '강제 flush 일부 실패', { repo: repoId, branch, failed });
+  } else {
+    log('info', '강제 flush', { repo: repoId, branch, flushed: paths.length });
+  }
+  sendJson(res, 200, {
+    status: 'success',
+    data: [{ flushed: paths.length - failed.length, failed: failed.length }],
+    message: '내려썼습니다.',
+  });
+}
+
 // --- HTTP(healthz) + 업그레이드 -------------------------------------------------------------
 
 const server = http.createServer((req, res) => {
@@ -536,6 +597,14 @@ const server = http.createServer((req, res) => {
     void handleResetRequest(req, res).catch((error: unknown) => {
       log('error', '되돌리기 처리 실패', { reason: (error as Error).message });
       sendJson(res, 500, { status: 'error', code: '500', message: '되돌리기를 처리하지 못했습니다.' });
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === FLUSH_PATH) {
+    void handleFlushRequest(req, res).catch((error: unknown) => {
+      log('error', 'flush 처리 실패', { reason: (error as Error).message });
+      sendJson(res, 500, { status: 'error', code: '500', message: 'flush 를 처리하지 못했습니다.' });
     });
     return;
   }

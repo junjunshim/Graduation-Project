@@ -636,21 +636,19 @@ Json::Value syncToJson(const SyncState &state) {
     return out;
 }
 
-// collab 이 되돌린 내용을 디스크에 내려놓을 때까지 기다리는 상한(초). 같은 호스트 안이라 짧아도 충분하고,
+// collab 내부 API 를 부르고 **응답을 기다리는** 상한(초). 같은 호스트 안이라 짧아도 충분하고,
 // 이 시간을 넘기면 collab 이 죽었다고 보고 그냥 진행한다.
-constexpr int kCollabResetWaitSeconds = 3;
+constexpr int kCollabCallWaitSeconds = 3;
 
-// 되돌리기를 collab 에 알리고 **끝날 때까지 기다린다** (§12.11.1).
+// collab 의 내부 API 를 부르고 **끝날 때까지 기다린다** (§12.11, §12.11.1).
 //
-// 왜 기다리는가: git 은 체크아웃할 때 그 경로가 비어 있다고 본 뒤 O_CREAT|O_EXCL 로 새로 만든다(entry.c).
-// 그 사이에 collab 이 같은 경로를 쓰면 git 이 `unable to create file <path>: File exists` 로 죽는다(실측).
-// 그래서 collab 이 되돌린 내용을 디스크에 내려놓고 응답할 때까지 기다린 뒤에 git 을 돌린다.
-// collab 이 없거나 제때 응답하지 않으면 기다리지 않고 진행한다 — 되돌리기 자체는 실패시키지 않는다.
-bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &files) {
-    if (files.empty()) {
-        return true; // 되돌릴 doc 이 없다 — 맞출 것도 없다.
-    }
-
+// 왜 기다리는가: 둘 다 "collab 이 파일을 내려쓴 뒤에 git 을 돌려야" 하기 때문이다.
+//   - 되돌리기: git 은 체크아웃할 때 그 경로가 비어 있다고 본 뒤 O_CREAT|O_EXCL 로 새로 만든다(entry.c).
+//     그 사이에 collab 이 같은 경로를 쓰면 `unable to create file <path>: File exists` 로 죽는다(실측).
+//   - 커밋: 편집은 디바운스(기본 2초) 뒤에 파일로 내려가므로, 안 기다리면 마지막 편집이 빠진 채 커밋된다.
+// collab 이 없거나 제때 응답하지 않으면 false 를 돌려주고 호출자는 그대로 진행한다 — collab 이 죽어
+// 있어도 되돌리기·커밋 자체를 실패시키지 않는다(그때는 메모리에 doc 이 없어 내려쓸 것도 없다).
+bool callCollabInternal(const std::string &path, const Json::Value &body) {
     const char *baseValue = std::getenv("COLLAB_BASE");
     const char *tokenValue = std::getenv("INTERNAL_TOKEN");
     const std::string collabBase = (baseValue != nullptr) ? std::string(baseValue) : std::string();
@@ -659,27 +657,24 @@ bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &f
         return false;
     }
 
-    Json::Value body;
-    body["repo_id"] = repoId;
-    body["branch"] = branch;
-    body["files"] = files;
+    const int repoId = body["repo_id"].isInt() ? body["repo_id"].asInt() : 0;
 
     // HttpClient 는 생성한 루프에서 호출해야 한다. 우리는 작업 스레드에 있으므로 메인 루프로 올리고,
-    // 이 스레드는 promise 로 응답을 기다린다 — 기다리지 않으면 collab 의 쓰기와 git 의 체크아웃이 겹친다.
+    // 이 스레드는 promise 로 응답을 기다린다 — 기다리지 않으면 collab 의 쓰기와 git 작업이 겹친다.
     auto done = std::make_shared<std::promise<bool>>();
     std::future<bool> future = done->get_future();
-    app().getLoop()->queueInLoop([collabBase, token, body, repoId, done]() {
+    app().getLoop()->queueInLoop([collabBase, token, path, body, repoId, done]() {
         auto client = HttpClient::newHttpClient(collabBase, app().getLoop());
         auto request = HttpRequest::newHttpJsonRequest(body);
         request->setMethod(Post);
-        request->setPath("/internal/collab/files/reset");
+        request->setPath(path);
         request->addHeader("X-Internal-Token", token);
 
-        client->sendRequest(request, [client, repoId, done](ReqResult result, const HttpResponsePtr &response) {
+        client->sendRequest(request, [client, path, repoId, done](ReqResult result, const HttpResponsePtr &response) {
             const bool ok = (result == ReqResult::Ok && response != nullptr &&
                              response->getStatusCode() == k200OK);
             if (!ok) {
-                LOG_WARN << "collab 되돌리기 통보 실패. repo=" << repoId
+                LOG_WARN << "collab 호출 실패. path=" << path << " repo=" << repoId
                          << " result=" << static_cast<int>(result)
                          << " status=" << ((response == nullptr) ? 0 : static_cast<int>(response->getStatusCode()));
             }
@@ -687,11 +682,33 @@ bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &f
         });
     });
 
-    if (future.wait_for(std::chrono::seconds(kCollabResetWaitSeconds)) != std::future_status::ready) {
-        LOG_WARN << "collab 되돌리기 통보 응답 없음(기다리지 않고 진행). repo=" << repoId;
+    if (future.wait_for(std::chrono::seconds(kCollabCallWaitSeconds)) != std::future_status::ready) {
+        LOG_WARN << "collab 호출 응답 없음(기다리지 않고 진행). path=" << path << " repo=" << repoId;
         return false;
     }
     return future.get();
+}
+
+// 되돌리기(§12.11.1): 열려 있는 doc 을 되돌린 내용으로 맞춘다.
+bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &files) {
+    if (files.empty()) {
+        return true; // 되돌릴 doc 이 없다 — 맞출 것도 없다.
+    }
+
+    Json::Value body;
+    body["repo_id"] = repoId;
+    body["branch"] = branch;
+    body["files"] = files;
+    return callCollabInternal("/internal/collab/files/reset", body);
+}
+
+// 커밋 전 강제 flush(§12.11): 아직 파일로 내려가지 않은 편집을 먼저 내려쓴다.
+// 이걸 빼면 편집 후 디바운스(2초) 안에 커밋했을 때 그 편집이 커밋에서 빠진다.
+bool flushCollabDocs(int repoId, const std::string &branch) {
+    Json::Value body;
+    body["repo_id"] = repoId;
+    body["branch"] = branch;
+    return callCollabInternal("/internal/collab/flush", body);
 }
 
 // 작업 트리·인덱스 상태가 바뀐 것을 같은 브랜치 접속자에게 알린다 (§15.10).
@@ -1597,8 +1614,9 @@ void GithubController::getStatus(const HttpRequestPtr &req, std::function<void(c
     });
 }
 
-// POST /api/github/repos/stage — 커밋 대상 표시.
-// 실제 'git add' 는 커밋 시점에 flush 뒤에 다시 한다(§12.11). 여기서는 표시만 바꾼다.
+// POST /api/github/repos/stage — 실제 'git add' 로 인덱스에 올린다.
+// 편집은 collab 이 디바운스(기본 2초) 뒤에 파일로 내려가므로, 그 전에 누르면 디스크의 옛 내용이
+// 인덱스에 올라갈 수 있다 — 그래서 add 앞에서 그 방을 강제 flush 한다(§12.11).
 void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
     if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
@@ -1626,6 +1644,10 @@ void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
             return failure;
         }
+
+        // 방금 친 내용이 아직 파일이 되지 않았을 수 있다 — 옛 내용이 인덱스에 올라가지 않게 먼저 내려쓴다.
+        // collab 이 죽어 있으면 그냥 진행한다(커밋과 같은 규칙: collab 때문에 스테이징을 막지 않는다).
+        flushCollabDocs(repoId, branch);
 
         auto staged = GitRunner::stageAdd(workDir, paths);
         if (!staged.ok()) {
@@ -1941,8 +1963,11 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         std::lock_guard<std::mutex> commitGuard(*repoLock(repoId));
 
         // 5) 커밋 대상 스테이징 → 커밋.
-        //    주의: 실제 'git add' 는 그 브랜치의 collab flush 가 끝난 뒤에 해야 한다(§12.11).
-        // TODO(M3): collab 연결 후 이 지점 앞에 POST /internal/collab/flush { repo_id, branch } 를 넣는다.
+        //    실제 'git add' 는 그 브랜치의 collab flush 가 끝난 뒤에 해야 한다(§12.11) — 편집은
+        //    디바운스(기본 2초) 뒤에 파일이 되므로, 안 기다리면 방금 친 내용이 커밋에서 빠진다.
+        //    collab 이 없거나 응답이 없으면 그대로 진행한다: 커밋 자체를 막지 않는다.
+        flushCollabDocs(repoId, branch);
+
         auto staged = paths.empty() ? GitRunner::run(workDir, {"add", "-A"})
                                     : GitRunner::stageAdd(workDir, paths);
         if (!staged.ok()) {

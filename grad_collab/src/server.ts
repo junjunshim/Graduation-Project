@@ -17,7 +17,7 @@ import { ClientFrame, parseClientFrame } from './protocol';
 import { CollabResolveError, resolveRepo } from './repoResolver';
 import { ReviewRecord } from './reviewIndex';
 import { Room, RoomClient, RoomRegistry } from './rooms';
-import { FileNotEditableError } from './store';
+import { FileNotEditableError, removeCollabDir } from './store';
 
 // 문서 소켓 서버 (TASK_11 §9.2 / §9.5 / §14.1).
 //
@@ -466,6 +466,7 @@ function handleFrame(client: RoomClient, frame: ClientFrame): Promise<void> | vo
 const RESET_PATH = '/internal/collab/files/reset';
 const FLUSH_PATH = '/internal/collab/flush';
 const DROP_PATH = '/internal/collab/files/drop';
+const BRANCH_DROP_PATH = '/internal/collab/branch/drop';
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 /** 내부 토큰을 상수 시간으로 비교한다(fail-closed — 토큰이 없으면 아무 요청도 받지 않는다). */
@@ -703,6 +704,74 @@ async function handleDropRequest(req: http.IncomingMessage, res: http.ServerResp
   log('info', 'doc 정리(트리 변경)', { repo: repoId, branch, targets: paths.length, dropped });
   sendJson(res, 200, { status: 'success', data: [{ dropped }], message: '문서를 정리했습니다.' });
 }
+/**
+ * 브랜치 삭제 통보(§9.7). C++ 가 그 브랜치의 worktree 를 지우기 **전에** 부른다.
+ *
+ * 방을 버리고(내려쓰지 않는다) 브랜치 디렉터리(`.ydoc`·`reviews.json`)를 통째로 지운다.
+ * 남겨 두면 (가) 남은 doc 의 flush 가 사라진 작업 디렉터리를 되살리고,
+ * (나) 같은 이름의 브랜치를 다시 만들었을 때 열기(§9.3 — `.ydoc` 우선)가 옛 내용을 되살린다.
+ */
+async function handleBranchDropRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!internalAuthorized(req)) {
+    log('warn', '브랜치 정리 요청 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.');
+    sendJson(res, 401, { status: 'error', code: '401', message: '내부 인증에 실패했습니다.' });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readBody(req));
+  } catch (error) {
+    sendJson(res, 400, { status: 'error', code: '400', message: `요청 본문을 읽지 못했습니다: ${(error as Error).message}` });
+    return;
+  }
+
+  const body = parsed as { repo_id?: unknown; branch?: unknown };
+  const repoId = typeof body.repo_id === 'number' ? body.repo_id : Number.NaN;
+  const branch = typeof body.branch === 'string' ? body.branch : '';
+  if (!Number.isInteger(repoId) || branch.length === 0) {
+    sendJson(res, 400, { status: 'error', code: '400', message: 'repo_id 와 branch 가 필요합니다.' });
+    return;
+  }
+
+  // 방이 없어도(편집자가 아무도 없었어도) `.ydoc` 은 브랜치 디렉터리에 남아 있다 — 경로는 backend 에서 받는다.
+  const room = rooms.get(repoId, branch);
+  let collabDir = room?.repo.collabDir;
+  if (!collabDir) {
+    try {
+      collabDir = (await resolveRepo(repoId, branch)).collabDir;
+    } catch (error) {
+      // 이미 브랜치가 사라졌다면 지울 대상도 없다 — worktree 정리를 막지 않도록 성공으로 답한다.
+      log('warn', '브랜치 상태 정리 건너뜀(경로 해석 실패)', {
+        repo: repoId,
+        branch,
+        reason: (error as Error).message,
+      });
+      sendJson(res, 200, {
+        status: 'success',
+        data: [{ discarded_docs: 0, removed: false }],
+        message: '정리할 상태가 없습니다.',
+      });
+      return;
+    }
+  }
+
+  const discarded = room ? room.docs.openCount : 0;
+  if (room) {
+    await rooms.abandon(room);
+  }
+  await removeCollabDir(collabDir).catch((error: unknown) => {
+    log('error', '브랜치 상태 삭제 실패', { repo: repoId, branch, reason: (error as Error).message });
+  });
+
+  log('info', '브랜치 상태 정리(브랜치 삭제)', { repo: repoId, branch, discarded });
+  sendJson(res, 200, {
+    status: 'success',
+    data: [{ discarded_docs: discarded, removed: true }],
+    message: '브랜치 상태를 정리했습니다.',
+  });
+}
+
 // --- HTTP(healthz) + 업그레이드 -------------------------------------------------------------
 
 
@@ -727,6 +796,14 @@ const server = http.createServer((req, res) => {
     void handleDropRequest(req, res).catch((error: unknown) => {
       log('error', 'doc 정리 처리 실패', { reason: (error as Error).message });
       sendJson(res, 500, { status: 'error', code: '500', message: '문서를 정리하지 못했습니다.' });
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === BRANCH_DROP_PATH) {
+    void handleBranchDropRequest(req, res).catch((error: unknown) => {
+      log('error', '브랜치 정리 처리 실패', { reason: (error as Error).message });
+      sendJson(res, 500, { status: 'error', code: '500', message: '브랜치 상태를 정리하지 못했습니다.' });
     });
     return;
   }

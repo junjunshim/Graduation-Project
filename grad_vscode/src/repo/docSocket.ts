@@ -474,8 +474,9 @@ async function handleDocReset(frame: Record<string, unknown>): Promise<void> {
         // 로컬 사본은 언제든 다시 만들 수 있는 캐시다(§10.1) — 지우지 못해도 무해하다.
     }
 
-    // 트리 변경(삭제·이름변경)으로 닫힌 것이면 안내하지 않는다 — 되돌리기와 원인이 다르다(§12.5).
-    if (asString(frame.reason) !== 'tree_changed') {
+    // 서버가 파일·브랜치를 지워 닫은 것이면 안내하지 않는다 — 되돌리기와 원인이 다르다(§12.5, §9.7).
+    const reason = asString(frame.reason);
+    if (reason !== 'tree_changed' && reason !== 'branch_deleted') {
         void vscode.window.showInformationMessage(`Axis Share: ${path} 이(가) 되돌려져 편집기에서 닫혔습니다.`);
     }
 }

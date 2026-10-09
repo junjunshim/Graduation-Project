@@ -177,6 +177,16 @@ export async function removeDocState(collabDir: string, filePath: string): Promi
   await fsp.rm(docStatePath(collabDir, filePath), { force: true });
 }
 
+/**
+ * 브랜치 디렉터리(`.ydoc` 전부 + `reviews.json`)를 통째로 지운다(브랜치 삭제, §9.7).
+ *
+ * 경로별로 지우지 않고 디렉터리를 지우는 이유: 메모리에 없는 doc 의 `.ydoc` 도 남아 있기 때문이다.
+ * 남겨 두면 같은 이름의 브랜치를 다시 만들었을 때 열기(§9.3 — `.ydoc` 우선)가 옛 내용을 되살린다.
+ */
+export async function removeCollabDir(collabDir: string): Promise<void> {
+  await fsp.rm(collabDir, { recursive: true, force: true });
+}
+
 /** 되돌리기로 지워야 하는 worktree 파일을 지운다(§12.11.1). 없어도 조용히 성공한다. */
 export async function removeFile(worktreeDir: string, filePath: string): Promise<void> {
   await fsp.rm(safeJoin(worktreeDir, filePath), { force: true });

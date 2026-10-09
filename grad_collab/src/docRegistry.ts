@@ -322,6 +322,30 @@ export class DocRegistry {
     this.docs.clear();
   }
 
+  /**
+   * 방을 버린다(브랜치 삭제, §9.7). `dispose` 와 달리 **내려쓰지 않는다** — 브랜치가 사라져 되쓸
+   * worktree 가 없고, 남은 doc 이 flush 하면 `writeAtomic` 의 `mkdir(recursive)` 이 지운 작업
+   * 디렉터리를 되살린다.
+   *
+   * 이미 시작된 쓰기가 끝나기를 기다린 **뒤에** 반환한다 — 호출자가 그 다음에 디렉터리를 지운다.
+   */
+  async abandon(): Promise<void> {
+    clearInterval(this.autosave);
+    const entries = [...this.docs.values()];
+    for (const entry of entries) {
+      if (entry.flushTimer) clearTimeout(entry.flushTimer);
+      if (entry.unloadTimer) clearTimeout(entry.unloadTimer);
+      entry.flushTimer = undefined;
+      entry.unloadTimer = undefined;
+    }
+    // 맵에서 먼저 놓는다 — 진행 중이던 쓰기의 후속(재예약)이 경로 조회에 실패해 멈춘다.
+    this.docs.clear();
+    for (const entry of entries) {
+      await entry.chain.catch(() => undefined);
+    }
+    log('info', 'doc 버림(브랜치 삭제)', { count: entries.length });
+  }
+
   // --- 리뷰 데코레이션 (§9.5: 파일의 Y.Doc 안에 저장, 서버는 내용을 해석하지 않는다) -------
 
   /** 데코레이션을 저장한다. `payload` 는 클라이언트가 보낸 JSON 그대로다. */

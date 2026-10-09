@@ -99,6 +99,38 @@ export class RoomRegistry {
     log('info', 'room closed', { repo: room.repo.repoId, branch: room.repo.branch });
   }
 
+  /**
+   * 브랜치가 삭제된 방을 버린다(§9.7). `close` 와 달리 **내려쓰지 않는다** — 되쓸 worktree 가 없고,
+   * 남은 doc 의 flush 가 사라진 작업 디렉터리를 되살리기 때문이다(`DocRegistry.abandon` 참고).
+   *
+   * 열려 있던 탭은 `doc_reset` 으로 닫는다("되돌리기" 안내는 띄우지 않는다). 접속자를 방에서
+   * 떼어내 늦게 도착한 프레임이 죽은 방으로 가지 않게 한다 — 확장은 제어 소켓의 `branch_deleted`
+   * 로 기본 브랜치로 옮기고, 다음 파일 열기에서 새 방에 붙는다(§10.3 / §12.2).
+   */
+  async abandon(room: Room): Promise<void> {
+    this.rooms.delete(room.key);
+
+    for (const filePath of room.docs.paths()) {
+      room.broadcastWatchers(filePath, {
+        type: 'doc_reset',
+        path: filePath,
+        deleted: true,
+        reason: 'branch_deleted',
+      });
+    }
+
+    const members = room.clients.size;
+    for (const client of room.clients) {
+      client.room = null;
+    }
+    room.clients.clear();
+    room.presence.clear();
+
+    await room.docs.abandon();
+    room.reviews.dispose();
+    log('info', 'room abandoned', { repo: room.repo.repoId, branch: room.repo.branch, members });
+  }
+
   /** 서버 종료 — 모든 방을 내려쓴다. */
   async disposeAll(): Promise<void> {
     const rooms = [...this.rooms.values()];

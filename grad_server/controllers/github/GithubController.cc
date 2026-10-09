@@ -1032,6 +1032,19 @@ bool dropCollabDocs(int repoId, const std::string &branch, const std::vector<std
     return callCollabInternal("/internal/collab/files/drop", body);
 }
 
+// collab 에게 "이 브랜치의 방과 영속화 상태를 버려라" 라고 알린다(브랜치 삭제, §9.7).
+// worktree 를 지운 **뒤**에 부르면 남은 doc 의 flush 가 그 디렉터리를 되살리므로 반드시 먼저 부른다.
+bool dropCollabBranch(int repoId, const std::string &branch) {
+    if (branch.empty()) {
+        return true;
+    }
+
+    Json::Value body;
+    body["repo_id"] = repoId;
+    body["branch"] = branch;
+    return callCollabInternal("/internal/collab/branch/drop", body);
+}
+
 // 트리 변경을 같은 브랜치 접속자에게 알린다(§12.5). 확장은 이 이벤트로 Repository 트리를 다시 그린다.
 void broadcastTreeChanged(int repoId, const std::string &branch, const std::string &type,
                           const std::string &path, const std::string &from = "") {
@@ -1962,6 +1975,12 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
             return errorResponse("P0801", "등록된 브랜치가 아닙니다: " + name, k404NotFound);
         }
 
+        // 0) 기본 브랜치는 지울 수 없다. 지우면 저장소의 기준 브랜치가 사라져 clone·worktree 해석이
+        //    어긋난다 — 확장도 이 브랜치는 삭제 항목으로 주지 않는다(§1.3-10).
+        if (isDefault) {
+            return errorResponse("400", "기본 브랜치는 삭제할 수 없습니다: " + name, k400BadRequest);
+        }
+
         // 1) 접속자가 있으면 거부한다 (P0809). 작업 중인 사용자를 강제로 밀어내지 않는다.
         const Json::Value presence = target["presence"];
         if (presence.isArray() && !presence.empty()) {
@@ -1977,7 +1996,7 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
         const std::string gitWorktreePath = hasRegisteredWorktree ? registeredWorktree : worktreePath;
 
         // 2) 커밋되지 않은 변경이 있으면 거부한다 (P0810). force 면 건너뛴다.
-        if (!isDefault && !force && worktreeReady(gitWorktreePath)) {
+        if (!force && worktreeReady(gitWorktreePath)) {
             GitResult statusResult;
             const Json::Value entries = readWorktreeStatus(gitWorktreePath, statusResult);
             if (!statusResult.ok()) {
@@ -1993,9 +2012,14 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
             }
         }
 
-        // 3) 작업 디렉터리 → 로컬 브랜치 → DB 행 순서로 정리한다.
+        // 3) collab 의 방·`.ydoc`·리뷰 인덱스를 먼저 버린다(§9.7). 순서를 뒤집으면 남은 doc 의 flush 가
+        //    곧 지울 작업 디렉터리를 되살리고(`writeAtomic` 의 mkdir), 같은 이름 브랜치를 다시 만들었을 때
+        //    열기(§9.3 — `.ydoc` 우선)가 옛 내용을 복원한다.
+        dropCollabBranch(repoId, name);
+
+        // 4) 작업 디렉터리 → 로컬 브랜치 → DB 행 순서로 정리한다.
         //    worktree 를 여기서 지우지 못하면 아래 branch -d 가 'already checked out' 으로 거부당한다.
-        if (!isDefault && (hasRegisteredWorktree || worktreeReady(gitWorktreePath))) {
+        if (hasRegisteredWorktree || worktreeReady(gitWorktreePath)) {
             auto removed = GitRunner::worktreeRemove(localPath, gitWorktreePath, force);
             if (!removed.ok()) {
                 // 디렉터리만 먼저 사라지고 등록 정보가 남은 경우가 있어 prune 한 뒤 한 번 더 확인한다.
@@ -2008,12 +2032,10 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
             }
         }
 
-        if (!isDefault) {
-            auto deleted = GitRunner::deleteBranch(localPath, name, force);
-            if (!deleted.ok()) {
-                // 원격에만 있고 아직 로컬 브랜치를 만들지 않은 경우엔 지울 것이 없다.
-                LOG_WARN << "로컬 브랜치 삭제 건너뜀 (" << name << "): " << trim(deleted.err);
-            }
+        auto deletedLocal = GitRunner::deleteBranch(localPath, name, force);
+        if (!deletedLocal.ok()) {
+            // 원격에만 있고 아직 로컬 브랜치를 만들지 않은 경우엔 지울 것이 없다.
+            LOG_WARN << "로컬 브랜치 삭제 건너뜀 (" << name << "): " << trim(deletedLocal.err);
         }
 
         auto result = db->execSqlSync("SELECT * FROM delete_github_branch($1, $2, $3)", requester, repoId, name);

@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 
 import { apiRequest } from '../api';
+import type { RangeDiffRequest } from './refContentProvider';
 import { getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
 import { NO_SESSION_MESSAGE } from './repoTreeProvider';
-import { getSyncInfo, onDidChangeCommitList, onDidChangeStatus } from './repoStatus';
+import { badgeForState, getSyncInfo, labelForState, onDidChangeCommitList, onDidChangeStatus } from './repoStatus';
 
 /**
  * [TASK_11 §15.14] Graph 뷰 — 현재 브랜치의 커밋 현황과 원격 위치.
@@ -16,6 +17,10 @@ import { getSyncInfo, onDidChangeCommitList, onDidChangeStatus } from './repoSta
  * 앞선/뒤진 개수는 `repoStatus` 가 받아 둔 sync(§3.2 `/repos/sync`)를 그대로 읽는다 — 다시 세지 않는다.
  *
  * 커밋과 push 를 분리했으므로(§12.11) 원격보다 위에 있는 커밋(미push)을 색으로 구분한다.
+ *
+ * 커밋과 요약을 펼치면 **그 사이에 바뀐 파일**이 나온다(§3.2 `GET /api/github/repos/diff`).
+ * 그 파일을 누르면 `axis-share.openRangeDiff` 가 양쪽 버전을 내장 diff 로 연다(§15.15 4·5번).
+ * 서버는 파일 목록만 만들고 비교는 VS Code 가 한다 — 내용은 파일 단위 조회로 따로 온다.
  */
 
 const VIEW_GRAPH = 'axis-share-graph';
@@ -34,10 +39,24 @@ export type GraphCommit = {
     authored_at?: string;
 };
 
-/** 뷰가 그리는 항목. 맨 위 요약 한 줄 + 커밋 목록. */
+/** `GET /api/github/repos/diff` 의 항목 1건 — 두 버전 사이에서 바뀐 파일(§3.2). */
+export type RangeFile = {
+    path: string;
+    /** `added|modified|deleted|renamed|copied|typechange` — status 와 같은 상태 이름(§3.2). */
+    state: string;
+    /** `renamed` / `copied` 의 원본 경로. 왼쪽 diff 는 이 경로로 읽는다. */
+    from?: string;
+};
+
+/**
+ * 뷰가 그리는 항목. 맨 위 요약 한 줄 + 커밋 목록이고, 커밋과 요약은 펼치면 그 사이에
+ * **바뀐 파일**이 나온다(§15.15 diff 4·5번). 그 파일을 누르면 내장 diff 가 열린다.
+ */
 export type GraphItem =
     | { kind: 'summary' }
-    | { kind: 'commit'; commit: GraphCommit; pushed: boolean; isHead: boolean; isOriginTip: boolean };
+    | { kind: 'commit'; commit: GraphCommit; base: string; pushed: boolean; isHead: boolean; isOriginTip: boolean }
+    | { kind: 'file'; state: string; request: RangeDiffRequest }
+    | { kind: 'note'; text: string };
 
 export class GraphTreeProvider implements vscode.TreeDataProvider<GraphItem>, vscode.Disposable {
     private readonly changeEmitter = new vscode.EventEmitter<void>();
@@ -53,13 +72,20 @@ export class GraphTreeProvider implements vscode.TreeDataProvider<GraphItem>, vs
 
     private lastError: string | undefined;
 
+    /**
+     * 펼친 항목의 바뀐 파일 목록. 커밋은 내용이 변하지 않으므로 한 번 받으면 그대로 두고,
+     * 원격 대비 목록은 sync 가 바뀌면 키가 달라져 자연히 새로 받는다(그리고 refresh 가 비운다).
+     */
+    private readonly filesByKey = new Map<string, readonly RangeFile[]>();
+
     public attachView(view: vscode.TreeView<GraphItem>): void {
         this.view = view;
         this.refresh();
     }
 
-    /** 목록을 다시 받아 온다. 세션이 바뀌거나 사용자가 새로 고칠 때 부른다. */
+    /** 목록을 다시 받아 온다. 세션이 바뀌거나 커밋·push 가 일어나거나 사용자가 새로 고칠 때 부른다. */
     public refresh(): void {
+        this.filesByKey.clear();
         void this.reload();
     }
 
@@ -74,14 +100,36 @@ export class GraphTreeProvider implements vscode.TreeDataProvider<GraphItem>, vs
     }
 
     public getTreeItem(item: GraphItem): vscode.TreeItem {
-        return item.kind === 'summary' ? summaryTreeItem() : commitTreeItem(item);
+        switch (item.kind) {
+            case 'summary':
+                return summaryTreeItem();
+            case 'commit':
+                return commitTreeItem(item);
+            case 'file':
+                return fileTreeItem(item);
+            default:
+                return noteTreeItem(item.text);
+        }
     }
 
-    public getChildren(element?: GraphItem): GraphItem[] {
-        if (element) {
-            return []; // 요약·커밋 항목에는 자식이 없다.
+    public async getChildren(element?: GraphItem): Promise<GraphItem[]> {
+        if (!element) {
+            return this.rootItems();
         }
 
+        if (element.kind === 'commit') {
+            return this.commitFiles(element);
+        }
+
+        if (element.kind === 'summary') {
+            return this.remoteFiles();
+        }
+
+        return []; // 파일·안내 항목에는 자식이 없다.
+    }
+
+    /** 요약 한 줄 + 커밋 목록(최신 → 과거). */
+    private rootItems(): GraphItem[] {
         if (this.commits.length === 0) {
             return [];
         }
@@ -96,6 +144,8 @@ export class GraphTreeProvider implements vscode.TreeDataProvider<GraphItem>, vs
             items.push({
                 kind: 'commit',
                 commit,
+                // 부모가 없으면 root 커밋이다 — 왼쪽이 빈 문서가 되어 "전부 추가"로 보인다(§15.15).
+                base: commit.parents?.[0] ?? '',
                 pushed,
                 isHead: refsOf(commit).some((ref) => ref.startsWith('HEAD ->')),
                 isOriginTip: index === originTip
@@ -103,6 +153,87 @@ export class GraphTreeProvider implements vscode.TreeDataProvider<GraphItem>, vs
         });
 
         return items;
+    }
+
+    /** 커밋을 펼쳤다 — 부모 → 커밋 사이에 바뀐 파일(4번, §15.15). */
+    private async commitFiles(item: Extract<GraphItem, { kind: 'commit' }>): Promise<GraphItem[]> {
+        const sha = item.commit.sha;
+        const label = `${sha.slice(0, 8)} 변경`;
+
+        let files = this.filesByKey.get(sha);
+        if (!files) {
+            const result = await this.fetchFiles(`commit:${sha}`, item.base, sha);
+            if (typeof result === 'string') {
+                return [note(`변경 목록을 불러오지 못했습니다: ${result}`)];
+            }
+
+            files = result;
+            this.filesByKey.set(sha, files);
+        }
+
+        return files.length === 0
+            ? [note('바뀐 파일이 없습니다.')]
+            : files.map((file) => ({ kind: 'file', state: file.state, request: rangeRequest(file, item.base, sha, label) }));
+    }
+
+    /**
+     * 요약을 펼쳤다 — push 하면 원격에 올라갈 내용(5번, §15.15).
+     *
+     * 왼쪽은 `origin/<branch>` 그대로가 아니라 sync 가 준 **원격 팁 SHA** 를 쓴다. 가상 URI 의 버전
+     * 자리에 `/` 가 들어가면 조각이 갈라져 인코딩이 필요해지는데, SHA 는 그런 문자가 없다. 뜻은 같다 —
+     * `git diff origin/<branch> HEAD` 와 `git diff <origin_sha> HEAD` 는 같은 비교다.
+     */
+    private async remoteFiles(): Promise<GraphItem[]> {
+        const branch = getCurrentBranch();
+        const sync = getSyncInfo();
+        const base = sync.origin_sha ?? '';
+        if (!branch || !sync.has_upstream || base.length === 0) {
+            return [note('이 브랜치는 아직 원격에 없습니다 — push 로 올리면 비교할 수 있습니다.')];
+        }
+
+        if (sync.ahead === 0 && sync.behind === 0) {
+            return [note('원격과 차이가 없습니다.')];
+        }
+
+        // 원격·HEAD 가 움직이면 키가 달라진다 — refresh(커밋·push 이벤트)가 캐시를 비우기도 한다.
+        const key = `${base}:${sync.head_sha ?? ''}`;
+        let files = this.filesByKey.get(key);
+        if (!files) {
+            const result = await this.fetchFiles(key, base, 'head');
+            if (typeof result === 'string') {
+                return [note(`변경 목록을 불러오지 못했습니다: ${result}`)];
+            }
+
+            files = result;
+            this.filesByKey.set(key, files);
+        }
+
+        const label = `원격 origin/${branch} 대비 변경`;
+        return files.length === 0
+            ? [note('원격과 차이가 없습니다.')]
+            : files.map((file) => ({ kind: 'file', state: file.state, request: rangeRequest(file, base, 'head', label) }));
+    }
+
+    /**
+     * 두 버전 사이에 바뀐 파일 목록(§3.2 `GET /api/github/repos/diff`). 실패하면 사유 문구를 돌려준다 —
+     * 뷰는 그 문구를 안내 줄로 보여 준다(예외를 던져 트리 전체를 깨뜨리지 않는다).
+     */
+    private async fetchFiles(cacheKey: string, base: string, target: string): Promise<readonly RangeFile[] | string> {
+        const session = getSession();
+        if (!session) {
+            this.filesByKey.delete(cacheKey);
+            return NO_SESSION_MESSAGE;
+        }
+
+        const query =
+            `/github/repos/diff?repo_id=${session.repoId}` +
+            `&base=${encodeURIComponent(base)}&target=${encodeURIComponent(target)}`;
+        try {
+            const rows = await apiRequest<RangeFile[]>(query);
+            return Array.isArray(rows) ? rows.filter(isRangeFile) : [];
+        } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+        }
     }
 
     /** 커밋 목록을 서버에서 받아 온다. */
@@ -170,7 +301,12 @@ function summaryTreeItem(): vscode.TreeItem {
     const branch = getCurrentBranch() ?? '';
     const hasUpstream = sync.has_upstream;
 
-    const node = new vscode.TreeItem(hasUpstream ? `origin/${branch}` : '아직 원격에 없음', vscode.TreeItemCollapsibleState.None);
+    // 원격과 차이가 있을 때만 펼친다 — 펼치면 push 하면 올라갈 파일이 나온다(§15.15 diff 5번).
+    const expandable = hasUpstream && (sync.ahead > 0 || sync.behind > 0);
+    const node = new vscode.TreeItem(
+        hasUpstream ? `origin/${branch}` : '아직 원격에 없음',
+        expandable ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+    );
     node.id = 'graph-summary';
     node.description = hasUpstream ? `↑${sync.ahead} ↓${sync.behind}` : `올릴 커밋 ${sync.ahead}개`;
     node.iconPath = new vscode.ThemeIcon(hasUpstream ? 'cloud' : 'cloud-upload');
@@ -193,7 +329,8 @@ function summaryTreeItem(): vscode.TreeItem {
 /** 커밋 한 줄. 미push 커밋은 색으로 구분하고, 원격 위치에 표시를 붙인다. */
 function commitTreeItem(item: Extract<GraphItem, { kind: 'commit' }>): vscode.TreeItem {
     const commit = item.commit;
-    const node = new vscode.TreeItem(commit.subject?.trim() || '(제목 없음)', vscode.TreeItemCollapsibleState.None);
+    // 펼치면 그 커밋이 바꾼 파일이 나온다(§15.15 diff 4번).
+    const node = new vscode.TreeItem(commit.subject?.trim() || '(제목 없음)', vscode.TreeItemCollapsibleState.Collapsed);
 
     node.id = commit.sha;
     node.contextValue = 'axisGraphCommit';
@@ -233,6 +370,60 @@ function commitTreeItem(item: Extract<GraphItem, { kind: 'commit' }>): vscode.Tr
     node.tooltip = new vscode.MarkdownString(tooltip.join('  \n'));
 
     return node;
+}
+
+/** 펼친 목록의 한 파일 → 그 버전 사이를 여는 diff 요청(§15.15). */
+function rangeRequest(file: RangeFile, base: string, target: string, label: string): RangeDiffRequest {
+    return { base, target, path: file.path, oldPath: file.from, label };
+}
+
+/** 뷰가 그리는 안내 줄. 자식이 없는 자리(바뀐 파일 없음·오류)를 채운다. */
+function note(text: string): GraphItem {
+    return { kind: 'note', text };
+}
+
+/** 펼친 범위에서 바뀐 파일 한 줄. 누르면 그 버전 사이의 내장 diff 가 열린다(§15.15 4·5번). */
+function fileTreeItem(item: Extract<GraphItem, { kind: 'file' }>): vscode.TreeItem {
+    const { dir, name } = splitPath(item.request.path);
+    const node = new vscode.TreeItem(name, vscode.TreeItemCollapsibleState.None);
+
+    node.id = `${item.request.base}:${item.request.target}:${item.request.path}`;
+    node.description = dir.length > 0 ? `${badgeForState(item.state)} · ${dir}` : badgeForState(item.state);
+    node.iconPath = new vscode.ThemeIcon('diff');
+    node.contextValue = 'axisGraphFile';
+    node.tooltip = new vscode.MarkdownString(
+        [item.request.path, labelForState(item.state), `비교 ${item.request.label}`].join('  \n')
+    );
+    node.command = {
+        command: 'axis-share.openRangeDiff',
+        title: '변경 내용 보기',
+        arguments: [item.request]
+    };
+
+    return node;
+}
+
+/** 안내 줄. 눌러도 아무 일도 일어나지 않아야 하므로 command 를 붙이지 않는다. */
+function noteTreeItem(text: string): vscode.TreeItem {
+    const node = new vscode.TreeItem(text, vscode.TreeItemCollapsibleState.None);
+    node.iconPath = new vscode.ThemeIcon('info');
+    node.contextValue = 'axisGraphNote';
+    return node;
+}
+
+/** 경로를 마지막 '/' 에서 나눈다 — 탐색기처럼 파일명을 앞에, 디렉터리를 뒤에 둔다. */
+function splitPath(path: string): { dir: string; name: string } {
+    const slash = path.lastIndexOf('/');
+    return slash < 0 ? { dir: '', name: path } : { dir: path.slice(0, slash), name: path.slice(slash + 1) };
+}
+
+function isRangeFile(value: unknown): value is RangeFile {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as { path?: unknown }).path === 'string' &&
+        typeof (value as { state?: unknown }).state === 'string'
+    );
 }
 
 function refsOf(commit: GraphCommit): readonly string[] {

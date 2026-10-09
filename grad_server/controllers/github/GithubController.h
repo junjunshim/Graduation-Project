@@ -24,6 +24,7 @@ class GithubController : public drogon::HttpController<GithubController>
     ADD_METHOD_TO(GithubController::getRepositoryTree,    "/api/github/repos/tree",     Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryFile,    "/api/github/repos/file",     Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryCommits, "/api/github/repos/commits",  Get, "JwtFilter");
+    ADD_METHOD_TO(GithubController::getRepositoryRange,    "/api/github/repos/diff",      Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getBranches,          "/api/github/repos/branches", Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getPresence,          "/api/github/repos/presence", Get, "JwtFilter");
 
@@ -63,6 +64,7 @@ class GithubController : public drogon::HttpController<GithubController>
     void getRepositoryTree(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryFile(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryCommits(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void getRepositoryRange(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getBranches(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getPresence(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 

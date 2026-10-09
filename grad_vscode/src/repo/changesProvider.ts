@@ -154,7 +154,9 @@ function groupTreeItem(item: ChangesGroupItem): vscode.TreeItem {
 
 /**
  * 파일 항목. `resourceUri` 를 Repository 트리와 같은 가상 URI 로 주면 파일 배지(§15.3)가 그대로 붙는다.
- * 클릭하면 파일이 열리고(삭제된 파일은 제외), 인라인 `$(add)`/`$(remove)` 가 스테이징을 부른다.
+ * 클릭하면 **변경 내용(diff)** 이 열리고(§15.15), 인라인 `$(add)`/`$(remove)` 가 스테이징을 부른다.
+ * 파일 자체를 편집하려면 컨텍스트 메뉴의 "파일 열기"(`axis-share.openFile`)를 쓴다 — 탐색기와 달리
+ * 이 뷰의 주 목적은 "무엇이 바뀌었나" 이기 때문이다.
  */
 function fileTreeItem(item: ChangesFileItem): vscode.TreeItem {
     const node = new vscode.TreeItem(baseName(item.path), vscode.TreeItemCollapsibleState.None);
@@ -172,10 +174,9 @@ function fileTreeItem(item: ChangesFileItem): vscode.TreeItem {
         node.resourceUri = repoResourceUri(session.repoId, branch, item.path);
     }
 
-    if (item.state !== 'deleted') {
-        // 탐색기와 같게 한 번 클릭으로 연다 — 내용은 collab 의 open/opened 로만 받는다(§12.4).
-        node.command = { command: 'axis-share.openFile', title: '열기', arguments: [{ path: item.path }] };
-    }
+    // 한 번 클릭 = 변경 내용 보기(§15.15). 그룹이 곧 비교 기준이다 — 스테이징됨은 HEAD↔인덱스,
+    // 나머지는 HEAD↔트리 작업. 항목을 그대로 넘겨 커맨드가 staged/state 를 함께 본다(§15.7).
+    node.command = { command: 'axis-share.openDiff', title: '변경 내용 보기', arguments: [item] };
 
     return node;
 }

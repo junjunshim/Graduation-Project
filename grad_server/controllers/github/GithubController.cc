@@ -222,6 +222,41 @@ std::string resolveTreeish(const std::string &localPath, const std::string &bran
     return "";
 }
 
+// 임의 rev 검증(§15.15 diff 4·5번의 왼쪽/오른쪽). `<sha>`, `origin/<branch>`, `HEAD`, `<sha>^` 처럼
+// 브랜치 이름으로 해석되지 않는 참조도 받는다. argv 로 그대로 넘어가므로 셸은 거치지 않지만,
+// git 옵션으로 오인될 수 있는 선행 '-' 와 tree-ish 구분자 ':' 는 허용 목록에서 뺀다.
+bool isValidRev(const std::string &rev) {
+    if (rev.empty() || rev.compare(0, 1, "-") == 0) {
+        return false;
+    }
+
+    const std::string allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/~^";
+    return rev.find_first_not_of(allowed) == std::string::npos;
+}
+
+// rev 를 clone 안에서 실제로 존재하는 tree-ish 로 확정한다. 성공하면 확정된 rev, 실패하면 빈 문자열.
+// 브랜치 이름은 로컬 브랜치일 수도(작업 트리 커밋) 원격 추적 참조일 수도 있어 순서대로 시도한다.
+std::string resolveRev(const std::string &localPath, const std::string &rev) {
+    if (!isValidRev(rev)) {
+        return "";
+    }
+
+    if (GitRunner::resolveRef(localPath, rev).ok()) {
+        return rev;
+    }
+
+    // 로컬 브랜치로 없으면 원격 추적 참조(origin/<rev>)까지 본다 — resolveTreeish 가 그 규칙을 안다.
+    const std::string treeish = resolveTreeish(localPath, rev);
+    if (!treeish.empty() && GitRunner::resolveRef(localPath, treeish).ok()) {
+        return treeish;
+    }
+
+    return "";
+}
+
+// 부모 없는 첫 커밋(root)을 비교할 때 쓰는 빈 트리. git 이 모든 저장소에서 같은 해시를 쓴다.
+constexpr char kEmptyTreeSha[] = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
 // ---------------------------------------------------------------------------
 // 환경/설정
 // ---------------------------------------------------------------------------
@@ -977,7 +1012,10 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
     });
 }
 
-// GET /api/github/repos/file?repo_id=3&branch=main&path=src/a.ts — 파일 내용
+// GET /api/github/repos/file?repo_id=3&branch=main&path=src/a.ts&ref=index — 파일 내용(§15.15 diff 양쪽)
+// ref 가 비었거나 head 면 브랜치 tip(= HEAD)의 커밋된 내용, index 면 worktree 인덱스(스테이징된 내용),
+// 그 밖에는 임의 rev(`<sha>`, `origin/<branch>`, `<sha>^`; diff 4·5번)다.
+// '그 버전에 파일이 없음'(HEAD 에 없는 새 파일 / 인덱스에 안 올라간 파일)은 404 이고, 호출자는 빈 문서로 본다.
 void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     int repoId = 0;
     if (!parseInt(req->getParameter("repo_id"), repoId)) {
@@ -995,8 +1033,17 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
     // 클라이언트가 캐시한 시각(직전 응답의 modified_at). 같으면 내용을 다시 보내지 않는다.
     const std::string since = req->getParameter("since");
 
+    // 어느 버전을 읽을지(§15.15 diff 의 왼쪽/오른쪽). "index" = 그 브랜치 worktree 의 **인덱스**(스테이징된 내용),
+    // 비어 있거나 "head" = 브랜치 tip(= HEAD) 의 커밋된 내용(기존 동작 그대로),
+    // 그 밖에는 임의 rev(`<sha>`, `origin/<branch>`, `<sha>^`) — diff 4·5번이 쓴다.
+    const std::string refKind = trim(req->getParameter("ref"));
+    if (!refKind.empty() && refKind != "head" && refKind != "index" && !isValidRev(refKind)) {
+        callback(errorResponse("400", "알 수 없는 ref 입니다: " + refKind + " (head|index|<rev>)", k400BadRequest));
+        return;
+    }
+
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, path, since]() -> HttpResponsePtr {
+    runOffLoop(std::move(callback), [requester, repoId, branch, path, since, refKind]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         Json::Value repoRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
@@ -1005,32 +1052,84 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
 
         const std::string localPath = repoRow["local_path"].asString();
         const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
-        const std::string ref = resolveTreeish(localPath, requested);
 
-        if (ref.empty()) {
-            return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
+        // 1) 어느 버전을 읽을지 정한다(§15.15 diff 의 왼쪽).
+        //    - index: 그 브랜치 worktree 의 인덱스. clone 이 아니라 worktree 에 있으므로 상태·스테이징과
+        //      같은 경로 해석(resolveWorkDir)을 쓴다.
+        //    - 그 밖: 브랜치 tip(= HEAD)의 커밋된 내용.
+        //    인덱스는 **일부러 flush 하지 않는다** — "스테이징 이후 무엇을 더 바꿨는가"를 보려면
+        //    스테이징 시점 내용이 그대로 남아 있어야 한다(§15.15).
+        const bool wantIndex = (refKind == "index");
+        const bool wantHead = refKind.empty() || refKind == "head";
+
+        std::string readDir = localPath;
+        std::string spec;
+        std::string refLabel;
+        if (wantIndex) {
+            std::string workDir;
+            HttpResponsePtr failure;
+            if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+                return failure;
+            }
+            readDir = workDir;
+            spec = ":" + path; // 빈 tree-ish = 인덱스
+            refLabel = "index";
+        } else if (wantHead) {
+            refLabel = resolveTreeish(localPath, requested);
+            if (refLabel.empty()) {
+                return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
+            }
+            spec = treeishOf(refLabel, path);
+        } else {
+            // 임의 rev(§15.15 diff 4·5번) — 커밋 SHA 와 원격 추적 참조가 여기로 온다.
+            // clone 의 객체 저장소만 보면 되므로(readDir = localPath) clone 디렉터리에서 읽는다.
+            refLabel = resolveRev(localPath, refKind);
+            if (refLabel.empty()) {
+                return errorResponse("P0801", "그 버전을 찾을 수 없습니다: " + refKind, k404NotFound);
+            }
+            spec = treeishOf(refLabel, path);
         }
 
-        const std::string spec = treeishOf(ref, path);
+        // 2) 캐시 검증 토큰. HEAD 쪽은 그 경로의 마지막 커밋 시각이고, 인덱스는 커밋 시각이 없으므로
+        //    **스테이징된 blob 해시**를 쓴다(내용이 같으면 해시도 같다). 인덱스는 여기서 존재 여부도 본다 —
+        //    인덱스에 없으면(새 파일을 스테이징하지 않았거나 삭제를 스테이징했거나) "그 버전에 없음"이 정답이다.
+        std::string version;
+        if (wantIndex) {
+            auto ls = GitRunner::run(readDir, {"ls-files", "-s", "--", path});
+            if (ls.ok()) {
+                const std::string line = trim(ls.out);
+                const std::size_t first = line.find(' ');
+                if (first != std::string::npos) {
+                    const std::size_t second = line.find(' ', first + 1);
+                    version = line.substr(first + 1, (second == std::string::npos) ? std::string::npos : second - first - 1);
+                }
+            }
+            if (version.empty()) {
+                return errorResponse("P0801", "인덱스에 없는 파일입니다: " + path, k404NotFound);
+            }
+        } else if (wantHead) {
+            // HEAD 쪽은 그 경로의 마지막 커밋 시각이 곧 버전이다(브랜치가 움직이면 바뀐다).
+            auto logResult = GitRunner::run(localPath, {"log", "-1", "--format=%cI", refLabel, "--", path});
+            version = logResult.ok() ? trim(logResult.out) : "";
+        } else {
+            // 임의 rev 는 확정된 SHA 자체가 버전이다 — 그 내용은 절대 변하지 않는다.
+            auto resolved = GitRunner::resolveRef(localPath, refLabel);
+            version = resolved.ok() ? trim(resolved.out) : refLabel;
+        }
 
-        // 이 파일이 마지막으로 바뀐 시각. 내용을 작업 트리가 아니라 커밋된 트리(git show)에서 읽으므로
-        // 커밋 시각이 곧 그 파일의 버전이고, 캐시 검증 토큰으로 쓰기에 충분하다.
-        auto logResult = GitRunner::run(localPath, {"log", "-1", "--format=%cI", ref, "--", path});
-        const std::string modifiedAt = logResult.ok() ? trim(logResult.out) : "";
-
-        // 캐시 검증: 클라이언트가 들고 있는 시각과 같으면 버전이 바뀌지 않았다는 뜻이므로 내용을 생략한다.
-        if (!since.empty() && !modifiedAt.empty() && since == modifiedAt) {
+        // 캐시 검증: 클라이언트가 들고 있는 값과 같으면 버전이 바뀌지 않았다는 뜻이므로 내용을 생략한다.
+        if (!since.empty() && !version.empty() && since == version) {
             Json::Value unchanged;
             unchanged["repo_id"] = repoId;
-            unchanged["branch"] = ref;
+            unchanged["branch"] = refLabel;
             unchanged["path"] = path;
             unchanged["changed"] = false;
-            unchanged["modified_at"] = modifiedAt;
+            unchanged["modified_at"] = version;
             return successResponse(singleItemArray(unchanged), "이미 받은 내용이 최신입니다.");
         }
 
-        // 1) 존재·크기 확인
-        auto sizeResult = GitRunner::run(localPath, {"cat-file", "-s", spec});
+        // 3) 존재·크기 확인
+        auto sizeResult = GitRunner::run(readDir, {"cat-file", "-s", spec});
         if (!sizeResult.ok()) {
             return errorResponse("P0801", "파일을 찾을 수 없습니다: " + path, k404NotFound);
         }
@@ -1043,28 +1142,28 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
 
         Json::Value data;
         data["repo_id"] = repoId;
-        data["branch"] = ref;
+        data["branch"] = refLabel;
         data["path"] = path;
         data["size"] = static_cast<Json::Int64>(size);
         data["encoding"] = "utf-8";
         data["read_only"] = false;
         data["content"] = "";
         data["changed"] = true;
-        data["modified_at"] = modifiedAt;
+        data["modified_at"] = version;
 
-        // 2) 상한 초과는 읽기 전용 (§12.6)
+        // 4) 상한 초과는 읽기 전용 (§12.6)
         if (size > kMaxTextFileBytes) {
             data["read_only"] = true;
             data["reason"] = "too_large";
             return successResponse(singleItemArray(data), "파일이 너무 커서 읽기 전용으로 표시했습니다.");
         }
 
-        auto content = GitRunner::run(localPath, {"show", spec});
+        auto content = GitRunner::run(readDir, {"show", spec});
         if (!content.ok()) {
             return errorResponse("P0801", "파일 내용을 읽지 못했습니다: " + path, k500InternalServerError);
         }
 
-        // 3) 바이너리(NUL 포함)도 읽기 전용
+        // 5) 바이너리(NUL 포함)도 읽기 전용
         if (content.out.find('\0') != std::string::npos) {
             data["read_only"] = true;
             data["reason"] = "binary";
@@ -1075,6 +1174,101 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         data["content"] = content.out;
         data["eol"] = (content.out.find("\r\n") != std::string::npos) ? "crlf" : "lf";
         return successResponse(singleItemArray(data), "파일을 조회했습니다.");
+    });
+}
+
+// GET /api/github/repos/diff?repo_id=1&base=<rev>&target=<rev> — 두 버전 사이에 바뀐 파일 목록(§15.15 diff 4·5번)
+// Graph 뷰가 커밋(부모 → 커밋)이나 원격(origin/<branch> → HEAD)을 펼칠 때 쓴다.
+// 여기서는 **목록만** 만든다 — 파일마다 GET /api/github/repos/file?ref=<rev> 로 양쪽 내용을 받아
+// VS Code 내장 diff 가 비교하는 것이 4·5번의 방식이다(서버는 diff 텍스트를 만들지 않는다).
+// base 가 비면 첫 커밋(root)으로 보고 빈 트리와 비교한다 — 전부 추가로 보인다.
+void GithubController::getRepositoryRange(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string base = trim(req->getParameter("base"));
+    const std::string target = trim(req->getParameter("target"));
+    if (target.empty() || !isValidRev(target) || (!base.empty() && !isValidRev(base))) {
+        callback(errorResponse("400", "필수 파라미터(base|target)가 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, base, target]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+
+        const std::string localPath = repoRow["local_path"].asString();
+
+        // 1) 두 끝을 clone 안의 실제 tree-ish 로 확정한다. base 가 비면 root 커밋이다(빈 트리와 비교).
+        const std::string leftRev = base.empty() ? std::string(kEmptyTreeSha) : resolveRev(localPath, base);
+        const std::string rightRev = resolveRev(localPath, target);
+        if (leftRev.empty()) {
+            return errorResponse("P0801", "그 버전을 찾을 수 없습니다: " + base, k404NotFound);
+        }
+        if (rightRev.empty()) {
+            return errorResponse("P0801", "그 버전을 찾을 수 없습니다: " + target, k404NotFound);
+        }
+
+        // 2) 이름과 상태만 받는다 — 내용은 파일 단위 조회로 따로 온다. -z 로 경로를 NUL 구분해
+        //    공백·개행이 있는 파일명도 안전하다(이름변경은 'R100\0<from>\0<to>\0' 순서).
+        //    --find-renames 는 저장소 설정에 기대지 않으려고 명시한다.
+        auto diff = GitRunner::run(localPath, {"diff", "--name-status", "-z", "--find-renames", leftRev, rightRev});
+        if (!diff.ok()) {
+            LOG_WARN << "diff --name-status 실패 (" << leftRev << " -> " << rightRev << "): " << trim(diff.err);
+            return errorResponse("P0807", "변경 목록을 읽지 못했습니다: " + trim(diff.err), k500InternalServerError);
+        }
+
+        // 3) 확장이 그대로 쓰는 [{path, state, from?}] 로 옮긴다(§3.2 status 와 같은 상태 이름).
+        Json::Value items(Json::arrayValue);
+        const std::vector<std::string> tokens = splitNul(diff.out);
+        std::size_t index = 0;
+        while (index < tokens.size()) {
+            const std::string code = tokens[index++];
+            if (code.empty()) {
+                continue;
+            }
+
+            const bool isRename = code.compare(0, 1, "R") == 0;
+            const bool isCopy = code.compare(0, 1, "C") == 0;
+            if (isRename || isCopy) {
+                if (index + 1 >= tokens.size()) {
+                    break; // 잘린 출력 — 더 볼 것이 없다
+                }
+                const std::string from = tokens[index++];
+                const std::string to = tokens[index++];
+
+                Json::Value item;
+                item["path"] = to;
+                item["state"] = isRename ? "renamed" : "copied";
+                item["from"] = from;
+                items.append(item);
+                continue;
+            }
+
+            if (index >= tokens.size()) {
+                break;
+            }
+            const std::string path = tokens[index++];
+
+            std::string state;
+            if (!porcelainState(code[0], state)) {
+                continue; // 우리가 다루지 않는 코드(X/B 등)는 건너뛴다
+            }
+
+            Json::Value item;
+            item["path"] = path;
+            item["state"] = state;
+            items.append(item);
+        }
+
+        return successResponse(items, "변경 목록을 조회했습니다.");
     });
 }
 

@@ -148,6 +148,19 @@
                 "command": "axis-share.discard",
                 "title": "Axis Share: 변경 되돌리기",
                 "icon": "$(discard)"
+            },
+            {
+                "command": "axis-share.openDiff",
+                "title": "Axis Share: 변경 내용 보기",
+                "icon": "$(diff)"
+            },
+            {
+                "command": "axis-share.diffIndex",
+                "title": "Axis Share: 스테이징 이후 변경 보기"
+            },
+            {
+                "command": "axis-share.openRangeDiff",
+                "title": "Axis Share: 커밋 변경 내용 보기"
             }
         ],
         "menus": {
@@ -275,9 +288,19 @@
                     "group": "3_copy@1"
                 },
                 {
-                    "command": "axis-share.openFile",
+                    "command": "axis-share.openDiff",
                     "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
                     "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.diffIndex",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "1_open@2"
+                },
+                {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "1_open@3"
                 },
                 {
                     "command": "axis-share.stage",
@@ -290,9 +313,19 @@
                     "group": "inline@2"
                 },
                 {
-                    "command": "axis-share.openFile",
+                    "command": "axis-share.openDiff",
                     "when": "view == axis-share-changes && viewItem == axisStagedFile",
                     "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.diffIndex",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "1_open@2"
+                },
+                {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "1_open@3"
                 },
                 {
                     "command": "axis-share.unstage",
@@ -339,6 +372,18 @@
                 },
                 {
                     "command": "axis-share.discard",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.openDiff",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.diffIndex",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.openRangeDiff",
                     "when": "false"
                 }
             ],

@@ -18,7 +18,8 @@ import { repoResourceUri } from './repoTreeProvider';
  * 사용자 PC 의 임시 사본(globalStorage)을 가리키게 된다. 상태도 스테이징도 커밋도 Changes 뷰 한 곳에서 다룬다.
  *
  * 지키는 규칙 셋(§15.7, §12.11):
- *   1. 스테이징은 "커밋 대상 표시" 다. 진짜 `git add` 는 커밋 시점에 서버가 다시 한다.
+ *   1. 스테이징은 실제 `git add` 다. 그 앞에서 서버가 collab flush 를 기다리고, 커밋도 flush 뒤
+ *      `git add` 를 한 번 더 한다 — 그래서 "스테이징 뒤에 친 내용" 까지 커밋에 들어간다(§12.11).
  *   2. `user.name` / `user.email` 이 없으면 커밋을 시작하지 않는다 — 커밋 자격은 그 둘이 정한다(§1.3-9).
  *   3. 커밋 순서(제어 소켓 `commit_started` → collab flush → git add/commit)는 서버가 정한다.
  *      UI 는 그 순서에 끼어들지 않고, `commit_started` / `commit_finished` 로 잠금만 맞춘다.
@@ -137,6 +138,15 @@ const commitListEmitter = new vscode.EventEmitter<void>();
 
 /** 커밋 이력이 바뀌었다(내/다른 사용자의 커밋·push). Graph 뷰가 이 이벤트로 목록을 다시 받는다(§15.14). */
 export const onDidChangeCommitList = commitListEmitter.event;
+
+const indexEmitter = new vscode.EventEmitter<void>();
+
+/**
+ * 인덱스(스테이징)가 바뀌었다 — diff 의 왼쪽 `index` 를 다시 받아야 한다(§15.15, §15.10).
+ * `onDidChangeStatus` 와 나눠 둔 이유: 상태는 편집(worktree_changed)으로도 계속 바뀌지만 인덱스는
+ * 스테이징·해제·되돌리기 때만 바뀐다. 필요한 순간에만 다시 받으려고 신호를 나눴다.
+ */
+export const onDidChangeIndex = indexEmitter.event;
 
 /**
  * 현재 작업 트리 상태(§3.2). Changes 뷰(§15.3)와 배지 provider 가 같은 값을 읽는다 — 출처는 하나다.
@@ -762,6 +772,7 @@ function onControlEvent(event: ControlEvent): void {
     if (event.type === 'status_changed') {
         // 같은 브랜치의 누군가(나 포함)가 스테이징·해제·되돌리기로 인덱스/작업 트리를 바꿨다(§15.10).
         // 파일 내용이 그대로여도 Staged/Changes 그룹이 달라지므로 변경 목록을 다시 받는다.
+        indexEmitter.fire(); // diff 의 왼쪽(`index`)도 다시 받아야 한다(§15.15).
         scheduleStatusRefresh();
         return;
     }

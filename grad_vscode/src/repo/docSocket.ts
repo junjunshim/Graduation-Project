@@ -56,6 +56,8 @@ type Watching = {
     text: Y.Text;
     /** `globalStorage/repo-<id>/branch-<slug>/<path>` 의 실제 파일 URI(§10.1). */
     uri: vscode.Uri;
+    /** 원본 파일의 줄바꿈. Yjs 텍스트는 LF 고정이고, 로컬 사본을 쓸 때만 되돌린다(§12.4). */
+    eol: 'lf' | 'crlf';
     canWrite: boolean;
     /** 서버의 방에 붙어 있는가. 끊기면 false 가 되고 편집을 보내지 않는다. */
     attached: boolean;
@@ -244,8 +246,50 @@ async function openFile(path: string): Promise<void> {
     }
 }
 
-/** `opened` 를 받아 Y.Doc 을 만들고, 로컬 사본을 쓴 뒤 에디터로 연다(§12.4 열기 순서 5~6). */
-async function materialize(repoId: number, branch: string, opened: OpenedFrame): Promise<void> {
+/**
+ * 파일의 편집 세션만 물린다 — 에디터 탭은 열지 않는다(§15.15 diff). 이미 물려 있으면 그대로 둔다.
+ * diff 의 오른쪽이 이 로컬 사본이고, 세션이 붙어 있어야 다른 사용자의 편집이 그대로 반영된다.
+ */
+export async function ensureDocSession(path: string): Promise<vscode.Uri | undefined> {
+    const session = getSession();
+    const branch = getCurrentBranch();
+    if (!session || !branch) {
+        void vscode.window.showWarningMessage('Axis Share: 앱에서 저장소를 연결한 뒤 파일을 열 수 있습니다.');
+        return undefined;
+    }
+
+    const existing = watching.get(path);
+    if (existing?.attached) {
+        return existing.uri;
+    }
+
+    if (existing) {
+        // 연결이 끊긴 사본이다. 닫고 새로 받는다(§12.10 은 다음 단계).
+        watching.delete(path);
+        await closeTab(existing.uri);
+    }
+
+    try {
+        await ensureJoined(session.repoId, branch);
+        const opened = await requestOpen(path);
+        return await materialize(session.repoId, branch, opened, { reveal: false });
+    } catch (error) {
+        const message = describe(error);
+        log(`파일 세션을 물리지 못했습니다(${path}): ${message}`);
+        return undefined;
+    }
+}
+
+/**
+ * `opened` 를 받아 Y.Doc 을 만들고 로컬 사본을 쓴다(§12.4 열기 순서 5~6).
+ * `reveal` 이 false 면 에디터 탭을 열지 않는다 — diff(§15.15)의 오른쪽은 탭이 필요 없다.
+ */
+async function materialize(
+    repoId: number,
+    branch: string,
+    opened: OpenedFrame,
+    options: { reveal?: boolean } = {}
+): Promise<vscode.Uri> {
     const uri = localCopyUri(repoId, branch, opened.path);
 
     const doc = new Y.Doc();
@@ -257,6 +301,7 @@ async function materialize(repoId: number, branch: string, opened: OpenedFrame):
         doc,
         text,
         uri,
+        eol: opened.eol,
         canWrite: opened.canWrite,
         attached: true,
         applyingRemote: 0,
@@ -266,12 +311,12 @@ async function materialize(repoId: number, branch: string, opened: OpenedFrame):
     watching.set(opened.path, entry);
     emitOpenDocsChange();
 
-    const onDisk = opened.eol === 'crlf' ? text.toString().replace(/\n/g, '\r\n') : text.toString();
-    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
-    await vscode.workspace.fs.writeFile(uri, Buffer.from(onDisk, 'utf8'));
+    await writeLocalCopy(entry);
 
-    await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(uri, { preview: false });
+    if (options.reveal !== false) {
+        await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(uri, { preview: false });
+    }
 
     if (opened.mismatch) {
         void vscode.window.showWarningMessage(
@@ -284,6 +329,16 @@ async function materialize(repoId: number, branch: string, opened: OpenedFrame):
             `Axis Share: ${opened.path} 는 읽기 전용 권한입니다. 편집 내용은 서버로 전송되지 않습니다.`
         );
     }
+
+    return uri;
+}
+
+/** 로컬 사본(=캐시, §10.1)을 Yjs 텍스트로 다시 쓴다. 줄바꿈은 원본 파일 것을 따른다. */
+async function writeLocalCopy(entry: Watching): Promise<void> {
+    const text = entry.text.toString();
+    const onDisk = entry.eol === 'crlf' ? text.replace(/\n/g, '\r\n') : text;
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(entry.uri, '..'));
+    await vscode.workspace.fs.writeFile(entry.uri, Buffer.from(onDisk, 'utf8'));
 }
 
 /**
@@ -434,6 +489,9 @@ function applyRemoteUpdate(frame: Record<string, unknown>): void {
 async function pushTextToEditor(entry: Watching): Promise<void> {
     const document = findDocument(entry.uri);
     if (!document) {
+        // 아무도 이 문서를 들고 있지 않다(에디터 탭도 diff 도 없다). 그래도 디스크 사본은 최신이어야
+        // 한다 — 나중에 열리는 diff(§15.15)가 이 파일을 오른쪽에 쓰기 때문이다.
+        await writeLocalCopy(entry);
         return;
     }
 

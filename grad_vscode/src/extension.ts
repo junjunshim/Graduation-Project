@@ -8,6 +8,7 @@ import { startCursorRenderer, stopCursorRenderer } from './repo/cursorRenderer';
 import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
 import { createGraphView } from './repo/graphProvider';
 import { createPresenceView } from './repo/presenceProvider';
+import { createRefContentProvider, openIndexDiff, openItemDiff, openRangeDiff } from './repo/refContentProvider';
 import { createRepoFileDecorations } from './repo/repoFileDecorations';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
 import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider';
@@ -44,6 +45,7 @@ import {
  *   src/repo/repoFileDecorations.ts git 상태 파일 배지(§15.3)
  *   src/repo/changesProvider.ts    Changes 뷰 — 작업 트리 상태 + 커밋 탭(§15.3)
  *   src/repo/graphProvider.ts      Graph 뷰 — 커밋 현황과 원격 위치(§15.14)
+ *   src/repo/refContentProvider.ts diff — 버전 문서 공급 + 내장 diff 열기(§15.15, 1·2·3·4·5번)
  *
  * 다음 단계에서 만들 모듈(§15.11):
  *   src/repo/decorationProvider.ts       Reviews 트리(§15.6)
@@ -77,7 +79,10 @@ const COMMANDS: readonly string[] = [
     'axis-share.push',
     'axis-share.stageAll',
     'axis-share.unstageAll',
-    'axis-share.discard'
+    'axis-share.discard',
+    'axis-share.openDiff',
+    'axis-share.diffIndex',
+    'axis-share.openRangeDiff'
 ];
 
 /**
@@ -211,6 +216,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // 3-4) 파일 상태 배지(§15.3). Repository 트리와 Changes 뷰 아이템에 같은 배지를 붙인다.
     createRepoFileDecorations(context);
 
+    // 3-5) diff 왼쪽 공급자(§15.15). 서버는 파일 내용만 주고, 비교·렌더는 VS Code 내장 diff 가 한다.
+    //      Changes 뷰 클릭이 이 공급자와 로컬 사본을 양쪽에 놓고 연다.
+    createRefContentProvider(context);
+
     // 4) 커맨드 등록(§15.11). 구현한 것만 실제 핸들러를 붙이고 나머지는 자리표시자로 남긴다.
     const implementedCommands: Record<string, (...args: unknown[]) => void> = {
         // 새로 고침은 트리와 작업 트리 상태(Changes)를 함께 다시 받는다.
@@ -242,6 +251,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // Changes 뷰 아이템의 인라인 $(discard) — 수정한 내용을 이전 상태로 되돌린다(§12.11.1).
         'axis-share.discard': (...args: unknown[]) => {
             void discardPaths(args);
+        },
+        // Changes 뷰 아이템 클릭 — 그룹이 비교 기준이다(§15.15): 스테이징됨 HEAD↔인덱스, 나머지 HEAD↔작업 트리.
+        'axis-share.openDiff': (...args: unknown[]) => {
+            void openItemDiff(args);
+        },
+        // 컨텍스트 메뉴 — 스테이징한 뒤에 더 고친 내용을 본다(§15.15, 인덱스↔작업 트리).
+        'axis-share.diffIndex': (...args: unknown[]) => {
+            void openIndexDiff(args);
+        },
+        // Graph 뷰 — 커밋(부모↔커밋)과 요약(원격↔HEAD)을 펼친 파일 항목의 클릭(§15.15 4·5번).
+        'axis-share.openRangeDiff': (...args: unknown[]) => {
+            void openRangeDiff(args);
         },
         // Changes 뷰 타이틀의 $(check). 메시지 입력은 이 커맨드가 직접 띄운다(§15.7).
         'axis-share.commit': () => {

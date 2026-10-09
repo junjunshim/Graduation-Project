@@ -15,6 +15,7 @@ import { log } from './logger';
 import { isSafeRelPath } from './paths';
 import { ClientFrame, parseClientFrame } from './protocol';
 import { CollabResolveError, resolveRepo } from './repoResolver';
+import { ReviewRecord } from './reviewIndex';
 import { Room, RoomClient, RoomRegistry } from './rooms';
 import { FileNotEditableError } from './store';
 
@@ -123,7 +124,15 @@ async function onJoin(client: RoomClient, repoId: number, branch: string): Promi
     return;
   }
 
+  // 리뷰 인덱스를 **먼저** 읽는다. 방에 붙고 나면 스냅샷과 증분 프레임이 순서대로 도착하므로,
+  // 클라이언트는 스냅샷으로 인덱스를 통째로 교체해도 늦게 온 변경을 잃지 않는다(§15.6).
+  await room.reviews.ready();
+
   await attach(client, room);
+
+  // 사이드바가 파일을 열지 않고 목록을 그릴 수 있게 브랜치 리뷰 인덱스를 한 번 보낸다(§15.6).
+  client.send({ type: 'reviews', branch: room.repo.branch, reviews: room.reviews.snapshot() });
+
   log('info', 'room joined', {
     repo: repoId,
     branch,
@@ -332,13 +341,39 @@ function onDecoAdd(client: RoomClient, frame: Extract<ClientFrame, { type: 'deco
   }
   payload.userEmail = client.session.userEmail;
   payload.userName = client.session.userName;
+  // 생성 시각은 서버가 찍는다 — 클라이언트 시계를 신뢰하지 않는다.
+  payload.createdAt = new Date().toISOString();
 
   room.docs.setDecoration(frame.path, frame.id, payload);
+
+  // 사이드바(Reviews)가 쓰는 브랜치 인덱스도 같이 맞춘다(§15.6).
+  const record = toReviewRecord(payload);
+  if (record.path !== '' && record.id !== '') {
+    room.reviews.upsert(record);
+  }
+
   room.broadcastWatchers(frame.path, { type: 'deco', ...payload }, client.id);
 }
 
+/** 저장 payload 를 리뷰 인덱스 레코드로 옮긴다. 모양은 `deco` 프레임과 같다(§9.5). */
+function toReviewRecord(payload: Record<string, unknown>): ReviewRecord {
+  const text = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+  return {
+    path: text(payload.path) ?? '',
+    id: text(payload.id) ?? '',
+    decoType: text(payload.decoType),
+    memo: text(payload.memo),
+    line: typeof payload.line === 'number' && Number.isFinite(payload.line) ? payload.line : undefined,
+    startRel: payload.startRel,
+    endRel: payload.endRel,
+    userEmail: text(payload.userEmail) ?? '',
+    userName: text(payload.userName),
+    createdAt: text(payload.createdAt) ?? new Date().toISOString(),
+  };
+}
+
 /** 삭제는 누구나 가능하다 — 브랜치 쓰기 권한만 본다(§8.10 확정). */
-function onDecoDel(client: RoomClient, frame: Extract<ClientFrame, { type: 'deco_del' }>): void {
+async function onDecoDel(client: RoomClient, frame: Extract<ClientFrame, { type: 'deco_del' }>): Promise<void> {
   const room = requireRoom(client);
   if (!room) return;
   if (!client.session.canWrite) {
@@ -347,7 +382,9 @@ function onDecoDel(client: RoomClient, frame: Extract<ClientFrame, { type: 'deco
     return;
   }
 
-  room.docs.deleteDecoration(frame.path, frame.id);
+  // 파일을 아무도 열고 있지 않아도 지운다 — `.ydoc` 폴백은 docRegistry 가 맡는다(§15.6).
+  await room.docs.deleteDecoration(frame.path, frame.id);
+  room.reviews.remove(frame.path, frame.id);
   room.broadcastWatchers(
     frame.path,
     { type: 'deco_del', path: frame.path, id: frame.id, userEmail: client.session.userEmail },

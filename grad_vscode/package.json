@@ -101,8 +101,13 @@
             },
             {
                 "command": "axis-share.toggleDecorations",
-                "title": "Axis Share: 리뷰 데코레이션 표시 전환",
+                "title": "Axis Share: 리뷰 데코레이션 표시",
                 "icon": "$(eye)"
+            },
+            {
+                "command": "axis-share.hideDecorations",
+                "title": "Axis Share: 리뷰 데코레이션 숨기기",
+                "icon": "$(eye-closed)"
             },
             {
                 "command": "axis-share.identitySettings",
@@ -227,7 +232,12 @@
                 },
                 {
                     "command": "axis-share.toggleDecorations",
-                    "when": "view == axis-share-reviews",
+                    "when": "view == axis-share-reviews && axis-share:decorationsVisible",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.hideDecorations",
+                    "when": "view == axis-share-reviews && !axis-share:decorationsVisible",
                     "group": "navigation@1"
                 }
             ],
@@ -384,6 +394,18 @@
                 },
                 {
                     "command": "axis-share.openRangeDiff",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.jumpToDecoration",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.deleteDecoration",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.hideDecorations",
                     "when": "false"
                 }
             ],

@@ -3,6 +3,16 @@ import * as vscode from 'vscode';
 import { ApiError } from './api';
 import { showBranchPicker } from './repo/branchPicker';
 import { createChangesView } from './repo/changesProvider';
+import {
+    addDecorationCommand,
+    deleteDecorationCommand,
+    jumpToDecorationCommand,
+    startDecorations,
+    stopDecorations,
+    toggleDecorationsCommand
+} from './repo/decorations';
+import { startDecorationRenderer, stopDecorationRenderer } from './repo/decorationRenderer';
+import { createReviewsView } from './repo/decorationProvider';
 import { CONTEXT_HAS_REPO_SESSION, startControlSocket, stopControlSocket } from './repo/controlSocket';
 import { startCursorRenderer, stopCursorRenderer } from './repo/cursorRenderer';
 import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
@@ -11,7 +21,7 @@ import { createPresenceView } from './repo/presenceProvider';
 import { createRefContentProvider, openIndexDiff, openItemDiff, openRangeDiff } from './repo/refContentProvider';
 import { createRepoFileDecorations } from './repo/repoFileDecorations';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
-import { createRepoTreeView, NO_SESSION_MESSAGE } from './repo/repoTreeProvider';
+import { createRepoTreeView } from './repo/repoTreeProvider';
 import {
     applyStage,
     applyStageAll,
@@ -46,16 +56,13 @@ import {
  *   src/repo/changesProvider.ts    Changes 뷰 — 작업 트리 상태 + 커밋 탭(§15.3)
  *   src/repo/graphProvider.ts      Graph 뷰 — 커밋 현황과 원격 위치(§15.14)
  *   src/repo/refContentProvider.ts diff — 버전 문서 공급 + 내장 diff 열기(§15.15, 1·2·3·4·5번)
+ *   src/repo/decorations.ts        리뷰 데코레이션 목록·추가·이동·삭제·토글(§8.10, §15.6)
+ *   src/repo/decorationRenderer.ts 인라인 리뷰 데코레이션 렌더(§15.6)
+ *   src/repo/decorationProvider.ts Reviews 트리(§15.6)
  *
- * 다음 단계에서 만들 모듈(§15.11):
- *   src/repo/decorationProvider.ts       Reviews 트리(§15.6)
+ * 뷰 id 는 각자 자기 모듈이 등록한다(§15.2) — `axis-share-files`(Repository)·`axis-share-people`
+ * (Editing)·`axis-share-reviews`(Reviews) 모두 전용 provider 가 그린다.
  */
-
-/**
- * 뷰 id 는 각자 자기 모듈이 등록한다 — `axis-share-files`(Repository)는 repoTreeProvider(§15.3),
- * `axis-share-people`(Editing)는 presenceProvider(§15.5). 여기에는 아직 자리표시자인 Reviews 만 남는다.
- */
-const VIEW_REVIEWS = 'axis-share-reviews';
 
 /** package.json 에 선언한 커맨드 전체(§15.11, §15.3 컨텍스트 메뉴 포함). */
 const COMMANDS: readonly string[] = [
@@ -73,6 +80,7 @@ const COMMANDS: readonly string[] = [
     'axis-share.jumpToDecoration',
     'axis-share.deleteDecoration',
     'axis-share.toggleDecorations',
+    'axis-share.hideDecorations',
     'axis-share.identitySettings',
     'axis-share.fetch',
     'axis-share.commit',
@@ -84,33 +92,6 @@ const COMMANDS: readonly string[] = [
     'axis-share.diffIndex',
     'axis-share.openRangeDiff'
 ];
-
-/**
- * 구현 전 단계의 자리표시자 트리.
- * §15.3 Repository, §15.5 Editing, §15.6 Reviews 는 각각 전용 provider 로 대체된다.
- */
-class EmptyTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-    public getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
-        return element;
-    }
-
-    public getChildren(): vscode.TreeItem[] {
-        return [];
-    }
-}
-
-/**
- * 뷰를 등록한다. 세션 전에는 항목 대신 안내 문구만 보여 준다.
- * 컨테이너를 when 으로 통째로 숨기지 않는다(§15.2) — 세션이 끊겼을 때 원인을 알 수 없다.
- */
-function registerEmptyView(context: vscode.ExtensionContext, viewId: string): void {
-    const view = vscode.window.createTreeView(viewId, {
-        treeDataProvider: new EmptyTreeProvider()
-    });
-
-    view.message = NO_SESSION_MESSAGE;
-    context.subscriptions.push(view);
-}
 
 /**
  * 커맨드를 자리표시자로 등록한다.
@@ -189,13 +170,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     //    이 창이 앱의 핸드오프 URI 를 받기 전까지 트리·접속자 뷰는 비어 있다.
     await initRepoSession(context);
 
-    // 2) 뷰 등록(§15.2). Repository·Editing 은 실제 데이터를 그린다. Reviews 는 collab(리뷰 인덱스)이
-    //    있어야 하므로 그때까지 자리표시자를 쓴다.
+    // 2) 뷰 등록(§15.2). Repository·Changes·Graph·Editing·Reviews 다섯 뷰 모두 전용 provider 가 그린다.
     const repoTree = createRepoTreeView(context);
     createChangesView(context);
     const graphView = createGraphView(context);
     createPresenceView(context);
-    registerEmptyView(context, VIEW_REVIEWS);
+    createReviewsView(context);
 
     // 3) 제어 소켓(§3.3). 세션·브랜치 변화를 구독해 스스로 붙고, 방 입장이 끝나면
     //    세션 컨텍스트 키(§15.2)를 켠다 — key 관리도 controlSocket 한 곳에서 한다(§15.10).
@@ -208,6 +188,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // 3-2) 원격 커서 렌더러(§12.8). 문서 소켓이 중계한 상대 좌표를 각자의 Y.Doc 에서 풀어 화면에 그린다.
     //      좌표 해석은 클라이언트만 할 수 있으므로 서버(collab)는 손대지 않는다(§8.10).
     startCursorRenderer(context);
+
+    // 3-2-1) 리뷰 데코레이션(§15.6). collab 이 보내는 브랜치 리뷰 인덱스와 증분 프레임을 모아 두고,
+    //        렌더러가 각자의 `Y.Doc` 에서 좌표를 풀어 에디터에 그린다(§8.10).
+    startDecorations(context);
+    startDecorationRenderer(context);
 
     // 3-3) 작업 트리 상태(§15.7). Changes 뷰와 파일 배지가 함께 읽는 상태를 여기서 한 번만 조회한다.
     //      네이티브 소스 제어(SCM)는 쓰지 않는다 — 상태도 커밋도 Changes 뷰 한 곳에서 다룬다(§15.7).
@@ -278,6 +263,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         },
         'axis-share.fetch': () => {
             void fetchRemote();
+        },
+        // 에디터 컨텍스트 메뉴 — 선택 영역에 리뷰 데코레이션을 남긴다(§15.6).
+        'axis-share.addDecoration': () => {
+            void addDecorationCommand();
+        },
+        // Reviews 뷰 아이템 클릭 / 컨텍스트 메뉴 — 그 파일을 열고 해당 줄로 이동한다(§15.6).
+        'axis-share.jumpToDecoration': (...args: unknown[]) => {
+            void jumpToDecorationCommand(args[0]);
+        },
+        // Reviews 뷰 인라인 $(trash) — 누구나 지울 수 있다(§8.10 확정).
+        'axis-share.deleteDecoration': (...args: unknown[]) => {
+            void deleteDecorationCommand(args[0]);
+        },
+        // Reviews 뷰 타이틀 $(eye)/$(eye-closed) — 에디터 인라인 데코 표시만 껐다 켠다(§15.6).
+        // 두 아이콘은 같은 동작이고, 컨텍스트 키(axis-share:decorationsVisible)로 어느 쪽을 보일지만 고른다.
+        'axis-share.toggleDecorations': () => {
+            void toggleDecorationsCommand();
+        },
+        'axis-share.hideDecorations': () => {
+            void toggleDecorationsCommand();
         }
     };
 
@@ -307,5 +312,7 @@ export function deactivate(): void {
     stopControlSocket();
     stopDocSocket();
     stopCursorRenderer();
+    stopDecorationRenderer();
+    stopDecorations();
     stopRepoStatus();
 }

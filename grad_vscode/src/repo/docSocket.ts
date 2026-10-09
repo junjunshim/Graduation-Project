@@ -94,6 +94,33 @@ export type FilePeerLeave = {
     userEmail: string;
 };
 
+/** 서버가 중계한 리뷰 데코레이션 1건(§9.5). 좌표는 상대좌표라 해석하지 않고 그대로 넘긴다(§8.10). */
+export type RemoteDecoration = {
+    path: string;
+    id: string;
+    decoType?: string;
+    memo?: string;
+    /** 표시용 줄 번호 스냅샷(0-based). 열린 doc 이 있으면 상대 좌표로 다시 계산한 값이 우선이다. */
+    line?: number;
+    startRel?: unknown;
+    endRel?: unknown;
+    userEmail: string;
+    userName?: string;
+    createdAt?: string;
+};
+
+/** 다른 사용자가 데코레이션을 지웠다(§9.5). */
+export type RemoteDecorationDelete = {
+    path: string;
+    id: string;
+};
+
+/** 방에 들어가자마자 받는 브랜치 리뷰 인덱스(§15.6). 사이드바가 파일을 열지 않고 목록을 그린다. */
+export type ReviewIndexFrame = {
+    branch: string;
+    reviews: readonly RemoteDecoration[];
+};
+
 let extensionContext: vscode.ExtensionContext | undefined;
 let started = false;
 
@@ -130,6 +157,9 @@ const warnedCodes = new Set<string>();
 const openDocsEmitter = new vscode.EventEmitter<void>();
 const cursorEmitter = new vscode.EventEmitter<RemoteCursorFrame>();
 const peerLeaveEmitter = new vscode.EventEmitter<FilePeerLeave>();
+const decorationEmitter = new vscode.EventEmitter<RemoteDecoration>();
+const decorationDeleteEmitter = new vscode.EventEmitter<RemoteDecorationDelete>();
+const reviewIndexEmitter = new vscode.EventEmitter<ReviewIndexFrame>();
 
 /** 열려 있는 문서 목록이 바뀌었다(열림·닫힘·브랜치 전환). 커서 렌더러가 이 이벤트로 다시 그린다. */
 export const onDidChangeOpenDocs = openDocsEmitter.event;
@@ -139,6 +169,15 @@ export const onDidReceiveCursor = cursorEmitter.event;
 
 /** 파일 참여자 이탈(§9.5). 서버는 커서 제거를 따로 알리지 않으므로 커서 모듈이 이 신호로 지운다. */
 export const onDidReceivePeerLeave = peerLeaveEmitter.event;
+
+/** 리뷰 데코레이션 추가·변경(§9.5). 데코 모듈이 인덱스에 반영하고 에디터에 그린다(§15.6). */
+export const onDidReceiveDecoration = decorationEmitter.event;
+
+/** 리뷰 데코레이션 삭제(§15.6 — 삭제는 누구나 가능하다). */
+export const onDidReceiveDecorationDelete = decorationDeleteEmitter.event;
+
+/** 브랜치 리뷰 인덱스 스냅샷(§15.6). 방에 들어갈 때마다 한 번 오므로 인덱스를 그대로 갈아 끼우면 된다. */
+export const onDidReceiveReviewIndex = reviewIndexEmitter.event;
 
 // ---------------------------------------------------------------------------
 // 수명주기
@@ -728,12 +767,20 @@ function handleFrame(text: string): void {
         case 'peer_leave':
             handlePeerLeave(frame);
             return;
+        case 'deco':
+            handleDecorationFrame(frame);
+            return;
+        case 'deco_del':
+            handleDecorationDeleteFrame(frame);
+            return;
+        case 'reviews':
+            handleReviewIndexFrame(frame);
+            return;
         case 'doc_reset':
             void handleDocReset(frame);
             return;
         default:
-            // `deco` / `deco_del` 은 리뷰 데코레이션(다음 단계), `peer_join` 은 Editing 뷰의
-            // 파일 그룹(§15.5), `flushed` 는 커밋 파이프라인(§12.11)에서 쓴다.
+            // `peer_join` 은 Editing 뷰의 파일 그룹(§15.5), `flushed` 는 커밋 파이프라인(§12.11)에서 쓴다.
             return;
     }
 }
@@ -869,6 +916,90 @@ function handleCursorFrame(frame: Record<string, unknown>): void {
     });
 }
 
+/**
+ * 리뷰 데코레이션 1건(§9.5). 이 모듈은 좌표를 해석하지 않는다 — 데코 모듈이 각자의 `Y.Doc` 에서 푼다.
+ */
+function handleDecorationFrame(frame: Record<string, unknown>): void {
+    const path = asString(frame.path);
+    const id = asString(frame.id);
+    const userEmail = asString(frame.userEmail);
+    if (path === undefined || id === undefined || userEmail === undefined) {
+        return;
+    }
+
+    decorationEmitter.fire({
+        path,
+        id,
+        decoType: asString(frame.decoType),
+        memo: asString(frame.memo),
+        line: typeof frame.line === 'number' ? frame.line : undefined,
+        startRel: frame.startRel,
+        endRel: frame.endRel,
+        userEmail,
+        userName: asString(frame.userName),
+        createdAt: asString(frame.createdAt)
+    });
+}
+
+/** 데코레이션 삭제(§9.5). 지우는 사람의 이메일까지 받지만 화면은 id 만 있으면 지울 수 있다. */
+function handleDecorationDeleteFrame(frame: Record<string, unknown>): void {
+    const path = asString(frame.path);
+    const id = asString(frame.id);
+    if (path === undefined || id === undefined) {
+        return;
+    }
+
+    decorationDeleteEmitter.fire({ path, id });
+}
+
+/** 브랜치 리뷰 인덱스(§15.6). 형식이 어긋난 항목은 조용히 버린다 — 서버가 원본을 갖고 있다. */
+function handleReviewIndexFrame(frame: Record<string, unknown>): void {
+    const branch = asString(frame.branch);
+    const raw = frame.reviews;
+    if (branch === undefined || !Array.isArray(raw)) {
+        return;
+    }
+
+    const reviews: RemoteDecoration[] = [];
+    for (const item of raw) {
+        if (!isRecord(item)) {
+            continue;
+        }
+
+        const path = asString(item.path);
+        const id = asString(item.id);
+        const userEmail = asString(item.userEmail);
+        if (path === undefined || id === undefined || userEmail === undefined) {
+            continue;
+        }
+
+        reviews.push(toRemoteDecoration(item, path, id, userEmail));
+    }
+
+    reviewIndexEmitter.fire({ branch, reviews });
+}
+
+/** 프레임 하나를 `RemoteDecoration` 으로 옮긴다. 서버는 형식을 강제하지 않으므로 여기서 한 번 더 본다. */
+function toRemoteDecoration(
+    item: Record<string, unknown>,
+    path: string,
+    id: string,
+    userEmail: string
+): RemoteDecoration {
+    return {
+        path,
+        id,
+        decoType: asString(item.decoType),
+        memo: asString(item.memo),
+        line: typeof item.line === 'number' ? item.line : undefined,
+        startRel: item.startRel,
+        endRel: item.endRel,
+        userEmail,
+        userName: asString(item.userName),
+        createdAt: asString(item.createdAt)
+    };
+}
+
 /** 다른 사용자가 파일에서 나갔다(§9.5). 서버는 커서 제거를 따로 보내지 않는다 — 이 신호로 지운다. */
 function handlePeerLeave(frame: Record<string, unknown>): void {
     const path = asString(frame.path);
@@ -892,6 +1023,22 @@ export function listOpenDocs(): OpenDoc[] {
 /** 로컬 사본 URI 로 열려 있는 문서를 찾는다 — 커서 모듈이 에디터 → doc 을 잇는 데 쓴다. */
 export function getOpenDocByUri(uri: vscode.Uri): OpenDoc | undefined {
     return entryForUri(uri);
+}
+
+/**
+ * 리뷰 데코레이션을 방에 알린다(§9.5). 서버가 그 파일의 `Y.Doc` 에 영속화하고, 같은 파일을 보는
+ * 사람에게만 팬아웃한다. **보낸 사람에게는 되돌아오지 않으므로** 화면 반영은 호출자가 낙관적으로 한다.
+ */
+export function sendDecorationFrame(
+    path: string,
+    deco: { id: string; decoType: string; memo: string; line: number; startRel: unknown; endRel: unknown }
+): boolean {
+    return send({ type: 'deco_add', path, ...deco });
+}
+
+/** 데코레이션 삭제(§15.6 — 브랜치 쓰기 권한만 본다. 작성자와 무관하게 누구나 지울 수 있다). */
+export function sendDecorationDeleteFrame(path: string, id: string): boolean {
+    return send({ type: 'deco_del', path, id });
 }
 
 /** 내 커서를 방에 알린다. 좌표는 Yjs 상대좌표(JSON)라 상대가 편집해도 위치가 유지된다(§12.8). */

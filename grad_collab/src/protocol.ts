@@ -10,7 +10,18 @@ export type ClientFrame =
   | { type: 'close'; path: string }
   | { type: 'update'; path: string; update: string }
   | { type: 'cursor'; path: string; startRel?: unknown; endRel?: unknown; activeRel?: unknown }
-  | { type: 'deco_add'; path: string; id: string; anchor?: unknown; text?: string }
+  | {
+      type: 'deco_add';
+      path: string;
+      id: string;
+      /** 데코레이션 종류(Typo/Grammar/Logical/Other/Highlight). 서버는 해석하지 않고 보관만 한다. */
+      decoType?: string;
+      memo?: string;
+      /** 표시용 줄 번호 스냅샷(0-based). 실제 이동은 열린 doc 의 상대 좌표로 다시 계산한다(§8.10). */
+      line?: number;
+      startRel?: unknown;
+      endRel?: unknown;
+    }
   | { type: 'deco_del'; path: string; id: string }
   | { type: 'flush'; path?: string }
   | { type: 'switch_branch'; repo_id: number; from: string; to: string };

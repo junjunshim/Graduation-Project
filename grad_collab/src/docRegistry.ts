@@ -298,13 +298,34 @@ export class DocRegistry {
     this.touch(filePath);
   }
 
-  deleteDecoration(filePath: string, id: string): void {
+  /**
+   * 데코레이션을 지운다.
+   *
+   * 파일을 아무도 열지 않았으면 메모리에 doc 이 없다. 그래도 `.ydoc` 에서 지워야 한다 —
+   * 사이드바(Reviews)에서 지운 리뷰가 나중에 그 파일을 열었을 때 되살아나면 안 되기 때문이다(§15.6).
+   * 열려 있는 파일이면 메모리에서 지우고(다음 flush 가 `.ydoc` 까지 맞춘다), 아니면 디스크 상태를
+   * 직접 고친다. `.ydoc` 는 같은 디렉터리에 원자적으로 다시 쓴다(§9.4 와 같은 방식).
+   */
+  async deleteDecoration(filePath: string, id: string): Promise<void> {
     const entry = this.docs.get(filePath);
-    if (!entry) return;
-    const map = entry.doc.getMap(DECO_MAP);
+    if (entry) {
+      const map = entry.doc.getMap(DECO_MAP);
+      if (!map.has(id)) return;
+      map.delete(id);
+      this.touch(filePath);
+      return;
+    }
+
+    const persisted = await readDocState(this.collabDir, filePath);
+    if (!persisted || persisted.byteLength === 0) return;
+
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, persisted, 'deco-del');
+    const map = doc.getMap(DECO_MAP);
     if (!map.has(id)) return;
+
     map.delete(id);
-    this.touch(filePath);
+    await writeDocState(this.collabDir, filePath, Y.encodeStateAsUpdate(doc));
   }
 
 

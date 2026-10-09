@@ -9,6 +9,7 @@ import { log } from './logger';
 import { notifyWorktreeChanged } from './notify';
 import { PresenceRegistry } from './presence';
 import { ResolvedRepo } from './repoResolver';
+import { ReviewIndex } from './reviewIndex';
 
 /** 문서 소켓 하나. 방이 이 객체를 통해 프레임을 보낸다. */
 export interface RoomClient {
@@ -29,10 +30,14 @@ export class Room {
   readonly docs: DocRegistry;
   readonly presence = new PresenceRegistry();
 
+  /** 브랜치 단위 리뷰 인덱스(§15.6). 파일을 열지 않아도 사이드바가 목록을 그리게 하는 파생물이다. */
+  readonly reviews: ReviewIndex;
+
   constructor(readonly repo: ResolvedRepo) {
     this.docs = new DocRegistry(repo.worktreeDir, repo.collabDir);
     // 파일이 flush 될 때마다 backend 에 알려, 같은 브랜치 접속자(Changes 뷰)가 즉시 갱신되게 한다(§9.9).
     this.docs.setFlushListener((filePath) => notifyWorktreeChanged(repo.repoId, repo.branch, filePath));
+    this.reviews = new ReviewIndex(repo.collabDir);
   }
 
   get key(): string {
@@ -89,6 +94,8 @@ export class RoomRegistry {
     this.rooms.delete(room.key);
     room.presence.clear();
     await room.docs.dispose();
+    await room.reviews.flush();
+    room.reviews.dispose();
     log('info', 'room closed', { repo: room.repo.repoId, branch: room.repo.branch });
   }
 
@@ -99,6 +106,8 @@ export class RoomRegistry {
     for (const room of rooms) {
       room.presence.clear();
       await room.docs.dispose();
+      await room.reviews.flush();
+      room.reviews.dispose();
     }
   }
 

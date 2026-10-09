@@ -661,8 +661,9 @@ export async function refreshStatus(): Promise<void> {
 }
 
 function clearStatus(): void {
-    // 브랜치·저장소가 바뀌었다 — 이전 브랜치의 worktree 알림이 뒤늦게 돌지 않게 취소한다(§9.9).
-    cancelWorktreeRefresh();
+    // 브랜치·저장소가 바뀌었다 — 이전 브랜치의 알림(worktree_changed / status_changed)이
+    // 뒤늦게 돌지 않게 취소한다(§9.9, §15.10).
+    cancelStatusRefresh();
     statusKey = undefined;
     syncInfo = { has_upstream: false, ahead: 0, behind: 0 };
     setStatus([]);
@@ -754,7 +755,14 @@ function onControlEvent(event: ControlEvent): void {
 
     if (event.type === 'worktree_changed') {
         // 같은 브랜치의 누군가(나 포함)가 worktree 파일을 내려썼다 — 변경 목록을 다시 받는다(§9.9, §15.10).
-        scheduleWorktreeRefresh();
+        scheduleStatusRefresh();
+        return;
+    }
+
+    if (event.type === 'status_changed') {
+        // 같은 브랜치의 누군가(나 포함)가 스테이징·해제·되돌리기로 인덱스/작업 트리를 바꿨다(§15.10).
+        // 파일 내용이 그대로여도 Staged/Changes 그룹이 달라지므로 변경 목록을 다시 받는다.
+        scheduleStatusRefresh();
         return;
     }
 
@@ -774,27 +782,28 @@ function onControlEvent(event: ControlEvent): void {
 }
 
 /**
- * `worktree_changed` 는 파일마다 따로 올 수 있다(같은 브랜치의 여러 편집자). 잠깐 모아 한 번만
- * 다시 조회한다 — 파일 열 개가 동시에 flush 돼도 조회는 한 번이다(§9.9).
+ * `worktree_changed`(파일 flush)와 `status_changed`(스테이징·해제·되돌리기)는 파일마다 따로 올 수
+ * 있다(같은 브랜치의 여러 사용자). 잠깐 모아 한 번만 다시 조회한다 — 파일 열 개가 한꺼번에 바뀌어도
+ * 조회는 한 번이다(§9.9, §15.10).
  */
-const WORKTREE_REFRESH_DEBOUNCE_MS = 300;
-let worktreeRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+const STATUS_REFRESH_DEBOUNCE_MS = 300;
+let statusRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
-function cancelWorktreeRefresh(): void {
-    if (worktreeRefreshTimer) {
-        clearTimeout(worktreeRefreshTimer);
-        worktreeRefreshTimer = undefined;
+function cancelStatusRefresh(): void {
+    if (statusRefreshTimer) {
+        clearTimeout(statusRefreshTimer);
+        statusRefreshTimer = undefined;
     }
 }
 
-function scheduleWorktreeRefresh(): void {
-    if (worktreeRefreshTimer) {
-        clearTimeout(worktreeRefreshTimer);
+function scheduleStatusRefresh(): void {
+    if (statusRefreshTimer) {
+        clearTimeout(statusRefreshTimer);
     }
-    worktreeRefreshTimer = setTimeout(() => {
-        worktreeRefreshTimer = undefined;
+    statusRefreshTimer = setTimeout(() => {
+        statusRefreshTimer = undefined;
         void refreshStatus();
-    }, WORKTREE_REFRESH_DEBOUNCE_MS);
+    }, STATUS_REFRESH_DEBOUNCE_MS);
 }
 
 // ---------------------------------------------------------------------------

@@ -694,6 +694,22 @@ bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &f
     return future.get();
 }
 
+// 작업 트리·인덱스 상태가 바뀐 것을 같은 브랜치 접속자에게 알린다 (§15.10).
+// 커밋·push 는 전용 이벤트(commit_finished / push_finished)가 있으므로 여기서 다루지 않는다 —
+// 스테이징·해제·되돌리기·fetch 처럼 "파일 상태만" 바뀌는 경우에 쓴다. 다른 사용자의 Changes 뷰가
+// 곧바로 따라오고, 요청자 자신도 받지만 디바운스된 재조회라 무해하다.
+void broadcastStatusChanged(int repoId, const std::string &branch) {
+    if (branch.empty()) {
+        return; // 방이 브랜치 단위라 어느 방으로 보낼지 정할 수 없다.
+    }
+
+    Json::Value event;
+    event["type"] = "status_changed";
+    event["repo_id"] = repoId;
+    event["branch"] = branch;
+    GithubWebSocketController::broadcastToBranch(repoId, branch, event);
+}
+
 // push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다 (§12.11).
 std::string classifyPushFailure(const std::string &detail) {
     if (detail.find("Authentication failed") != std::string::npos ||
@@ -1616,6 +1632,9 @@ void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(
             return errorResponse("P0807", "스테이징하지 못했습니다: " + trim(staged.err), k500InternalServerError);
         }
 
+        // 인덱스가 바뀌었다 — 같은 브랜치의 다른 사용자도 Staged/Changes 그룹을 다시 그린다(§15.10).
+        broadcastStatusChanged(repoId, branch);
+
         GitResult statusResult;
         const Json::Value entries = readWorktreeStatus(workDir, statusResult);
         return successResponse(entries, "스테이징했습니다.");
@@ -1655,6 +1674,9 @@ void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<voi
         if (!unstaged.ok()) {
             return errorResponse("P0807", "스테이징을 해제하지 못했습니다: " + trim(unstaged.err), k500InternalServerError);
         }
+
+        // 해제도 인덱스를 바꾼다 — 같은 브랜치의 다른 사용자도 그룹을 다시 그린다(§15.10).
+        broadcastStatusChanged(repoId, branch);
 
         GitResult statusResult;
         const Json::Value entries = readWorktreeStatus(workDir, statusResult);
@@ -1761,6 +1783,9 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
             std::filesystem::remove(workDir + "/" + path, ec);
         }
 
+        // 인덱스·작업 트리가 바뀌었다 — 같은 브랜치의 다른 사용자에게도 알린다(§15.10).
+        broadcastStatusChanged(repoId, branch);
+
         GitResult statusResult;
         const Json::Value entries = readWorktreeStatus(workDir, statusResult);
         if (!statusResult.ok()) {
@@ -1821,6 +1846,10 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
             }
             return errorResponse("P0807", "원격 저장소를 가져오지 못했습니다: " + detail, k502BadGateway);
         }
+
+        // fetch 는 원격 추적 ref 만 바꾸지만 ahead/behind 뱃지도 상태다 — 다른 사용자에게도 알린다(§15.10).
+        // (요청에 브랜치가 없으면 어느 방으로 보낼지 알 수 없어 건너뛴다.)
+        broadcastStatusChanged(repoId, branch);
 
         // 갱신된 브랜치 목록을 함께 돌려준다(확장이 브랜치 목록을 새로 고칠 수 있게).
         Json::Value data;

@@ -350,6 +350,39 @@ function onDocumentChanged(event: vscode.TextDocumentChangeEvent): void {
     scheduleSave(entry);
 }
 
+/**
+ * 서버가 되돌리기로 이 파일의 doc 을 버렸다(§12.11.1). 열어 둔 탭을 닫고 감시를 멈춘다 —
+ * 파일이 사라졌으므로 더 이상 편집할 대상이 없다. 내용만 바뀌는 경우(수정 되돌리기)는
+ * 일반 `update` 로 오므로 여기서 다루지 않는다.
+ */
+async function handleDocReset(frame: Record<string, unknown>): Promise<void> {
+    const path = asString(frame.path);
+    if (path === undefined) {
+        return;
+    }
+
+    const entry = watching.get(path);
+    if (!entry) {
+        return;
+    }
+
+    watching.delete(path);
+    if (entry.saveTimer) {
+        clearTimeout(entry.saveTimer);
+        entry.saveTimer = undefined;
+    }
+    emitOpenDocsChange();
+
+    await closeTab(entry.uri);
+    try {
+        await vscode.workspace.fs.delete(entry.uri, { useTrash: false });
+    } catch {
+        // 로컬 사본은 언제든 다시 만들 수 있는 캐시다(§10.1) — 지우지 못해도 무해하다.
+    }
+
+    void vscode.window.showInformationMessage(`Axis Share: ${path} 이(가) 되돌려져 편집기에서 닫혔습니다.`);
+}
+
 /** 탭이 닫히면 doc 참여를 끝낸다. 서버는 마지막 참여자가 나가면 grace 뒤 flush 한다(§12.4). */
 function onDocumentClosed(document: vscode.TextDocument): void {
     const entry = entryForUri(document.uri);
@@ -636,6 +669,9 @@ function handleFrame(text: string): void {
             return;
         case 'peer_leave':
             handlePeerLeave(frame);
+            return;
+        case 'doc_reset':
+            void handleDocReset(frame);
             return;
         default:
             // `deco` / `deco_del` 은 리뷰 데코레이션(다음 단계), `peer_join` 은 Editing 뷰의

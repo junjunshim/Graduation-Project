@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as http from 'node:http';
 import * as stream from 'node:stream';
 import * as WebSocket from 'ws';
@@ -421,9 +422,120 @@ function handleFrame(client: RoomClient, frame: ClientFrame): Promise<void> | vo
   }
 }
 
+// --- 내부 HTTP API (C++ → collab) -----------------------------------------------------------
+
+// 되돌리기 통보(§12.11.1). C++ 이 HEAD 내용(또는 "지워라")을 만들어 넘기면, 열려 있는 doc 을 그 내용으로 맞춘다.
+// nginx 는 /internal/* 를 404 로 막고, collab 은 compose 내부망에서만 닿는다. 그 위에 토큰까지 본다.
+const RESET_PATH = '/internal/collab/files/reset';
+const MAX_BODY_BYTES = 16 * 1024 * 1024;
+
+/** 내부 토큰을 상수 시간으로 비교한다(fail-closed — 토큰이 없으면 아무 요청도 받지 않는다). */
+function internalAuthorized(req: http.IncomingMessage): boolean {
+  const configured = config.internalToken;
+  if (configured.length === 0) return false;
+  const header = req.headers['x-internal-token'];
+  const presented = Array.isArray(header) ? header[0] : header;
+  if (typeof presented !== 'string' || presented.length !== configured.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(presented, 'utf8'), Buffer.from(configured, 'utf8'));
+}
+
+function sendJson(res: http.ServerResponse, status: number, payload: unknown): void {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(payload));
+}
+
+async function readBody(req: http.IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = chunk as Buffer;
+    size += buf.length;
+    if (size > MAX_BODY_BYTES) throw new Error('본문이 너무 큽니다.');
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+interface ResetFile {
+  path: string;
+  text?: string;
+  deleted?: boolean;
+}
+
+/** 되돌리기 요청 하나를 처리한다. 열려 있지 않은 경로는 건드리지 않는다(다음 open 이 파일에서 새로 만든다). */
+async function handleResetRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!internalAuthorized(req)) {
+    log('warn', '되돌리기 통보 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.');
+    sendJson(res, 401, { status: 'error', code: '401', message: '내부 인증에 실패했습니다.' });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readBody(req));
+  } catch (error) {
+    sendJson(res, 400, { status: 'error', code: '400', message: `요청 본문을 읽지 못했습니다: ${(error as Error).message}` });
+    return;
+  }
+
+  const body = parsed as { repo_id?: unknown; branch?: unknown; files?: unknown };
+  const repoId = typeof body.repo_id === 'number' ? body.repo_id : Number.NaN;
+  const branch = typeof body.branch === 'string' ? body.branch : '';
+  const files = Array.isArray(body.files) ? (body.files as ResetFile[]) : [];
+  if (!Number.isInteger(repoId) || branch.length === 0) {
+    sendJson(res, 400, { status: 'error', code: '400', message: 'repo_id 와 branch 가 필요합니다.' });
+    return;
+  }
+
+  const room = rooms.get(repoId, branch);
+  if (!room) {
+    // 아무도 이 브랜치를 보고 있지 않다 — 메모리에 doc 이 없으므로 되돌릴 것도 없다.
+    sendJson(res, 200, { status: 'success', data: [{ applied: 0, deleted: 0 }], message: '열린 문서가 없습니다.' });
+    return;
+  }
+
+  let applied = 0;
+  let deleted = 0;
+  for (const file of files) {
+    if (!file || typeof file.path !== 'string' || !isSafeRelPath(file.path)) continue;
+
+    if (file.deleted === true) {
+      const watchers = room.docs.watchersOf(file.path).map((w) => w.clientId);
+      if (await room.docs.dropDoc(file.path)) {
+        room.sendTo(watchers, { type: 'doc_reset', path: file.path, deleted: true });
+        deleted += 1;
+      }
+      continue;
+    }
+
+    if (typeof file.text === 'string') {
+      const update = room.docs.resetText(file.path, file.text);
+      if (update) {
+        room.broadcastWatchers(file.path, {
+          type: 'update',
+          path: file.path,
+          update: Buffer.from(update).toString('base64'),
+        });
+        applied += 1;
+      }
+    }
+  }
+
+  log('info', '되돌리기 적용', { repo: repoId, branch, applied, deleted });
+  sendJson(res, 200, { status: 'success', data: [{ applied, deleted }], message: '되돌렸습니다.' });
+}
+
 // --- HTTP(healthz) + 업그레이드 -------------------------------------------------------------
 
 const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === RESET_PATH) {
+    void handleResetRequest(req, res).catch((error: unknown) => {
+      log('error', '되돌리기 처리 실패', { reason: (error as Error).message });
+      sendJson(res, 500, { status: 'error', code: '500', message: '되돌리기를 처리하지 못했습니다.' });
+    });
+    return;
+  }
+
   if (req.method === 'GET' && req.url === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(

@@ -15,6 +15,7 @@ import {
     applyStage,
     applyStageAll,
     commitInteractive,
+    discardPaths,
     fetchRemote,
     pushBranch,
     refreshStatus,
@@ -75,7 +76,8 @@ const COMMANDS: readonly string[] = [
     'axis-share.commit',
     'axis-share.push',
     'axis-share.stageAll',
-    'axis-share.unstageAll'
+    'axis-share.unstageAll',
+    'axis-share.discard'
 ];
 
 /**
@@ -236,6 +238,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         },
         'axis-share.unstageAll': () => {
             void applyStageAll(false);
+        },
+        // Changes 뷰 아이템의 인라인 $(discard) — 수정한 내용을 이전 상태로 되돌린다(§12.11.1).
+        'axis-share.discard': (...args: unknown[]) => {
+            void discardPaths(args);
         },
         // Changes 뷰 타이틀의 $(check). 메시지 입력은 이 커맨드가 직접 띄운다(§15.7).
         'axis-share.commit': () => {

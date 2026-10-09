@@ -176,3 +176,8 @@ export async function writeDocState(
 export async function removeDocState(collabDir: string, filePath: string): Promise<void> {
   await fsp.rm(docStatePath(collabDir, filePath), { force: true });
 }
+
+/** 되돌리기로 지워야 하는 worktree 파일을 지운다(§12.11.1). 없어도 조용히 성공한다. */
+export async function removeFile(worktreeDir: string, filePath: string): Promise<void> {
+  await fsp.rm(safeJoin(worktreeDir, filePath), { force: true });
+}

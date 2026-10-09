@@ -47,6 +47,14 @@ export class Room {
     }
   }
 
+  /** 지정한 접속자에게만. 되돌리기로 doc 을 버릴 때 그 watchers 에게 알린다(§12.11.1). */
+  sendTo(clientIds: Iterable<string>, frame: unknown): void {
+    const ids = new Set(clientIds);
+    for (const client of this.clients) {
+      if (ids.has(client.id)) client.send(frame);
+    }
+  }
+
   /** 그 파일을 열고 있는 사람에게만. */
   broadcastWatchers(filePath: string, frame: unknown, exceptClientId?: string): void {
     const ids = new Set(this.docs.watchersOf(filePath).map((watcher) => watcher.clientId));

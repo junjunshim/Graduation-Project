@@ -458,6 +458,19 @@ std::vector<std::string> jsonStringArray(const Json::Value &value) {
     return items;
 }
 
+// CRLF 를 LF 로만 바꾼다(되돌리기 payload 용). collab 의 Yjs 텍스트는 LF 고정이고 flush 때 원본 EOL 을 복원한다(§9.4).
+std::string toLf(std::string text) {
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\r' && i + 1 < text.size() && text[i + 1] == '\n') {
+            continue;
+        }
+        out.push_back(text[i]);
+    }
+    return out;
+}
+
 // porcelain XY 코드를 응답용 상태 문자열로 옮긴다.
 bool porcelainState(char code, std::string &state) {
     switch (code) {
@@ -619,6 +632,48 @@ Json::Value syncToJson(const SyncState &state) {
     out["ahead"] = state.ahead;
     out["behind"] = state.behind;
     return out;
+}
+
+// 되돌리기를 collab 에 알린다 (§12.11.1). collab 이 열고 있는 doc 을 되돌린 내용으로 맞춰야
+// 뒤늦은 flush 가 되돌린 파일을 덮어쓰지 않는다. 응답은 기다리지 않는다(fire-and-forget) —
+// collab 이 죽어 있어도 되돌리기 자체는 성공해야 한다. 그때는 메모리에 doc 이 없으므로 되돌릴 것도 없다.
+void notifyCollabReset(int repoId, const std::string &branch, const Json::Value &files) {
+    if (files.empty()) {
+        return;
+    }
+
+    const char *baseValue = std::getenv("COLLAB_BASE");
+    const char *tokenValue = std::getenv("INTERNAL_TOKEN");
+    const std::string collabBase = (baseValue != nullptr) ? std::string(baseValue) : std::string();
+    const std::string token = (tokenValue != nullptr) ? std::string(tokenValue) : std::string();
+    if (collabBase.empty() || token.empty()) {
+        return;
+    }
+
+    Json::Value body;
+    body["repo_id"] = repoId;
+    body["branch"] = branch;
+    body["files"] = files;
+
+    // HttpClient 는 생성한 루프에서 호출해야 한다. 우리는 작업 스레드에 있으므로 메인 루프로 올린다.
+    app().getLoop()->queueInLoop([collabBase, token, body, repoId]() {
+        auto client = HttpClient::newHttpClient(collabBase, app().getLoop());
+        auto request = HttpRequest::newHttpJsonRequest(body);
+        request->setMethod(Post);
+        request->setPath("/internal/collab/files/reset");
+        request->addHeader("X-Internal-Token", token);
+
+        client->sendRequest(request, [client, repoId](ReqResult result, const HttpResponsePtr &response) {
+            if (result != ReqResult::Ok || response == nullptr) {
+                LOG_WARN << "collab 되돌리기 통보 실패(무시). repo=" << repoId;
+                return;
+            }
+            if (response->getStatusCode() != k200OK) {
+                LOG_WARN << "collab 되돌리기 통보 거부. repo=" << repoId
+                         << " status=" << static_cast<int>(response->getStatusCode());
+            }
+        });
+    });
 }
 
 // push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다 (§12.11).
@@ -1586,6 +1641,107 @@ void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<voi
         GitResult statusResult;
         const Json::Value entries = readWorktreeStatus(workDir, statusResult);
         return successResponse(entries, "스테이징을 해제했습니다.");
+    });
+}
+
+// POST /api/github/repos/discard — 되돌리기(§12.11.1).
+// 수정한 내용을 버리고 이전(HEAD) 상태로 되돌린다. HEAD 에 없는 파일(새로 만든 파일)은 지운다.
+// 되돌릴 수 없으므로 확인은 확장(UI)이 받는다. 여기서는 순서만 지킨다:
+//   ① 되돌릴 내용을 정한다 → ② collab 이 열고 있는 doc 을 먼저 맞춘다 → ③ 작업 트리·인덱스를 git 으로 되돌린다.
+void GithubController::discardPaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::vector<std::string> paths = jsonStringArray((*jsonPtr)["paths"]);
+    if (paths.empty()) {
+        callback(errorResponse("400", "필수 파라미터(paths)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        // 커밋과 같은 이유로 저장소 단위로 직렬화한다(index.lock 경합 방지, §12.11).
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        // 1) 되돌릴 내용을 git 에서 먼저 읽는다. HEAD 에 있으면 그 내용, 없으면 새로 만든 파일이라 지운다.
+        Json::Value files(Json::arrayValue);   // collab 에게 줄 되돌리기 목록
+        std::vector<std::string> tracked;      // git restore 대상
+        std::vector<std::string> fresh;        // 지울 대상(HEAD 에 없음)
+        // collab 은 512KB 를 넘는 파일을 doc 으로 열지 않는다(§12.6). 그런 파일은 되돌릴 doc 이 없으니
+        // 통보에서도 뺀다 — 본문이 커져 내부 통보가 통째로 실패하는 편이 더 나쁘다.
+        constexpr std::size_t kCollabDocLimit = 512 * 1024;
+        constexpr std::size_t kResetPayloadLimit = 8 * 1024 * 1024;
+        std::size_t payloadBytes = 0;
+
+        for (const auto &path : paths) {
+            auto blob = GitRunner::run(workDir, {"show", "HEAD:" + path});
+
+            if (!blob.ok()) {
+                // HEAD 에 없다 — 새로 만든 파일이라 지운다. 열려 있던 doc 도 버린다.
+                fresh.push_back(path);
+                Json::Value file;
+                file["path"] = path;
+                file["deleted"] = true;
+                files.append(file);
+                continue;
+            }
+
+            tracked.push_back(path);
+            if (blob.out.size() > kCollabDocLimit) {
+                continue; // doc 이 없는 크기다.
+            }
+            if (payloadBytes + blob.out.size() > kResetPayloadLimit) {
+                LOG_WARN << "되돌리기 통보 payload 상한 초과. repo=" << repoId << " path=" << path;
+                continue;
+            }
+
+            payloadBytes += blob.out.size();
+            Json::Value file;
+            file["path"] = path;
+            file["text"] = toLf(blob.out);
+            files.append(file);
+        }
+
+        // 2) collab 을 먼저 맞춘다. 열려 있는 doc 이 옛 텍스트를 그대로 들고 있으면 다음 flush 가 되돌리기를 무른다.
+        notifyCollabReset(repoId, branch, files);
+
+        // 3) 작업 트리와 인덱스를 되돌린다.
+        for (const auto &path : tracked) {
+            auto restored = GitRunner::run(workDir, {"restore", "--source=HEAD", "--staged", "--worktree", "--", path});
+            if (!restored.ok()) {
+                return errorResponse("P0807", "되돌리지 못했습니다: " + trim(restored.err), k500InternalServerError);
+            }
+        }
+        for (const auto &path : fresh) {
+            // 스테이징된 새 파일이면 인덱스에서 먼저 뺀다(추적되지 않은 파일이면 실패해도 무해하다).
+            GitRunner::run(workDir, {"rm", "--cached", "-q", "-f", "--", path});
+            std::error_code ec;
+            std::filesystem::remove(workDir + "/" + path, ec);
+        }
+
+        GitResult statusResult;
+        const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+        if (!statusResult.ok()) {
+            return errorResponse("P0807", "작업 트리 상태를 읽지 못했습니다: " + trim(statusResult.err),
+                                 k500InternalServerError);
+        }
+        return successResponse(entries, "되돌렸습니다.");
     });
 }
 

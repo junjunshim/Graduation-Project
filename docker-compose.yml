@@ -43,6 +43,8 @@ services:
       REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY}
       # collab 사이드카와의 내부 인증 토큰 (backend <-> collab). .env 에만 두고 커밋하지 않는다.
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      # collab 사이드카 주소 (backend -> collab, 되돌리기 통보 §12.11.1). compose 내부망 서비스 이름을 쓴다.
+      COLLAB_BASE: ${COLLAB_BASE:-http://collab:3000}
     volumes:
       - .:/app                  # 로컬 소스 수정을 컨테이너에 즉시 반영 (개발용)
       # 저장소 clone/worktree 전용 마운트.

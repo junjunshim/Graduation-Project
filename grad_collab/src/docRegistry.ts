@@ -15,6 +15,8 @@ import {
   flushFile,
   readDocState,
   readFileText,
+  removeDocState,
+  removeFile,
   tryReadFileText,
   writeDocState,
 } from './store';
@@ -187,6 +189,69 @@ export class DocRegistry {
     const entry = this.docs.get(filePath);
     if (!entry) return Promise.resolve();
     return this.enqueue(entry, () => this.writeEntry(entry));
+  }
+
+  /**
+   * 되돌리기(§12.11.1). 열려 있는 doc 의 텍스트를 호출자가 넘긴 내용으로 갈아 끼우고,
+   * watchers 가 적용할 **델타 업데이트**를 돌려준다(열려 있지 않거나 같으면 undefined).
+   *
+   * 되돌릴 내용을 C++(HEAD blob)이 만들어 넘긴다 — collab 은 git 을 모르고, 디스크를 다시 읽으면
+   * 아직 안 내려간 flush 가 뒤늦게 덮어쓰는 것과 경합한다. 여기서는 대기 중 flush 를 취소하고
+   * 되돌린 내용을 같은 경로 큐에 다시 태워, 앞선 쓰기 뒤에 반드시 이기게 한다.
+   */
+  resetText(filePath: string, text: string): Uint8Array | undefined {
+    const entry = this.docs.get(filePath);
+    if (!entry) {
+      return undefined; // 열려 있지 않다 — 다음 open 이 되돌린 파일에서 새로 만든다.
+    }
+
+    if (entry.flushTimer) {
+      clearTimeout(entry.flushTimer);
+      entry.flushTimer = undefined;
+    }
+
+    const ytext = entry.doc.getText(TEXT_TYPE);
+    const changed = ytext.toString() !== text;
+    const before = Y.encodeStateVector(entry.doc);
+    if (changed) {
+      entry.doc.transact(() => {
+        ytext.delete(0, ytext.length);
+        ytext.insert(0, text);
+      });
+    }
+
+    void this.flush(filePath).catch((error: unknown) => {
+      log('error', '되돌리기 flush 실패', { path: filePath, reason: (error as Error).message });
+    });
+
+    return changed ? Y.encodeStateAsUpdate(entry.doc, before) : undefined;
+  }
+
+  /**
+   * 되돌리기 대상이 HEAD 에 없는 파일(새로 만든 파일)이라 지워야 한다. 열려 있던 doc 을 버린다.
+   * 남은 쓰기를 먼저 흘려보낸 **뒤에** 파일과 `.ydoc` 를 지운다 — 순서를 뒤집으면 늦은 쓰기가 되살린다.
+   */
+  async dropDoc(filePath: string): Promise<boolean> {
+    const entry = this.docs.get(filePath);
+    if (!entry) {
+      return false;
+    }
+
+    if (entry.flushTimer) {
+      clearTimeout(entry.flushTimer);
+      entry.flushTimer = undefined;
+    }
+    if (entry.unloadTimer) {
+      clearTimeout(entry.unloadTimer);
+      entry.unloadTimer = undefined;
+    }
+
+    this.docs.delete(filePath);
+    await entry.chain.catch(() => undefined);
+    await removeFile(this.worktreeDir, filePath).catch(() => undefined);
+    await removeDocState(this.collabDir, filePath).catch(() => undefined);
+    log('info', '되돌리기로 doc 제거', { path: filePath });
+    return true;
   }
 
   /** 열린 doc 을 전부 내려쓴다. 실패는 로그만 남긴다(브랜치 전환·종료 경로). */

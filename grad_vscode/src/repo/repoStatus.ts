@@ -426,6 +426,59 @@ async function stagePaths(stage: boolean, paths: readonly string[]): Promise<voi
 }
 
 /**
+ * 되돌리기(§12.11.1). Changes 뷰 아이템의 인라인 `$(discard)` 가 부른다.
+ * 수정한 내용을 버리고 이전(HEAD) 상태로 돌린다 — 되돌릴 수 없으므로 먼저 확인받는다.
+ * 이름변경 항목이면 원래 경로(`from`)까지 함께 되돌린다 — 새 이름만 지우면 원본이 사라진 채로 남는다.
+ * 열려 있는 편집 내용(collab doc)도 서버가 함께 되돌린다 — 그래서 파일을 열어 둔 채로 눌러도 되돌리기가 유지된다.
+ */
+export async function discardPaths(args: unknown[]): Promise<void> {
+    const session = getSession();
+    const branch = getCurrentBranch();
+    if (!session || !branch) {
+        return;
+    }
+
+    const paths = collectDiscardPaths(args);
+    if (paths.length === 0) {
+        return;
+    }
+
+    const key = `${session.repoId}|${branch}`;
+    const untracked = statusEntries.filter(
+        (entry) => entry.state === 'untracked' && paths.includes(entry.path)
+    ).length;
+    const detail =
+        untracked > 0
+            ? `수정한 내용은 사라지고, 새로 만든 파일 ${untracked}개는 삭제됩니다.`
+            : '수정한 내용이 사라집니다.';
+
+    const confirmed = await vscode.window.showWarningMessage(
+        `선택한 파일 ${paths.length}개의 변경을 되돌릴까요? ${detail}`,
+        { modal: true },
+        '되돌리기'
+    );
+    if (confirmed !== '되돌리기') {
+        return; // 사용자가 취소했다.
+    }
+
+    try {
+        const rows = await apiRequest<RepoStatusEntry[]>('/github/repos/discard', {
+            method: 'POST',
+            body: { repo_id: session.repoId, branch, paths }
+        });
+        if (statusKey !== key) {
+            return; // 그 사이 저장소·브랜치가 바뀌었다 — 낡은 응답은 버린다.
+        }
+
+        setStatus(Array.isArray(rows) ? rows.filter(isStatusEntry) : []);
+        void refreshSync(key);
+        void vscode.window.showInformationMessage(`Axis Share: ${paths.length}개 파일의 변경을 되돌렸습니다.`);
+    } catch (error) {
+        showError('되돌리지 못했습니다.', error);
+    }
+}
+
+/**
  * 커밋한다(§15.7 → §12.11). Changes 뷰 타이틀의 `$(check)` 가 부른다. 커밋 메시지는 여기서 입력받는다.
  *
  * 커밋은 서버 로컬 저장소에만 남는다(2026-10-09) — 원격 전송은 별도 `axis-share.push` 가 맡는다.
@@ -757,6 +810,46 @@ function readIdentity(): CommitIdentity {
         name: (config.get<string>('user.name', '') ?? '').trim(),
         email: (config.get<string>('user.email', '') ?? '').trim()
     };
+}
+
+/**
+ * 되돌리기 대상 경로. 이름변경 항목이면 원래 경로(`from`)까지 넣는다 — 그래야 원본이 되살아난다.
+ * 스테이징(`collectPaths`)과 달리 `from` 을 넣는 이유: 되돌리기는 "없던 파일을 지우고, 있던 파일을 되살린다" 이다.
+ */
+function collectDiscardPaths(args: unknown[]): string[] {
+    const flat: unknown[] = [];
+    for (const arg of args) {
+        if (Array.isArray(arg)) {
+            flat.push(...arg);
+        } else {
+            flat.push(arg);
+        }
+    }
+
+    const paths: string[] = [];
+    for (const item of flat) {
+        if (!isRecord(item)) {
+            continue;
+        }
+
+        if (typeof item.path === 'string' && item.path.length > 0) {
+            paths.push(item.path);
+        } else {
+            const uri = item.resourceUri;
+            if (uri instanceof vscode.Uri) {
+                const entry = statusByUri.get(uri.toString());
+                if (entry) {
+                    paths.push(entry.path);
+                }
+            }
+        }
+
+        if (typeof item.from === 'string' && item.from.length > 0) {
+            paths.push(item.from);
+        }
+    }
+
+    return unique(paths);
 }
 
 /**

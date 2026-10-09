@@ -143,6 +143,11 @@
                 "command": "axis-share.push",
                 "title": "Axis Share: 원격으로 push",
                 "icon": "$(cloud-upload)"
+            },
+            {
+                "command": "axis-share.discard",
+                "title": "Axis Share: 변경 되돌리기",
+                "icon": "$(discard)"
             }
         ],
         "menus": {
@@ -280,6 +285,11 @@
                     "group": "inline@1"
                 },
                 {
+                    "command": "axis-share.discard",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "inline@2"
+                },
+                {
                     "command": "axis-share.openFile",
                     "when": "view == axis-share-changes && viewItem == axisStagedFile",
                     "group": "1_open@1"
@@ -288,6 +298,11 @@
                     "command": "axis-share.unstage",
                     "when": "view == axis-share-changes && viewItem == axisStagedFile",
                     "group": "inline@1"
+                },
+                {
+                    "command": "axis-share.discard",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "inline@2"
                 },
                 {
                     "command": "axis-share.jumpToDecoration",
@@ -320,6 +335,10 @@
                 },
                 {
                     "command": "axis-share.unstageAll",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.discard",
                     "when": "false"
                 }
             ],

@@ -92,6 +92,8 @@ enum class DbErrorCode {
     BranchHasLocalChanges,      // P0810 브랜치에 커밋되지 않은 변경이 있음
     HandoffCodeInvalid,         // P0811 핸드오프 코드가 없거나 만료/재사용됨
     ExtensionTokenInvalid,      // P0812 확장 리프레시 토큰이 없거나 만료/이미 회전됨
+    PathAlreadyExists,          // P0813 파일·디렉터리가 이미 있음
+    PathNotFound,               // P0814 파일·디렉터리를 찾을 수 없음
     Unknown                     // 알 수 없는 에러
 };
 

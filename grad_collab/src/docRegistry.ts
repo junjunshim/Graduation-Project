@@ -254,6 +254,40 @@ export class DocRegistry {
     return true;
   }
 
+  /**
+   * 경로의 doc 을 버린다(파일 삭제·이름변경, §12.5).
+   *
+   * `dropDoc` 과 달리 **worktree 파일은 건드리지 않는다** — 파일은 이미 C++(git rm / git mv)가 정리했다.
+   * 여기서는 메모리 doc 과 `.ydoc` 만 지운다.
+   *
+   * 메모리에 doc 이 없어도 `.ydoc` 는 지운다. 남겨 두면 나중에 같은 경로(이름변경이면 새 이름)를 열었을 때
+   * 지운 내용이 되살아난다. 열려 있던 doc 이면 그 소켓 id 들을 돌려준다 — 호출자가 `doc_reset` 을 보낸다.
+   */
+  async forget(filePath: string): Promise<string[]> {
+    const entry = this.docs.get(filePath);
+    if (!entry) {
+      await removeDocState(this.collabDir, filePath).catch(() => undefined);
+      return [];
+    }
+
+    if (entry.flushTimer) {
+      clearTimeout(entry.flushTimer);
+      entry.flushTimer = undefined;
+    }
+    if (entry.unloadTimer) {
+      clearTimeout(entry.unloadTimer);
+      entry.unloadTimer = undefined;
+    }
+
+    const watchers = [...entry.watchers.keys()];
+    // 맵에서 먼저 빼면 남은 flush 타이머·touch 는 경로 조회에 실패해 더 쓰지 않는다.
+    this.docs.delete(filePath);
+    await entry.chain.catch(() => undefined);
+    await removeDocState(this.collabDir, filePath).catch(() => undefined);
+    log('info', 'doc 제거(트리 변경)', { path: filePath });
+    return watchers;
+  }
+
   /** 열린 doc 을 전부 내려쓴다. 실패는 로그만 남긴다(브랜치 전환·종료 경로). */
   async flushAll(): Promise<void> {
     await Promise.all(

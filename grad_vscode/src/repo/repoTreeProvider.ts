@@ -165,6 +165,37 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
         this.changeEmitter.fire();
     }
 
+    /**
+     * 경로가 바뀐 디렉터리만 캐시에서 지우고 트리를 다시 그린다(§12.5 트리 변경).
+     * 전체 캐시를 비우지 않는 이유: 파일 하나가 바뀌어도 펼쳐 둔 모든 디렉터리를 다시 받게 된다.
+     */
+    public invalidatePaths(paths: readonly string[]): void {
+        const branch = getCurrentBranch();
+        if (!branch) {
+            this.refresh();
+            return;
+        }
+
+        const keys = new Set<string>();
+        for (const path of paths) {
+            const slash = path.lastIndexOf('/');
+            const parent = slash === -1 ? '' : path.slice(0, slash);
+            keys.add(`${branch}|${parent}`);
+            keys.add(`${branch}|${path}`);
+        }
+
+        let changed = false;
+        for (const key of keys) {
+            if (this.cache.delete(key)) {
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            this.changeEmitter.fire();
+        }
+    }
+
     public dispose(): void {
         this.changeEmitter.dispose();
     }

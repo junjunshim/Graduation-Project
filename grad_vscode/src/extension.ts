@@ -19,6 +19,14 @@ import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
 import { createGraphView } from './repo/graphProvider';
 import { createPresenceView } from './repo/presenceProvider';
 import { createRefContentProvider, openIndexDiff, openItemDiff, openRangeDiff } from './repo/refContentProvider';
+import {
+    copyPathCommand,
+    createDirectoryCommand,
+    createFileCommand,
+    deleteEntryCommand,
+    renameEntryCommand,
+    startFileOps
+} from './repo/fileOps';
 import { createRepoFileDecorations } from './repo/repoFileDecorations';
 import { getRepositoryDisplayName, initRepoSession, startSessionFromHandoff } from './repo/repoSession';
 import { createRepoTreeView } from './repo/repoTreeProvider';
@@ -201,6 +209,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // 3-4) 파일 상태 배지(§15.3). Repository 트리와 Changes 뷰 아이템에 같은 배지를 붙인다.
     createRepoFileDecorations(context);
 
+    // 3-6) 트리 변경(§12.5). 다른 접속자가 파일을 만들거나 지우거나 옮기면 Repository 트리를 다시 그린다.
+    startFileOps(context, repoTree.provider);
+
     // 3-5) diff 왼쪽 공급자(§15.15). 서버는 파일 내용만 주고, 비교·렌더는 VS Code 내장 diff 가 한다.
     //      Changes 뷰 클릭이 이 공급자와 로컬 사본을 양쪽에 놓고 연다.
     createRefContentProvider(context);
@@ -218,6 +229,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         },
         'axis-share.openFile': (entry?: unknown) => {
             void openRepoFile(entry);
+        },
+        // Repository 트리의 파일·디렉터리 생성 / 이름변경 / 삭제 / 경로 복사(§12.5, §15.3).
+        // 파일 시스템 변경은 서버가 수행한다 — 여기서는 요청만 보낸다.
+        'axis-share.newFile': (entry?: unknown) => {
+            void createFileCommand(entry);
+        },
+        'axis-share.newFolder': (entry?: unknown) => {
+            void createDirectoryCommand(entry);
+        },
+        'axis-share.renameEntry': (entry?: unknown) => {
+            void renameEntryCommand(entry);
+        },
+        'axis-share.deleteEntry': (entry?: unknown) => {
+            void deleteEntryCommand(entry);
+        },
+        'axis-share.copyPath': (entry?: unknown) => {
+            void copyPathCommand(entry);
         },
         // Changes 뷰 아이템의 인라인 $(add)/$(remove) 와 컨텍스트 메뉴가 부른다(§15.7).
         'axis-share.stage': (...args: unknown[]) => {

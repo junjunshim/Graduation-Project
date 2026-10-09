@@ -370,6 +370,8 @@ function describeStatusEntries(data: unknown): string {
         return '변경 내용을 확인해 주세요.';
     }
 
+    // 지우면 작업 디렉터리와 함께 사라지므로, 몇 개가 함께 없어지는지 첫 줄에 적는다(§12.5).
+    const header = `커밋하지 않은 변경 ${data.length}개가 함께 삭제됩니다.`;
     const shown = data.slice(0, 10).map((raw) => {
         const entry = raw as WorktreeStatusEntry;
         const state = STATE_LABELS[entry.state] ?? entry.state;
@@ -379,7 +381,7 @@ function describeStatusEntries(data: unknown): string {
         shown.push(`외 ${data.length - shown.length}건`);
     }
 
-    return shown.join('\n');
+    return [header, ...shown].join('\n');
 }
 
 /** P0809 의 상세 목록(브랜치 접속자)을 여러 줄 문구로 만든다. */

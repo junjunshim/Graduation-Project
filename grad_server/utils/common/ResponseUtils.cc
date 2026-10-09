@@ -163,6 +163,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0810") != std::string::npos) return DbErrorCode::BranchHasLocalChanges;
     else if (errMsg.find("P0811") != std::string::npos) return DbErrorCode::HandoffCodeInvalid;
     else if (errMsg.find("P0812") != std::string::npos) return DbErrorCode::ExtensionTokenInvalid;
+    else if (errMsg.find("P0813") != std::string::npos) return DbErrorCode::PathAlreadyExists;
+    else if (errMsg.find("P0814") != std::string::npos) return DbErrorCode::PathNotFound;
     else return DbErrorCode::Unknown;
 }
 
@@ -608,6 +610,16 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::ExtensionTokenInvalid:{
             ret["message"] = "확장 세션이 만료되었습니다. 앱에서 다시 연결해 주세요.";
             ret["http_code"] = drogon::k401Unauthorized;
+            break;
+        }
+        case DbErrorCode::PathAlreadyExists:{
+            ret["message"] = "이미 있는 경로입니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::PathNotFound:{
+            ret["message"] = "경로를 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
             break;
         }        default:{
             ret["message"] = "알 수 없는 데이터베이스 에러가 발생했습니다.";

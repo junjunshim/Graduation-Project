@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <map>
 #include <memory>
@@ -578,13 +579,18 @@ Json::Value parseStatusPorcelain(const std::string &text) {
     return entries;
 }
 
+// 트리 변경 헬퍼(§12.5)의 정의는 파일 뒤쪽에 모아 두었다 — 여기서 먼저 쓰므로 미리 알린다.
+Json::Value filterNoiseEntries(const Json::Value &entries, const std::vector<std::string> &noise);
+std::vector<std::string> nestedWorktreePaths(const std::string &workDir);
+
 // 작업 트리 상태를 읽는다. 실패하면 out.ok() 가 false 다.
+// 저장소 안쪽에 남은 worktree(과거 상대 경로 버그의 흔적)는 그 트리 전체가 untracked 로 보이므로 걸러낸다.
 Json::Value readWorktreeStatus(const std::string &workDir, GitResult &out) {
     out = GitRunner::run(workDir, {"status", "--porcelain=v1", "--untracked-files=all", "-z"});
     if (!out.ok()) {
         return Json::Value(Json::arrayValue);
     }
-    return parseStatusPorcelain(out.out);
+    return filterNoiseEntries(parseStatusPorcelain(out.out), nestedWorktreePaths(workDir));
 }
 
 // 확장이 실패 사유를 프로그램으로 구분할 수 있게 data 에 reason 만 담는다.
@@ -811,6 +817,238 @@ bool isRemoteAccessDenied(const std::string &detail) {
            detail.find("403") != std::string::npos ||
            detail.find("401") != std::string::npos;
 }
+
+// ---------------------------------------------------------------------------
+// 트리 변경 헬퍼 (§12.5: 파일·디렉터리 생성 / 이름변경 / 삭제)
+// ---------------------------------------------------------------------------
+
+// 확장이 보낸 저장소 상대 경로가 worktree 밖을 가리키지 않는지 검사한다.
+// 절대 경로·'..'·'.git'·빈 조각·역슬래시·널 문자를 모두 거부한다(collab 의 isSafeRelPath 와 같은 규칙).
+bool isSafeRelPath(const std::string &path) {
+    if (path.empty() || path.size() > 4096) {
+        return false;
+    }
+    if (path.front() == '/' || path.front() == '~' || path.back() == '/') {
+        return false;
+    }
+    if (path.find('\\') != std::string::npos || path.find('\0') != std::string::npos) {
+        return false;
+    }
+
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t end = path.find('/', start);
+        const std::string segment =
+            path.substr(start, (end == std::string::npos) ? std::string::npos : end - start);
+        if (segment.empty() || segment == "." || segment == ".." || segment == ".git") {
+            return false;
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return true;
+}
+
+// worktree 안의 실제 경로. 상대 경로는 위에서 검증한 것만 넘긴다.
+std::string worktreeAbsPath(const std::string &workDir, const std::string &relPath) {
+    return workDir + "/" + relPath;
+}
+
+// worktree 안에서 그 상대 경로가 파일이든 디렉터리든 존재하는가.
+bool worktreePathExists(const std::string &workDir, const std::string &relPath) {
+    std::error_code ec;
+    return std::filesystem::exists(worktreeAbsPath(workDir, relPath), ec);
+}
+
+// git 이 그 경로를 추적하는가(인덱스 기준). untracked 는 git mv / git rm 으로 다룰 수 없다.
+bool isTrackedPath(const std::string &workDir, const std::string &relPath) {
+    return GitRunner::run(workDir, {"ls-files", "--error-unmatch", "--", relPath}).ok();
+}
+
+// 경로의 상위 디렉터리('' 이면 루트).
+std::string parentOfPath(const std::string &path) {
+    const std::size_t slash = path.find_last_of('/');
+    return (slash == std::string::npos) ? std::string() : path.substr(0, slash);
+}
+
+// 경로의 첫 조각(최상위 이름).
+std::string firstComponentOf(const std::string &path) {
+    const std::size_t slash = path.find('/');
+    return (slash == std::string::npos) ? path : path.substr(0, slash);
+}
+
+// path 가 candidate 자신이거나 그 하위 경로인가(디렉터리를 통째로 다룰 때 쓴다).
+bool pathCovers(const std::string &path, const std::string &candidate) {
+    if (path == candidate) {
+        return true;
+    }
+    return candidate.size() > path.size() && candidate.compare(0, path.size(), path) == 0 &&
+           candidate[path.size()] == '/';
+}
+
+// 상위 디렉터리를 만든다. 성공하면 빈 문자열, 실패하면 사유.
+std::string ensureParentDir(const std::string &absPath) {
+    const std::filesystem::path parent = std::filesystem::path(absPath).parent_path();
+    if (parent.empty()) {
+        return "";   // 저장소 루트 바로 아래 — 만들 것이 없다.
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(parent, ec);
+    return ec ? ec.message() : std::string();
+}
+
+// 이 작업 디렉터리 **안쪽**에 있는 다른 worktree 의 상대 경로를 모은다.
+// git 은 worktree 를 형제 디렉터리로 만든다(§2.3). 안쪽에 있다면 과거 상대 경로 버그의 흔적이고,
+// 그 트리 전체가 clone 의 untracked 로 보인다 — 저장소 내용이 아니므로 조회에서 걸러낸다.
+std::vector<std::string> nestedWorktreePaths(const std::string &workDir) {
+    std::vector<std::string> result;
+
+    auto listed = GitRunner::worktreeList(workDir);
+    if (!listed.ok()) {
+        return result;
+    }
+
+    std::error_code ec;
+    const std::string root = std::filesystem::absolute(workDir, ec).lexically_normal().string();
+    if (ec || root.empty()) {
+        return result;
+    }
+
+    std::istringstream stream(listed.out);
+    std::string line;
+    while (std::getline(stream, line)) {
+        line = trim(line);
+        if (line.rfind("worktree ", 0) != 0) {
+            continue;
+        }
+
+        const std::string other =
+            std::filesystem::absolute(trim(line.substr(std::string("worktree ").size())), ec)
+                .lexically_normal()
+                .string();
+        if (ec || other.empty() || other == root) {
+            continue;
+        }
+        if (other.size() > root.size() + 1 && other.compare(0, root.size(), root) == 0 &&
+            other[root.size()] == '/') {
+            result.push_back(other.substr(root.size() + 1));
+        }
+    }
+    return result;
+}
+
+// ls-tree(커밋된 트리)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목 이름을 **한 단계** 분량으로 모은다.
+//
+// 브랜치마다 작업 디렉터리가 따로 있으므로, 새로 만든 파일은 그것을 만든 브랜치에만 보인다(§6-9).
+// 인덱스에 올라간 파일(intent-to-add 포함)과 무시되지 않은 untracked 파일을 함께 보고,
+// 요청한 디렉터리보다 깊은 경로는 디렉터리 하나로 접는다 — 트리는 한 단계씩 펼치는 구조다.
+std::map<std::string, bool> worktreeOnlyNames(const std::string &workDir, const std::string &path) {
+    std::map<std::string, bool> names;   // 이름 → 디렉터리인가
+
+    // 저장소 안쪽에 남은 worktree(과거 버그 흔적)는 저장소 내용이 아니다 — 최상위 이름째로 무시한다.
+    std::map<std::string, bool> noiseRoots;
+    for (const auto &nested : nestedWorktreePaths(workDir)) {
+        noiseRoots[firstComponentOf(nested)] = true;
+    }
+    noiseRoots[".worktrees"] = true;
+
+    const std::string prefix = path.empty() ? std::string() : (path + "/");
+    const std::string pathspec = path.empty() ? "." : path;
+
+    auto collect = [&](const GitResult &result) {
+        for (const auto &full : splitNul(result.out)) {
+            if (full.empty() || noiseRoots.find(firstComponentOf(full)) != noiseRoots.end()) {
+                continue;
+            }
+            if (!prefix.empty() &&
+                (full.size() <= prefix.size() || full.compare(0, prefix.size(), prefix) != 0)) {
+                continue;   // 요청한 디렉터리 밖
+            }
+
+            const std::string rest = full.substr(prefix.size());
+            const std::size_t slash = rest.find('/');
+            names.emplace((slash == std::string::npos) ? rest : rest.substr(0, slash),
+                          slash != std::string::npos);
+        }
+    };
+    collect(GitRunner::lsFiles(workDir, {"--cached", "-z", "--", pathspec}));
+    collect(GitRunner::lsFiles(workDir, {"--others", "--exclude-standard", "-z", "--", pathspec}));
+
+    return names;
+}
+
+// 작업 트리 상태에서 "저장소 내용이 아닌" 항목(안쪽 worktree 등)을 걸러낸다.
+Json::Value filterNoiseEntries(const Json::Value &entries, const std::vector<std::string> &noise) {
+    if (noise.empty() || !entries.isArray()) {
+        return entries;
+    }
+
+    Json::Value filtered(Json::arrayValue);
+    for (const auto &entry : entries) {
+        const std::string path = entry["path"].asString();
+        bool noisy = false;
+        for (const auto &prefix : noise) {
+            if (pathCovers(prefix, path)) {
+                noisy = true;
+                break;
+            }
+        }
+        if (!noisy) {
+            filtered.append(entry);
+        }
+    }
+    return filtered;
+}
+
+// 요청 처리 뒤 최신 작업 트리 상태를 응답으로 돌려준다(스테이징·되돌리기와 같은 규격).
+HttpResponsePtr respondWithStatus(const std::string &workDir, const std::string &message,
+                                  HttpStatusCode code = k200OK) {
+    GitResult statusResult;
+    const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+    if (!statusResult.ok()) {
+        return errorResponse("P0807", "작업 트리 상태를 읽지 못했습니다: " + trim(statusResult.err),
+                             k500InternalServerError);
+    }
+    return successResponse(entries, message, code);
+}
+
+// collab 에게 "이 경로들의 doc 을 버려라" 라고 알린다(파일 삭제·이름변경, §12.5).
+// collab 은 메모리의 doc 과 영속화된 `.ydoc` 를 함께 지운다 — 남겨 두면 다음 flush 가 지운 파일을 되살린다.
+bool dropCollabDocs(int repoId, const std::string &branch, const std::vector<std::string> &paths) {
+    if (paths.empty()) {
+        return true;
+    }
+
+    Json::Value body;
+    body["repo_id"] = repoId;
+    body["branch"] = branch;
+    Json::Value list(Json::arrayValue);
+    for (const auto &path : paths) {
+        list.append(path);
+    }
+    body["paths"] = list;
+    return callCollabInternal("/internal/collab/files/drop", body);
+}
+
+// 트리 변경을 같은 브랜치 접속자에게 알린다(§12.5). 확장은 이 이벤트로 Repository 트리를 다시 그린다.
+void broadcastTreeChanged(int repoId, const std::string &branch, const std::string &type,
+                          const std::string &path, const std::string &from = "") {
+    if (branch.empty()) {
+        return;
+    }
+
+    Json::Value event;
+    event["type"] = type;
+    event["repo_id"] = repoId;
+    event["branch"] = branch;
+    event["path"] = path;
+    if (!from.empty()) {
+        event["from"] = from;
+    }
+    GithubWebSocketController::broadcastToBranch(repoId, branch, event);
+}
 }  // namespace
 
 // ===========================================================================
@@ -977,6 +1215,7 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
         }
 
         Json::Value items(Json::arrayValue);
+        std::map<std::string, bool> present;   // ls-tree 가 이미 담은 이름(중복 방지)
         for (const auto &entry : splitNul(tree.out)) {
             // "<mode> <type> <object> <size>\t<name>"
             const auto tab = entry.find('\t');
@@ -1005,6 +1244,23 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
                 node["type"] = "file";
                 node["size"] = static_cast<Json::Int64>(parseInt(size, fileSize) ? fileSize : 0);
             }
+            items.append(node);
+            present[name] = (type == "tree");
+        }
+
+        // 커밋된 트리(ls-tree)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목을 덧붙인다(§6-9, §12.5).
+        // 새로 만든 파일·디렉터리는 그것을 만든 브랜치의 worktree 에만 있으므로 다른 브랜치에는 나타나지 않는다.
+        // (빈 디렉터리는 git 이 추적하지 않아 여기에도 나오지 않는다 — git 사용자에게는 익숙한 동작이다.)
+        for (const auto &item : worktreeOnlyNames(localPath, path)) {
+            if (present.find(item.first) != present.end()) {
+                continue;
+            }
+
+            Json::Value node;
+            node["name"] = item.first;
+            node["path"] = path.empty() ? item.first : (path + "/" + item.first);
+            node["type"] = item.second ? "dir" : "file";
+            node["worktree_only"] = true;   // 아직 커밋되지 않은 항목
             items.append(node);
         }
 
@@ -1729,8 +1985,10 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
                                      k500InternalServerError);
             }
             if (!entries.empty()) {
+                // 지우면 작업 디렉터리 자체가 사라진다 — 커밋하지 않은 파일도 함께 없어진다는 것을 수로 분명히 알린다.
                 return errorResponse("P0810",
-                                     "이 브랜치에 커밋되지 않은 변경(staged/modified/untracked)이 있습니다. 확인해 주세요.",
+                                     "이 브랜치에 커밋되지 않은 변경 " + std::to_string(entries.size()) +
+                                         "개(staged/modified/untracked)가 있습니다. 삭제하면 함께 사라집니다. 확인해 주세요.",
                                      k409Conflict, entries);
             }
         }
@@ -2009,6 +2267,313 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
                                  k500InternalServerError);
         }
         return successResponse(entries, "되돌렸습니다.");
+    });
+}
+
+// ===========================================================================
+// 트리 변경: 파일·디렉터리 생성 / 이름변경·이동 / 삭제 (§12.5)
+// ===========================================================================
+//
+// 파일 시스템 변경은 서버(C++)가 수행하고 결과를 이벤트로 알린다 — 클라이언트는 요청만 하고 직접 만들지 않는다.
+// 브랜치마다 작업 디렉터리(worktree)가 다르므로, 같은 요청도 브랜치마다 다른 곳에 반영된다(§2.3).
+//
+// 공통 순서
+//   ① 경로 검증(worktree 밖 탈출 금지)
+//   ② collab 강제 flush — 아직 파일이 되지 않은 편집을 먼저 내려쓴다(§9.4). 커밋과 같은 이유다.
+//   ③ git / 파일 시스템 조작 — 추적되는 경로는 git(rm·mv)으로 인덱스까지 맞추고, untracked 는 파일만 고친다.
+//   ④ collab doc 정리 — 남겨 두면 다음 flush 가 지운 파일이나 옛 경로를 되살린다.
+//   ⑤ 브로드캐스트 — 같은 브랜치 접속자의 트리·변경 목록이 즉시 따라온다.
+//   ⑥ 최신 작업 트리 상태를 응답으로(스테이징·되돌리기와 같은 규격)
+
+// POST /api/github/repos/files — 빈 파일 생성
+void GithubController::createFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "path")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch, path)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    const std::string path = normalizePath((*jsonPtr)["path"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+    if (!isSafeRelPath(path)) {
+        callback(errorResponse("400", "경로가 올바르지 않습니다: " + path, k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        // 같은 저장소의 git 조작은 직렬화한다(index.lock 경합 방지, §12.11).
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        if (worktreePathExists(workDir, path)) {
+            return errorResponse("P0813", "이미 있는 경로입니다: " + path, k409Conflict);
+        }
+
+        // 아직 파일이 되지 않은 편집을 먼저 내려쓴 뒤에 만든다 — 순서가 뒤집히면 늦은 flush 가 빈 파일을 덮어쓴다.
+        flushCollabDocs(repoId, branch);
+
+        const std::string target = worktreeAbsPath(workDir, path);
+        const std::string parentReason = ensureParentDir(target);
+        if (!parentReason.empty()) {
+            return errorResponse("P0807", "상위 디렉터리를 만들지 못했습니다: " + parentReason, k500InternalServerError);
+        }
+        {
+            // 빈 파일을 만든다. 같은 요청이 겹쳐 이미 있으면 그대로 둔다.
+            std::ofstream file(target, std::ios::binary | std::ios::app);
+            if (!file) {
+                return errorResponse("P0807", "파일을 만들지 못했습니다: " + path, k500InternalServerError);
+            }
+        }
+
+        // 의도 표시(intent-to-add): 이 경로가 새 파일임을 인덱스에 알려 변경 목록에 '추가'(A) 로 뜨게 한다.
+        // 스테이징은 아니므로 커밋 대상이 아니고, 실패해도 untracked 로 남을 뿐이다(트리에는 그래도 나온다).
+        auto intent = GitRunner::run(workDir, {"add", "-N", "--", path});
+        if (!intent.ok()) {
+            LOG_WARN << "intent-to-add 실패 (" << path << "): " << trim(intent.err);
+        }
+
+        broadcastTreeChanged(repoId, branch, "file_created", path);
+        broadcastStatusChanged(repoId, branch);
+        return respondWithStatus(workDir, "파일을 만들었습니다.", k201Created);
+    });
+}
+
+// POST /api/github/repos/dirs — 디렉터리 생성.
+// git 은 빈 디렉터리를 추적하지 않으므로 그 안에 파일을 만들기 전에는 트리에 나타나지 않는다(§15.3).
+void GithubController::createDirectory(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "path")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch, path)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    const std::string path = normalizePath((*jsonPtr)["path"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+    if (!isSafeRelPath(path)) {
+        callback(errorResponse("400", "경로가 올바르지 않습니다: " + path, k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        if (worktreePathExists(workDir, path)) {
+            return errorResponse("P0813", "이미 있는 경로입니다: " + path, k409Conflict);
+        }
+
+        // 파일이 되지 않은 편집이 이 디렉터리 안에서 일어나고 있을 수 있다 — 먼저 내려쓴 뒤 만든다.
+        flushCollabDocs(repoId, branch);
+
+        std::error_code ec;
+        std::filesystem::create_directories(worktreeAbsPath(workDir, path), ec);
+        if (ec) {
+            return errorResponse("P0807", "디렉터리를 만들지 못했습니다: " + ec.message(), k500InternalServerError);
+        }
+
+        broadcastTreeChanged(repoId, branch, "dir_created", path);
+        return respondWithStatus(workDir, "디렉터리를 만들었습니다.", k201Created);
+    });
+}
+
+// PATCH /api/github/repos/files — 이름변경·이동.
+// 추적되는 경로는 git mv 로 옮겨 인덱스까지 함께 옮긴다(그래야 이름변경이 한 항목으로 보인다, §15.15).
+// untracked 는 파일 시스템에서 옮긴다. 어느 쪽이든 옮긴 뒤 옛 경로의 collab doc 을 버린다 —
+// 남겨 두면 다음 flush 가 옛 경로를 되살린다. 새 경로는 열 때 작업 트리 파일에서 읽는다(§12.5).
+void GithubController::renameFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "from", "to")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch, from, to)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    const std::string from = normalizePath((*jsonPtr)["from"].asString());
+    const std::string to = normalizePath((*jsonPtr)["to"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+    if (!isSafeRelPath(from) || !isSafeRelPath(to)) {
+        callback(errorResponse("400", "경로가 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+    if (from == to) {
+        callback(errorResponse("400", "옮기기 전후 경로가 같습니다: " + from, k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch, from, to]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        if (!worktreePathExists(workDir, from)) {
+            return errorResponse("P0814", "경로를 찾을 수 없습니다: " + from, k404NotFound);
+        }
+        if (worktreePathExists(workDir, to)) {
+            return errorResponse("P0813", "이미 있는 경로입니다: " + to, k409Conflict);
+        }
+
+        // 아직 파일이 되지 않은 편집을 먼저 내려쓴다 — 그러지 않으면 옮긴 뒤 늦은 flush 가 옛 경로에 쓴다.
+        flushCollabDocs(repoId, branch);
+
+        const std::string target = worktreeAbsPath(workDir, to);
+        bool moved = false;
+        if (isTrackedPath(workDir, from)) {
+            auto result = GitRunner::mv(workDir, from, to);
+            moved = result.ok();
+            if (!moved) {
+                LOG_WARN << "git mv 실패 — 파일 시스템 이동으로 대체 (" << from << " → " << to << "): " << trim(result.err);
+            }
+        }
+        if (!moved) {
+            // untracked 이거나, git 이 인덱스에 없는 경로라 옮기지 못한 경우다.
+            const std::string parentReason = ensureParentDir(target);
+            if (!parentReason.empty()) {
+                return errorResponse("P0807", "상위 디렉터리를 만들지 못했습니다: " + parentReason, k500InternalServerError);
+            }
+
+            std::error_code ec;
+            std::filesystem::rename(worktreeAbsPath(workDir, from), target, ec);
+            if (ec) {
+                return errorResponse("P0807", "이름을 바꾸지 못했습니다: " + ec.message(), k500InternalServerError);
+            }
+        }
+
+        // 옛 경로의 doc 과 `.ydoc` 를 버린다(디렉터리 이동이면 그 아래 전부를 collab 이 함께 정리한다).
+        dropCollabDocs(repoId, branch, {from});
+
+        broadcastTreeChanged(repoId, branch, "file_moved", to, from);
+        broadcastStatusChanged(repoId, branch);
+        return respondWithStatus(workDir, "이름을 바꿨습니다.");
+    });
+}
+
+// DELETE /api/github/repos/files — 삭제.
+// 커밋되지 않은 변경이 있으면 먼저 force 를 요구한다(브랜치 삭제와 같은 사고방식, §12.5 삭제 규칙).
+// 확인(모달)은 확장이 받고, 서버는 force 로만 그 확인을 건너뛴다.
+void GithubController::deleteFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    // DELETE 는 본문을 못 쓰는 클라이언트가 있어 쿼리 파라미터도 받는다(브랜치 삭제와 같은 규칙).
+    Json::Value body;
+    if (auto jsonPtr = req->getJsonObject()) {
+        body = *jsonPtr;
+    }
+
+    int repoId = 0;
+    if (body["repo_id"].isInt()) {
+        repoId = body["repo_id"].asInt();
+    } else if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string branch =
+        trim(body["branch"].isString() ? body["branch"].asString() : req->getParameter("branch"));
+    const std::string path =
+        normalizePath(body["path"].isString() ? body["path"].asString() : req->getParameter("path"));
+    if (branch.empty() || path.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch, path)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+    if (!isSafeRelPath(path)) {
+        callback(errorResponse("400", "경로가 올바르지 않습니다: " + path, k400BadRequest));
+        return;
+    }
+
+    const bool force = body["force"].isBool() ? body["force"].asBool() : (req->getParameter("force") == "true");
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(std::move(callback), [requester, repoId, branch, path, force]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        if (!worktreePathExists(workDir, path)) {
+            return errorResponse("P0814", "경로를 찾을 수 없습니다: " + path, k404NotFound);
+        }
+
+        // 아직 파일이 되지 않은 편집을 먼저 내려쓴 뒤 상태를 본다 — 그래야 최신 변경이 경고에 잡힌다.
+        flushCollabDocs(repoId, branch);
+
+        if (!force) {
+            GitResult statusResult;
+            const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+            if (!statusResult.ok()) {
+                return errorResponse("P0807", "작업 트리 상태를 읽지 못했습니다: " + trim(statusResult.err),
+                                     k500InternalServerError);
+            }
+
+            // 이 경로(디렉터리면 그 아래 전부)의 커밋되지 않은 변경만 추린다.
+            Json::Value relevant(Json::arrayValue);
+            for (const auto &entry : entries) {
+                if (pathCovers(path, entry["path"].asString())) {
+                    relevant.append(entry);
+                }
+            }
+            if (!relevant.empty()) {
+                return errorResponse("P0810",
+                                     "이 경로에 커밋되지 않은 변경 " + std::to_string(relevant.size()) +
+                                         "개가 있습니다. 삭제하면 함께 사라집니다. 확인해 주세요.",
+                                     k409Conflict, relevant);
+            }
+        }
+
+        // 추적되는 경로는 인덱스에서도 지워야 한다(git rm). untracked 는 파일만 지운다.
+        std::error_code ec;
+        if (isTrackedPath(workDir, path)) {
+            auto removed = GitRunner::rmPath(workDir, path);
+            if (!removed.ok()) {
+                // 인덱스에는 있는데 작업 트리에 없거나 git 이 거부하는 상태다 — 인덱스에서 빼고 파일을 지운다.
+                LOG_WARN << "git rm 실패 — 인덱스 해제 후 파일 삭제로 대체 (" << path << "): " << trim(removed.err);
+                GitRunner::run(workDir, {"rm", "-r", "--cached", "-q", "-f", "--", path});
+                std::filesystem::remove_all(worktreeAbsPath(workDir, path), ec);
+            }
+        } else {
+            std::filesystem::remove_all(worktreeAbsPath(workDir, path), ec);
+        }
+        if (ec) {
+            return errorResponse("P0807", "삭제하지 못했습니다: " + ec.message(), k500InternalServerError);
+        }
+
+        // 열려 있던 doc 을 버린다 — 남기면 다음 flush 가 지운 파일을 되살린다.
+        dropCollabDocs(repoId, branch, {path});
+
+        broadcastTreeChanged(repoId, branch, "file_deleted", path);
+        broadcastStatusChanged(repoId, branch);
+        return respondWithStatus(workDir, "삭제했습니다.");
     });
 }
 

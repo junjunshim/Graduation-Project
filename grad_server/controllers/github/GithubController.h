@@ -32,6 +32,12 @@ class GithubController : public drogon::HttpController<GithubController>
     ADD_METHOD_TO(GithubController::createBranch,         "/api/github/repos/branches", Post,   "JwtFilter");
     ADD_METHOD_TO(GithubController::deleteBranch,         "/api/github/repos/branches", Delete, "JwtFilter");
 
+    // --- 트리 변경: 파일·디렉터리 생성 / 이름변경·이동 / 삭제 (§12.5) ---
+    ADD_METHOD_TO(GithubController::createFileEntry,      "/api/github/repos/files", Post,   "JwtFilter");
+    ADD_METHOD_TO(GithubController::renameFileEntry,      "/api/github/repos/files", Patch,  "JwtFilter");
+    ADD_METHOD_TO(GithubController::deleteFileEntry,      "/api/github/repos/files", Delete, "JwtFilter");
+    ADD_METHOD_TO(GithubController::createDirectory,      "/api/github/repos/dirs",  Post,   "JwtFilter");
+
     // --- 작업 트리: 커밋 직전 상태 확인 / 스테이징 / 수동 fetch (§1.3-8, §1.4) ---
     ADD_METHOD_TO(GithubController::getStatus,            "/api/github/repos/status",   Get,    "JwtFilter");
     ADD_METHOD_TO(GithubController::stagePaths,           "/api/github/repos/stage",    Post,   "JwtFilter");
@@ -70,6 +76,11 @@ class GithubController : public drogon::HttpController<GithubController>
 
     void createBranch(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void deleteBranch(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+
+    void createFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void renameFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void deleteFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void createDirectory(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 
     void getStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void stagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);

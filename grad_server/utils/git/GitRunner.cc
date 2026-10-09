@@ -443,6 +443,21 @@ GitResult GitRunner::worktreeAdd(const std::string &repoDir, const std::string &
     // 경로는 반드시 절대 경로로 넘긴다. 상대 경로면 repoDir 기준으로 해석되어 저장소 안쪽에
     // worktree 가 만들어지고, DB 의 worktree_path(프로세스 CWD 기준)와 어긋나 버린다.
     const std::string target = absoluteFsPath(worktreeDir);
+
+    // 저장소 디렉터리 **안쪽**에 worktree 를 만들면 clone 의 작업 트리가 그 worktree 전체를
+    // 추적되지 않은 파일로 보게 된다(§2.3 — 브랜치 작업 디렉터리는 형제 디렉터리로 분리한다).
+    // git 은 인자로 받은 상대 경로를 repoDir 기준으로 해석하므로, 과거처럼 상대 경로가 새어 들어오면
+    // 여기서 막는다(위 absoluteFsPath 주석의 버그가 되살아나도 트리가 오염되지 않게).
+    const std::string repoAbs = absoluteFsPath(repoDir);
+    if (!repoAbs.empty() && target.size() > repoAbs.size() &&
+        target.compare(0, repoAbs.size(), repoAbs) == 0 && target[repoAbs.size()] == '/') {
+        GitResult rejected;
+        rejected.exitCode = 1;
+        rejected.err = "작업 디렉터리를 저장소 안쪽에 만들 수 없습니다: " + target;
+        LOG_WARN << rejected.err;
+        return rejected;
+    }
+
     if (startPoint.empty()) {
         // 이미 있는 브랜치를 붙인다
         return run(repoDir, {"worktree", "add", target, branch});
@@ -485,6 +500,18 @@ GitResult GitRunner::stageRemove(const std::string &worktreeDir, const std::vect
     std::vector<std::string> args = {"reset", "-q", "HEAD", "--"};
     args.insert(args.end(), paths.begin(), paths.end());
     return run(worktreeDir, args);
+}
+
+GitResult GitRunner::mv(const std::string &worktreeDir, const std::string &from, const std::string &to) {
+    // 추적되는 경로는 git 으로 옮긴다. -f 는 "목적지가 있어도 덮어쓴다" 가 아니라
+    // "수정된 파일이라도 옮긴다" 는 뜻이다(목적지 존재는 호출자가 미리 막는다).
+    return run(worktreeDir, {"mv", "-f", "--", from, to});
+}
+
+GitResult GitRunner::rmPath(const std::string &worktreeDir, const std::string &path) {
+    // -r 로 디렉터리까지, -f 로 수정·스테이징된 내용이 있어도 강제로 지운다.
+    // 되돌릴 수 없으므로 확인은 호출자(API)가 받는다(§12.5).
+    return run(worktreeDir, {"rm", "-r", "-f", "-q", "--", path});
 }
 
 GitResult GitRunner::commit(const std::string &worktreeDir, const std::string &message,

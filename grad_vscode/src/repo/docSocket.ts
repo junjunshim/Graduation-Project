@@ -474,7 +474,10 @@ async function handleDocReset(frame: Record<string, unknown>): Promise<void> {
         // 로컬 사본은 언제든 다시 만들 수 있는 캐시다(§10.1) — 지우지 못해도 무해하다.
     }
 
-    void vscode.window.showInformationMessage(`Axis Share: ${path} 이(가) 되돌려져 편집기에서 닫혔습니다.`);
+    // 트리 변경(삭제·이름변경)으로 닫힌 것이면 안내하지 않는다 — 되돌리기와 원인이 다르다(§12.5).
+    if (asString(frame.reason) !== 'tree_changed') {
+        void vscode.window.showInformationMessage(`Axis Share: ${path} 이(가) 되돌려져 편집기에서 닫혔습니다.`);
+    }
 }
 
 /** 탭이 닫히면 doc 참여를 끝낸다. 서버는 마지막 참여자가 나가면 grace 뒤 flush 한다(§12.4). */

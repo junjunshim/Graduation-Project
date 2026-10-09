@@ -116,6 +116,12 @@ export class ReviewIndex {
     this.scheduleSave();
   }
 
+  /** 그 파일의 리뷰를 통째로 지운다(파일 삭제·이름변경, §12.5). */
+  removePath(filePath: string): void {
+    if (!this.byPath.delete(filePath)) return;
+    this.scheduleSave();
+  }
+
   /** 남은 쓰기를 즉시 흘려보낸다(방 종료·서버 종료). 로드보다 먼저 불려도 안전하다. */
   async flush(): Promise<void> {
     if (this.saveTimer) {

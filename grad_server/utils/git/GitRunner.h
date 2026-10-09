@@ -64,6 +64,9 @@ public:
     static GitResult deleteBranch(const std::string &repoDir, const std::string &branch, bool force = false);
     static GitResult stageAdd(const std::string &worktreeDir, const std::vector<std::string> &paths);
     static GitResult stageRemove(const std::string &worktreeDir, const std::vector<std::string> &paths);
+    // 트리 변경(§12.5). 추적되는 경로는 git 으로, 추적되지 않는 경로는 파일 시스템으로 다룬다.
+    static GitResult mv(const std::string &worktreeDir, const std::string &from, const std::string &to);
+    static GitResult rmPath(const std::string &worktreeDir, const std::string &path);
     static GitResult commit(const std::string &worktreeDir, const std::string &message,
                             const std::string &authorName, const std::string &authorEmail);
     static GitResult headSha(const std::string &worktreeDir);

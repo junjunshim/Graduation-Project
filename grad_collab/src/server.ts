@@ -465,6 +465,7 @@ function handleFrame(client: RoomClient, frame: ClientFrame): Promise<void> | vo
 // nginx 는 /internal/* 를 404 로 막고, collab 은 compose 내부망에서만 닿는다. 그 위에 토큰까지 본다.
 const RESET_PATH = '/internal/collab/files/reset';
 const FLUSH_PATH = '/internal/collab/flush';
+const DROP_PATH = '/internal/collab/files/drop';
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 /** 내부 토큰을 상수 시간으로 비교한다(fail-closed — 토큰이 없으면 아무 요청도 받지 않는다). */
@@ -627,7 +628,83 @@ async function handleFlushRequest(req: http.IncomingMessage, res: http.ServerRes
   });
 }
 
+
+/**
+ * 파일 삭제·이름변경 통보(§12.5). C++ 이 git 작업(git rm / git mv)을 **끝낸 뒤** 부른다 —
+ * 여기서는 열려 있는 doc 과 `.ydoc`, 그리고 그 파일의 리뷰를 버린다.
+ * 남겨 두면 다음 flush 가 지운 파일이나 옛 경로를 되살린다.
+ *
+ * 경로가 디렉터리면 그 아래 doc 도 함께 버린다(트리에서 디렉터리를 통째로 지울 수 있다).
+ */
+async function handleDropRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!internalAuthorized(req)) {
+    log('warn', 'doc 정리 요청 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.');
+    sendJson(res, 401, { status: 'error', code: '401', message: '내부 인증에 실패했습니다.' });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readBody(req));
+  } catch (error) {
+    sendJson(res, 400, { status: 'error', code: '400', message: `요청 본문을 읽지 못했습니다: ${(error as Error).message}` });
+    return;
+  }
+
+  const body = parsed as { repo_id?: unknown; branch?: unknown; paths?: unknown };
+  const repoId = typeof body.repo_id === 'number' ? body.repo_id : Number.NaN;
+  const branch = typeof body.branch === 'string' ? body.branch : '';
+  const paths = Array.isArray(body.paths)
+    ? body.paths.filter((item): item is string => typeof item === 'string')
+    : [];
+  if (!Number.isInteger(repoId) || branch.length === 0) {
+    sendJson(res, 400, { status: 'error', code: '400', message: 'repo_id 와 branch 가 필요합니다.' });
+    return;
+  }
+
+  const room = rooms.get(repoId, branch);
+  if (!room) {
+    // 방이 없으면 메모리 doc 도 없었으므로 버릴 것도 없다(다음 open 이 파일에서 새로 만든다).
+    sendJson(res, 200, { status: 'success', data: [{ dropped: 0 }], message: '열린 문서가 없습니다.' });
+    return;
+  }
+
+  let dropped = 0;
+  for (const target of paths) {
+    if (!isSafeRelPath(target)) continue;
+
+    // 디렉터리 삭제·이동이면 그 아래 doc 도 함께 버린다.
+    const affected = new Set<string>([target]);
+    for (const openPath of room.docs.paths()) {
+      if (openPath === target || openPath.startsWith(`${target}/`)) affected.add(openPath);
+    }
+
+    for (const filePath of affected) {
+      const watchers = room.docs.watchersOf(filePath);
+      const clientIds = await room.docs.forget(filePath);
+      room.reviews.removePath(filePath);
+      for (const watcher of watchers) {
+        room.presence.removeCursor(filePath, watcher.userEmail);
+      }
+      if (clientIds.length > 0) {
+        // 열려 있던 탭은 닫는다 — 경로가 사라졌으니 내용을 더 보여 줄 수 없다(§12.5).
+        // `reason` 을 붙여 "되돌리기" 안내 문구를 쓰지 않게 한다.
+        room.sendTo(clientIds, { type: 'doc_reset', path: filePath, deleted: true, reason: 'tree_changed' });
+        dropped += 1;
+      }
+    }
+  }
+
+  // 그 경로의 리뷰도 함께 사라졌을 수 있다 — 사이드바(Reviews)가 통째로 다시 그리도록 스냅샷을 보낸다(§15.6).
+  if (paths.length > 0) {
+    room.broadcast({ type: 'reviews', branch: room.repo.branch, reviews: room.reviews.snapshot() });
+  }
+
+  log('info', 'doc 정리(트리 변경)', { repo: repoId, branch, targets: paths.length, dropped });
+  sendJson(res, 200, { status: 'success', data: [{ dropped }], message: '문서를 정리했습니다.' });
+}
 // --- HTTP(healthz) + 업그레이드 -------------------------------------------------------------
+
 
 const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === RESET_PATH) {
@@ -642,6 +719,14 @@ const server = http.createServer((req, res) => {
     void handleFlushRequest(req, res).catch((error: unknown) => {
       log('error', 'flush 처리 실패', { reason: (error as Error).message });
       sendJson(res, 500, { status: 'error', code: '500', message: 'flush 를 처리하지 못했습니다.' });
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === DROP_PATH) {
+    void handleDropRequest(req, res).catch((error: unknown) => {
+      log('error', 'doc 정리 처리 실패', { reason: (error as Error).message });
+      sendJson(res, 500, { status: 'error', code: '500', message: '문서를 정리하지 못했습니다.' });
     });
     return;
   }

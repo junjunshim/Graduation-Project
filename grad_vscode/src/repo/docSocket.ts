@@ -121,7 +121,7 @@ export type FileWatcher = {
 };
 
 /**
- * 파일 1개와 그것을 보고 있는 사람들(§15.5 Editing 뷰 파일 그룹).
+ * 파일 1개와 그것을 보고 있는 사람들(§15.5 Editing 뷰 사람 → 파일 단계).
  * 문서 소켓이 아는 것만 담는다 — 이 브랜치에서 내가 연 파일과, 그 파일을 함께 보는 사람뿐이다.
  */
 export type OpenFilePresence = {
@@ -212,8 +212,9 @@ const openWaiters = new Map<
 const watching = new Map<string, Watching>();
 
 /**
- * 이 브랜치에서 열려 있는 파일(경로) → 그 파일을 보는 사람(§15.5 Editing 뷰 파일 그룹).
+ * 이 브랜치에서 열려 있는 파일(경로) → 그 파일을 보는 사람(§15.5 Editing 뷰 사람 → 파일 단계).
  * 문서 소켓이 아는 것만 담는다 — `opened.watchers`(열 때)와 `peer_join`/`peer_leave`(그 뒤)뿐이다(§9.5).
+ * **키는 항상 `watching` 의 부분집합이다** — 감시를 끝낸 파일은 여기에도 남지 않는다.
  */
 const openFileWatchers = new Map<string, FileWatcher[]>();
 
@@ -250,7 +251,7 @@ export const onDidReceiveReviewIndex = reviewIndexEmitter.event;
 /** 편집 연결 상태 변경(§12.10). 상태 표시줄이 이 이벤트로 배지를 다시 그린다. */
 export const onDidChangeDocConnection = docConnectionEmitter.event;
 
-/** 파일별 참여자 변경(§15.5). Editing 뷰가 이 이벤트로 파일 그룹을 다시 그린다. */
+/** 파일별 참여자 변경(§15.5). Editing 뷰가 이 이벤트로 사람 → 파일 단계를 다시 그린다. */
 export const onDidChangeFilePresence = filePresenceEmitter.event;
 
 // ---------------------------------------------------------------------------
@@ -269,6 +270,7 @@ export function startDocSocket(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((event) => onDocumentChanged(event)),
         vscode.workspace.onDidCloseTextDocument((document) => onDocumentClosed(document)),
+        vscode.window.tabGroups.onDidChangeTabs((event) => onTabsClosed(event)),
         vscode.window.onDidChangeActiveTextEditor((editor) => onActiveEditorChanged(editor)),
         onDidChangeSession(() => onSessionChanged()),
         onDidChangeControlState((next) => applyControlGate(next === 'joined')),
@@ -630,24 +632,81 @@ async function handleDocReset(frame: Record<string, unknown>): Promise<void> {
 /** 탭이 닫히면 doc 참여를 끝낸다. 서버는 마지막 참여자가 나가면 grace 뒤 flush 한다(§12.4). */
 function onDocumentClosed(document: vscode.TextDocument): void {
     const entry = entryForUri(document.uri);
-    if (!entry) {
+    if (entry) {
+        releaseWatching(entry);
+    }
+}
+
+/**
+ * 탭이 닫힌 순간을 직접 본다(§12.4).
+ *
+ * `onDidCloseTextDocument` 는 문서가 **완전히 버려질 때만** 온다 — 같은 로컬 사본을 diff(§15.15)가
+ * 붙들고 있으면 오지 않는다. 그래서 탭 닫힘을 따로 보고, 그 문서를 보여 주는 탭이 하나도 남지
+ * 않았으면 감시를 끝낸다. 닫힌 탭의 URI 만 검사하므로 아직 화면에 올라가지 않은 문서는 건드리지 않는다.
+ */
+function onTabsClosed(event: vscode.TabChangeEvent): void {
+    if (event.closed.length === 0) {
         return;
     }
 
-    watching.delete(entry.path);
-    emitOpenDocsChange();
+    const closedUris = new Set<string>();
+    for (const tab of event.closed) {
+        for (const uri of tabUris(tab)) {
+            closedUris.add(uri);
+        }
+    }
+    if (closedUris.size === 0) {
+        return;
+    }
+
+    for (const entry of [...watching.values()]) {
+        if (closedUris.has(entry.uri.toString()) && !isUriInAnyTab(entry.uri)) {
+            releaseWatching(entry);
+        }
+    }
+}
+
+/** 이 창의 감시를 끝낸다. 마지막 참여자였으면 서버가 grace 뒤 파일로 내려쓴다(§12.4). */
+function releaseWatching(entry: Watching): void {
+    if (watching.delete(entry.path)) {
+        emitOpenDocsChange();
+    }
+
     // 내 탭만 닫은 것이다 — 아직 이 파일을 보는 다른 사람은 목록에 남긴다(§15.5).
     const me = getSession()?.userEmail;
     if (me !== undefined) {
         removeFileWatcher(entry.path, me);
     }
+
     if (entry.saveTimer) {
         clearTimeout(entry.saveTimer);
+        entry.saveTimer = undefined;
     }
 
     if (entry.attached) {
         send({ type: 'close', path: entry.path });
     }
+}
+
+/** 탭이 들고 있는 URI(에디터 탭·diff 양쪽). 우리 문서가 아니면 빈 배열이다. */
+function tabUris(tab: vscode.Tab): string[] {
+    const input: unknown = tab.input;
+    if (input instanceof vscode.TabInputText) {
+        return [input.uri.toString()];
+    }
+    if (input instanceof vscode.TabInputTextDiff) {
+        return [input.original.toString(), input.modified.toString()];
+    }
+
+    return [];
+}
+
+/** 이 URI 를 보여 주는 탭이 아직 하나라도 있는가. */
+function isUriInAnyTab(uri: vscode.Uri): boolean {
+    const key = uri.toString();
+    return vscode.window.tabGroups.all.some((group) =>
+        group.tabs.some((tab) => tabUris(tab).includes(key))
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -950,7 +1009,7 @@ function handleFrame(text: string): void {
             void handleDocReset(frame);
             return;
         default:
-            // `peer_join` 은 Editing 뷰의 파일 그룹(§15.5), `flushed` 는 커밋 파이프라인(§12.11)에서 쓴다.
+            // `peer_join` 은 Editing 뷰의 사람 → 파일 단계(§15.5), `flushed` 는 커밋 파이프라인(§12.11)에서 쓴다.
             return;
     }
 }
@@ -1498,11 +1557,16 @@ function handlePeerLeave(frame: Record<string, unknown>): void {
 }
 
 // ---------------------------------------------------------------------------
-// 파일별 참여자 (Editing 뷰 파일 그룹, §15.5)
+// 파일별 참여자 (Editing 뷰 사람 → 파일 단계, §15.5)
 // ---------------------------------------------------------------------------
 
 /** 같은 사람이 탭을 여러 개 열어도 한 줄만 그린다 — 이메일이 신원이다(§12.8). */
 function addFileWatcher(path: string, email: string, name: string | undefined): void {
+    if (!watching.has(path)) {
+        // 이 창이 열지 않은 파일이다(끊긴 사이 서버가 보낸 신호 등). 목록에 넣지 않는다(§15.5).
+        return;
+    }
+
     const existing = openFileWatchers.get(path);
     const watchers = existing ? [...existing] : [];
     const index = watchers.findIndex((watcher) => watcher.email === email);
@@ -1592,13 +1656,20 @@ function parseFileWatchers(value: unknown): FileWatcher[] {
  * 값을 준다 — 소켓 하나가 한 방에만 붙으므로 다른 브랜치의 파일 참여자는 알 수 없다(§9.5).
  */
 export function getOpenFilePresence(branch: string): OpenFilePresence[] {
-    if (joinedBranch !== branch || openFileWatchers.size === 0) {
+    if (joinedBranch !== branch) {
         return [];
     }
 
-    return [...openFileWatchers.entries()]
-        .map(([path, watchers]) => ({ path, watchers }))
-        .sort((a, b) => a.path.localeCompare(b.path));
+    // 지금 이 창이 열어 둔 파일만 보여 준다 — 감시를 끝낸 파일이 목록에 남지 않게 하는 마지막 기준이다(§15.5).
+    const files: OpenFilePresence[] = [];
+    for (const path of watching.keys()) {
+        const watchers = openFileWatchers.get(path);
+        if (watchers !== undefined && watchers.length > 0) {
+            files.push({ path, watchers });
+        }
+    }
+
+    return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /** 지금 열려 있는 파일들. 커서 렌더러가 경로·Y.Text 를 얻는 유일한 창구다. */

@@ -7,7 +7,7 @@ import {
     onDidReceiveControlEvent,
     type PresenceEntry
 } from './controlSocket';
-import { getOpenFilePresence, onDidChangeFilePresence, type FileWatcher } from './docSocket';
+import { getOpenFilePresence, onDidChangeFilePresence } from './docSocket';
 import { getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
 import { NO_SESSION_MESSAGE } from './repoTreeProvider';
 import { userColor } from './userColors';
@@ -19,9 +19,12 @@ import { userColor } from './userColors';
  * 보여 주고, 뷰 타이틀에 저장소 전체 인원을 적는다 — 다른 브랜치에 사람이 있는지 보려고
  * 브랜치를 옮겨 다니지 않아도 되게 하려는 것이다.
  *
- * §15.5 의 최종 구조는 그 아래에 "파일(열려 있는 파일) → 그 파일을 보는 사용자" 한 단계가 더 있다.
- * 파일 단위 참여자는 문서 소켓의 `opened` / `peer_join` / `peer_leave` 로만 알 수 있으므로(§9.5),
- * **문서 소켓이 그 브랜치에 붙어 있을 때**(= 이 창이 파일을 하나라도 연 뒤)만 파일 그룹이 나타난다.
+ * 구조는 **브랜치 → 사람 → 그 사람이 보고 있는 파일**이다(§15.5). 사람 아래에 파일을 두면 같은 이름이
+ * 파일마다 되풀이되지 않고 "누가 무엇을 보고 있나" 가 한 줄로 읽힌다.
+ *
+ * 파일 단위 참여자는 문서 소켓의 `opened` / `peer_join` / `peer_leave` 로만 알 수 있고(§9.5), 그 소켓은
+ * 이 창이 연 파일만 안다. 그래서 파일 목록은 **문서 소켓이 그 브랜치에 붙어 있을 때**(= 이 창이 파일을
+ * 하나라도 연 뒤)만 채워지고, 겹치는 파일이 없는 사람은 이름만 남는다.
  */
 
 const VIEW_PEOPLE = 'axis-share-people';
@@ -33,13 +36,13 @@ const WAITING_MESSAGE = '제어 소켓에 연결되면 브랜치별 접속자가
 const EMPTY_MESSAGE = '이 저장소에서 편집 중인 사용자가 없습니다.';
 
 /**
- * 뷰가 그리는 항목. 브랜치 그룹 · 파일 그룹(§15.5) · 접속자 1명, 세 종류다.
- * 파일 그룹은 문서 소켓이 아는 파일에만 붙는다 — 브랜치 접속자 목록은 제어 소켓이 준다(§12.2).
+ * 뷰가 그리는 항목 — 브랜치 그룹 · 사람 · 파일, 세 종류다(§15.5).
+ * 접속자 목록은 제어 소켓이(§12.2), 각자가 보고 있는 파일은 문서 소켓이 준다(§9.5).
  */
 export type PresenceItem =
     | { kind: 'branch'; branch: string; entries: readonly PresenceEntry[] }
-    | { kind: 'file'; path: string; watchers: readonly FileWatcher[] }
-    | { kind: 'person'; entry: PresenceEntry; isMe: boolean; path?: string };
+    | { kind: 'person'; entry: PresenceEntry; isMe: boolean; files: readonly string[] }
+    | { kind: 'file'; path: string };
 
 export class PresenceTreeProvider implements vscode.TreeDataProvider<PresenceItem>, vscode.Disposable {
     private readonly changeEmitter = new vscode.EventEmitter<void>();
@@ -76,20 +79,14 @@ export class PresenceTreeProvider implements vscode.TreeDataProvider<PresenceIte
         }
 
         if (element.kind === 'branch') {
-            return branchChildren(element.branch, element.entries);
+            return branchPeople(element.branch, element.entries);
         }
 
-        if (element.kind === 'file') {
-            const me = getSession()?.userEmail;
-            return element.watchers.map((watcher) => ({
-                kind: 'person',
-                entry: watcher,
-                isMe: watcher.email === me,
-                path: element.path
-            }));
+        if (element.kind === 'person') {
+            return element.files.map((path) => ({ kind: 'file', path }) as PresenceItem);
         }
 
-        // 접속자 항목에는 자식이 없다.
+        // 파일 항목에는 자식이 없다.
         return [];
     }
 
@@ -147,29 +144,56 @@ function branchGroups(): PresenceItem[] {
 }
 
 /**
- * 브랜치 그룹의 자식(§15.5). 문서 소켓이 아는 파일을 먼저 파일 그룹으로 놓고, 그 파일들에 나타나지
- * 않은 접속자를 사람 항목으로 남긴다 — 파일을 열지 않은 사람이 목록에서 사라지지 않게 하려는 것이다.
- * 파일 참여자는 문서 소켓이 그 브랜치에 붙어 있을 때만 알 수 있다(§9.5).
+ * 브랜치 그룹의 자식 — 사람 목록(§15.5). 접속자 목록(제어 소켓)을 기준으로 하고, 각자에게 지금
+ * 보고 있는 파일(문서 소켓)을 붙인다. 문서 소켓은 이 창이 연 파일만 아니, 겹치는 파일이 없는
+ * 사람은 파일 없이 이름만 남는다 — 없는 정보를 지어내지 않는다(§9.5).
  */
-function branchChildren(branch: string, entries: readonly PresenceEntry[]): PresenceItem[] {
+function branchPeople(branch: string, entries: readonly PresenceEntry[]): PresenceItem[] {
     const me = getSession()?.userEmail;
-    const items: PresenceItem[] = [];
-    const covered = new Set<string>();
+    const filesByUser = new Map<string, string[]>();
 
     for (const file of getOpenFilePresence(branch)) {
-        items.push({ kind: 'file', path: file.path, watchers: file.watchers });
         for (const watcher of file.watchers) {
-            covered.add(watcher.email);
+            const files = filesByUser.get(watcher.email);
+            if (files) {
+                files.push(file.path);
+            } else {
+                filesByUser.set(watcher.email, [file.path]);
+            }
         }
     }
 
+    const people: PresenceItem[] = [];
+    const seen = new Set<string>();
     for (const entry of entries) {
-        if (!covered.has(entry.email)) {
-            items.push({ kind: 'person', entry, isMe: entry.email === me });
+        seen.add(entry.email);
+        people.push({
+            kind: 'person',
+            entry,
+            isMe: entry.email === me,
+            files: filesByUser.get(entry.email) ?? []
+        });
+    }
+
+    // 접속자 목록에 없는데 문서 소켓에는 보이는 사람(끊김 직후 등)도 빠뜨리지 않는다.
+    for (const [email, files] of filesByUser) {
+        if (!seen.has(email)) {
+            people.push({ kind: 'person', entry: { email }, isMe: email === me, files });
         }
     }
 
-    return items;
+    // 나를 맨 앞에 두고 나머지는 이름순이다(§15.5). 그래야 내가 여는 파일을 먼저 본다.
+    people.sort((a, b) => {
+        if (a.kind !== 'person' || b.kind !== 'person') {
+            return 0;
+        }
+        if (a.isMe !== b.isMe) {
+            return a.isMe ? -1 : 1;
+        }
+        return displayName(a.entry).localeCompare(displayName(b.entry));
+    });
+
+    return people;
 }
 
 /** 저장소 전체 접속자 수(브랜치별 인원의 합). 뷰 타이틀에 쓴다. */
@@ -199,18 +223,19 @@ function branchTreeItem(item: Extract<PresenceItem, { kind: 'branch' }>): vscode
     return treeItem;
 }
 
-/** 파일 그룹 한 줄(§15.5). 누르면 그 파일을 연다 — 파일 참여자를 보다가 바로 그 파일로 간다. */
+/** 사람 아래의 파일 한 줄(§15.5). 라벨은 파일 이름, `description` 은 디렉터리. 누르면 그 파일을 연다. */
 function fileTreeItem(item: Extract<PresenceItem, { kind: 'file' }>): vscode.TreeItem {
-    const treeItem = new vscode.TreeItem(basename(item.path), vscode.TreeItemCollapsibleState.Expanded);
+    const treeItem = new vscode.TreeItem(basename(item.path), vscode.TreeItemCollapsibleState.None);
 
-    // 항목 id 를 고정해야 다시 그려도 펼침 상태가 유지된다.
+    // 항목 id 를 고정해야 다시 그려도 같은 자리를 지킨다.
     treeItem.id = `file:${item.path}`;
     const directory = dirname(item.path);
-    const count = `${item.watchers.length}명`;
-    treeItem.description = directory ? `${directory} · ${count}` : count;
+    if (directory) {
+        treeItem.description = directory;
+    }
     treeItem.iconPath = new vscode.ThemeIcon('file');
     treeItem.contextValue = 'axisFilePresence';
-    treeItem.tooltip = `${item.path}\n이 파일을 보고 있는 사용자 ${item.watchers.length}명`;
+    treeItem.tooltip = item.path;
     treeItem.command = {
         command: 'axis-share.openFile',
         title: '파일 열기',
@@ -232,17 +257,22 @@ function dirname(path: string): string {
     return index > 0 ? path.slice(0, index) : '';
 }
 
-/** 접속자 한 줄. */
+/** 접속자 한 줄. 보고 있는 파일이 있으면 그 아래에 붙는다(§15.5). */
 function personTreeItem(item: Extract<PresenceItem, { kind: 'person' }>): vscode.TreeItem {
     const entry = item.entry;
-    const treeItem = new vscode.TreeItem(displayName(entry), vscode.TreeItemCollapsibleState.None);
+    const collapsible = item.files.length > 0
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.None;
+    const treeItem = new vscode.TreeItem(displayName(entry), collapsible);
 
+    // 항목 id 를 고정해야 다시 그려도 펼침 상태가 유지된다.
+    treeItem.id = `person:${entry.email}`;
     // 같은 이름이 여럿일 수 있어 이메일을 함께 보여 준다(§15.11 의 axisPerson 컨텍스트 기준).
-    treeItem.description = item.isMe ? `${entry.email} · 나` : entry.email;
+    const identity = item.isMe ? `${entry.email} · 나` : entry.email;
+    treeItem.description = item.files.length > 0 ? `${item.files.length}개 파일 · ${identity}` : identity;
     // 사이드바 점은 원격 커서와 같은 색을 쓴다(§15.8).
     treeItem.iconPath = new vscode.ThemeIcon('circle-filled', userColor(entry.email));
-    // 파일 그룹 아래의 사람은 그 파일을 열 수 있다 — 컨텍스트 메뉴가 이 값으로 갈린다(§15.5).
-    treeItem.contextValue = item.path === undefined ? 'axisPerson' : 'axisFilePerson';
+    treeItem.contextValue = 'axisPerson';
     treeItem.tooltip = buildTooltip(entry);
 
     return treeItem;

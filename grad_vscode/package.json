@@ -359,7 +359,7 @@
                 },
                 {
                     "command": "axis-share.openFile",
-                    "when": "view == axis-share-people && viewItem == axisFilePerson",
+                    "when": "view == axis-share-people && viewItem == axisFilePresence",
                     "group": "1_open@1"
                 }
             ],

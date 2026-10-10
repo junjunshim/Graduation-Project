@@ -19,7 +19,7 @@ import { diffRange, normalizeEol, toRawOffset } from './text';
  *
  * 텍스트 병합은 Yjs 가 한다. 이 모듈은 값을 해석하지 않고 그대로 옮기기만 한다(§9.1).
  *
- * 아직 하지 않는 것: 커서·리뷰 데코레이션(§12.8), 끊김 자동 재접속(§12.10). 다음 단계다.
+ * 끊기면 편집을 잠그고, 다시 붙으면 열려 있던 파일을 서버 내용으로 통째로 다시 받는다(§12.10).
  */
 
 /** Yjs 공유 텍스트 타입 이름. collab 과 같은 값이어야 한다(§8.5). */
@@ -34,8 +34,21 @@ const OPEN_TIMEOUT_MS = 15_000;
 /** 로컬 사본 디스크 쓰기 디바운스(§10.1). 타이핑마다 파일을 쓰지 않는다. */
 const SAVE_DEBOUNCE_MS = 1_000;
 
+/** 재연결 백오프(§12.10). 제어 소켓과 같은 규칙 — 1초에서 2배씩 늘려 30초에서 멈춘다(±20% 지터). */
+const RECONNECT_MIN_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
+
+/** 끊긴 뒤 편집을 잠그기까지의 유예(§12.10). 이 안에 다시 붙으면 잠그지 않는다. */
+const LOCK_GRACE_MS = 3_000;
+
 /** 문서 소켓 상태(§10.2 상태 머신 중 이 모듈이 책임지는 구간). */
 export type DocState = 'disconnected' | 'joining' | 'active';
+
+/**
+ * 편집 연결 상태(§12.10) — 상태 표시줄(`connectionStatus.ts`)이 이 값으로 배지를 그린다.
+ * `idle` 은 "붙을 방이 없거나 스스로 접은 상태"라 알릴 것이 없고, `reconnecting`·`locked` 는 사고다.
+ */
+export type DocConnection = 'idle' | 'joining' | 'active' | 'reconnecting' | 'locked';
 
 /** 서버가 확인해 준 `opened` 프레임에서 이 모듈이 쓰는 필드만 추린 것. */
 type OpenedFrame = {
@@ -142,6 +155,18 @@ let joinTask: Promise<void> | undefined;
 let joinWaiter: { resolve: () => void; reject: (error: Error) => void } | undefined;
 let joinTimer: ReturnType<typeof setTimeout> | undefined;
 
+/** 다시 붙을 방과 백오프(§12.10). 끊긴 시점의 방을 기억한다 — 그 사이 브랜치가 바뀌면 버린다. */
+let reconnectTarget: { repoId: number; branch: string } | undefined;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let reconnectDelayMs = RECONNECT_MIN_MS;
+
+/** 편집 잠금 유예 타이머와 잠금 여부(§12.10). */
+let lockTimer: ReturnType<typeof setTimeout> | undefined;
+let docsLocked = false;
+
+/** 편집 연결 상태(§12.10). 상태 표시줄이 구독한다. */
+let docConnection: DocConnection = 'idle';
+
 /** 경로별 `opened` 대기자. */
 const openWaiters = new Map<
     string,
@@ -160,6 +185,7 @@ const peerLeaveEmitter = new vscode.EventEmitter<FilePeerLeave>();
 const decorationEmitter = new vscode.EventEmitter<RemoteDecoration>();
 const decorationDeleteEmitter = new vscode.EventEmitter<RemoteDecorationDelete>();
 const reviewIndexEmitter = new vscode.EventEmitter<ReviewIndexFrame>();
+const docConnectionEmitter = new vscode.EventEmitter<DocConnection>();
 
 /** 열려 있는 문서 목록이 바뀌었다(열림·닫힘·브랜치 전환). 커서 렌더러가 이 이벤트로 다시 그린다. */
 export const onDidChangeOpenDocs = openDocsEmitter.event;
@@ -179,6 +205,9 @@ export const onDidReceiveDecorationDelete = decorationDeleteEmitter.event;
 /** 브랜치 리뷰 인덱스 스냅샷(§15.6). 방에 들어갈 때마다 한 번 오므로 인덱스를 그대로 갈아 끼우면 된다. */
 export const onDidReceiveReviewIndex = reviewIndexEmitter.event;
 
+/** 편집 연결 상태 변경(§12.10). 상태 표시줄이 이 이벤트로 배지를 다시 그린다. */
+export const onDidChangeDocConnection = docConnectionEmitter.event;
+
 // ---------------------------------------------------------------------------
 // 수명주기
 // ---------------------------------------------------------------------------
@@ -194,6 +223,7 @@ export function startDocSocket(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((event) => onDocumentChanged(event)),
         vscode.workspace.onDidCloseTextDocument((document) => onDocumentClosed(document)),
+        vscode.window.onDidChangeActiveTextEditor((editor) => onActiveEditorChanged(editor)),
         onDidChangeSession(() => onSessionChanged()),
         { dispose: () => stopDocSocket() }
     );
@@ -228,6 +258,8 @@ function onSessionChanged(): void {
 /** 열려 있던 탭을 접고 소켓을 버린다. 다음 파일 열기에서 새 방으로 다시 붙는다. */
 async function retireAll(): Promise<void> {
     const uris = [...watching.values()].map((entry) => entry.uri);
+    cancelReconnect();
+    unlockEditors(false);
     watching.clear();
     emitOpenDocsChange();
 
@@ -269,9 +301,17 @@ async function openFile(path: string): Promise<void> {
     }
 
     if (existing) {
-        // 연결이 끊긴 사본이다. 닫고 새로 받는다(§12.10 은 다음 단계).
-        watching.delete(path);
-        await closeTab(existing.uri);
+        // 끊긴 사본이다 — 탭은 두고 서버 내용으로 다시 채운다(§12.10 재동기화).
+        try {
+            await ensureJoined(session.repoId, branch);
+            await applyServerFrame(existing, await requestOpen(path));
+            await reveal(existing.uri);
+        } catch (error) {
+            const message = describe(error);
+            log(`파일을 다시 열지 못했습니다(${path}): ${message}`);
+            void vscode.window.showWarningMessage(`Axis Share: ${message}`);
+        }
+        return;
     }
 
     try {
@@ -303,9 +343,15 @@ export async function ensureDocSession(path: string): Promise<vscode.Uri | undef
     }
 
     if (existing) {
-        // 연결이 끊긴 사본이다. 닫고 새로 받는다(§12.10 은 다음 단계).
-        watching.delete(path);
-        await closeTab(existing.uri);
+        // 끊긴 사본이다 — 탭을 열지 않고 서버 내용으로 다시 채운다(§12.10 재동기화).
+        try {
+            await ensureJoined(session.repoId, branch);
+            await applyServerFrame(existing, await requestOpen(path));
+            return existing.uri;
+        } catch (error) {
+            log(`파일 세션을 다시 물리지 못했습니다(${path}): ${describe(error)}`);
+            return undefined;
+        }
     }
 
     try {
@@ -352,6 +398,11 @@ async function materialize(
 
     await writeLocalCopy(entry);
 
+    // 같은 경로가 이미 에디터에 열려 있으면(이전 세션 등) 버퍼도 서버 내용으로 맞춘다.
+    if (findDocument(uri)) {
+        await pushTextToEditor(entry);
+    }
+
     if (options.reveal !== false) {
         await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(uri, { preview: false });
@@ -370,6 +421,40 @@ async function materialize(
     }
 
     return uri;
+}
+
+/**
+ * 서버 권위 상태(`opened`)로 이 파일의 로컬 doc·버퍼를 통째로 갈아 끼운다(§12.10 재동기화).
+ * 로컬 replica 를 병합하지 않는다 — 끊긴 동안의 로컬 변경은 버리고 서버 내용만 따른다.
+ */
+async function applyServerFrame(entry: Watching, opened: OpenedFrame): Promise<void> {
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, b64ToBytes(opened.state), 'remote');
+
+    const previous = entry.doc;
+    entry.doc = doc;
+    entry.text = doc.getText(TEXT_TYPE);
+    entry.eol = opened.eol;
+    entry.canWrite = opened.canWrite;
+    entry.attached = true;
+    emitOpenDocsChange(); // 다시 붙은 문서를 커서·데코 렌더러가 다시 그린다.
+
+    // 앞선 화면 반영과 순서가 엉키지 않게 같은 큐에 태운다(§12.7).
+    entry.queue = entry.queue
+        .then(async () => {
+            await writeLocalCopy(entry);
+            await pushTextToEditor(entry);
+        })
+        .catch((error: unknown) => {
+            log(`재동기화를 화면에 반영하지 못했습니다(${entry.path}): ${describe(error)}`);
+        });
+    await entry.queue;
+
+    try {
+        previous.destroy();
+    } catch {
+        // 이미 버린 doc 이다 — 무해하다.
+    }
 }
 
 /** 로컬 사본(=캐시, §10.1)을 Yjs 텍스트로 다시 쓴다. 줄바꿈은 원본 파일 것을 따른다. */
@@ -600,6 +685,12 @@ async function saveEntry(entry: Watching): Promise<void> {
 async function ensureJoined(repoId: number, branch: string): Promise<void> {
     if (state === 'active' && joinedRepoId === repoId && joinedBranch === branch) {
         return;
+    }
+
+    // 다른 방으로 옮기는 것이면 예약된 재연결은 버린다(§12.10).
+    if (reconnectTarget && (reconnectTarget.repoId !== repoId || reconnectTarget.branch !== branch)) {
+        cancelReconnect();
+        unlockEditors(false);
     }
 
     const key = `${repoId}|${branch}`;
@@ -845,9 +936,14 @@ function handleServerError(frame: Record<string, unknown>): void {
     void vscode.window.showWarningMessage(`Axis Share: ${message}`);
 }
 
-/** 예고 없이 끊겼다. 붙어 있던 문서를 전부 "떨어짐" 으로 표시하고 알린다(§12.10 은 다음 단계). */
+/**
+ * 예고 없이 끊겼다(§12.10). 편집 전송을 즉시 멈추고, 짧은 유예 뒤에도 못 붙으면 편집기를 잠근 뒤
+ * 백오프로 다시 붙는다. 다시 붙으면 열려 있던 파일을 서버 내용으로 통째로 다시 받는다.
+ */
 function handleSocketClosed(): void {
-    const wasActive = state === 'active';
+    const repoId = joinedRepoId;
+    const branch = joinedBranch;
+    const hadRoom = state === 'active' && repoId !== undefined && branch !== undefined;
 
     socket = undefined;
     socketGeneration += 1;
@@ -863,16 +959,30 @@ function handleSocketClosed(): void {
     }
     openWaiters.clear();
 
+    // 붙어 있던 문서는 전부 "떨어짐" 으로 표시한다 — 끊긴 동안에는 편집을 보내지 않는다.
     for (const entry of watching.values()) {
         entry.attached = false;
     }
+    emitOpenDocsChange();
 
-    if (wasActive) {
-        log('문서 소켓 연결이 끊어졌습니다.');
-        void vscode.window.showWarningMessage(
-            'Axis Share: 협업 서버 연결이 끊어졌습니다. 편집 내용이 전송되지 않으니 파일을 다시 열어 주세요.'
-        );
+    if (!hadRoom || watching.size === 0) {
+        return; // 붙어 있던 방이 없다 — 다시 붙을 대상도 없다(다음 파일 열기에서 새로 붙는다).
     }
+
+    if (!docsLocked) {
+        setDocConnection('reconnecting'); // 상태 표시줄에 눈에 띄게 알린다(§12.10). 잠금 중이면 잠금 표시를 지킨다.
+    }
+    log(`문서 소켓 연결이 끊어졌습니다. ${LOCK_GRACE_MS}ms 안에 못 붙으면 편집을 잠급니다.`);
+
+    // 짧은 끊김은 유예한다 — 유예 안에 다시 붙으면 잠그지 않는다(§12.10).
+    if (!lockTimer) {
+        lockTimer = setTimeout(() => {
+            lockTimer = undefined;
+            lockEditors();
+        }, LOCK_GRACE_MS);
+    }
+
+    scheduleReconnect(repoId, branch);
 }
 
 /** 소켓과 방 상태를 버린다. 다음 파일 열기에서 티켓을 새로 받아 다시 붙는다. */
@@ -899,6 +1009,173 @@ async function teardown(): Promise<void> {
         } catch {
             // 이미 닫힌 소켓이다.
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 재연결·재동기화(§12.10)
+// ---------------------------------------------------------------------------
+
+/** 활성 탭이 바뀌었다. 잠긴 동안이면 새로 앞으로 나온 우리 문서도 잠근다(§12.10). */
+function onActiveEditorChanged(editor: vscode.TextEditor | undefined): void {
+    if (!docsLocked || !editor) {
+        return;
+    }
+
+    if (entryForUri(editor.document.uri)) {
+        void setEditorLocked(editor.document.uri, true);
+    }
+}
+
+/** 끊긴 방을 기억하고 백오프 뒤에 다시 붙는다(§12.10). 제어 소켓과 같은 규칙이다. */
+function scheduleReconnect(repoId: number, branch: string): void {
+    reconnectTarget = { repoId, branch };
+    if (reconnectTimer) {
+        return;
+    }
+
+    const delay = Math.round(reconnectDelayMs * (0.8 + Math.random() * 0.4));
+    reconnectDelayMs = Math.min(reconnectDelayMs * 2, RECONNECT_MAX_MS);
+
+    log(`문서 소켓을 ${delay}ms 뒤에 다시 연결합니다.`);
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        void reconnectNow();
+    }, delay);
+}
+
+/** 백오프가 돌아왔다 — 다시 붙은 뒤 열려 있던 파일을 서버 내용으로 맞춘다(§12.10). */
+async function reconnectNow(): Promise<void> {
+    const target = reconnectTarget;
+    if (!started || !target) {
+        return;
+    }
+
+    // 그 사이 방이 바뀌었거나(브랜치 전환) 편집할 파일이 없으면 붙을 이유가 없다.
+    const session = getSession();
+    if (
+        watching.size === 0 ||
+        !session ||
+        session.repoId !== target.repoId ||
+        getCurrentBranch() !== target.branch
+    ) {
+        cancelReconnect();
+        unlockEditors(false);
+        return;
+    }
+
+    try {
+        await ensureJoined(target.repoId, target.branch);
+        if (await resyncOpenDocs()) {
+            reconnectDelayMs = RECONNECT_MIN_MS;
+            cancelReconnect();
+            unlockEditors(true);
+            log('문서 소켓이 다시 연결되어 서버 내용으로 재동기화했습니다.');
+        } else {
+            // 못 채운 파일이 있다 — 잠금을 유지한 채 다시 시도한다(끊긴 채 편집하면 안 된다).
+            log('일부 파일을 재동기화하지 못했습니다. 잠금을 유지하고 다시 시도합니다.');
+            scheduleReconnect(target.repoId, target.branch);
+        }
+    } catch (error) {
+        log(`문서 소켓에 다시 연결하지 못했습니다: ${describe(error)}`);
+        if (reconnectTarget) {
+            scheduleReconnect(target.repoId, target.branch); // 다음 백오프를 예약한다.
+        }
+    }
+}
+
+/**
+ * 열려 있던 파일마다 서버 상태를 다시 받아 통째로 갈아 끼운다(§12.10 서버 우선 재동기화).
+ * 한 파일이라도 실패하면 `false` 를 돌려준다 — 호출자가 잠금을 유지하고 다시 시도한다.
+ */
+async function resyncOpenDocs(): Promise<boolean> {
+    let ok = true;
+    for (const entry of [...watching.values()]) {
+        try {
+            await applyServerFrame(entry, await requestOpen(entry.path));
+        } catch (error) {
+            ok = false;
+            log(`재동기화하지 못했습니다(${entry.path}): ${describe(error)}`);
+        }
+    }
+
+    return ok;
+}
+
+/** 유예가 지나도 붙지 못했다 — 열려 있는 우리 문서의 편집을 잠근다(§12.10). */
+function lockEditors(): void {
+    if (docsLocked || state === 'active') {
+        return;
+    }
+
+    docsLocked = true;
+    setDocConnection('locked');
+    for (const entry of watching.values()) {
+        void setEditorLocked(entry.uri, true);
+    }
+
+    void vscode.window.showWarningMessage(
+        'Axis Share: 협업 서버 연결이 끊어져 편집을 잠갔습니다. 다시 연결되면 서버 내용으로 맞춥니다.'
+    );
+}
+
+/** 잠금을 푼다(§12.10). `notify` 가 참이면 재연결 사실을 함께 알린다. */
+function unlockEditors(notify: boolean): void {
+    if (!docsLocked) {
+        return;
+    }
+
+    docsLocked = false;
+    if (state === 'active') {
+        setDocConnection('active');
+    }
+    for (const entry of watching.values()) {
+        void setEditorLocked(entry.uri, false);
+    }
+
+    if (notify) {
+        void vscode.window.showInformationMessage(
+            'Axis Share: 협업 서버에 다시 연결되었습니다. 서버 내용으로 맞췄습니다.'
+        );
+    }
+}
+
+/** 재연결 예약과 유예 타이머를 버린다(§12.10). 잠금 자체는 `unlockEditors` 가 푼다. */
+function cancelReconnect(): void {
+    reconnectTarget = undefined;
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+    }
+    if (lockTimer) {
+        clearTimeout(lockTimer);
+        lockTimer = undefined;
+    }
+}
+
+/** 편집기 하나를 읽기 전용으로 잠그거나 푼다(§12.10). 화면에 없으면 다음에 켤 때 잠근다. */
+async function setEditorLocked(uri: vscode.Uri, locked: boolean): Promise<void> {
+    const editor = vscode.window.visibleTextEditors.find(
+        (candidate) => candidate.document.uri.toString() === uri.toString()
+    );
+    if (!editor) {
+        return;
+    }
+
+    try {
+        // 활성 편집기여야 명령이 먹는다 — 포커스는 옮기지 않는다(레퍼런스 p2p-code-share 와 같다).
+        await vscode.window.showTextDocument(editor.document, {
+            viewColumn: editor.viewColumn,
+            preserveFocus: true,
+            preview: false
+        });
+        await vscode.commands.executeCommand(
+            locked
+                ? 'workbench.action.files.setActiveEditorReadonlyInSession'
+                : 'workbench.action.files.resetActiveEditorReadonlyInSession'
+        );
+    } catch {
+        // 명령을 지원하지 않는 환경(테스트 호스트 등)이다 — 전송 차단은 그대로 유지된다.
     }
 }
 
@@ -1072,6 +1349,20 @@ function send(payload: Record<string, unknown>): boolean {
     }
 }
 
+/** 현재 편집 연결 상태(§12.10). 상태 표시줄이 읽는다. */
+export function getDocConnection(): DocConnection {
+    return docConnection;
+}
+
+function setDocConnection(next: DocConnection): void {
+    if (docConnection === next) {
+        return;
+    }
+
+    docConnection = next;
+    docConnectionEmitter.fire(next);
+}
+
 function setState(next: DocState): void {
     if (state === next) {
         return;
@@ -1079,6 +1370,17 @@ function setState(next: DocState): void {
 
     state = next;
     log(`문서 소켓 상태: ${next}`);
+
+    // 상태 표시줄용(§12.10). 잠금이 걸려 있으면 그 사실이 가장 중요하다 — 해제는 unlockEditors 가 한다.
+    if (docsLocked) {
+        setDocConnection('locked');
+    } else if (next === 'joining') {
+        setDocConnection('joining');
+    } else if (next === 'active') {
+        setDocConnection('active');
+    } else {
+        setDocConnection('idle');
+    }
 }
 
 // ---------------------------------------------------------------------------

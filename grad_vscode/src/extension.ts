@@ -13,6 +13,7 @@ import {
 } from './repo/decorations';
 import { startDecorationRenderer, stopDecorationRenderer } from './repo/decorationRenderer';
 import { createReviewsView } from './repo/decorationProvider';
+import { startConnectionStatus } from './repo/connectionStatus';
 import { CONTEXT_HAS_REPO_SESSION, startControlSocket, stopControlSocket } from './repo/controlSocket';
 import { startCursorRenderer, stopCursorRenderer } from './repo/cursorRenderer';
 import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
@@ -57,6 +58,7 @@ import {
  *   src/repo/controlSocket.ts      제어 소켓 — presence·브랜치·커밋 이벤트(§3.3)
  *   src/repo/presenceProvider.ts   Editing 뷰 — 브랜치별 접속자(§15.5)
  *   src/repo/docSocket.ts          문서 소켓 — 파일 열기·Yjs 텍스트 동기화(§12.4, §12.7)
+ *   src/repo/connectionStatus.ts   연결 상태 표시줄 — 끊김·편집 잠금 배지(§12.10)
  *   src/repo/cursorRenderer.ts     원격 커서·선택 영역 렌더(§12.8)
  *   src/repo/userColors.ts         사용자 색 배정(§15.8)
  *   src/repo/repoStatus.ts         작업 트리 상태 + 스테이징·커밋(§15.7)
@@ -192,6 +194,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // 3-1) 문서 소켓(§12.4). 파일 열기와 실시간 텍스트 동기화를 맡는다. 세션·브랜치가 바뀌면
     //      스스로 접고, 다음 파일 열기에서 새 방으로 다시 붙는다(§10.3).
     startDocSocket(context);
+
+    // 3-1-1) 연결 상태 표시줄(§12.10). 편집 연결이 끊기면 편집이 잠기므로 그 사실을 눈에 띄게 남긴다.
+    startConnectionStatus(context);
 
     // 3-2) 원격 커서 렌더러(§12.8). 문서 소켓이 중계한 상대 좌표를 각자의 Y.Doc 에서 풀어 화면에 그린다.
     //      좌표 해석은 클라이언트만 할 수 있으므로 서버(collab)는 손대지 않는다(§8.10).

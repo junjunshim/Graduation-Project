@@ -61,6 +61,8 @@ type OpenedFrame = {
     canWrite: boolean;
     /** 서버에 저장된 doc 과 worktree 파일이 어긋난 채 열렸다(§9.3). */
     mismatch: boolean;
+    /** 이 파일을 함께 보고 있는 사람들(§9.5). 열 때 한 번 받는다. */
+    watchers: FileWatcher[];
 };
 
 /** 지금 열려 있는 파일 하나. Y.Doc 과 그 로컬 사본을 묶는다. */
@@ -110,6 +112,21 @@ export type RemoteCursorFrame = {
 export type FilePeerLeave = {
     path: string;
     userEmail: string;
+};
+
+/** 파일 1개를 보고 있는 사람(§9.5). 서버가 `opened.watchers`·`peer_join` 으로 알려 준다. */
+export type FileWatcher = {
+    email: string;
+    name?: string;
+};
+
+/**
+ * 파일 1개와 그것을 보고 있는 사람들(§15.5 Editing 뷰 파일 그룹).
+ * 문서 소켓이 아는 것만 담는다 — 이 브랜치에서 내가 연 파일과, 그 파일을 함께 보는 사람뿐이다.
+ */
+export type OpenFilePresence = {
+    path: string;
+    watchers: readonly FileWatcher[];
 };
 
 /** 서버가 중계한 리뷰 데코레이션 1건(§9.5). 좌표는 상대좌표라 해석하지 않고 그대로 넘긴다(§8.10). */
@@ -194,6 +211,12 @@ const openWaiters = new Map<
 /** 지금 열려 있는 파일들. 경로가 키다(§12.4 — 같은 파일을 두 번 열지 않는다). */
 const watching = new Map<string, Watching>();
 
+/**
+ * 이 브랜치에서 열려 있는 파일(경로) → 그 파일을 보는 사람(§15.5 Editing 뷰 파일 그룹).
+ * 문서 소켓이 아는 것만 담는다 — `opened.watchers`(열 때)와 `peer_join`/`peer_leave`(그 뒤)뿐이다(§9.5).
+ */
+const openFileWatchers = new Map<string, FileWatcher[]>();
+
 /** 같은 오류를 반복해 알리지 않는다(§9.8). */
 const warnedCodes = new Set<string>();
 
@@ -204,6 +227,7 @@ const decorationEmitter = new vscode.EventEmitter<RemoteDecoration>();
 const decorationDeleteEmitter = new vscode.EventEmitter<RemoteDecorationDelete>();
 const reviewIndexEmitter = new vscode.EventEmitter<ReviewIndexFrame>();
 const docConnectionEmitter = new vscode.EventEmitter<DocConnection>();
+const filePresenceEmitter = new vscode.EventEmitter<void>();
 
 /** 열려 있는 문서 목록이 바뀌었다(열림·닫힘·브랜치 전환). 커서 렌더러가 이 이벤트로 다시 그린다. */
 export const onDidChangeOpenDocs = openDocsEmitter.event;
@@ -225,6 +249,9 @@ export const onDidReceiveReviewIndex = reviewIndexEmitter.event;
 
 /** 편집 연결 상태 변경(§12.10). 상태 표시줄이 이 이벤트로 배지를 다시 그린다. */
 export const onDidChangeDocConnection = docConnectionEmitter.event;
+
+/** 파일별 참여자 변경(§15.5). Editing 뷰가 이 이벤트로 파일 그룹을 다시 그린다. */
+export const onDidChangeFilePresence = filePresenceEmitter.event;
 
 // ---------------------------------------------------------------------------
 // 수명주기
@@ -282,6 +309,7 @@ async function retireAll(): Promise<void> {
     unlockEditors(false);
     watching.clear();
     emitOpenDocsChange();
+    clearFileWatchers();
 
     await teardown();
 
@@ -416,6 +444,7 @@ async function materialize(
     };
     watching.set(opened.path, entry);
     emitOpenDocsChange();
+    setFileWatchers(opened.path, opened.watchers);
 
     await writeLocalCopy(entry);
 
@@ -460,6 +489,7 @@ async function applyServerFrame(entry: Watching, opened: OpenedFrame): Promise<v
     entry.attached = true;
     entry.mismatch = opened.mismatch;
     emitOpenDocsChange(); // 다시 붙은 문서를 커서·데코 렌더러가 다시 그린다.
+    setFileWatchers(entry.path, opened.watchers);
 
     // 앞선 화면 반영과 순서가 엉키지 않게 같은 큐에 태운다(§12.7).
     entry.queue = entry.queue
@@ -576,6 +606,7 @@ async function handleDocReset(frame: Record<string, unknown>): Promise<void> {
     }
 
     watching.delete(path);
+    forgetFileWatchers(path);
     if (entry.saveTimer) {
         clearTimeout(entry.saveTimer);
         entry.saveTimer = undefined;
@@ -605,6 +636,11 @@ function onDocumentClosed(document: vscode.TextDocument): void {
 
     watching.delete(entry.path);
     emitOpenDocsChange();
+    // 내 탭만 닫은 것이다 — 아직 이 파일을 보는 다른 사람은 목록에 남긴다(§15.5).
+    const me = getSession()?.userEmail;
+    if (me !== undefined) {
+        removeFileWatcher(entry.path, me);
+    }
     if (entry.saveTimer) {
         clearTimeout(entry.saveTimer);
     }
@@ -889,6 +925,9 @@ function handleFrame(text: string): void {
         case 'cursor':
             handleCursorFrame(frame);
             return;
+        case 'peer_join':
+            handlePeerJoin(frame);
+            return;
         case 'peer_leave':
             handlePeerLeave(frame);
             return;
@@ -948,7 +987,8 @@ function resolveOpen(frame: Record<string, unknown>): void {
         state: asString(frame.state) ?? '',
         eol: frame.eol === 'crlf' ? 'crlf' : 'lf',
         canWrite: frame.can_write === true,
-        mismatch: frame.mismatch === true
+        mismatch: frame.mismatch === true,
+        watchers: parseFileWatchers(frame.watchers)
     });
 }
 
@@ -1000,6 +1040,7 @@ function handleSocketClosed(): void {
         entry.attached = false;
     }
     emitOpenDocsChange();
+    clearFileWatchers(); // 끊긴 동안에는 누가 무엇을 보는지 알 수 없다(§12.10).
 
     if (!hadRoom || watching.size === 0) {
         return; // 붙어 있던 방이 없다 — 다시 붙을 대상도 없다(다음 파일 열기에서 새로 붙는다).
@@ -1433,6 +1474,17 @@ function toRemoteDecoration(
     };
 }
 
+/** 다른 사용자가 이 파일을 열었다(§9.5). 그 파일을 이미 열고 있는 사람에게만 온다. */
+function handlePeerJoin(frame: Record<string, unknown>): void {
+    const path = asString(frame.path);
+    const userEmail = asString(frame.userEmail);
+    if (path === undefined || userEmail === undefined) {
+        return;
+    }
+
+    addFileWatcher(path, userEmail, asString(frame.userName));
+}
+
 /** 다른 사용자가 파일에서 나갔다(§9.5). 서버는 커서 제거를 따로 보내지 않는다 — 이 신호로 지운다. */
 function handlePeerLeave(frame: Record<string, unknown>): void {
     const path = asString(frame.path);
@@ -1441,12 +1493,113 @@ function handlePeerLeave(frame: Record<string, unknown>): void {
         return;
     }
 
+    removeFileWatcher(path, userEmail);
     peerLeaveEmitter.fire({ path, userEmail });
+}
+
+// ---------------------------------------------------------------------------
+// 파일별 참여자 (Editing 뷰 파일 그룹, §15.5)
+// ---------------------------------------------------------------------------
+
+/** 같은 사람이 탭을 여러 개 열어도 한 줄만 그린다 — 이메일이 신원이다(§12.8). */
+function addFileWatcher(path: string, email: string, name: string | undefined): void {
+    const existing = openFileWatchers.get(path);
+    const watchers = existing ? [...existing] : [];
+    const index = watchers.findIndex((watcher) => watcher.email === email);
+    if (index >= 0) {
+        watchers[index] = { email, name };
+    } else {
+        watchers.push({ email, name });
+    }
+
+    openFileWatchers.set(path, watchers);
+    filePresenceEmitter.fire();
+}
+
+function removeFileWatcher(path: string, email: string): void {
+    const existing = openFileWatchers.get(path);
+    if (!existing) {
+        return;
+    }
+
+    const watchers = existing.filter((watcher) => watcher.email !== email);
+    if (watchers.length === 0) {
+        openFileWatchers.delete(path);
+    } else {
+        openFileWatchers.set(path, watchers);
+    }
+
+    filePresenceEmitter.fire();
+}
+
+/** 서버가 준 참여자 목록으로 갈아 끼운다(`opened`, 재동기화). */
+function setFileWatchers(path: string, watchers: readonly FileWatcher[]): void {
+    if (watchers.length === 0) {
+        openFileWatchers.delete(path);
+    } else {
+        openFileWatchers.set(path, [...watchers]);
+    }
+
+    filePresenceEmitter.fire();
+}
+
+/** 이 파일에 대한 지식이 더 이상 유효하지 않다(탭을 닫았다·doc 이 버려졌다). */
+function forgetFileWatchers(path: string): void {
+    if (openFileWatchers.delete(path)) {
+        filePresenceEmitter.fire();
+    }
+}
+
+/** 방 지식이 통째로 무효가 되었다(브랜치 전환·연결 끊김). */
+function clearFileWatchers(): void {
+    if (openFileWatchers.size === 0) {
+        return;
+    }
+
+    openFileWatchers.clear();
+    filePresenceEmitter.fire();
+}
+
+/** `opened.watchers` 를 읽는다. 없거나 형식이 다르면 빈 배열이다. */
+function parseFileWatchers(value: unknown): FileWatcher[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const watchers: FileWatcher[] = [];
+    for (const item of value) {
+        if (!isRecord(item)) {
+            continue;
+        }
+
+        const email = asString(item.email);
+        if (email === undefined || watchers.some((watcher) => watcher.email === email)) {
+            continue;
+        }
+
+        watchers.push({ email, name: asString(item.name) });
+    }
+
+    return watchers;
 }
 
 // ---------------------------------------------------------------------------
 // 열려 있는 문서 / 커서 (커서·데코 모듈이 쓰는 창구)
 // ---------------------------------------------------------------------------
+
+/**
+ * 그 브랜치에서 지금 열려 있는 파일과 그 참여자(§15.5). 문서 소켓이 그 브랜치에 붙어 있을 때만
+ * 값을 준다 — 소켓 하나가 한 방에만 붙으므로 다른 브랜치의 파일 참여자는 알 수 없다(§9.5).
+ */
+export function getOpenFilePresence(branch: string): OpenFilePresence[] {
+    if (joinedBranch !== branch || openFileWatchers.size === 0) {
+        return [];
+    }
+
+    return [...openFileWatchers.entries()]
+        .map(([path, watchers]) => ({ path, watchers }))
+        .sort((a, b) => a.path.localeCompare(b.path));
+}
 
 /** 지금 열려 있는 파일들. 커서 렌더러가 경로·Y.Text 를 얻는 유일한 창구다. */
 export function listOpenDocs(): OpenDoc[] {

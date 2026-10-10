@@ -149,9 +149,9 @@ GitResult GitRunner::run(const std::string &workDir,
                          const std::vector<std::pair<std::string, std::string>> &extraEnv) {
     GitResult res;
 
-    // 1. 하드닝 기본 인자를 앞에 붙인다 (저장소 훅 실행 금지, 서명 요구 제거)
+    // 1. 하드닝 기본 인자를 앞에 붙인다 (저장소 훅 실행 금지, 서명 요구 제거, 서브모듈 재귀 금지)
     std::vector<std::string> full;
-    full.reserve(args.size() + 7);
+    full.reserve(args.size() + 9);
     full.push_back("git");
     full.push_back("-c");
     full.push_back("core.hooksPath=/dev/null");
@@ -160,6 +160,9 @@ GitResult GitRunner::run(const std::string &workDir,
     // 한글 등 비ASCII 경로를 8진수로 이스케이프하지 않는다 (경로가 그대로 JSON 으로 나간다)
     full.push_back("-c");
     full.push_back("core.quotepath=false");
+    // 서브모듈을 재귀적으로 건드리지 않는다 — 저장소 안 .gitmodules 는 신뢰할 수 없는 입력이다(§5)
+    full.push_back("-c");
+    full.push_back("submodule.recurse=false");
     full.insert(full.end(), args.begin(), args.end());
 
     std::vector<char *> argv;

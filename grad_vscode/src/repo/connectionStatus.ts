@@ -56,6 +56,16 @@ export function startConnectionStatus(context: vscode.ExtensionContext): void {
             return;
         }
 
+        if (doc === 'readonly') {
+            show(
+                item,
+                '$(lock) Axis Share: 편집 권한 없음 — 읽기 전용',
+                'warning',
+                '이 저장소의 편집 권한이 회수되어 읽기 전용으로 전환했습니다. 권한이 복구되면 자동으로 풀립니다(§12.9).'
+            );
+            return;
+        }
+
         if (doc === 'reconnecting') {
             show(
                 item,

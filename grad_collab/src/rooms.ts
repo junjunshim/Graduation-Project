@@ -8,7 +8,7 @@ import { DocRegistry } from './docRegistry';
 import { log } from './logger';
 import { notifyWorktreeChanged } from './notify';
 import { PresenceRegistry } from './presence';
-import { ResolvedRepo } from './repoResolver';
+import { forgetResolvedRepo, ResolvedRepo } from './repoResolver';
 import { ReviewIndex } from './reviewIndex';
 
 /** 문서 소켓 하나. 방이 이 객체를 통해 프레임을 보낸다. */
@@ -19,6 +19,11 @@ export interface RoomClient {
   room: Room | null;
   /** 살아 있는 소켓이면 JSON 프레임을 보낸다. 끊긴 소켓은 조용히 무시한다. */
   send(frame: unknown): void;
+  /**
+   * 소켓을 닫는다. 서버 쪽에서 세션을 끝내야 할 때(노드 삭제, §12.9) 쓴다.
+   * `reason` 은 WebSocket close reason 이라 ASCII 로 짧게 넘긴다(사람이 읽을 문구는 별도 프레임으로 보낸다).
+   */
+  close(code: number, reason: string): void;
 }
 
 export function roomKey(repoId: number, branch: string): string {
@@ -87,6 +92,43 @@ export class RoomRegistry {
 
   get(repoId: number, branch: string): Room | undefined {
     return this.rooms.get(roomKey(repoId, branch));
+  }
+
+  /** 그 저장소의 모든 브랜치 방. 권한 통보처럼 저장소 단위로 훑어야 할 때 쓴다(§12.9). */
+  ofRepo(repoId: number): Room[] {
+    const found: Room[] = [];
+    for (const room of this.rooms.values()) {
+      if (room.repo.repoId === repoId) found.push(room);
+    }
+    return found;
+  }
+
+  /**
+   * 저장소가 통째로 사라졌을 때(노드 삭제) 그 저장소의 모든 방을 닫는다(TASK_11 §12.9).
+   *
+   * `abandon`(브랜치 삭제)과 달리 **내려쓰고 닫는다.** 노드 삭제는 소프트 딜리트라 작업 트리가
+   * 그대로 남고, 복구되었을 때 편집 내용이 살아 있게 하기 위해서다. 접속자에게는 마지막으로
+   * `repo_closed` 를 보내고 소켓을 닫는다 — 확장은 그 신호로 편집 세션을 정리한다(제어 소켓은
+   * C++ 이 따로 끊는다).
+   *
+   * 경로 캐시도 함께 비운다. 남겨 두면 삭제 직후 다시 붙는 세션이 backend 를 거치지 않고 옛 경로로
+   * 방을 열어 버린다(`forgetResolvedRepo`).
+   */
+  async closeRepo(repoId: number, reason: string, message: string): Promise<{ rooms: number; clients: number }> {
+    const targets = this.ofRepo(repoId);
+    let clients = 0;
+    for (const room of targets) {
+      room.broadcast({ type: 'repo_closed', repo_id: repoId, reason, message });
+      for (const client of room.clients) {
+        client.room = null; // 늦게 도착한 프레임이 죽은 방으로 가지 않게 먼저 뗀다.
+        client.close(1000, reason);
+        clients += 1;
+      }
+      room.clients.clear();
+      await this.close(room); // flush(내려쓰기) → 영속화 → 메모리 해제
+    }
+    forgetResolvedRepo(repoId);
+    return { rooms: targets.length, clients };
   }
 
   /** 마지막 편집자가 나간 방을 정리한다(flush → 영속화 → 메모리 해제). */

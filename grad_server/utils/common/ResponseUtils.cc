@@ -166,6 +166,7 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0812") != std::string::npos) return DbErrorCode::ExtensionTokenInvalid;
     else if (errMsg.find("P0813") != std::string::npos) return DbErrorCode::PathAlreadyExists;
     else if (errMsg.find("P0814") != std::string::npos) return DbErrorCode::PathNotFound;
+    else if (errMsg.find("P0815") != std::string::npos) return DbErrorCode::NodeDeletedForRepo;
     else return DbErrorCode::Unknown;
 }
 
@@ -622,7 +623,13 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["message"] = "경로를 찾을 수 없습니다.";
             ret["http_code"] = drogon::k404NotFound;
             break;
-        }        default:{
+        }
+        case DbErrorCode::NodeDeletedForRepo:{
+            ret["message"] = "워크스페이스가 삭제되어 연결할 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        default:{
             ret["message"] = "알 수 없는 데이터베이스 에러가 발생했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
             break;

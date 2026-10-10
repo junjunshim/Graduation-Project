@@ -10,6 +10,7 @@
 #include <chrono>
 #include <functional>
 #include <sstream>
+#include <unordered_set>
 
 using namespace api;
 
@@ -64,6 +65,10 @@ std::string extractErrorCode(const std::string &message)
     }
     return "500";
 }
+
+// 강제 종료 통보(`repo_closed`)를 보낸 뒤 실제로 소켓을 닫기까지의 여유(초). 곧바로 forceClose 하면
+// 큐에 남은 프레임이 버려질 수 있어, 확장이 "왜 끊겼는지" 를 못 보게 된다.
+constexpr double kCloseAfterNotifySeconds = 0.25;
 
 void sendEvent(const WebSocketConnectionPtr &wsConnPtr, const Json::Value &event)
 {
@@ -375,6 +380,122 @@ bool GithubWebSocketController::broadcastToRepository(int repo_id, const Json::V
     return sent;
 }
 
+// 강제 종료 통보를 보내고 소켓을 닫는 일은 "저장소 전체"(노드 삭제)와 "사용자 일부"(권한 상실)가
+// 같은 모양이다 — 누구를 고르는지만 다르다. 그래서 고르기와 알리고-닫기를 나눠 둔다.
+namespace
+{
+// 이 연결들에게 `repo_closed` 를 보낸 뒤 잠시 뒤에 닫는다. **이벤트 루프 스레드에서만** 부른다 —
+// 소켓 API(send/forceClose)를 만지기 때문이다. 바로 닫지 않고 기다리는 이유는, 큐에 남은 프레임이
+// 버려지면 확장이 "왜 끊겼는지"를 못 보게 되기 때문이다.
+void notifyAndCloseConnections(const std::vector<WebSocketConnectionPtr> &targets, const std::string &reason,
+                               const std::string &message)
+{
+    if (targets.empty())
+    {
+        return;
+    }
+
+    Json::Value event;
+    event["type"] = "repo_closed";
+    event["reason"] = reason;
+    event["message"] = message;
+    const std::string payload = toJsonString(event);
+
+    for (const auto &conn : targets)
+    {
+        // 이유를 먼저 알리고, 전송이 빠져나갈 틈을 준 뒤 닫는다. 접속자 행 정리는 close 콜백
+        // (handleConnectionClosed → removePresenceAndNotify)이 맡는다.
+        conn->send(payload);
+        drogon::app().getLoop()->runAfter(kCloseAfterNotifySeconds, [conn]() {
+            if (conn && !conn->disconnected())
+            {
+                conn->forceClose();
+            }
+        });
+    }
+}
+}  // namespace
+
+template <typename Accept>
+std::vector<WebSocketConnectionPtr> GithubWebSocketController::collectRepoConnections(int repo_id, Accept accept)
+{
+    std::vector<WebSocketConnectionPtr> targets;
+    const std::string prefix = repositoryPrefix(repo_id);
+    for (auto &shard : shards_)
+    {
+        // 락 안에서는 포인터만 모은다 — 락을 잡은 채 전송하면 안 된다.
+        std::shared_lock<std::shared_mutex> lock(shard.mutex);
+        for (const auto &entry : shard.rooms)
+        {
+            if (entry.first.compare(0, prefix.size(), prefix) != 0)
+            {
+                continue;
+            }
+            for (const auto &conn : entry.second)
+            {
+                if (conn && conn->connected() && accept(conn))
+                {
+                    targets.push_back(conn);
+                }
+            }
+        }
+    }
+    return targets;
+}
+
+void GithubWebSocketController::closeRepositorySessions(const std::vector<int> &repo_ids,
+                                                        const std::string &reason,
+                                                        const std::string &message)
+{
+    if (repo_ids.empty())
+    {
+        return;
+    }
+
+    // 소켓 API 는 이벤트 루프 스레드에서만 만진다. 호출자(노드 삭제)는 워커 스레드이므로 여기서
+    // 루프로 넘긴다. 넘긴 뒤의 실패는 알릴 곳이 없어 로그로만 남긴다.
+    drogon::app().getLoop()->queueInLoop([repo_ids, reason, message]() {
+        int closed = 0;
+        for (const int repo_id : repo_ids)
+        {
+            auto targets = collectRepoConnections(repo_id, [](const WebSocketConnectionPtr &) { return true; });
+            notifyAndCloseConnections(targets, reason, message);
+            closed += static_cast<int>(targets.size());
+        }
+
+        LOG_INFO << "저장소 접속 강제 종료: repo=" << repo_ids.size() << "개, 연결=" << closed
+                 << " (reason: " << reason << ")";
+    });
+}
+
+void GithubWebSocketController::closeRepositorySessionsForUsers(int repo_id,
+                                                               const std::vector<std::string> &user_emails,
+                                                               const std::string &reason,
+                                                               const std::string &message)
+{
+    if (repo_id <= 0 || user_emails.empty())
+    {
+        return;
+    }
+
+    // 이메일 집합은 루프로 값으로 넘긴다 — 이 함수의 인자는 호출자 스택이 먼저 사라진다.
+    std::unordered_set<std::string> emails(user_emails.begin(), user_emails.end());
+    drogon::app().getLoop()->queueInLoop([repo_id, emails, reason, message]() {
+        auto targets = collectRepoConnections(repo_id, [&emails](const WebSocketConnectionPtr &conn) {
+            auto session = conn->getContext<WsSession>();
+            return session && !session->user_email.empty() && emails.count(session->user_email) > 0;
+        });
+        if (targets.empty())
+        {
+            return;
+        }
+
+        notifyAndCloseConnections(targets, reason, message);
+        LOG_INFO << "저장소 접속 강제 종료(권한 상실): repo=" << repo_id << ", 연결=" << targets.size()
+                 << " (reason: " << reason << ")";
+    });
+}
+
 void GithubWebSocketController::handleNewConnection(const HttpRequestPtr &req, const WebSocketConnectionPtr &wsConnPtr)
 {
     // 1. 세션을 만들어 연결에 바인딩한다. 인증 전에는 authenticated 가 false 다.
@@ -511,6 +632,22 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
             }
             catch (const orm::DrogonDbException &e)
             {
+                // 접속자 행을 되살릴 수 없다 = 그 저장소를 볼 수 없다(P0103) 또는 워크스페이스가
+                // 삭제됐다(P0815). 권한 변경 통보를 놓쳤더라도 여기서 끊으면 세션이 스스로 정리된다 —
+                // 확장은 `err` 를 받고 그 방을 포기한다(§12.9). 일시적 DB 장애는 다시 시도하게 두고
+                // 로그만 남긴다.
+                const std::string code = extractErrorCode(e.base().what());
+                if (code == "P0103" || code == "P0815")
+                {
+                    sendError(wsConnPtr, code, "이 저장소에 더 이상 접속할 수 없어 연결을 종료합니다.");
+                    drogon::app().getLoop()->runAfter(kCloseAfterNotifySeconds, [wsConnPtr]() {
+                        if (wsConnPtr && !wsConnPtr->disconnected())
+                        {
+                            wsConnPtr->forceClose();
+                        }
+                    });
+                    return;
+                }
                 LOG_WARN << "GitHub presence heartbeat 실패: " << e.base().what();
             }
         }

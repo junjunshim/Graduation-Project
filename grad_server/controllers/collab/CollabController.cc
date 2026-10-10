@@ -302,6 +302,14 @@ void CollabController::issueTicket(const HttpRequestPtr &req,
         }
         const int nodeId = repo["node_id"].asInt();
 
+        // 1-1) 노드가 삭제되었으면(그 서브트리까지 연쇄 소프트 딜리트) 세션을 열 이유가 없다(§12.9).
+        //      접속 등록(P0815)이 최종 방어선이지만, 여기서 먼저 막아 문서 소켓이 붙을 기회를 주지 않는다.
+        if (db->execSqlSync("SELECT 1 FROM organization_nodes WHERE node_id = $1 AND is_deleted = FALSE",
+                            nodeId)
+                .empty()) {
+            return errorResponse("P0815", "워크스페이스가 삭제되어 협업 세션을 열 수 없습니다.", k404NotFound);
+        }
+
         // 2) 세션에 담을 이름과 쓰기 권한을 한 번에 읽는다.
         //    권한은 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE 를 기준으로 한다.
         auto rows = db->execSqlSync(
@@ -424,6 +432,14 @@ void CollabController::resolvePath(const HttpRequestPtr &req,
         const std::string worktreePath = row["worktree_path"].as<std::string>();
         const std::string branchSlug = row["branch_slug"].as<std::string>();
         const int nodeId = row["node_id"].as<int>();
+
+        // 2-1) 노드가 삭제된 저장소는 열 수 없다(§12.9). 접속 등록(P0815)과 같은 이유다 —
+        //      캐시가 비워진 뒤 다시 붙는 세션이 옛 경로로 방을 여는 것을 막는다.
+        if (db->execSqlSync("SELECT 1 FROM organization_nodes WHERE node_id = $1 AND is_deleted = FALSE",
+                            nodeId)
+                .empty()) {
+            return errorResponse("P0815", "워크스페이스가 삭제되어 브랜치를 열 수 없습니다.", k404NotFound);
+        }
 
         std::string localRel;
         std::string worktreeRel;

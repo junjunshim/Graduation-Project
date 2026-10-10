@@ -680,7 +680,7 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 저장소 존재 확인
+    -- 2. 저장소가 연결돼 있어야 한다.
     SELECT node_id INTO v_node_id
     FROM github_repositories
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
@@ -688,6 +688,13 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
         USING ERRCODE = 'P0801';
+    END IF;
+
+    -- 2-1. 그 저장소의 노드가 살아 있어야 한다. 노드가 삭제되면(서브트리까지 연쇄 소프트 딜리트)
+    --      저장소 행은 남아도 쓸 수 없다 — 끊긴 세션이 다시 붙지 않도록 접속 등록을 거부한다(§12.9).
+    IF NOT EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = v_node_id AND is_deleted = FALSE) THEN
+        RAISE EXCEPTION '[P0815]Node of repository has been deleted: %', p_repo_id
+        USING ERRCODE = 'P0815';
     END IF;
 
     -- 3. 권한 확인 (노드를 볼 수 있으면 접속 자체는 가능하다 — 읽기 전용 접속자도 목록에 남는다)
@@ -737,7 +744,7 @@ BEGIN
     ORDER BY gp.connected_at;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' OR SQLSTATE 'P0815' THEN
             RAISE;
         WHEN OTHERS THEN
             RAISE EXCEPTION '[P0807]Failed to register branch presence: % (repo %), (REASON: %)', p_branch_name, p_repo_id, SQLERRM

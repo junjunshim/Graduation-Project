@@ -136,6 +136,22 @@ export function forgetResolved(repoId: number, branch: string): void {
   cache.delete(cacheKey(repoId, branch));
 }
 
+/**
+ * 저장소가 통째로 사라질 때(노드 삭제) 그 저장소의 캐시를 전부 비운다(TASK_11 §12.9).
+ *
+ * 캐시는 (저장소, 브랜치)별이고 브랜치 이름을 모르므로 접두사로 훑는다. 비우지 않으면 삭제 후
+ * 60초 안에 다시 붙는 세션이 backend 를 거치지 않고 **옛 경로로 방을 열어 버린다** — 경로 해석의
+ * 삭제 검사(P0815)를 우회하는 구멍이 된다.
+ */
+export function forgetResolvedRepo(repoId: number): void {
+  const prefix = `${repoId}\u0000`;
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(prefix)) {
+      cache.delete(key);
+    }
+  }
+}
+
 /** 테스트·진단용. */
 export function resolvedCacheSize(): number {
   return cache.size;

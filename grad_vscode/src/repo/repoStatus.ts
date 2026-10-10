@@ -196,6 +196,9 @@ export function commitBlockedReason(): string | undefined {
     // 협업(문서 소켓)이 끊긴 동안에는 커밋하지 않는다(§9.8). 마지막 편집이 아직 파일로 내려가지
     // 않았을 수 있다 — 서버도 그 경우 flush 가 실패해 P0908 로 거부한다.
     const docState = getDocConnection();
+    if (docState === 'readonly') {
+        return '편집 권한이 없어 커밋할 수 없습니다.';
+    }
     if (docState === 'locked' || docState === 'reconnecting') {
         return '협업 서버 연결이 끊겨 커밋할 수 없습니다. 다시 연결되면 시도해 주세요.';
     }
@@ -522,6 +525,10 @@ export async function commitInteractive(): Promise<void> {
 
     // 협업 연결이 끊긴 동안의 커밋은 서버가 P0908 로 거부한다 — 미리 막고 이유를 알려준다(§9.8).
     const docState = getDocConnection();
+    if (docState === 'readonly') {
+        void vscode.window.showWarningMessage('Axis Share: 편집 권한이 없어 커밋할 수 없습니다.');
+        return;
+    }
     if (docState === 'locked' || docState === 'reconnecting') {
         void vscode.window.showWarningMessage(
             'Axis Share: 협업 서버 연결이 끊겨 커밋할 수 없습니다. 다시 연결되면 시도해 주세요.'

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as Y from 'yjs';
 
 import { ApiError, apiRequest, getServerBaseUrl } from '../api';
-import { getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
+import { clearSession, getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
 import { branchSlug } from './repoTreeProvider';
 import { diffRange, normalizeEol, toRawOffset } from './text';
 
@@ -46,9 +46,9 @@ export type DocState = 'disconnected' | 'joining' | 'active';
 
 /**
  * 편집 연결 상태(§12.10) — 상태 표시줄(`connectionStatus.ts`)이 이 값으로 배지를 그린다.
- * `idle` 은 "붙을 방이 없거나 스스로 접은 상태"라 알릴 것이 없고, `reconnecting`·`locked` 는 사고다.
+ * `idle` 은 "붙을 방이 없거나 스스로 접은 상태"라 알릴 것이 없고, `reconnecting`·`locked`·`readonly` 는 사고다.
  */
-export type DocConnection = 'idle' | 'joining' | 'active' | 'reconnecting' | 'locked';
+export type DocConnection = 'idle' | 'joining' | 'active' | 'reconnecting' | 'locked' | 'readonly';
 
 /** 서버가 확인해 준 `opened` 프레임에서 이 모듈이 쓰는 필드만 추린 것. */
 type OpenedFrame = {
@@ -167,6 +167,9 @@ let reconnectDelayMs = RECONNECT_MIN_MS;
 /** 편집 잠금 유예 타이머와 잠금 여부(§12.10). */
 let lockTimer: ReturnType<typeof setTimeout> | undefined;
 let docsLocked = false;
+
+/** 편집 권한 회수 통보(`perm`)로 읽기 전용이 되었는가(§12.9). 연결 잠금(`docsLocked`)과 별개다. */
+let writeRevoked = false;
 
 /** 편집 연결 상태(§12.10). 상태 표시줄이 구독한다. */
 let docConnection: DocConnection = 'idle';
@@ -877,6 +880,12 @@ function handleFrame(text: string): void {
         case 'reviews':
             handleReviewIndexFrame(frame);
             return;
+        case 'perm':
+            handlePermissionFrame(frame);
+            return;
+        case 'repo_closed':
+            handleRepoClosed(frame);
+            return;
         case 'doc_reset':
             void handleDocReset(frame);
             return;
@@ -975,7 +984,7 @@ function handleSocketClosed(): void {
         return; // 붙어 있던 방이 없다 — 다시 붙을 대상도 없다(다음 파일 열기에서 새로 붙는다).
     }
 
-    if (!docsLocked) {
+    if (!docsLocked && !writeRevoked) {
         setDocConnection('reconnecting'); // 상태 표시줄에 눈에 띄게 알린다(§12.10). 잠금 중이면 잠금 표시를 지킨다.
     }
     log(`문서 소켓 연결이 끊어졌습니다. ${LOCK_GRACE_MS}ms 안에 못 붙으면 편집을 잠급니다.`);
@@ -1022,9 +1031,9 @@ async function teardown(): Promise<void> {
 // 재연결·재동기화(§12.10)
 // ---------------------------------------------------------------------------
 
-/** 활성 탭이 바뀌었다. 잠긴 동안이면 새로 앞으로 나온 우리 문서도 잠근다(§12.10). */
+/** 활성 탭이 바뀌었다. 잠긴(또는 권한이 회수된) 동안이면 새로 앞으로 나온 우리 문서도 잠근다(§12.10). */
 function onActiveEditorChanged(editor: vscode.TextEditor | undefined): void {
-    if (!docsLocked || !editor) {
+    if ((!docsLocked && !writeRevoked) || !editor) {
         return;
     }
 
@@ -1105,12 +1114,85 @@ async function resyncOpenDocs(): Promise<boolean> {
         }
     }
 
+    // 끊긴 동안 회수된 권한이 풀렸을 수 있다 — 재동기화한 서버 상태가 진실이다(§12.9).
+    // 열린 문서가 없으면 서버에 물어볼 것도 없다 — 회수를 풀었다고 단정하지 않는다(fail-closed).
+    if (writeRevoked && watching.size > 0 && [...watching.values()].every((entry) => entry.canWrite)) {
+        applyWriteRevocation(false);
+    }
+
     return ok;
+}
+
+/**
+ * `perm` 프레임(§9.5, §12.9). 서버가 확정한 쓰기 권한을 세션과 열려 있는 문서에 반영한다.
+ * 편집을 보내는 문(`onDocumentChanged`)이 이 값을 보므로, 회수되면 즉시 전송이 멈춘다.
+ */
+function handlePermissionFrame(frame: Record<string, unknown>): void {
+    const canWrite = frame.can_write === true;
+    for (const entry of watching.values()) {
+        entry.canWrite = canWrite;
+    }
+    emitOpenDocsChange();
+    applyWriteRevocation(!canWrite);
+}
+
+/**
+ * 저장소와의 인연이 끝났다 — 노드 삭제(`repo_closed`) 또는 권한 상실로 인한 강제 이탈
+ * (`reason: authority_lost`, §12.9). 서버는 이 프레임을 보낸 직후 소켓을 닫는다.
+ *
+ * 제어 소켓도 같은 프레임을 받아 세션을 버리고 안내를 띄운다(`controlSocket.ts`). 여기 처리는
+ * **제어 소켓이 못 받았을 때의 안전망**이다 — 세션이 아직 살아 있으면 우리가 안내를 띄우고 버린다.
+ * 두 곳이 같은 일을 두 번 해도 결과가 같으므로(멱등) 순서를 따지지 않는다.
+ */
+function handleRepoClosed(frame: Record<string, unknown>): void {
+    if (!getSession()) {
+        return; // 제어 소켓이 이미 처리했다.
+    }
+
+    const reason = asString(frame.reason) ?? 'repo_closed';
+    const message = asString(frame.message) ?? '워크스페이스와의 연결이 종료되었습니다.';
+    log('저장소 세션 종료(' + reason + '): ' + message);
+    void vscode.window.showWarningMessage('Axis Share: ' + message);
+    void clearSession();
+}
+
+/**
+ * 쓰기 권한 회수·복구를 화면에 반영한다(§12.9). 연결 문제가 아니라 권한 문제라, 재연결로
+ * 풀리지 않는다 — 서버가 다시 허용할 때(`perm { can_write: true }`)만 풀린다.
+ */
+function applyWriteRevocation(revoked: boolean): void {
+    if (writeRevoked === revoked) {
+        return;
+    }
+
+    writeRevoked = revoked;
+
+    if (revoked) {
+        if (state === 'active') {
+            setDocConnection('readonly');
+        }
+        for (const entry of watching.values()) {
+            void setEditorLocked(entry.uri, true);
+        }
+        void vscode.window.showWarningMessage(
+            'Axis Share: 이 저장소의 편집 권한이 회수되었습니다. 읽기 전용으로 전환했습니다.'
+        );
+        return;
+    }
+
+    // 다시 허용되었다. 연결이 살아 있으면 그대로 풀고, 아니면 재연결 뒤 잠금 해제 경로가 푼다.
+    for (const entry of watching.values()) {
+        void setEditorLocked(entry.uri, docsLocked);
+    }
+    if (state === 'active' && !docsLocked) {
+        setDocConnection('active');
+    }
+    void vscode.window.showInformationMessage('Axis Share: 편집 권한이 복구되었습니다.');
 }
 
 /** 유예가 지나도 붙지 못했다 — 열려 있는 우리 문서의 편집을 잠근다(§12.10). */
 function lockEditors(): void {
-    if (docsLocked || state === 'active') {
+    if (docsLocked || writeRevoked || state === 'active') {
         return;
     }
 
@@ -1132,14 +1214,16 @@ function unlockEditors(notify: boolean): void {
     }
 
     docsLocked = false;
-    if (state === 'active') {
+    if (writeRevoked) {
+        setDocConnection('readonly'); // 권한이 회수된 채 다시 붙었다 — 잠금은 그대로 둔다(§12.9).
+    } else if (state === 'active') {
         setDocConnection('active');
     }
     for (const entry of watching.values()) {
-        void setEditorLocked(entry.uri, false);
+        void setEditorLocked(entry.uri, writeRevoked);
     }
 
-    if (notify) {
+    if (notify && !writeRevoked) {
         void vscode.window.showInformationMessage(
             'Axis Share: 협업 서버에 다시 연결되었습니다. 서버 내용으로 맞췄습니다.'
         );
@@ -1377,8 +1461,10 @@ function setState(next: DocState): void {
     state = next;
     log(`문서 소켓 상태: ${next}`);
 
-    // 상태 표시줄용(§12.10). 잠금이 걸려 있으면 그 사실이 가장 중요하다 — 해제는 unlockEditors 가 한다.
-    if (docsLocked) {
+    // 상태 표시줄용(§12.10). 잠금·권한 회수가 걸려 있으면 그 사실이 가장 중요하다 — 해제는 각 경로가 한다.
+    if (writeRevoked) {
+        setDocConnection('readonly');
+    } else if (docsLocked) {
         setDocConnection('locked');
     } else if (next === 'joining') {
         setDocConnection('joining');

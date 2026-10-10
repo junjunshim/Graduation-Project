@@ -278,6 +278,8 @@ function onUpdate(client: RoomClient, filePath: string, updateBase64: string): v
   if (!client.session.canWrite) {
     logDeniedOnce(client, filePath);
     client.send(errFrame('P0902', '이 저장소에 편집 권한이 없습니다.'));
+    // 통보(`perm`)가 유실되었더라도(끊긴 사이 변경 등) 여기서 확실히 읽기 전용으로 되돌린다(§12.9).
+    client.send({ type: 'perm', can_write: false });
     return;
   }
 
@@ -467,6 +469,9 @@ const RESET_PATH = '/internal/collab/files/reset';
 const FLUSH_PATH = '/internal/collab/flush';
 const DROP_PATH = '/internal/collab/files/drop';
 const BRANCH_DROP_PATH = '/internal/collab/branch/drop';
+const PERMISSION_PATH = '/internal/collab/permission';
+// 저장소 닫기 통보(노드 삭제, §12.9). 저장소 여러 개를 한 번에 받는다.
+const REPO_CLOSE_PATH = '/internal/collab/repo/close';
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
 
 /** 내부 토큰을 상수 시간으로 비교한다(fail-closed — 토큰이 없으면 아무 요청도 받지 않는다). */
@@ -772,6 +777,169 @@ async function handleBranchDropRequest(req: http.IncomingMessage, res: http.Serv
   });
 }
 
+/**
+ * 권한을 잃은 사용자를 그 저장소의 방에서 내보낸다(보기 권한 상실, §12.9).
+ *
+ * `repo_closed` 를 그 사람에게만 보내고 소켓을 닫은 뒤 **즉시 방에서 뗀다.** 소켓 종료 이벤트는
+ * 큐를 거쳐 늦게 도착하므로, 그 전에 `detach` 가 한 번 돌아야 남은 사람의 파일 참여자 목록
+ * (`peer_leave`)이 바로 갱신된다. 방 자체는 없애지 않는다 — 남은 접속자가 계속 쓰는 방이고,
+ * 마지막 사람이 나갈 때 `detach` 규칙으로 정리(내려쓰기 포함)된다.
+ *
+ * `closeRepo`(노드 삭제)와 달리 저장소 전체를 닫지 않는다. 잃은 것은 그 사람의 권한뿐이다.
+ */
+async function evictUsers(repoId: number, userEmails: Set<string>, reason: string, message: string): Promise<number> {
+  let evicted = 0;
+  for (const room of rooms.ofRepo(repoId)) {
+    const targets = [...room.clients].filter((client) => userEmails.has(client.session.userEmail));
+    if (targets.length === 0) continue;
+
+    room.sendTo(targets.map((client) => client.id), { type: 'repo_closed', repo_id: repoId, reason, message });
+    for (const client of targets) {
+      client.close(1000, reason);
+      await detach(client);
+      evicted += 1;
+    }
+  }
+  return evicted;
+}
+
+/**
+ * 권한 변경 통보(TASK_11 §12.9). C++ 이 "이 사용자의 권한이 이렇게 바뀌었다"를 확정해 넘기면,
+ * 그 저장소 방의 해당 세션에 반영한다.
+ *
+ * collab 은 권한을 판정하지 않는다 — 받은 값을 세션에 반영하고 클라이언트에 전달할 뿐이다. 값이
+ * 그대로인 세션에는 프레임을 보내지 않는다(같은 값을 중복 통보해도 화면이 흔들리지 않게).
+ * 끊겨 가는 소켓은 `send` 가 조용히 버리므로 여기서 따로 걸러내지 않는다.
+ *
+ * 두 값의 처리가 다르다(§12.9).
+ *   - `can_write=false`: `perm` 으로 알려 확장이 읽기 전용으로 전환한다. 세션은 살려 둔다 —
+ *     대개 일시적이고 곧 복구된다.
+ *   - `can_view=false` : 그 저장소를 더 이상 볼 수 없다는 뜻이다. **세션을 끝낸다.** 읽기만
+ *     막고 남겨 두면 못 보는 저장소의 편집을 계속 받는다.
+ */
+async function handlePermissionRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!internalAuthorized(req)) {
+    log('warn', '권한 통보 요청 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.');
+    sendJson(res, 401, { status: 'error', code: '401', message: '내부 인증에 실패했습니다.' });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readBody(req));
+  } catch (error) {
+    sendJson(res, 400, { status: 'error', code: '400', message: '요청 본문을 읽지 못했습니다: ' + (error as Error).message });
+    return;
+  }
+
+  const body = parsed as { repo_id?: unknown; users?: unknown };
+  const repoId = typeof body.repo_id === 'number' ? body.repo_id : Number.NaN;
+  if (!Number.isInteger(repoId)) {
+    sendJson(res, 400, { status: 'error', code: '400', message: 'repo_id 가 필요합니다.' });
+    return;
+  }
+
+  // can_view 를 보내지 않은 통보는 "그대로"로 본다 — 모르는 값으로 남의 세션을 끊지 않는다.
+  const targets = new Map<string, { canView: boolean; canWrite: boolean }>();
+  if (Array.isArray(body.users)) {
+    for (const raw of body.users as Array<{ user_email?: unknown; can_view?: unknown; can_write?: unknown }>) {
+      if (!raw || typeof raw.user_email !== 'string' || raw.user_email.length === 0) continue;
+      targets.set(raw.user_email, { canView: raw.can_view !== false, canWrite: raw.can_write === true });
+    }
+  }
+  if (targets.size === 0) {
+    sendJson(res, 400, { status: 'error', code: '400', message: '갱신할 사용자 목록이 필요합니다.' });
+    return;
+  }
+
+  const lostView = new Set<string>();
+  let updated = 0;
+  let revoked = 0;
+  for (const room of rooms.ofRepo(repoId)) {
+    // 방에서 떼는 일은 순회가 끝난 뒤에 한다 — 순회 중에 방 구성이 바뀌지 않게.
+    for (const client of [...room.clients]) {
+      const target = targets.get(client.session.userEmail);
+      if (!target) continue;
+      if (!target.canView) {
+        lostView.add(client.session.userEmail);
+        continue;
+      }
+      if (client.session.canWrite === target.canWrite) continue;
+      client.session.canWrite = target.canWrite;
+      client.send({ type: 'perm', can_write: target.canWrite });
+      updated += 1;
+      if (!target.canWrite) revoked += 1;
+    }
+  }
+
+  const evicted = lostView.size === 0
+    ? 0
+    : await evictUsers(repoId, lostView, 'authority_lost', '이 워크스페이스에 대한 권한이 없어 편집 세션을 종료했습니다.');
+
+  log('info', '권한 변경 통보', { repo: repoId, updated, revoked, evicted, users: targets.size });
+  sendJson(res, 200, {
+    status: 'success',
+    data: [{ updated, revoked, evicted }],
+    message: '권한 변경을 통보했습니다.',
+  });
+}
+
+/**
+ * 저장소 닫기 통보(TASK_11 §12.9). C++ 이 노드 삭제를 마친 뒤 부른다.
+ *
+ * 노드는 소프트 딜리트라 저장소 행이 남는다. 그래서 "지금 붙어 있는 세션을 끊는 일"과 "다시 못
+ * 붙게 막는 일"을 나눠서 한다 — collab 은 전자만 한다(후자는 접속 등록·경로 해석의 P0815 가 막는다).
+ * 저장소 방을 파일로 내려쓴 뒤(편집 보존) 접속자에게 `repo_closed` 를 보내고 소켓을 닫는다.
+ *
+ * collab 은 판정하지 않는다 — C++ 이 준 repo_id 목록을 그대로 집행할 뿐이다(§9.1 의 경계).
+ */
+async function handleRepoCloseRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (!internalAuthorized(req)) {
+    log('warn', '저장소 닫기 요청 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.');
+    sendJson(res, 401, { status: 'error', code: '401', message: '내부 인증에 실패했습니다.' });
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readBody(req));
+  } catch (error) {
+    sendJson(res, 400, { status: 'error', code: '400', message: '요청 본문을 읽지 못했습니다: ' + (error as Error).message });
+    return;
+  }
+
+  const body = parsed as { repo_ids?: unknown; reason?: unknown };
+  const repoIds = Array.isArray(body.repo_ids)
+    ? body.repo_ids.filter((item): item is number => typeof item === 'number' && Number.isInteger(item) && item > 0)
+    : [];
+  if (repoIds.length === 0) {
+    sendJson(res, 400, { status: 'error', code: '400', message: 'repo_ids 배열이 필요합니다.' });
+    return;
+  }
+
+  // close reason 은 WebSocket 규격상 ASCII·123바이트 이하다. 사람이 읽는 문구는 별도 프레임(repo_closed)으로 간다.
+  const reason = typeof body.reason === 'string' && body.reason.length > 0 ? body.reason : 'repo_closed';
+  const message = '워크스페이스가 삭제되어 편집 세션을 종료했습니다.';
+
+  let closedRooms = 0;
+  let closedClients = 0;
+  for (const repoId of repoIds) {
+    const closed = await rooms.closeRepo(repoId, reason, message);
+    closedRooms += closed.rooms;
+    closedClients += closed.clients;
+    if (closed.rooms > 0) {
+      log('info', '저장소 방 닫음(노드 삭제)', { repo: repoId, rooms: closed.rooms, clients: closed.clients });
+    }
+  }
+
+  log('info', '저장소 닫기 통보 완료', { repos: repoIds.length, rooms: closedRooms, clients: closedClients });
+  sendJson(res, 200, {
+    status: 'success',
+    data: [{ repos: repoIds.length, rooms_closed: closedRooms, clients_closed: closedClients }],
+    message: '저장소 세션을 닫았습니다.',
+  });
+}
+
 // --- HTTP(healthz) + 업그레이드 -------------------------------------------------------------
 
 
@@ -804,6 +972,22 @@ const server = http.createServer((req, res) => {
     void handleBranchDropRequest(req, res).catch((error: unknown) => {
       log('error', '브랜치 정리 처리 실패', { reason: (error as Error).message });
       sendJson(res, 500, { status: 'error', code: '500', message: '브랜치 상태를 정리하지 못했습니다.' });
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === PERMISSION_PATH) {
+    void handlePermissionRequest(req, res).catch((error: unknown) => {
+      log('error', '권한 통보 처리 실패', { reason: (error as Error).message });
+      sendJson(res, 500, { status: 'error', code: '500', message: '권한 변경을 통보하지 못했습니다.' });
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === REPO_CLOSE_PATH) {
+    void handleRepoCloseRequest(req, res).catch((error: unknown) => {
+      log('error', '저장소 닫기 처리 실패', { reason: (error as Error).message });
+      sendJson(res, 500, { status: 'error', code: '500', message: '저장소 세션을 닫지 못했습니다.' });
     });
     return;
   }
@@ -885,6 +1069,13 @@ wss.on('connection', (ws: WsSocket) => {
     send(frame: unknown): void {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(frame));
+      }
+    },
+    close(code: number, reason: string): void {
+      try {
+        ws.close(code, reason);
+      } catch {
+        // 이미 닫히는 중인 소켓이다 — 정리(close 콜백)는 그대로 진행된다.
       }
     },
   };

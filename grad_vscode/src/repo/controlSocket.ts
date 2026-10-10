@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { apiRequest, getServerBaseUrl } from '../api';
 import {
+    clearSession,
     getCurrentBranch,
     getSession,
     getValidAccessToken,
@@ -351,6 +352,9 @@ function handleFrame(text: string): void {
         case 'branch_deleted':
             handleBranchDeleted(parsed);
             return;
+        case 'repo_closed':
+            handleRepoClosed(parsed);
+            return;
         case 'err':
             handleServerError(parsed);
             return;
@@ -512,20 +516,41 @@ function handleBranchDeleted(payload: Record<string, unknown>): void {
     emitEvent(payload, 'branch_deleted');
 }
 
+/**
+ * 이 저장소와의 인연이 끝났다(§12.9) — 이유가 둘이다.
+ *
+ *   - `node_deleted`   : 워크스페이스가 삭제됐다(소프트 딜리트).
+ *   - `authority_lost` : 보기 권한을 잃어 그 저장소에서 강제 이탈했다.
+ *
+ * 둘 다 세션을 버려 다시 붙지 않게 한다. 그냥 두면 재접속 → join → P0815/P0103 거부가 반복된다.
+ * 세션을 버리면 제어·문서 소켓과 열려 있던 탭이 함께 정리된다(repoSession 의 세션 변경 이벤트).
+ */
+function handleRepoClosed(payload: Record<string, unknown>): void {
+    const message = asString(payload.message) ?? '워크스페이스가 삭제되었습니다.';
+
+    // 안내는 한 번만 — 문서 소켓도 같은 프레임을 받으므로(`docSocket.ts`), 세션이 이미 버려졌으면
+    // (다른 쪽이 먼저 처리했으면) 문구를 다시 띄우지 않는다.
+    if (getSession()) {
+        void vscode.window.showWarningMessage(`Axis Share: ${message}`);
+    }
+    void clearSession();
+    emitEvent(payload, 'repo_closed');
+}
+
 /** 서버 오류(`err`). SQL 이 던진 코드를 그대로 옮겨 온다(§3.3 추가분). */
 function handleServerError(payload: Record<string, unknown>): void {
     const code = asString(payload.code);
     const message = asString(payload.message) ?? '요청을 처리하지 못했습니다.';
 
-    // 입장·방 이동이 거부된 경우(P0103 권한 없음, P0801 없는 브랜치)는 알려 줘야 한다.
+    // 입장·방 이동이 거부된 경우(P0103 권한 없음, P0801 없는 브랜치, P0815 삭제된 워크스페이스)는 알려 줘야 한다.
     // 그냥 두면 화면은 새 브랜치인데 서버 방은 이전 브랜치인 어긋난 상태가 조용히 남는다.
-    const roomFailure = code === 'P0103' || code === 'P0801' || code === 'P0401';
+    const roomFailure = code === 'P0103' || code === 'P0801' || code === 'P0401' || code === 'P0815';
     if (state !== 'joined' || roomFailure) {
         void vscode.window.showWarningMessage(`Axis Share: ${message}${code ? ` (${code})` : ''}`);
     }
 
     if (roomFailure) {
-        // 서버가 방을 거부했다(P0103 권한 없음, P0801 등록되지 않은 브랜치).
+        // 서버가 방을 거부했다(P0103 권한 없음, P0801 등록되지 않은 브랜치, P0815 삭제된 워크스페이스).
         // 여기서 상태를 풀지 않으면 "응답 대기(joining)" 에 갇힌다 — 그 상태에서는
         // syncRoom 이 요청을 보내지 않아, 브랜치를 되돌려도 접속자 목록이 돌아오지 않는다(2026-10-08 수정).
         if (requestedRepoId !== undefined && requestedBranch) {
@@ -536,6 +561,18 @@ function handleServerError(payload: Record<string, unknown>): void {
         requestedBranch = undefined;
         presenceByBranch.clear();
         setState('disconnected');
+
+        // 그 저장소를 **볼 수 없다**는 거부(P0103 권한 없음, P0815 삭제된 워크스페이스)이고 그게
+        // 지금 세션의 방이면, 세션을 버려 문서 소켓·열린 탭까지 함께 정리한다(§12.9). 권한 변경
+        // 통보(`repo_closed`)를 놓쳤을 때의 안전망이다 — 서버도 heartbeat 재확인에서 같은 코드로 끊는다.
+        // 브랜치만 잘못된 경우(P0801)는 세션을 살려 두고 방만 다시 맞춘다.
+        const session = getSession();
+        const deniesRepo = code === 'P0103' || code === 'P0815';
+        if (deniesRepo && session && blockedRepoId === session.repoId && blockedBranch === getCurrentBranch()) {
+            void clearSession();
+            return;
+        }
+
         // 거부된 방이 아닌 곳(이전 브랜치 등)을 가리키고 있으면 곧바로 다시 맞춘다.
         syncConnection();
     }

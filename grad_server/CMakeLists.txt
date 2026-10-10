@@ -65,6 +65,7 @@ set(MODEL_SRC ${MODEL_AUTH_SRC} ${MODEL_NODE_SRC} ${MODEL_WORK_SRC} ${MODEL_ROLE
 
 aux_source_directory(utils/common UTIL_SRC)
 aux_source_directory(utils/git UTIL_GIT_SRC)
+aux_source_directory(utils/collab UTIL_COLLAB_SRC)
 
 drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
                     ${CMAKE_CURRENT_BINARY_DIR})
@@ -93,7 +94,8 @@ target_include_directories(${PROJECT_NAME}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/work
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/role
                                    ${CMAKE_CURRENT_SOURCE_DIR}/utils/common
-                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/git)
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/git
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/collab)
 target_sources(${PROJECT_NAME}
                PRIVATE
                ${SRC_DIR}
@@ -102,7 +104,8 @@ target_sources(${PROJECT_NAME}
                ${PLUGIN_SRC}
                ${MODEL_SRC}
                ${UTIL_SRC}
-               ${UTIL_GIT_SRC})
+               ${UTIL_GIT_SRC}
+               ${UTIL_COLLAB_SRC})
 # ##############################################################################
 # uncomment the following line for dynamically loading views 
 # set_property(TARGET ${PROJECT_NAME} PROPERTY ENABLE_EXPORTS ON)

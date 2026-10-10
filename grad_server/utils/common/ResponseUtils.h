@@ -94,6 +94,7 @@ enum class DbErrorCode {
     ExtensionTokenInvalid,      // P0812 확장 리프레시 토큰이 없거나 만료/이미 회전됨
     PathAlreadyExists,          // P0813 파일·디렉터리가 이미 있음
     PathNotFound,               // P0814 파일·디렉터리를 찾을 수 없음
+    NodeDeletedForRepo,         // P0815 연결된 노드(워크스페이스)가 삭제되어 저장소를 쓸 수 없음
     Unknown                     // 알 수 없는 에러
 };
 

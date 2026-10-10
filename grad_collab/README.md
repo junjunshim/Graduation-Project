@@ -44,6 +44,8 @@ VSCode 확장과 backend(C++) 사이에서 **텍스트의 진실**을 갖는 Nod
 | WS | `/collab/?ticket=<t>` | 1회용 티켓 | 문서 소켓 |
 | POST | `/internal/collab/tickets/consume` | — | (backend 가 제공) collab 이 부르는 티켓 검증 API |
 | POST | `/internal/collab/resolve` | — | (backend 가 제공) collab 이 부르는 작업 디렉터리 해석 API |
+| POST | `/internal/collab/permission` | `X-Internal-Token` | **collab 이 제공** — backend 가 부르는 권한 변경 통보. `can_write` 가 바뀐 세션은 `perm` 을 받고, `can_view=false` 인 세션은 **끝난다**(`repo_closed { reason: authority_lost }` → 소켓 닫기, §12.9) |
+| POST | `/internal/collab/repo/close` | `X-Internal-Token` | **collab 이 제공** — backend 가 부르는 저장소 닫기 통보(노드 삭제). 그 저장소의 모든 방을 **내려쓴 뒤**(편집 보존) 접속자에게 `repo_closed` 를 보내고 소켓을 닫는다(§12.9) |
 
 - 티켓이 없으면 `401`, 검증 실패 `401`/`503`, backend 가 죽어 있으면 `503`(P0903).
 - collab 은 외부에 직접 노출하지 않는다. nginx `location ^~ /collab/` 만 연다.
@@ -77,6 +79,8 @@ collab → 클라이언트:
 | `deco` | `{ path, id, userEmail, userName, ... }` | 팬아웃(작성자는 세션 값으로 확정) |
 | `deco_del` | `{ path, id, userEmail }` | 팬아웃 |
 | `flushed` | `{ path }` | flush 완료(커밋 전 대기 해제) |
+| `perm` | `{ can_write }` | 쓰기 권한 변경 통보(§12.9) — false 면 확장이 즉시 읽기 전용으로 전환한다 |
+| `repo_closed` | `{ repo_id, reason, message }` | 저장소와의 인연이 끝났다(§12.9). `node_deleted`(노드 삭제, 저장소 전체) 또는 `authority_lost`(보기 권한 상실, 그 사람만). 확장은 편집 세션을 정리하고, 제어 소켓도 backend 가 따로 끊는다 |
 | `peer_join` / `peer_leave` | `{ path, userEmail, userName? }` | **파일 doc 참여자** 변동 |
 | `err` | `{ code, message }` | 오류(P09xx) |
 
@@ -95,6 +99,7 @@ collab → 클라이언트:
 | `P0906` | flush 실패 / 파일을 열지 못함 |
 | `P0801` | 등록되지 않은 저장소·브랜치 |
 | `P0807` | 저장소 경로 정보가 올바르지 않거나 작업 디렉터리가 준비되지 않음 |
+| `P0815` | 연결된 워크스페이스가 삭제됨 — 세션·방을 열 수 없음(§12.9) |
 
 ## 파일·경로 규칙
 
@@ -128,7 +133,5 @@ npm run build              # dist/ 생성
 
 ## 아직 구현하지 않은 것 (다음 단계)
 
-- `POST /internal/collab/flush` — 커밋 직전 backend 가 강제 flush 를 요청하는 내부 API(§12.11).
 - 파일 생성·삭제·이름변경(`/api/collab/files`, §12.5) 및 트리 변경 이벤트 중계.
 - `branch_deleted` 이벤트 처리(그 브랜치 doc 정리·`.ydoc` 삭제, §9.7).
-- `perm` 프레임 — 작업 중 권한 회수 통보(§12.9).

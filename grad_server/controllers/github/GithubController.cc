@@ -4,6 +4,7 @@
 #include "GitRunner.h"
 #include "GithubWebSocketController.h"
 #include "AuthController.h"
+#include "CollabClient.h"
 
 #include <drogon/HttpClient.h>
 #include <json/json.h>
@@ -705,75 +706,6 @@ Json::Value syncToJson(const SyncState &state) {
     out["ahead"] = state.ahead;
     out["behind"] = state.behind;
     return out;
-}
-
-// collab 내부 API 를 부르고 **응답을 기다리는** 상한(초). 같은 호스트 안이라 짧아도 충분하고,
-// 이 시간을 넘기면 collab 이 죽었다고 보고 그냥 진행한다.
-constexpr int kCollabCallWaitSeconds = 3;
-
-// collab 의 내부 API 를 부르고 **끝날 때까지 기다린다** (§12.11, §12.11.1).
-//
-// 왜 기다리는가: 둘 다 "collab 이 파일을 내려쓴 뒤에 git 을 돌려야" 하기 때문이다.
-//   - 되돌리기: git 은 체크아웃할 때 그 경로가 비어 있다고 본 뒤 O_CREAT|O_EXCL 로 새로 만든다(entry.c).
-//     그 사이에 collab 이 같은 경로를 쓰면 `unable to create file <path>: File exists` 로 죽는다(실측).
-//   - 커밋: 편집은 디바운스(기본 2초) 뒤에 파일로 내려가므로, 안 기다리면 마지막 편집이 빠진 채 커밋된다.
-// collab 이 없거나 제때 응답하지 않으면 false 를 돌려주고 호출자는 그대로 진행한다 — collab 이 죽어
-// 있어도 되돌리기·커밋 자체를 실패시키지 않는다(그때는 메모리에 doc 이 없어 내려쓸 것도 없다).
-// outData 를 넘기면 200 응답의 `data` 배열을 그대로 담아 준다 — 커밋 전 flush 가 `failed` 를 보는
-// 경로가 쓴다(§9.8). 응답을 못 받았거나 200 이 아니면 outData 는 건드리지 않는다.
-bool callCollabInternal(const std::string &path, const Json::Value &body, Json::Value *outData = nullptr) {
-    const char *baseValue = std::getenv("COLLAB_BASE");
-    const char *tokenValue = std::getenv("INTERNAL_TOKEN");
-    const std::string collabBase = (baseValue != nullptr) ? std::string(baseValue) : std::string();
-    const std::string token = (tokenValue != nullptr) ? std::string(tokenValue) : std::string();
-    if (collabBase.empty() || token.empty()) {
-        return false;
-    }
-
-    const int repoId = body["repo_id"].isInt() ? body["repo_id"].asInt() : 0;
-
-    // HttpClient 는 생성한 루프에서 호출해야 한다. 우리는 작업 스레드에 있으므로 메인 루프로 올리고,
-    // 이 스레드는 promise 로 응답을 기다린다 — 기다리지 않으면 collab 의 쓰기와 git 작업이 겹친다.
-    auto done = std::make_shared<std::promise<bool>>();
-    // 200 응답의 `data` 배열을 담아 둘 곳. 워커 스택이 아니라 shared_ptr 에 담는다 — 응답이 늦어
-    // 타임아웃으로 워커가 먼저 빠져나가도 콜백이 죽은 스택을 건드리지 않게 하기 위함이다.
-    auto payload = std::make_shared<Json::Value>(Json::arrayValue);
-    std::future<bool> future = done->get_future();
-    app().getLoop()->queueInLoop([collabBase, token, path, body, repoId, done, payload]() {
-        auto client = HttpClient::newHttpClient(collabBase, app().getLoop());
-        auto request = HttpRequest::newHttpJsonRequest(body);
-        request->setMethod(Post);
-        request->setPath(path);
-        request->addHeader("X-Internal-Token", token);
-
-        client->sendRequest(request, [client, path, repoId, done, payload](ReqResult result, const HttpResponsePtr &response) {
-            const bool ok = (result == ReqResult::Ok && response != nullptr &&
-                             response->getStatusCode() == k200OK);
-            if (ok) {
-                // 호출자가 응답 내용(예: flush 의 `failed`)을 봐야 하므로 `data` 배열을 옮겨 둔다.
-                Json::Value parsed;
-                Json::Reader reader;
-                if (reader.parse(std::string(response->getBody()), parsed) && parsed["data"].isArray()) {
-                    *payload = parsed["data"];
-                }
-            } else {
-                LOG_WARN << "collab 호출 실패. path=" << path << " repo=" << repoId
-                         << " result=" << static_cast<int>(result)
-                         << " status=" << ((response == nullptr) ? 0 : static_cast<int>(response->getStatusCode()));
-            }
-            done->set_value(ok);
-        });
-    });
-
-    if (future.wait_for(std::chrono::seconds(kCollabCallWaitSeconds)) != std::future_status::ready) {
-        LOG_WARN << "collab 호출 응답 없음(기다리지 않고 진행). path=" << path << " repo=" << repoId;
-        return false;
-    }
-    const bool ok = future.get();
-    if (ok && outData != nullptr) {
-        *outData = *payload;
-    }
-    return ok;
 }
 
 // 되돌리기(§12.11.1): 열려 있는 doc 을 되돌린 내용으로 맞춘다.

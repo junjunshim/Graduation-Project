@@ -34,6 +34,21 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
     // 같은 저장소의 모든 브랜치 접속자에게 보낸다 (branch_created / branch_deleted / presence_updated).
     static bool broadcastToRepository(int repo_id, const Json::Value &event);
 
+    // 저장소 접속을 강제로 끊는다(노드 삭제, §12.9). 그 저장소의 모든 브랜치 방 접속자에게
+    // `repo_closed` 를 보낸 뒤 소켓을 닫는다. 접속자 행 정리와 남은 사람 알림은 소켓 종료
+    // 경로(handleConnectionClosed)가 맡는다.
+    //
+    // **이벤트 루프 스레드에서만 만져야 하는 소켓 API 를 쓰므로, 호출이 어느 스레드에서 왔든
+    // 여기서 루프로 넘긴다.** 그래서 돌려주는 값이 없고, 끊긴 결과는 로그로만 남는다.
+    static void closeRepositorySessions(const std::vector<int> &repo_ids, const std::string &reason,
+                                        const std::string &message);
+
+    // 그 저장소에서 **지정한 사용자만** 강제로 끊는다(권한 상실로 인한 강제 이탈, §12.9).
+    // 노드 삭제처럼 저장소를 통째로 닫는 것이 아니라, 보기 권한을 잃은 사람만 내보낸다 —
+    // 나머지 접속자는 그대로 작업한다. 나머지 동작(통보 → 종료, 접속자 행 정리)은 위와 같다.
+    static void closeRepositorySessionsForUsers(int repo_id, const std::vector<std::string> &user_emails,
+                                                const std::string &reason, const std::string &message);
+
   private:
     // 연결 1개당 유지하는 세션 상태. 인증 전에는 user_email 이 비어 있고 authenticated 가 false 다.
     struct WsSession {
@@ -44,6 +59,11 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
         int repo_id = 0;             // 들어가 있는 방(방에 없으면 0)
         std::string branch;
     };
+
+    // 한 저장소(`repo:{id}:branch:…`)의 방들에 붙은 연결 중 `accept` 가 true 인 것만 모은다.
+    // 락 안에서는 포인터만 복사한다 — 전송은 락 밖(이벤트 루프)에서 한다.
+    template <typename Accept>
+    static std::vector<WebSocketConnectionPtr> collectRepoConnections(int repo_id, Accept accept);
 
     // 샤드 1개.
     //  - connections: 사용자별 목록. 같은 client_id 의 중복 소켓을 교체하는 데 쓴다.

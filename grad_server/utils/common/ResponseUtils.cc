@@ -1,4 +1,5 @@
 #include "ResponseUtils.h"
+#include "AuthorityBits.h"
 #include "NotificationWebSocketController.h"
 
 // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
@@ -286,7 +287,7 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             break;
         }
         case DbErrorCode::InvalidAuthorityBit:{
-            ret["message"] = "유효하지 않은 24비트 권한 비트 문자열입니다.";
+            ret["message"] = "유효하지 않은 " + std::to_string(app_utils::kAuthorityBitLength) + "비트 권한 비트 문자열입니다.";
             ret["http_code"] = drogon::k400BadRequest;
             break;
         }

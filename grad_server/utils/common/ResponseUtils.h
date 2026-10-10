@@ -27,7 +27,7 @@ enum class DbErrorCode {
     RoleNotDefined,             // P0407 노드에 정의되지 않은 역할
     RoleNameEmpty,              // P0408 역할 이름이 비어있음
     CannotModifyAdminRole,      // P0409 ADMIN 역할은 생성/수정 불가
-    InvalidAuthorityBit,        // P0410 유효하지 않은 24비트 권한 문자열
+    InvalidAuthorityBit,        // P0410 유효하지 않은 권한 비트 문자열(비트 폭 불일치)
     CreateRoleDefinitionFailed, // P0411 역할 정의 생성 실패
     RoleDefinitionAlreadyExists,// P0412 노드에 이미 존재하는 역할 정의
     UpdateRoleAuthorityFailed,  // P0413 역할 권한 수정 실패

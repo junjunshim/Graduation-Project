@@ -4,6 +4,7 @@ import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import {
   AUTHORITY_BITS,
+  AUTHORITY_DENY_BIT,
   AUTHORITY_PRESETS,
   getCascadeImpact,
   parseAuthorityBitSet,
@@ -232,8 +233,8 @@ export function WorkspaceRolesTab({
   // 권한 토글 핸들러 (의존성 체인 자동 처리 + 연계 피드백 메시지 생성)
   const handleToggleBit = (bit: number) => {
     if (!isEditable) return
-    // DENY(Bit 23)는 최상위 담당자만 수정 가능
-    if (bit === 23 && !isCurrentUserAdmin) {
+    // DENY 비트는 최상위 담당자만 수정 가능
+    if (bit === AUTHORITY_DENY_BIT && !isCurrentUserAdmin) {
       return
     }
 
@@ -276,8 +277,12 @@ export function WorkspaceRolesTab({
     if (!isEditable) return
     // ADMIN이 아닌 경우 DENY 비트는 0으로 강제 유지
     let bitmask = preset.bitmask
-    if (!isCurrentUserAdmin && bitmask[0] === '1') {
-      bitmask = '0' + bitmask.slice(1)
+    if (!isCurrentUserAdmin) {
+      const presetBits = parseAuthorityBitSet(bitmask)
+      if (presetBits.has(AUTHORITY_DENY_BIT)) {
+        presetBits.delete(AUTHORITY_DENY_BIT)
+        bitmask = stringifyAuthorityBitSet(presetBits)
+      }
     }
     if (isCreatingRole) {
       setNewRoleBitmask(bitmask)
@@ -511,13 +516,13 @@ export function WorkspaceRolesTab({
     }
   }, [])
 
-  const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== 23 && currentBitSet.has(b.bit)).length
-  const totalCount = AUTHORITY_BITS.filter((b) => b.bit !== 23).length
+  const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== AUTHORITY_DENY_BIT && currentBitSet.has(b.bit)).length
+  const totalCount = AUTHORITY_BITS.filter((b) => b.bit !== AUTHORITY_DENY_BIT).length
 
   // 공통 그룹 카드 렌더러
   const renderGroupCard = (group: { category: string; categoryLabel: string; bits: AuthorityBitInfo[] }) => {
-    const groupActiveCount = group.bits.filter((b) => b.bit !== 23 && currentBitSet.has(b.bit)).length
-    const groupTotalCount = group.bits.filter((b) => b.bit !== 23).length
+    const groupActiveCount = group.bits.filter((b) => b.bit !== AUTHORITY_DENY_BIT && currentBitSet.has(b.bit)).length
+    const groupTotalCount = group.bits.filter((b) => b.bit !== AUTHORITY_DENY_BIT).length
 
     return (
       <section key={group.category} className={styles.groupCard}>
@@ -534,7 +539,7 @@ export function WorkspaceRolesTab({
           {group.bits.map((bitInfo) => {
             const isChecked = currentBitSet.has(bitInfo.bit)
             const wasChecked = savedBitSet.has(bitInfo.bit)
-            const isDeny = bitInfo.bit === 23
+            const isDeny = bitInfo.bit === AUTHORITY_DENY_BIT
 
             const isNewlyAdded = !wasChecked && isChecked
             const isNewlyRemoved = wasChecked && !isChecked
@@ -704,7 +709,7 @@ export function WorkspaceRolesTab({
               const hasUnsavedChanges = !isCreatingRole && savedMask !== draftMask
 
               const bSet = parseAuthorityBitSet(savedMask)
-              const count = AUTHORITY_BITS.filter((b) => b.bit !== 23 && bSet.has(b.bit)).length
+              const count = AUTHORITY_BITS.filter((b) => b.bit !== AUTHORITY_DENY_BIT && bSet.has(b.bit)).length
 
               return (
                 <button

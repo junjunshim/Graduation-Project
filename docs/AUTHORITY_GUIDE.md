@@ -160,3 +160,23 @@ graph TD
 | **`MANAGER`** | `001110111110111101111111` | `0x3BEF7F` | 전체 업무 관리, 멤버/역할/권한 관리(`ROLE_CHANGE` 포함), 전체 활동 로그, GitHub 커밋·push (`NODE_INFO_CHANGE`, `GITHUB_REPO_MANAGE` 제외) |
 | **`MEMBER`** | `001110110000001101110111` | `0x3B0377` | 본인 업무 생성/변경, 타인 업무 상세/전체 이력 조회, 파일 다운/업로드, GitHub 커밋·push |
 | **`VIEWER`** | `001100010000000000110011` | `0x310033` | 노드 멤버/공개 및 타인 업무 상세/파일/개인 및 전체 이력 조회 (읽기 전용) |
+
+---
+
+## 5. 비트 폭 단일 정의 지점 (Centralization)
+
+권한 비트 폭(현재 24비트)은 아래 세 곳에서만 정의하고, 나머지 코드는 그 정의에서 파생시켜 사용한다.
+따라서 비트를 늘리거나 줄일 때 구조를 건드릴 곳은 **이 세 곳뿐**이다.
+
+| 계층 | 파일 | 정의 |
+| :--- | :--- | :--- |
+| DB | `data/00_domain_authority.sql` | `authority_mask` DOMAIN(`BIT(24)`), `authority_mask_text` DOMAIN(`VARCHAR(24)`), `authority_bit_length()`, `authority_mask_of(bit_position)` |
+| Server | `grad_server/utils/common/AuthorityBits.h` | `kAuthorityBitLength`, `kAuthorityDenyBit` |
+| Client | `grad_client/renderer/features/workspace/model/authorityDefinitions.ts` | `AUTHORITY_BIT_WIDTH`, `AUTHORITY_DENY_BIT` |
+
+- DB 의 `role_authorities.authority`, `role_defaults.default_authority`, 각 함수의 지역 변수는 모두 `authority_mask` 도메인을 쓴다.
+- 개별 비트 마스크는 `(B'0…01'::BIT(n) << bit_position)` 리터럴 대신 `authority_mask_of(bit_position)` 로 생성한다.
+- `authority_constants.bit_position` 의 상한도 `authority_bit_length()` 에서 파생된다(`01_schema.sql` CHECK).
+- 24자리 2진수 문자열 길이 검사는 서버 `kAuthorityBitLength`, 클라이언트 `AUTHORITY_BIT_WIDTH` 가 담당한다.
+- 폭을 바꿀 때 함께 손봐야 하는 **데이터**는 별도다: `data/02_define_authority.sql` 의 `bit_position` 시드, `role_defaults` 4개 마스크(§4), 클라이언트 `DEFAULT_ROLE_AUTHORITIES` / `AUTHORITY_PRESETS`.
+- 세 계층은 비트 폭이 어긋나면 상호 검증에서 거부되므로 **동시에 배포**해야 한다.

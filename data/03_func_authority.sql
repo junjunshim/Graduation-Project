@@ -13,11 +13,11 @@ $$ LANGUAGE plpgsql;
 -- Function: get_bit_position (권한 이름을 비트 위치로 변환하는 함수)
 CREATE OR REPLACE FUNCTION get_bit_position(
     p_authority_name authority_constants.name%TYPE
-) RETURNS BIT(24) AS $$
+) RETURNS authority_mask AS $$
 DECLARE
-    v_required_bit BIT(24);
+    v_required_bit authority_mask;
 BEGIN
-    SELECT (B'000000000000000000000001'::BIT(24) << bit_position)
+    SELECT authority_mask_of(bit_position)
     INTO v_required_bit
     FROM authority_constants
     WHERE name = p_authority_name;
@@ -35,10 +35,10 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_effective_authority(
     p_user_id users.user_id%TYPE,
     p_node_id organization_nodes.node_id%TYPE
-) RETURNS BIT(24) AS $$
+) RETURNS authority_mask AS $$
 DECLARE
     v_path organization_nodes.path%TYPE;
-    v_final_auth BIT(24);
+    v_final_auth authority_mask;
 BEGIN
     -- 1단계: 현재 노드(p_node_id)에 직접 설정된 권한 확인 (여러 역할 합산)
     SELECT BIT_OR(auth.authority) INTO v_final_auth
@@ -76,14 +76,14 @@ CREATE OR REPLACE FUNCTION check_authority_with_override(
     p_required_authority_name authority_constants.name%TYPE
 ) RETURNS BOOLEAN AS $$
 DECLARE
-    v_final_auth BIT(24);
-    v_required_bit BIT(24);
-    v_deny_bit BIT(24);
+    v_final_auth authority_mask;
+    v_required_bit authority_mask;
+    v_deny_bit authority_mask;
 BEGIN
     -- 0단계: 권한 비트 로드 (필요 권한 및 DENY 권한을 한 번의 쿼리로 가져옴)
     SELECT 
-        BIT_OR(CASE WHEN name = p_required_authority_name THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = p_required_authority_name THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
     INTO v_required_bit, v_deny_bit
     FROM authority_constants
     WHERE name IN (p_required_authority_name, 'DENY');
@@ -123,9 +123,9 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_direct_authority(
     p_user_id users.user_id%TYPE,
     p_node_id organization_nodes.node_id%TYPE
-) RETURNS BIT(24) AS $$
+) RETURNS authority_mask AS $$
 DECLARE
-    v_direct_auth BIT(24);
+    v_direct_auth authority_mask;
 BEGIN
     SELECT BIT_OR(auth.authority) INTO v_direct_auth
     FROM role_assignments ra
@@ -144,13 +144,13 @@ CREATE OR REPLACE FUNCTION check_direct_authority(
     p_required_authority_name authority_constants.name%TYPE
 ) RETURNS BOOLEAN AS $$
 DECLARE
-    v_direct_auth BIT(24);
-    v_required_bit BIT(24);
-    v_deny_bit BIT(24);
+    v_direct_auth authority_mask;
+    v_required_bit authority_mask;
+    v_deny_bit authority_mask;
 BEGIN
     SELECT
-        BIT_OR(CASE WHEN name = p_required_authority_name THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = p_required_authority_name THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
     INTO v_required_bit, v_deny_bit
     FROM authority_constants
     WHERE name IN (p_required_authority_name, 'DENY');

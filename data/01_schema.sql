@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS role_authorities (
     authority_id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
     role VARCHAR(50) NOT NULL,
-    authority BIT(24) NOT NULL, -- Bitmask 권한 (8 -> 24)
+    authority authority_mask NOT NULL, -- Bitmask 권한 (정의: data/00_domain_authority.sql)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_top_role BOOLEAN NOT NULL DEFAULT FALSE,
@@ -72,14 +72,14 @@ CREATE INDEX idx_assignments_role_id ON role_assignments(role_id);
 CREATE TABLE IF NOT EXISTS authority_constants (
     constant_id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
-    bit_position INTEGER NOT NULL CHECK (bit_position BETWEEN 0 AND 23),
+    bit_position INTEGER NOT NULL CHECK (bit_position >= 0 AND bit_position < authority_bit_length()),
     description TEXT
 );
 
 -- 4.2 역할별 기본 권한 테이블
 CREATE TABLE IF NOT EXISTS role_defaults (
     role VARCHAR(50) PRIMARY KEY,
-    default_authority BIT(24) NOT NULL,
+    default_authority authority_mask NOT NULL,
     is_top_role BOOLEAN NOT NULL DEFAULT FALSE
 );
 
@@ -180,7 +180,7 @@ CREATE TABLE role_authority_histories (
     authority_id INTEGER NOT NULL,
     node_id INTEGER NOT NULL,
     role VARCHAR(50) NOT NULL,
-    authority BIT(24) NOT NULL,
+    authority authority_mask NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     change_status history_status NOT NULL,

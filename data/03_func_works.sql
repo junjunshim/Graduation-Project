@@ -764,21 +764,21 @@ DECLARE
     v_owner_node_id organization_nodes.node_id%TYPE;
     v_owner_user_id users.user_id%TYPE;
     v_hidden BOOLEAN;
-    v_authority BIT(24);
+    v_authority authority_mask;
     
     -- 권한 비트 상수 캐싱용
-    v_node_info_view BIT(24);
-    v_wi_public_view BIT(24);
-    v_wi_hidden_view BIT(24);
-    v_file_view BIT(24);
+    v_node_info_view authority_mask;
+    v_wi_public_view authority_mask;
+    v_wi_hidden_view authority_mask;
+    v_file_view authority_mask;
     v_can_view_files BOOLEAN := FALSE;
 BEGIN
     -- 0. 권한 상수 로드
     SELECT 
-        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN authority_mask_of(bit_position) END)
     INTO v_node_info_view, v_wi_public_view, v_wi_hidden_view, v_file_view
     FROM authority_constants
     WHERE name IN ('NODE_INFO_VIEW', 'WI_PUBLIC_VIEW', 'WI_HIDDEN_VIEW', 'FILE_VIEW');

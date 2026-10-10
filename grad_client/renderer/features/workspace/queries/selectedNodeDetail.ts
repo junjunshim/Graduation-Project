@@ -1,5 +1,5 @@
 import { resolveRoleAssignments } from '../model/roleDefinitions'
-import { parseAuthorityBitSet } from '../model/authorityDefinitions'
+import { AUTHORITY_DENY_BIT, parseAuthorityBitSet } from '../model/authorityDefinitions'
 import type {
   OrganizationNodeRecord,
   RoleMember,
@@ -62,7 +62,7 @@ export function getSelectedNodeDetail(
     const definition = snapshot.authorities?.find((a) => a.id === role.roleId && a.nodeId === role.nodeId)
     if (!definition) return false
     const bits = parseAuthorityBitSet(definition.authority)
-    return !bits.has(23) && (definition.isTopRole === true || bits.has(15))
+    return !bits.has(AUTHORITY_DENY_BIT) && (definition.isTopRole === true || bits.has(15))
   }
   const accessibleNodeIds = userId
     ? getAccessibleNodeIdsForUser(userId, snapshot)

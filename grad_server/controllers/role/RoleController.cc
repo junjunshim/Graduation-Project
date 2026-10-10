@@ -2,6 +2,7 @@
 #include "RoleAssignments.h"
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
+#include "AuthorityBits.h"
 #include <json/json.h>
 
 using namespace api;
@@ -165,11 +166,11 @@ void RoleController::createRoleDefinition(const HttpRequestPtr &req, std::functi
     std::string role_name = (*jsonPtr)["role_name"].asString();
     std::string authority = (*jsonPtr)["authority"].asString();
 
-    if (authority.length() != 24) {
+    if (authority.length() != kAuthorityBitLength) {
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "authority는 24비트 2진수 문자열이어야 합니다.";
+        ret["message"] = "authority는 " + std::to_string(kAuthorityBitLength) + "비트 2진수 문자열이어야 합니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -223,11 +224,11 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
     int role_id = (*jsonPtr)["role_id"].asInt();
     std::string authority = (*jsonPtr)["authority"].asString();
 
-    if (authority.length() != 24) {
+    if (authority.length() != kAuthorityBitLength) {
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "authority는 24비트 2진수 문자열이어야 합니다.";
+        ret["message"] = "authority는 " + std::to_string(kAuthorityBitLength) + "비트 2진수 문자열이어야 합니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);

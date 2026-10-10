@@ -364,28 +364,28 @@ CREATE OR REPLACE FUNCTION get_node_detail(
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
-    v_authority BIT(24);
+    v_authority authority_mask;
     
     -- 권한 비트 상수 캐싱용
-    v_node_info_view BIT(24);
-    v_node_members_view BIT(24);
-    v_wi_public_view BIT(24);
-    v_wi_hidden_view BIT(24);
-    v_file_view BIT(24);
-    v_history_personal_view BIT(24);
-    v_history_all_view BIT(24);
-    v_deny BIT(24);
+    v_node_info_view authority_mask;
+    v_node_members_view authority_mask;
+    v_wi_public_view authority_mask;
+    v_wi_hidden_view authority_mask;
+    v_file_view authority_mask;
+    v_history_personal_view authority_mask;
+    v_history_all_view authority_mask;
+    v_deny authority_mask;
 BEGIN
     -- 0. 권한 상수 로드
     SELECT 
-        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view,
         v_wi_public_view, v_wi_hidden_view, v_file_view,
@@ -725,7 +725,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION check_authority_on_path(
     p_user_id VARCHAR, p_path INTEGER[], p_authority_name VARCHAR
 ) RETURNS BOOLEAN AS $$
-DECLARE v_auth BIT(24);
+DECLARE v_auth authority_mask;
 BEGIN
     SELECT a.authority INTO v_auth
     FROM unnest(p_path) WITH ORDINALITY AS path(node_id, depth)

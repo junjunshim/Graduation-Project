@@ -1,6 +1,7 @@
 import { resolveRoleAssignments } from './roleDefinitions'
 import {
   AUTHORITY_BITS,
+  AUTHORITY_DENY_BIT,
   parseAuthorityBitSet,
 } from './authorityDefinitions'
 import type {
@@ -48,7 +49,7 @@ export function getRolePriorityScore(
   if (bitSet.has(17)) score += 200 // FILE_CHANGE
   if (bitSet.has(6)) score += 150 // WI_HIDDEN_VIEW
 
-  const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== 23 && bitSet.has(b.bit)).length
+  const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== AUTHORITY_DENY_BIT && bitSet.has(b.bit)).length
   score += activeCount * 10
   return score
 }

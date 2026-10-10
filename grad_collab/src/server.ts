@@ -133,6 +133,9 @@ async function onJoin(client: RoomClient, repoId: number, branch: string): Promi
   // 사이드바가 파일을 열지 않고 목록을 그릴 수 있게 브랜치 리뷰 인덱스를 한 번 보낸다(§15.6).
   client.send({ type: 'reviews', branch: room.repo.branch, reviews: room.reviews.snapshot() });
 
+  // Editing 뷰는 **남의 파일까지** 그려야 한다 — 방에 열려 있는 파일 목록을 한 번 보낸다(§15.5).
+  client.send({ type: 'open_files', branch: room.repo.branch, files: room.openFiles() });
+
   log('info', 'room joined', {
     repo: repoId,
     branch,
@@ -173,6 +176,8 @@ async function detach(client: RoomClient): Promise<void> {
       { type: 'peer_leave', path: filePath, userEmail: client.session.userEmail },
       client.id,
     );
+    // 떠난 사람도 사이드바에서는 즉시 빠져야 한다(§15.5).
+    room.announceFileWatchers(filePath);
   }
 
   room.clients.delete(client);
@@ -237,6 +242,9 @@ async function onOpen(client: RoomClient, filePath: string): Promise<void> {
     client.id,
   );
 
+  // 사이드바는 이 파일을 열지 않은 사람에게도 보여야 한다 — 참여자 집합을 방 전체에 알린다(§15.5).
+  room.announceFileWatchers(filePath);
+
   if (opened.created) {
     log('info', 'doc opened', {
       repo: room.repo.repoId,
@@ -262,6 +270,7 @@ function onClose(client: RoomClient, filePath: string): void {
     { type: 'peer_leave', path: filePath, userEmail: client.session.userEmail },
     client.id,
   );
+  room.announceFileWatchers(filePath);
 }
 
 // --- 실시간 편집 ---------------------------------------------------------------------------
@@ -548,6 +557,7 @@ async function handleResetRequest(req: http.IncomingMessage, res: http.ServerRes
       const watchers = room.docs.watchersOf(file.path).map((w) => w.clientId);
       if (await room.docs.dropDoc(file.path)) {
         room.sendTo(watchers, { type: 'doc_reset', path: file.path, deleted: true });
+        room.announceFileWatchers(file.path); // doc 이 버려졌으니 열린 목록에서도 빠진다(§15.5)
         deleted += 1;
       }
       continue;
@@ -698,6 +708,8 @@ async function handleDropRequest(req: http.IncomingMessage, res: http.ServerResp
         room.sendTo(clientIds, { type: 'doc_reset', path: filePath, deleted: true, reason: 'tree_changed' });
         dropped += 1;
       }
+      // 사라진 파일은 방의 열린 목록에서도 빠진다(§15.5).
+      room.announceFileWatchers(filePath);
     }
   }
 

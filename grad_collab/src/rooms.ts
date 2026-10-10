@@ -73,6 +73,46 @@ export class Room {
       client.send(frame);
     }
   }
+
+  /**
+   * 그 파일을 보고 있는 사람(사이드바 형태). 같은 사람이 탭·창을 여러 개 열어도 이메일 기준 한 줄이다(§12.8).
+   * 이메일순으로 고정해 두어, 같은 내용이면 프레임의 순서도 같게 만든다.
+   */
+  private fileWatchers(filePath: string): Array<{ email: string; name: string }> {
+    const byEmail = new Map<string, string>();
+    for (const watcher of this.docs.watchersOf(filePath)) {
+      if (!byEmail.has(watcher.userEmail)) byEmail.set(watcher.userEmail, watcher.userName);
+    }
+
+    return [...byEmail]
+      .map(([email, name]) => ({ email, name }))
+      .sort((a, b) => a.email.localeCompare(b.email));
+  }
+
+  /**
+   * 그 파일의 참여자 집합을 **방 전체**에 알린다(TASK_11 §15.5 Editing 뷰).
+   *
+   * `peer_join`/`peer_leave` 는 그 파일을 열고 있는 사람에게만 가므로(§9.5), 사이드바는 다른 사람이
+   * 연 파일을 알 수 없다. 사이드바는 "누가 무엇을 보고 있나" 를 그려야 하므로 참여자가 바뀔 때마다
+   * **집합 전체**를 방 전체에 보낸다 — 집합이라 순서가 뒤바뀌어도 결과가 같다(§9.6). 빈 배열은
+   * "지금은 아무도 안 본다" 는 뜻이고, 받는 쪽은 그 파일을 목록에서 지운다.
+   */
+  announceFileWatchers(filePath: string): void {
+    this.broadcast({
+      type: 'file_watchers',
+      path: filePath,
+      watchers: this.fileWatchers(filePath),
+    });
+  }
+
+  /** 지금 이 방에서 열려 있는 파일과 그 참여자(입장 직후 스냅샷, §15.5). 아무도 안 보는 파일은 뺀다. */
+  openFiles(): Array<{ path: string; watchers: Array<{ email: string; name: string }> }> {
+    return this.docs
+      .paths()
+      .map((path) => ({ path, watchers: this.fileWatchers(path) }))
+      .filter((file) => file.watchers.length > 0)
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
 }
 
 export class RoomRegistry {

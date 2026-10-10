@@ -122,7 +122,7 @@ export type FileWatcher = {
 
 /**
  * 파일 1개와 그것을 보고 있는 사람들(§15.5 Editing 뷰 사람 → 파일 단계).
- * 문서 소켓이 아는 것만 담는다 — 이 브랜치에서 내가 연 파일과, 그 파일을 함께 보는 사람뿐이다.
+ * 문서 소켓이 아는 것만 담는다 — 이 브랜치 **방 전체**에서 열려 있는 파일과 그 사람들이다.
  */
 export type OpenFilePresence = {
     path: string;
@@ -212,9 +212,11 @@ const openWaiters = new Map<
 const watching = new Map<string, Watching>();
 
 /**
- * 이 브랜치에서 열려 있는 파일(경로) → 그 파일을 보는 사람(§15.5 Editing 뷰 사람 → 파일 단계).
- * 문서 소켓이 아는 것만 담는다 — `opened.watchers`(열 때)와 `peer_join`/`peer_leave`(그 뒤)뿐이다(§9.5).
- * **키는 항상 `watching` 의 부분집합이다** — 감시를 끝낸 파일은 여기에도 남지 않는다.
+ * 이 브랜치 방에서 열려 있는 파일(경로) → 그 파일을 보는 사람(§15.5 Editing 뷰 사람 → 파일 단계).
+ *
+ * **이 창이 연 파일만이 아니다** — 방 전체다. 서버가 참여자가 바뀔 때마다 집합을 방 전체에 밀어 주기
+ * 때문이다(`file_watchers`, 입장 직후에는 `open_files` 스냅샷, §9.5). `opened.watchers`(내가 열 때)와
+ * `peer_join`/`peer_leave`(그 파일을 열고 있는 사람에게만 온다)도 같은 표를 갱신한다.
  */
 const openFileWatchers = new Map<string, FileWatcher[]>();
 
@@ -999,6 +1001,12 @@ function handleFrame(text: string): void {
         case 'reviews':
             handleReviewIndexFrame(frame);
             return;
+        case 'open_files':
+            handleOpenFilesFrame(frame);
+            return;
+        case 'file_watchers':
+            handleFileWatchersFrame(frame);
+            return;
         case 'perm':
             handlePermissionFrame(frame);
             return;
@@ -1544,6 +1552,46 @@ function handlePeerJoin(frame: Record<string, unknown>): void {
     addFileWatcher(path, userEmail, asString(frame.userName));
 }
 
+/** 방에 열려 있는 파일 목록 스냅샷(§15.5). 입장 직후 한 번 오고, 표를 통째로 갈아 끼운다. */
+function handleOpenFilesFrame(frame: Record<string, unknown>): void {
+    openFileWatchers.clear();
+
+    const files = frame.files;
+    if (Array.isArray(files)) {
+        for (const item of files) {
+            if (!isRecord(item)) {
+                continue;
+            }
+
+            const path = asString(item.path);
+            if (path === undefined) {
+                continue;
+            }
+
+            const watchers = parseFileWatchers(item.watchers);
+            if (watchers.length > 0) {
+                openFileWatchers.set(path, watchers);
+            }
+        }
+    }
+
+    filePresenceEmitter.fire();
+}
+
+/**
+ * 어떤 파일의 참여자 집합이 바뀌었다(§15.5). **그 파일을 열지 않은 창에도** 온다 — 사이드바가 남의
+ * 파일까지 그리기 위해서다. 집합 전체가 오므로 순서가 뒤바뀌어도 결과가 같다. 빈 배열은
+ * "지금은 아무도 안 본다" 이므로 그 파일을 목록에서 지운다.
+ */
+function handleFileWatchersFrame(frame: Record<string, unknown>): void {
+    const path = asString(frame.path);
+    if (path === undefined) {
+        return;
+    }
+
+    setFileWatchers(path, parseFileWatchers(frame.watchers));
+}
+
 /** 다른 사용자가 파일에서 나갔다(§9.5). 서버는 커서 제거를 따로 보내지 않는다 — 이 신호로 지운다. */
 function handlePeerLeave(frame: Record<string, unknown>): void {
     const path = asString(frame.path);
@@ -1560,13 +1608,11 @@ function handlePeerLeave(frame: Record<string, unknown>): void {
 // 파일별 참여자 (Editing 뷰 사람 → 파일 단계, §15.5)
 // ---------------------------------------------------------------------------
 
-/** 같은 사람이 탭을 여러 개 열어도 한 줄만 그린다 — 이메일이 신원이다(§12.8). */
+/**
+ * 파일 한 줄에 사람 하나를 더한다. 같은 사람이 탭을 여러 개 열어도 한 줄만 그린다 — 이메일이 신원이다(§12.8).
+ * **이 창이 열지 않은 파일이어도 넣는다** — 이 표는 방 전체를 나타낸다(§15.5).
+ */
 function addFileWatcher(path: string, email: string, name: string | undefined): void {
-    if (!watching.has(path)) {
-        // 이 창이 열지 않은 파일이다(끊긴 사이 서버가 보낸 신호 등). 목록에 넣지 않는다(§15.5).
-        return;
-    }
-
     const existing = openFileWatchers.get(path);
     const watchers = existing ? [...existing] : [];
     const index = watchers.findIndex((watcher) => watcher.email === email);
@@ -1652,19 +1698,20 @@ function parseFileWatchers(value: unknown): FileWatcher[] {
 // ---------------------------------------------------------------------------
 
 /**
- * 그 브랜치에서 지금 열려 있는 파일과 그 참여자(§15.5). 문서 소켓이 그 브랜치에 붙어 있을 때만
+ * 그 브랜치 방에서 지금 열려 있는 파일과 그 참여자(§15.5). 문서 소켓이 그 브랜치에 붙어 있을 때만
  * 값을 준다 — 소켓 하나가 한 방에만 붙으므로 다른 브랜치의 파일 참여자는 알 수 없다(§9.5).
+ * 목록은 **방 전체**다(내가 열지 않은 파일 포함) — 서버가 참여자 집합을 밀어 준다(§15.5).
  */
 export function getOpenFilePresence(branch: string): OpenFilePresence[] {
     if (joinedBranch !== branch) {
         return [];
     }
 
-    // 지금 이 창이 열어 둔 파일만 보여 준다 — 감시를 끝낸 파일이 목록에 남지 않게 하는 마지막 기준이다(§15.5).
+    // 방 전체(내가 연 파일 + 남이 연 파일). 남이 닫으면 서버가 빈 집합을 보내 빠지고,
+    // 내가 닫으면 `releaseWatching` 이 곧바로 뺀다 — 그래야 닫은 파일이 목록에 남지 않는다(§15.5).
     const files: OpenFilePresence[] = [];
-    for (const path of watching.keys()) {
-        const watchers = openFileWatchers.get(path);
-        if (watchers !== undefined && watchers.length > 0) {
+    for (const [path, watchers] of openFileWatchers) {
+        if (watchers.length > 0) {
             files.push({ path, watchers });
         }
     }

@@ -32,6 +32,10 @@ namespace {
 // 파일 크기 상한 (§6-10 / §12.6). 넘으면 읽기 전용으로만 다룬다.
 constexpr long long kMaxTextFileBytes = 512 * 1024;
 
+// GitHub 연동 권한 비트 (§3.2). 저장소 연결/해제는 GITHUB_REPO_MANAGE(bit 18) 로 SQL 함수가 판정하고,
+// worktree 편집(브랜치 생성·삭제, 커밋, push, 파일 조작)은 GITHUB_CHANGE(bit 19) 로 여기서 한 번 더 막는다.
+constexpr char kGithubChangeAuthority[] = "GITHUB_CHANGE";
+
 // ---------------------------------------------------------------------------
 // 응답 헬퍼
 // ---------------------------------------------------------------------------
@@ -416,16 +420,42 @@ GitResult ensureWorktree(const std::string &localPath, const std::string &worktr
     return GitRunner::worktreeAdd(localPath, worktreePath, branch, baseBranch.empty() ? "HEAD" : baseBranch);
 }
 
+// 저장소가 연결된 노드에 대한 GITHUB_CHANGE(bit 19) 권한을 확인한다(§3.2).
+// 통과하면 true, 아니면 outError 에 응답을 담고 false 를 돌려준다.
+bool requireGithubChange(const std::string &requester, int nodeId, HttpResponsePtr &outError) {
+    auto authRows = app().getDbClient()->execSqlSync(
+        "SELECT check_authority_with_override(u.user_id, $2, $3) AS can_write "
+        "FROM users u WHERE u.email = $1 AND u.is_deleted = FALSE",
+        requester, nodeId, std::string(kGithubChangeAuthority));
+    if (authRows.empty()) {
+        outError = errorResponse("P0001", "요청자 계정을 찾을 수 없습니다.", k401Unauthorized);
+        return false;
+    }
+    if (!authRows[0]["can_write"].as<bool>()) {
+        outError = errorResponse("P0103", "저장소 편집 권한(GITHUB_CHANGE)이 없습니다.", k403Forbidden);
+        return false;
+    }
+    return true;
+}
+
 // 요청한 브랜치가 실제로 checkout 되어 있는 작업 디렉터리를 확정한다.
 // 기본 브랜치는 clone 디렉터리 자체가 작업 트리이고, 나머지는 등록된 worktree 를 쓴다.
+// forWrite=true(편집 계열)면 연결 노드에 대한 GITHUB_CHANGE 권한까지 함께 확인한다.
+// 조회 계열은 위 get_github_repository_by_id 의 NODE_INFO_VIEW 만으로 충분하다.
 // 실패하면 outError 에 응답을 담고 false 를 돌려준다.
 bool resolveWorkDir(const std::string &requester, int repoId, const std::string &requestedBranch,
-                    std::string &outWorkDir, HttpResponsePtr &outError) {
+                    std::string &outWorkDir, HttpResponsePtr &outError, bool forWrite = false) {
     auto db = app().getDbClient();
 
     Json::Value repoRow;
     if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
         outError = errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        return false;
+    }
+
+    // 편집 계열이면 저장소가 연결된 노드의 GITHUB_CHANGE 권한을 한 번 더 본다.
+    // (조회는 위 함수의 NODE_INFO_VIEW 로 끝나지만 커밋·push·파일 조작은 그보다 높은 권한이 필요하다)
+    if (forWrite && !requireGithubChange(requester, repoRow["node_id"].asInt(), outError)) {
         return false;
     }
 
@@ -2192,7 +2222,7 @@ void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(
     runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2239,7 +2269,7 @@ void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<voi
     runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2285,7 +2315,7 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
     runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2408,7 +2438,7 @@ void GithubController::createFileEntry(const HttpRequestPtr &req, std::function<
     runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2473,7 +2503,7 @@ void GithubController::createDirectory(const HttpRequestPtr &req, std::function<
     runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2529,7 +2559,7 @@ void GithubController::renameFileEntry(const HttpRequestPtr &req, std::function<
     runOffLoop(std::move(callback), [requester, repoId, branch, from, to]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2614,7 +2644,7 @@ void GithubController::deleteFileEntry(const HttpRequestPtr &req, std::function<
     runOffLoop(std::move(callback), [requester, repoId, branch, path, force]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2703,6 +2733,12 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
             return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
         }
         const std::string localPath = repoRow["local_path"].asString();
+
+        // fetch 는 공유 로컬 저장소의 ref 를 갱신하는 쓰기 작업이라 편집 권한을 요구한다(§3.2).
+        HttpResponsePtr denied;
+        if (!requireGithubChange(requester, repoRow["node_id"].asInt(), denied)) {
+            return denied;
+        }
 
         GitRunner::Auth auth;
         const GitRunner::Auth *authPtr = nullptr;
@@ -2805,7 +2841,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         // 2) 브랜치의 작업 디렉터리를 확정한다(없으면 worktree 를 만든다).
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 
@@ -2974,7 +3010,7 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
 
         std::string workDir;
         HttpResponsePtr failure;
-        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
             return failure;
         }
 

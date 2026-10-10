@@ -503,7 +503,7 @@ export function WorkspaceRolesTab({
     }
 
     const leftCats: AuthorityBitInfo['category'][] = ['space', 'manage', 'role', 'history']
-    const rightCats: AuthorityBitInfo['category'][] = ['work', 'file', 'special']
+    const rightCats: AuthorityBitInfo['category'][] = ['work', 'file', 'integration', 'special']
 
     return {
       leftGroups: leftCats.map(getCategoryBits).filter((g) => g.bits.length > 0),

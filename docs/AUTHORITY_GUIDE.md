@@ -7,7 +7,7 @@
 ## 1. 24비트 권한 비트맵 (Bit Position Overview)
 
 > **포맷 규격**: 24자리 2진수 문자열 (Big-Endian 표기, `Bit 23`이 맨 앞, `Bit 0`이 맨 끝)  
-> 예시: `"001100111111111101111111"` (MANAGER 권한)
+> 예시: `"001110111110111101111111"` (MANAGER 권한)
 
 ```
 Bit:  23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
@@ -29,8 +29,8 @@ Bit:  23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
       │  │  │  │  │  │  │  │  └────────────────────────────────────────────── ROLE_CHANGE
       │  │  │  │  │  │  │  └───────────────────────────────────────────────── FILE_VIEW
       │  │  │  │  │  │  └──────────────────────────────────────────────────── FILE_CHANGE
-      │  │  │  │  │  └─────────────────────────────────────────────────────── (Bit 18 Reserved)
-      │  │  │  │  └────────────────────────────────────────────────────────── (Bit 19 Reserved)
+      │  │  │  │  │  └─────────────────────────────────────────────────────── GITHUB_REPO_MANAGE
+      │  │  │  │  └────────────────────────────────────────────────────────── GITHUB_CHANGE
       │  │  │  └───────────────────────────────────────────────────────────── HISTORY_PERSONAL_VIEW
       │  │  └──────────────────────────────────────────────────────────────── HISTORY_ALL_VIEW
       │  └─────────────────────────────────────────────────────────────────── (Bit 22 Reserved)
@@ -61,7 +61,8 @@ Bit:  23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
 | **15** | `ROLE_CHANGE` | 역할/인원 | 노드의 커스텀 역할을 생성하고 역할별 24비트 권한을 설정/수정 가능 | `NODE_ADD_ROLE` (Bit 14) |
 | **16** | `FILE_VIEW` | 파일/첨부 | 업무에 첨부된 파일을 조회하고 다운로드 가능 | `WI_PUBLIC_VIEW` (Bit 4) |
 | **17** | `FILE_CHANGE` | 파일/첨부 | 업무에 파일을 새로 업로드하거나 삭제 가능 | `FILE_VIEW` (Bit 16) |
-| *18, 19* | *RESERVED* | - | 예약 비트 (항상 `0`) | - |
+| **18** | `GITHUB_REPO_MANAGE` | 통합(GitHub) | 연결된 원격 저장소를 새로 연결하거나 해제 가능 | `NODE_INFO_VIEW` (Bit 0) |
+| **19** | `GITHUB_CHANGE` | 통합(GitHub) | 저장소 worktree 편집 — 브랜치 생성/삭제, 커밋, push, 파일·디렉터리 조작 | `NODE_INFO_VIEW` (Bit 0) |
 | **20** | `HISTORY_PERSONAL_VIEW` | 히스토리 | 본인이 변경한 활동/수정 이력을 조회 가능 | `NODE_INFO_VIEW` (Bit 0) |
 | **21** | `HISTORY_ALL_VIEW` | 히스토리 | 노드 내 모든 인원의 변경/활동 전체 이력을 조회 가능 | `HISTORY_PERSONAL_VIEW` (Bit 20) + `NODE_MEMBERS_VIEW` (Bit 1) |
 | *22* | *RESERVED* | - | 예약 비트 (항상 `0`) | - |
@@ -82,6 +83,8 @@ graph TD
     Bit0 --> Bit12["NODE_INFO_CHANGE (Bit 12)"]
     Bit0 --> Bit13["NODE_SUB_CREATE (Bit 13)"]
     Bit0 --> Bit20["HISTORY_PERSONAL_VIEW (Bit 20)"]
+    Bit0 --> Bit18["GITHUB_REPO_MANAGE (Bit 18)"]
+    Bit0 --> Bit19["GITHUB_CHANGE (Bit 19)"]
 
     Bit1 --> Bit14["NODE_ADD_ROLE (Bit 14)"]
     Bit14 --> Bit15["ROLE_CHANGE (Bit 15)"]
@@ -136,6 +139,10 @@ graph TD
   - `NODE_MEMBERS_VIEW (Bit 1)`, `WI_PUBLIC_VIEW (Bit 4)`, `NODE_INFO_VIEW (Bit 0)`가 **자동으로 ON** 되어야 합니다.
 - **`WI_HIDDEN_CHANGE (Bit 9)` 활성화 시**:
   - `WI_HIDDEN_VIEW (Bit 6)`, `WI_PERSONAL_CHANGE (Bit 8)`, `WI_PUBLIC_VIEW (Bit 4)`, `NODE_INFO_VIEW (Bit 0)`가 **자동으로 ON** 되어야 합니다.
+- **`GITHUB_REPO_MANAGE (Bit 18)` 활성화 시**:
+  - `NODE_INFO_VIEW (Bit 0)`가 **자동으로 ON** 되어야 합니다.
+- **`GITHUB_CHANGE (Bit 19)` 활성화 시**:
+  - `NODE_INFO_VIEW (Bit 0)`가 **자동으로 ON** 되어야 합니다.
 
 ---
 
@@ -150,6 +157,6 @@ graph TD
 | 역할 이름 | 24비트 비트마스크 문자열 | 16진수(Hex) | 포함된 주요 권한 |
 | :--- | :---: | :---: | :--- |
 | **`ADMIN`** | `011111111111111111111111` | `0x7FFFFF` | `DENY` 제외 **모든 권한 보유** (비트 0~21 전체 ON) |
-| **`MANAGER`** | `001100111110111101111111` | `0x33EF7F` | 전체 업무 관리, 멤버/역할/권한 관리(`ROLE_CHANGE` 포함), 전체 활동 로그 (`NODE_INFO_CHANGE` 제외) |
-| **`MEMBER`** | `001100110000001101110111` | `0x330377` | 본인 업무 생성/변경, 타인 업무 상세/전체 이력 조회, 파일 다운/업로드 |
+| **`MANAGER`** | `001110111110111101111111` | `0x3BEF7F` | 전체 업무 관리, 멤버/역할/권한 관리(`ROLE_CHANGE` 포함), 전체 활동 로그, GitHub 커밋·push (`NODE_INFO_CHANGE`, `GITHUB_REPO_MANAGE` 제외) |
+| **`MEMBER`** | `001110110000001101110111` | `0x3B0377` | 본인 업무 생성/변경, 타인 업무 상세/전체 이력 조회, 파일 다운/업로드, GitHub 커밋·push |
 | **`VIEWER`** | `001100010000000000110011` | `0x310033` | 노드 멤버/공개 및 타인 업무 상세/파일/개인 및 전체 이력 조회 (읽기 전용) |

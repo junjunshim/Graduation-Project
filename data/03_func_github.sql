@@ -1,9 +1,10 @@
 -- 컨트롤러에서 사용될 github 관련 함수 생성
 --
--- 권한 정책 (TASK_11 §3.2 + TASK_10 §4.5 승계)
+-- 권한 정책 (TASK_11 §3.2 — 24비트 중 GitHub 전용 비트 2개를 새로 쓴다)
 --   - 조회(연결 목록·브랜치·접속자·자격증명 상태): 해당 노드 NODE_INFO_VIEW
---   - 저장소 연결/해제: 해당 노드 NODE_INFO_CHANGE (ADMIN 계열 — MANAGER 는 bit 12 가 없다)
---   - 브랜치 생성·삭제·커밋: WI_PERSONAL_CHANGE (작업자 이상 — VIEWER 는 불가)
+--   - 저장소 연결/해제: GITHUB_REPO_MANAGE (bit 18, ADMIN 계열 — MANAGER 기본값에는 없다)
+--   - 브랜치 생성·삭제·커밋·push: GITHUB_CHANGE (bit 19, 작업자 이상 — VIEWER 는 불가)
+--   - 자격증명 등록/조회/삭제, 핸드오프·확장 토큰: 권한 검사 없음 (본인 계정 범위)
 --
 -- 오류 코드 (P0801 ~ P0812) — P04xx 는 역할, P03xx 는 노드가 이미 쓰고 있어 대역을 분리했다.
 --   P0801 저장소(또는 브랜치)가 연결되어 있지 않음
@@ -140,8 +141,8 @@ BEGIN
     END IF;
 
     -- 3. 권한 확인 (연결은 ADMIN 계열만 가능하다)
-    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_INFO_CHANGE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have NODE_INFO_CHANGE permission on node: %', p_node_id
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'GITHUB_REPO_MANAGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_REPO_MANAGE permission on node: %', p_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -336,8 +337,8 @@ BEGIN
     END IF;
 
     -- 3. 권한 확인 (해제도 연결과 같은 ADMIN 계열)
-    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'NODE_INFO_CHANGE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have NODE_INFO_CHANGE permission on node: %', v_node_id
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_REPO_MANAGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_REPO_MANAGE permission on node: %', v_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -431,8 +432,8 @@ BEGIN
     END IF;
 
     -- 3. 권한 확인 (브랜치 생성은 작업자 이상)
-    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'WI_PERSONAL_CHANGE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', v_node_id
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_CHANGE permission on node: %', v_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -610,8 +611,8 @@ BEGIN
     END IF;
 
     -- 3. 권한 확인 (브랜치 삭제도 작업자 이상)
-    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'WI_PERSONAL_CHANGE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', v_node_id
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_CHANGE permission on node: %', v_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -838,8 +839,8 @@ BEGIN
     END IF;
 
     -- 3. 권한 확인 (커밋은 작업자 이상)
-    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'WI_PERSONAL_CHANGE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', v_node_id
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_CHANGE permission on node: %', v_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -934,8 +935,8 @@ BEGIN
     END IF;
 
     -- 3. 권한 확인 (push 는 커밋과 같은 작업자 이상)
-    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'WI_PERSONAL_CHANGE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', v_node_id
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_CHANGE permission on node: %', v_node_id
         USING ERRCODE = 'P0103';
     END IF;
 

@@ -21,7 +21,9 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 -- Integration Bits (16-19)
 ('FILE_VIEW', 16, '파일 조회 및 다운로드 가능'),
 ('FILE_CHANGE', 17, '파일 등록 및 삭제 가능'),
--- (bit 18, 19 reserved)
+-- GitHub Integration (18-19)
+('GITHUB_REPO_MANAGE', 18, '원격 저장소 연결/해제 가능'),
+('GITHUB_CHANGE', 19, '브랜치 생성/삭제, 커밋, push, 파일 조작 가능'),
 -- History Bits (20-23)
 ('HISTORY_PERSONAL_VIEW', 20, '개인 히스토리 식별 가능'),
 ('HISTORY_ALL_VIEW', 21, '노드의 모든 히스토리 식별 가능'),
@@ -30,14 +32,14 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 
 -- Role Default Permissions
 -- admin => deny 비트(23) 제외 모두 1
--- manager => bit 0~6, 8~11, 13~17, 20, 21 ON (bit 12 NODE_INFO_CHANGE 제외) -> B'001100111110111101111111'
--- member  => bit 0~2, 4~6, 8, 9, 16, 17, 20, 21 ON                      -> B'001100110000001101110111'
+-- manager => bit 0~6, 8~11, 13~17, 19~21 ON (bit 12 NODE_INFO_CHANGE, bit 18 GITHUB_REPO_MANAGE 제외) -> B'001110111110111101111111'
+-- member  => bit 0~2, 4~6, 8, 9, 16, 17, 19, 20, 21 ON                 -> B'001110110000001101110111'
 -- viewer  => bit 0, 1, 4, 5, 16, 20, 21 ON                               -> B'001100010000000000110011'
 
 INSERT INTO role_defaults (role, default_authority) VALUES
 ('ADMIN',   B'011111111111111111111111'),
-('MANAGER', B'001100111110111101111111'),
-('MEMBER',  B'001100110000001101110111'),
+('MANAGER', B'001110111110111101111111'),
+('MEMBER',  B'001110110000001101110111'),
 ('VIEWER',  B'001100010000000000110011');
 
 UPDATE role_defaults SET is_top_role = TRUE WHERE role = 'ADMIN';

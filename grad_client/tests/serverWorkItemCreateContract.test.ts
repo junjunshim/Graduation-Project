@@ -26,10 +26,10 @@ const snapshot: WorkspaceSnapshot = {
   ],
   authorities: [
     { id: 101, nodeId: 10, roleName: 'ADMIN', authority: '011111111111111111111111', isTopRole: true },
-    { id: 102, nodeId: 10, roleName: 'MEMBER', authority: '001100110000001101110111' },
+    { id: 102, nodeId: 10, roleName: 'MEMBER', authority: '001110110000001101110111' },
     { id: 103, nodeId: 10, roleName: 'VIEWER', authority: '001100010000000000110011' },
     { id: 104, nodeId: 20, roleName: 'VIEWER', authority: '001100010000000000110011' },
-    { id: 105, nodeId: 20, roleName: 'MEMBER', authority: '001100110000001101110111' },
+    { id: 105, nodeId: 20, roleName: 'MEMBER', authority: '001110110000001101110111' },
   ],
   workItems: [
     {

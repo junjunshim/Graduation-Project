@@ -4,7 +4,7 @@ export type AuthorityBitInfo = {
   bit: number
   key: string
   label: string
-  category: 'space' | 'work' | 'file' | 'manage' | 'role' | 'history' | 'special'
+  category: 'space' | 'work' | 'file' | 'manage' | 'role' | 'history' | 'integration' | 'special'
   categoryLabel: string
   description: string
   prerequisites: number[] // 이 권한이 켜지기 위해 반드시 켜져 있어야 하는 부모 비트 목록
@@ -134,6 +134,26 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     prerequisites: [16, 4, 0],
   },
 
+  // 3-1. GitHub 통합 (Bit 18 ~ 19)
+  {
+    bit: 18,
+    key: 'GITHUB_REPO_MANAGE',
+    label: '저장소 연결/해제',
+    category: 'integration',
+    categoryLabel: '통합 (GitHub)',
+    description: '워크스페이스에 원격 저장소를 연결하거나 연결을 해제합니다.',
+    prerequisites: [0],
+  },
+  {
+    bit: 19,
+    key: 'GITHUB_CHANGE',
+    label: '저장소 편집',
+    category: 'integration',
+    categoryLabel: '통합 (GitHub)',
+    description: '저장소 작업 트리에서 브랜치 생성/삭제, 커밋, push, 파일·디렉터리 조작을 수행합니다.',
+    prerequisites: [0],
+  },
+
   // 4. 공간 관리 (Bit 12 ~ 13)
   {
     bit: 12,
@@ -208,8 +228,8 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
 
 export const DEFAULT_ROLE_AUTHORITIES: Record<StandardRoleName, string> = {
   ADMIN: '011111111111111111111111',
-  MANAGER: '001100111110111101111111',
-  MEMBER: '001100110000001101110111',
+  MANAGER: '001110111110111101111111',
+  MEMBER: '001110110000001101110111',
   VIEWER: '001100010000000000110011',
 }
 
@@ -225,13 +245,13 @@ export const AUTHORITY_PRESETS: AuthorityPreset[] = [
     id: 'manager',
     label: '관리자형 (Manager)',
     description: '공간/역할/업무 전체 관리 및 모든 이력 조회',
-    bitmask: '001100111110111101111111',
+    bitmask: '001110111110111101111111',
   },
   {
     id: 'member',
     label: '일반 멤버형 (Member)',
     description: '본인 업무 생성/수정, 타인 업무 상세/전체 이력 조회 및 파일 관리',
-    bitmask: '001100110000001101110111',
+    bitmask: '001110110000001101110111',
   },
   {
     id: 'viewer',

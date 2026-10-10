@@ -34,9 +34,9 @@ constexpr int kTicketTtlSeconds = 60;
 // collab ↔ backend 내부 인증 헤더. 두 컨테이너만 아는 값이고 외부에 노출하지 않는다(§9.2).
 constexpr char kInternalTokenHeader[] = "X-Internal-Token";
 
-// 협업 편집의 쓰기 권한. 브랜치 생성/삭제·커밋과 같은 권한을 쓴다(§12.9).
+// 협업 편집의 쓰기 권한. 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE(bit 19) 를 쓴다(§12.9).
 // VIEWER 는 read-only 티켓을, MEMBER 이상은 can_write=true 티켓을 받는다.
-constexpr char kWriteAuthority[] = "WI_PERSONAL_CHANGE";
+constexpr char kWriteAuthority[] = "GITHUB_CHANGE";
 
 // ---------------------------------------------------------------------------
 // 응답 헬퍼 (GithubController 와 같은 규격: {status, data[], message})
@@ -303,7 +303,7 @@ void CollabController::issueTicket(const HttpRequestPtr &req,
         const int nodeId = repo["node_id"].asInt();
 
         // 2) 세션에 담을 이름과 쓰기 권한을 한 번에 읽는다.
-        //    권한은 브랜치 생성/삭제·커밋과 같은 WI_PERSONAL_CHANGE 를 기준으로 한다.
+        //    권한은 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE 를 기준으로 한다.
         auto rows = db->execSqlSync(
             "SELECT u.name, check_authority_with_override(u.user_id, $2, $3) AS can_write "
             "FROM users u WHERE u.email = $1 AND u.is_deleted = FALSE",

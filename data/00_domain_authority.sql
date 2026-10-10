@@ -10,8 +10,8 @@
 DROP DOMAIN IF EXISTS authority_mask_text CASCADE;
 DROP DOMAIN IF EXISTS authority_mask CASCADE;
 
-CREATE DOMAIN authority_mask AS BIT(24);
-CREATE DOMAIN authority_mask_text AS VARCHAR(24);
+CREATE DOMAIN authority_mask AS BIT(32);
+CREATE DOMAIN authority_mask_text AS VARCHAR(32);
 
 -- 권한 비트 폭을 도메인 정의에서 파생시킨다(마스크 시프트와 CHECK 제약에 사용).
 CREATE OR REPLACE FUNCTION authority_bit_length() RETURNS INTEGER

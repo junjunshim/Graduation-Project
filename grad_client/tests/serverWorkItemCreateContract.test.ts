@@ -25,11 +25,11 @@ const snapshot: WorkspaceSnapshot = {
     { id: 5, userId: 'member', nodeId: 20, roleName: 'MEMBER', roleId: 105, createdAt: '2026-08-29' },
   ],
   authorities: [
-    { id: 101, nodeId: 10, roleName: 'ADMIN', authority: '011111111111111111111111', isTopRole: true },
-    { id: 102, nodeId: 10, roleName: 'MEMBER', authority: '001110110000001101110111' },
-    { id: 103, nodeId: 10, roleName: 'VIEWER', authority: '001100010000000000110011' },
-    { id: 104, nodeId: 20, roleName: 'VIEWER', authority: '001100010000000000110011' },
-    { id: 105, nodeId: 20, roleName: 'MEMBER', authority: '001110110000001101110111' },
+    { id: 101, nodeId: 10, roleName: 'ADMIN', authority: '01111111111111111111111111111111', isTopRole: true },
+    { id: 102, nodeId: 10, roleName: 'MEMBER', authority: '00000000111100110000001101110111' },
+    { id: 103, nodeId: 10, roleName: 'VIEWER', authority: '00000000011100010000000000110011' },
+    { id: 104, nodeId: 20, roleName: 'VIEWER', authority: '00000000011100010000000000110011' },
+    { id: 105, nodeId: 20, roleName: 'MEMBER', authority: '00000000111100110000001101110111' },
   ],
   workItems: [
     {

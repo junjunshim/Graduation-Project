@@ -160,13 +160,13 @@ export function WorkspaceRolesTab({
     () => new Map(roleBitmaskMap),
   )
 
-  const getDefaultAuthority = (_role: RoleName): string => '000000000000000000000000'
+  const getDefaultAuthority = (_role: RoleName): string => '00000000000000000000000000000000'
 
   const currentBitmaskStr = isCreatingRole
     ? newRoleBitmask
     : draftBitmaskMap.get(selectedRole) || getDefaultAuthority(selectedRole)
   const savedBitmaskStr = isCreatingRole
-    ? '000000000000000000000000'
+    ? '00000000000000000000000000000000'
     : savedBitmaskMap.get(selectedRole) || getDefaultAuthority(selectedRole)
   const isDirty = isCreatingRole ? true : currentBitmaskStr !== savedBitmaskStr
 

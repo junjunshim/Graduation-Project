@@ -235,7 +235,7 @@ RoleName에는 서버 DB 열거형과 맞추기 위해 VIEWER를 추가했고 �
 | ROLE | id, parent_id(node id), title(user email), status(role) | RoleAssignmentRecord와 이메일 기반 UserRecord |
 | WORK_ITEM | id, parent_id(owner node), title, status, priority, extra_info(parent work item) | WorkItemRecord |
 | USER | 문서화된 확장 응답에 존재할 경우 식별 정보 사용 | UserRecord |
-| AUTHORITY | id, node_id, role, authority(24비트 문자열) | 알려진 서버 권한 정책으로 수용하되 현재 WorkspaceDatabase에는 저장하지 않음 |
+| AUTHORITY | id, node_id, role, authority(32비트 문자열) | 알려진 서버 권한 정책으로 수용하되 현재 WorkspaceDatabase에는 저장하지 않음 |
 | MENTION | id, comment_id, work_item_id, message, is_read | 알려진 알림 메타데이터로 수용하되 현재 알림 도메인이 없어 저장하지 않음 |
 
 문서에 있는 확장 필드 owner_node_id, owner_user_id/email, description, weight, progress, start_date, due_date, created_at 등도 함께 지원한다. 서버가 실제로 보내면 손실 없이 도메인 레코드에 반영한다.
@@ -492,7 +492,7 @@ npm run build의 마지막 electron-builder 단계는 Windows의 사용자 AppDa
 17. 업무 category는 현재 프론트의 기존 정적 태그 표현에만 있고 POST/PATCH/DB 계약에는 없다. 서버에는 저장되는 값처럼 보이지 않도록 비활성화했으며, 실제 저장 기능이 필요하면 서버 필드와 응답 계약을 추가해야 한다.
 18. 현재 조직/역할/업무 생성 SQL은 상위 노드의 상속 역할이 아니라 대상 노드의 직접 역할을 검사한다. 프론트는 이 동작에 맞췄지만, 제품 정책이 상속 권한을 의도했다면 서버 권한 규칙과 응답 명세를 함께 변경해야 한다.
 19. PATCH /org/nodes는 이름/유형 중 하나가 누락되면 컨트롤러가 빈 문자열을 채워 SQL에서 기존 값을 덮는다. 프론트는 두 필드를 필수 공통 요청 타입으로 만들고 항상 함께 보내지만, 서버에서도 부분 PATCH 또는 full update 중 하나로 계약을 명확히 해야 한다.
-20. 프론트의 현재 버튼 노출 권한은 역할명 중심이며 서버의 AUTHORITY 24비트 정책을 직접 소비하지 않는다. 커스텀 role_authorities를 허용할 경우 권한 상수·상속·DENY를 포함한 공개 계약이 필요하다.
+20. 프론트의 현재 버튼 노출 권한은 역할명 중심이며 서버의 AUTHORITY 32비트 정책을 직접 소비하지 않는다. 커스텀 role_authorities를 허용할 경우 권한 상수·상속·DENY를 포함한 공개 계약이 필요하다.
 21. MENTION 초기/동기화 응답은 확인했지만 현재 프론트 알림 도메인과 삭제·읽음 병합 규칙이 없다. 알림 기능 구현 전 응답 및 갱신 계약을 확정해야 한다.
 
 ## 13. 변경 범위 확인

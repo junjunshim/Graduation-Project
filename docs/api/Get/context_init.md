@@ -75,7 +75,7 @@
             "id" : 2,
             "node_id" : 4,
             "role" : "ADMIN",
-            "authority" : "011111111111111111111111",
+            "authority" : "01111111111111111111111111111111",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
@@ -160,7 +160,7 @@
 | node_id | Integer | role, authority, activity | 소속 노드의 id |
 | email | String | role | 역할이 배정된 사용자 이메일 |
 | role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
-| authority | String | authority | 24비트 권한 문자열 |
+| authority | String | authority | 32비트 권한 문자열 |
 | comment_id | Integer | mention | 멘션이 발생한 댓글 식별 ID |
 | work_item_id | String | mention, file | 연관된 업무 식별 ID |
 | message | String | mention | 멘션 알림 메시지 내용 |

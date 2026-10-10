@@ -1,5 +1,5 @@
 # 역할 권한 수정 api
-- 노드 내 특정 역할의 24비트 권한을 변경하는 api (15번 비트 ROLE_CHANGE 권한 필요)
+- 노드 내 특정 역할의 32비트 권한을 변경하는 api (15번 비트 ROLE_CHANGE 권한 필요)
 ## Request
 - Request syntax
 ```json
@@ -29,7 +29,7 @@
 | :--- | :--- | :--- | :--- |
 | node_id | Integer | 필수 | 역할을 수정할 노드 id |
 | role_name | String | 필수 | 권한을 수정할 역할 이름 (ADMIN은 수정 불가) |
-| authority | String | 필수 | 변경할 24비트 2진수 권한 비트마스크 문자열 |
+| authority | String | 필수 | 변경할 32비트 2진수 권한 비트마스크 문자열 |
 
 ---
 
@@ -73,5 +73,5 @@
 | id | Integer | 필수 | 역할 권한 식별 id |
 | node_id | Integer | 필수 | 소속 노드의 id |
 | role | String | 필수 | 역할 이름 |
-| authority | String | 필수 | 갱신된 24비트 권한 문자열 |
+| authority | String | 필수 | 갱신된 32비트 권한 문자열 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

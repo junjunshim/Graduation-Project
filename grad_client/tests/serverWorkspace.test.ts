@@ -201,7 +201,7 @@ function createDocumentedContextResponse() {
         id: 2,
         node_id: 4,
         role: 'ADMIN',
-        authority: '011111111111111111111111',
+        authority: '01111111111111111111111111111111',
         updated_at: timestamp,
       },
       {
@@ -327,7 +327,7 @@ test('server login stores both tokens before loading and preserving the document
     // 권한/멘션/활동/파일 같은 부가 컨텍스트는 워크스페이스 캐시에 그대로 보존된다.
     assert.equal(workspace.authorities?.length, 1)
     assert.equal(workspace.authorities?.[0]?.nodeId, 4)
-    assert.equal(workspace.authorities?.[0]?.authority, '011111111111111111111111')
+    assert.equal(workspace.authorities?.[0]?.authority, '01111111111111111111111111111111')
     assert.equal(workspace.mentions?.length, 1)
     assert.equal(workspace.mentions?.[0]?.workItemId, 'WI-1101')
     assert.equal(workspace.mentions?.[0]?.isRead, false)

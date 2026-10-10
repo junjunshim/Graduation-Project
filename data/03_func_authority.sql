@@ -96,7 +96,7 @@ BEGIN
     -- 1단계: 유효 권한 가져오기 (Override 정책 적용)
     v_final_auth := get_effective_authority(p_user_id, p_node_id);
 
-    -- 2단계: DENY 비트(bit 23)가 켜져 있으면 무조건 거부
+    -- 2단계: DENY 비트(bit 31)가 켜져 있으면 무조건 거부
     IF (v_final_auth & v_deny_bit) = v_deny_bit THEN
         RETURN FALSE;
     END IF;
@@ -166,7 +166,7 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    -- DENY 비트(bit 23)가 켜져 있으면 무조건 거부
+    -- DENY 비트(bit 31)가 켜져 있으면 무조건 거부
     IF (v_direct_auth & v_deny_bit) = v_deny_bit THEN
         RETURN FALSE;
     END IF;

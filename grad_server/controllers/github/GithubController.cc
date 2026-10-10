@@ -32,8 +32,8 @@ namespace {
 // 파일 크기 상한 (§6-10 / §12.6). 넘으면 읽기 전용으로만 다룬다.
 constexpr long long kMaxTextFileBytes = 512 * 1024;
 
-// GitHub 연동 권한 비트 (§3.2). 저장소 연결/해제는 GITHUB_REPO_MANAGE(bit 18) 로 SQL 함수가 판정하고,
-// worktree 편집(브랜치 생성·삭제, 커밋, push, 파일 조작)은 GITHUB_CHANGE(bit 19) 로 여기서 한 번 더 막는다.
+// GitHub 연동 권한 비트 (§3.2). 조회는 GITHUB_VIEW(bit 22), 저장소 추가/해제는 GITHUB_REPO_MANAGE(bit 24) 로 SQL 함수가 판정하고,
+// worktree 편집(브랜치 생성·삭제, 커밋, push, 파일 조작)은 GITHUB_CHANGE(bit 23) 로 여기서 한 번 더 막는다.
 constexpr char kGithubChangeAuthority[] = "GITHUB_CHANGE";
 
 // ---------------------------------------------------------------------------
@@ -420,7 +420,7 @@ GitResult ensureWorktree(const std::string &localPath, const std::string &worktr
     return GitRunner::worktreeAdd(localPath, worktreePath, branch, baseBranch.empty() ? "HEAD" : baseBranch);
 }
 
-// 저장소가 연결된 노드에 대한 GITHUB_CHANGE(bit 19) 권한을 확인한다(§3.2).
+// 저장소가 연결된 노드에 대한 GITHUB_CHANGE(bit 23) 권한을 확인한다(§3.2).
 // 통과하면 true, 아니면 outError 에 응답을 담고 false 를 돌려준다.
 bool requireGithubChange(const std::string &requester, int nodeId, HttpResponsePtr &outError) {
     auto authRows = app().getDbClient()->execSqlSync(

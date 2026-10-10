@@ -1,4 +1,4 @@
-﻿# 역할 이름 변경 api
+# 역할 이름 변경 api
 - 노드 내 특정 역할의 이름을 변경하는 api (15번 비트 ROLE_CHANGE 권한 필요)
 - 해당 역할을 부여받은 멤버들의 역할 할당(role_assignments)도 새 역할명으로 자동 연쇄 갱신됩니다.
 - ADMIN 역할은 변경할 수 없으며, 새 이름을 ADMIN으로 변경하는 것도 불가능합니다.
@@ -84,7 +84,7 @@
 | id | Integer | 필수 | 역할 권한 식별 id |
 | node_id | Integer | 필수 | 소속 노드의 id |
 | role | String | 필수 | 변경된 새 역할 이름 |
-| authority | String | 필수 | 24비트 권한 문자열 |
+| authority | String | 필수 | 32비트 권한 문자열 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 
 - Data Elements (ROLE)

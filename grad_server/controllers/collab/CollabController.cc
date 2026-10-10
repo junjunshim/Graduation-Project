@@ -34,7 +34,7 @@ constexpr int kTicketTtlSeconds = 60;
 // collab ↔ backend 내부 인증 헤더. 두 컨테이너만 아는 값이고 외부에 노출하지 않는다(§9.2).
 constexpr char kInternalTokenHeader[] = "X-Internal-Token";
 
-// 협업 편집의 쓰기 권한. 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE(bit 19) 를 쓴다(§12.9).
+// 협업 편집의 쓰기 권한. 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE(bit 23) 를 쓴다(§12.9).
 // VIEWER 는 read-only 티켓을, MEMBER 이상은 can_write=true 티켓을 받는다.
 constexpr char kWriteAuthority[] = "GITHUB_CHANGE";
 

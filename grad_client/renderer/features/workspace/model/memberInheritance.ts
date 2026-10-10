@@ -34,7 +34,7 @@ export function getRolePriorityScore(
   role: string,
   roleBitmaskMap: Map<RoleName, string>,
 ): number {
-  const mask = roleBitmaskMap.get(role) ?? '000000000000000000000000'
+  const mask = roleBitmaskMap.get(role) ?? '00000000000000000000000000000000'
   const bitSet = parseAuthorityBitSet(mask)
 
   let score = 0

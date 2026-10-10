@@ -57,7 +57,7 @@
             "id" : 389,
             "node_id" : 98,
             "role" : "ADMIN",
-            "authority" : "011111111111111111111111",
+            "authority" : "01111111111111111111111111111111",
             "updated_at" : "2026-09-02T08:54:49.604005+00:00"
         },
         {
@@ -140,7 +140,7 @@
 | is_deleted | Boolean | node, work_item, file | 삭제 여부 |
 | email | String | role | 역할이 배정된 사용자 이메일 |
 | role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
-| authority | String | authority | 24비트 권한 문자열 |
+| authority | String | authority | 32비트 권한 문자열 |
 | owner_node_id | Integer | work_item | 업무 소속 노드 id |
 | owner_user_id | String | work_item | 업무 담당자 사용자 id |
 | description | String or Null | work_item | 업무 설명 |

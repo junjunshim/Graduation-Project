@@ -58,12 +58,12 @@ test('직속 역할의 비트만 합산한다 (멤버 관리 14 / 역할 정의 
   assert.equal(canManageNodeRoles('U-14', 4, snapshot), false)
 })
 
-test('DENY 비트(23)가 켜져 있으면 직속 권한은 모두 무효다', () => {
+test('DENY 비트(31)가 켜져 있으면 직속 권한은 모두 무효다', () => {
   const denyAuthority: AuthorityRecord = {
     id: 13,
     nodeId: 4,
     roleName: 'DENIED',
-    authority: mask([0, 14, 23]),
+    authority: mask([0, 14, 31]),
   }
   const snapshot = {
     roles: [assignment(1, 'U-15', 4, 13)],

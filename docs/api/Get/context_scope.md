@@ -67,7 +67,7 @@
             "is_top_role" : false,
             "node_id" : 98,
             "role" : "ADMIN",
-            "authority" : "011111111111111111111111",
+            "authority" : "01111111111111111111111111111111",
             "updated_at" : "2026-09-02T08:54:49.604005Z"
         }
     ]
@@ -107,12 +107,12 @@
 | role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
 | role_id | Integer | role, authority | 역할 정의 id |
 | is_top_role | Boolean | role, authority | 최상위 역할 여부 |
-| authority | String | authority | 24비트 권한 문자열 |
+| authority | String | authority | 32비트 권한 문자열 |
 | created_at | String | node | 노드 생성 일시 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 
 - 설명<br>
 1. 스코프는 JWT 사용자 기준으로 직접 배정 노드 + 하위 노드(NODE_SUB_VIEW) + 상위 노드(NODE_PARENT_VIEW)를 합집합으로 계산한 뒤 DENY 비트가 설정된 노드를 제외해 결정됩니다.<br>
 2. ROLE은 멤버 열람 권한(NODE_MEMBERS_VIEW)이 있거나 본인의 역할인 경우에만 반환됩니다.<br>
-3. AUTHORITY는 멤버 열람 권한이 있거나 본인 역할의 정의인 경우에만 반환됩니다. authority 값은 24비트 문자열입니다.<br>
+3. AUTHORITY는 멤버 열람 권한이 있거나 본인 역할의 정의인 경우에만 반환됩니다. authority 값은 32비트 문자열입니다.<br>
 4. 사용자가 존재하지 않으면 404와 `요청자를 찾을 수 없습니다.` 메시지가 반환되고, 스코프 계산 중 오류가 나면 500과 `워크스페이스 스코프를 불러오지 못했습니다.` 메시지가 반환됩니다.<br>

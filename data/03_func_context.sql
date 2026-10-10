@@ -89,7 +89,7 @@ BEGIN
             get_effective_authority(v_user_id, vn.node_id) as effective_authority
         FROM (SELECT DISTINCT node_id FROM visible_node_ids) vn
     )
-    -- DENY 비트 체크 (Bit 23)
+    -- DENY 비트 체크 (Bit 31)
     , filtered_nodes AS (
         SELECT * FROM final_visible_nodes
         WHERE (effective_authority & v_deny) != v_deny

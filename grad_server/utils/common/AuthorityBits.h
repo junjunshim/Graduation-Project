@@ -8,10 +8,10 @@ namespace app_utils {
      * 클라이언트는 grad_client/.../authorityDefinitions.ts 의 AUTHORITY_BIT_WIDTH 가 담당한다.
      * 비트 폭을 늘릴 때는 이 세 곳을 함께 수정한다.
      */
-    constexpr int kAuthorityBitLength = 24;
+    constexpr int kAuthorityBitLength = 32;
 
     /**
      * @brief 절대 거부(DENY) 비트 위치. 켜지면 하위 비트와 무관하게 모든 권한이 무효화된다.
      */
-    constexpr int kAuthorityDenyBit = 23;
+    constexpr int kAuthorityDenyBit = 31;
 }

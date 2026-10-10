@@ -12,8 +12,8 @@ export type AuthorityBitInfo = {
 
 // 권한 비트 폭과 특수 비트 위치의 단일 정의 지점.
 // 서버는 data/00_domain_authority.sql(authority_mask) / grad_server/utils/common/AuthorityBits.h 를 사용한다.
-export const AUTHORITY_BIT_WIDTH = 24
-export const AUTHORITY_DENY_BIT = 23
+export const AUTHORITY_BIT_WIDTH = 32
+export const AUTHORITY_DENY_BIT = 31
 
 export const AUTHORITY_BITS: AuthorityBitInfo[] = [
   // 1. 공간/노드 (Bit 0 ~ 3)
@@ -139,24 +139,33 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     prerequisites: [16, 4, 0],
   },
 
-  // 3-1. GitHub 통합 (Bit 18 ~ 19)
+  // 3-1. GitHub 통합 (Bit 22 ~ 24)
   {
-    bit: 18,
-    key: 'GITHUB_REPO_MANAGE',
-    label: '저장소 연결/해제',
+    bit: 22,
+    key: 'GITHUB_VIEW',
+    label: '저장소 조회',
     category: 'integration',
     categoryLabel: '통합 (GitHub)',
-    description: '워크스페이스에 원격 저장소를 연결하거나 연결을 해제합니다.',
+    description: '연결된 저장소의 구조·브랜치·커밋·파일을 조회하고 실시간 편집 세션에 접속합니다.',
     prerequisites: [0],
   },
   {
-    bit: 19,
+    bit: 23,
     key: 'GITHUB_CHANGE',
     label: '저장소 편집',
     category: 'integration',
     categoryLabel: '통합 (GitHub)',
     description: '저장소 작업 트리에서 브랜치 생성/삭제, 커밋, push, 파일·디렉터리 조작을 수행합니다.',
-    prerequisites: [0],
+    prerequisites: [22, 0],
+  },
+  {
+    bit: 24,
+    key: 'GITHUB_REPO_MANAGE',
+    label: '저장소 추가/해제',
+    category: 'integration',
+    categoryLabel: '통합 (GitHub)',
+    description: '워크스페이스에 원격 저장소를 추가(연결)하거나 연결을 해제합니다.',
+    prerequisites: [22, 0],
   },
 
   // 4. 공간 관리 (Bit 12 ~ 13)
@@ -232,10 +241,10 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
 ]
 
 export const DEFAULT_ROLE_AUTHORITIES: Record<StandardRoleName, string> = {
-  ADMIN: '011111111111111111111111',
-  MANAGER: '001110111110111101111111',
-  MEMBER: '001110110000001101110111',
-  VIEWER: '001100010000000000110011',
+  ADMIN: '01111111111111111111111111111111',
+  MANAGER: '00000000111100111110111101111111',
+  MEMBER: '00000000111100110000001101110111',
+  VIEWER: '00000000011100010000000000110011',
 }
 
 export type AuthorityPreset = {
@@ -250,25 +259,25 @@ export const AUTHORITY_PRESETS: AuthorityPreset[] = [
     id: 'manager',
     label: '관리자형 (Manager)',
     description: '공간/역할/업무 전체 관리 및 모든 이력 조회',
-    bitmask: '001110111110111101111111',
+    bitmask: '00000000111100111110111101111111',
   },
   {
     id: 'member',
     label: '일반 멤버형 (Member)',
     description: '본인 업무 생성/수정, 타인 업무 상세/전체 이력 조회 및 파일 관리',
-    bitmask: '001110110000001101110111',
+    bitmask: '00000000111100110000001101110111',
   },
   {
     id: 'viewer',
     label: '읽기 전용형 (Viewer)',
     description: '노드 멤버/업무 상세/파일/이력 조회',
-    bitmask: '001100010000000000110011',
+    bitmask: '00000000011100010000000000110011',
   },
   {
     id: 'clear',
     label: '모든 권한 해제',
     description: '공간 기본 조회만 남기고 모든 권한 해제',
-    bitmask: '000000000000000000000001',
+    bitmask: '00000000000000000000000000000001',
   },
 ]
 

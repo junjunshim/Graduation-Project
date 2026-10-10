@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 import { getControlState, onDidChangeControlState } from './controlSocket';
-import { getDocConnection, onDidChangeDocConnection } from './docSocket';
+import { getDocConnection, listOpenDocs, onDidChangeDocConnection, onDidChangeOpenDocs } from './docSocket';
 import { getSession, onDidChangeSession } from './repoSession';
 
 /**
@@ -10,6 +10,9 @@ import { getSession, onDidChangeSession } from './repoSession';
  * 협업 연결이 끊기면 편집이 잠긴다(§12.10). 그 사실이 화면 어딘가에 남아 있어야 하므로 상태
  * 표시줄 한 곳에 모아 그린다 — 정상일 때는 아무것도 그리지 않는다(잡음 금지). 문서 소켓(편집)과
  * 제어 소켓(presence·브랜치 이벤트) 중 더 심각한 하나만 보여 준다.
+ *
+ * 복원한 편집 내용과 파일이 어긋나 **파일 내용으로** 열린 문서도 여기서 알린다(§9.3, P0907). 그
+ * 사실은 한 번 뜨는 경고로 끝나지 않고, 열려 있는 동안 배지로 남는다.
  *
  * 매니페스트는 건드리지 않는다 — 커맨드 하나를 코드로만 등록해 이 항목의 클릭을 받는다.
  */
@@ -84,6 +87,21 @@ export function startConnectionStatus(context: vscode.ExtensionContext): void {
             return;
         }
 
+        // 복원한 편집 내용과 파일이 어긋나 파일 기준으로 맞춘 문서가 있으면 열려 있는 동안 계속 알린다
+        // (§9.3, P0907). 연결 상태보다는 급하지 않으므로 마지막에 본다 — 위 경고를 가리지 않는다.
+        const mismatched = listOpenDocs().filter((doc) => doc.mismatch);
+        if (mismatched.length > 0) {
+            show(
+                item,
+                `$(warning) Axis Share: 파일 기준으로 열린 문서 ${mismatched.length}개`,
+                'warning',
+                `저장된 편집 내용과 파일이 달라 파일 내용으로 맞춘 문서입니다(§9.3):\n${mismatched
+                    .map((doc) => doc.path)
+                    .join('\n')}`
+            );
+            return;
+        }
+
         item.hide(); // 둘 다 정상이다.
     };
 
@@ -91,6 +109,7 @@ export function startConnectionStatus(context: vscode.ExtensionContext): void {
         item,
         onDidChangeDocConnection(() => render()),
         onDidChangeControlState(() => render()),
+        onDidChangeOpenDocs(() => render()),
         onDidChangeSession(() => render()),
         vscode.commands.registerCommand(COMMAND_ID, () => {
             void vscode.window.showInformationMessage(

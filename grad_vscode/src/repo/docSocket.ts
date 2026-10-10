@@ -74,6 +74,8 @@ type Watching = {
     canWrite: boolean;
     /** 서버의 방에 붙어 있는가. 끊기면 false 가 되고 편집을 보내지 않는다. */
     attached: boolean;
+    /** 저장된 편집 내용과 파일이 달라 **파일 내용으로** 열렸다(§9.3). 상태 표시줄 배지가 읽는다. */
+    mismatch: boolean;
     /** 원격 반영이 만든 변경 이벤트를 에코로 보기 위한 표시(§12.7). */
     applyingRemote: number;
     /** 원격 반영을 순서대로 처리하는 큐(§12.7). */
@@ -89,6 +91,8 @@ export type OpenDoc = {
     readonly text: Y.Text;
     readonly canWrite: boolean;
     readonly attached: boolean;
+    /** 저장된 편집 내용과 파일이 달라 **파일 내용으로** 열렸다(§9.3). */
+    readonly mismatch: boolean;
 };
 
 /** 서버가 중계한 원격 커서 프레임(§9.5). 상대좌표는 해석하지 않고 그대로 넘긴다(§8.10). */
@@ -389,6 +393,7 @@ async function materialize(
         eol: opened.eol,
         canWrite: opened.canWrite,
         attached: true,
+        mismatch: opened.mismatch,
         applyingRemote: 0,
         queue: Promise.resolve(),
         saveTimer: undefined
@@ -410,7 +415,7 @@ async function materialize(
 
     if (opened.mismatch) {
         void vscode.window.showWarningMessage(
-            `Axis Share: ${opened.path} 는 파일과 저장된 편집 내용이 달라, 저장된 편집 내용을 기준으로 열었습니다.`
+            `Axis Share: ${opened.path} 는 저장된 편집 내용과 파일이 달라, 파일 내용을 기준으로 열었습니다.`
         );
     }
 
@@ -437,6 +442,7 @@ async function applyServerFrame(entry: Watching, opened: OpenedFrame): Promise<v
     entry.eol = opened.eol;
     entry.canWrite = opened.canWrite;
     entry.attached = true;
+    entry.mismatch = opened.mismatch;
     emitOpenDocsChange(); // 다시 붙은 문서를 커서·데코 렌더러가 다시 그린다.
 
     // 앞선 화면 반영과 순서가 엉키지 않게 같은 큐에 태운다(§12.7).

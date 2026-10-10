@@ -217,7 +217,7 @@ async function onOpen(client: RoomClient, filePath: string): Promise<void> {
     state: opened.state,
     eol: entry.eol,
     can_write: client.session.canWrite,
-    mismatch: entry.mismatch,
+    mismatch: opened.mismatch,
     watchers: room.docs.watchersOf(filePath).map((w) => ({ email: w.userEmail, name: w.userName })),
   });
 

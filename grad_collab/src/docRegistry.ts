@@ -57,6 +57,11 @@ export interface AcquireResult {
   /** 클라이언트의 Yjs replica 를 만드는 초기 상태(base64). */
   state: string;
   created: boolean;
+  /**
+   * 이 open 이 `.ydoc` 와 worktree 파일이 어긋난 상태를 **맞추면서** 열렸다(§9.3).
+   * 맞추고 나면 둘은 같아지므로 `entry.mismatch` 는 즉시 내린다 — 알림은 이 open 한 번뿐이다.
+   */
+  mismatch: boolean;
 }
 
 /** Y.Doc 전체 상태를 base64 로. `opened` 프레임에 그대로 싣는다. */
@@ -141,7 +146,8 @@ export class DocRegistry {
       await existing.loading;
       existing.watchers.set(watcher.clientId, watcher);
       this.clearUnload(existing);
-      return { entry: existing, state: encodeState(existing.doc), created: false };
+      // 이미 맞춰진 doc 이다 — 나중에 연 사람에게는 알릴 것이 없다.
+      return { entry: existing, state: encodeState(existing.doc), created: false, mismatch: false };
     }
 
     const entry = this.createEntry(filePath);
@@ -157,8 +163,12 @@ export class DocRegistry {
       throw error;
     }
 
+    // 이 open 이 불일치를 맞추면서 열렸는지 여기서 한 번만 꺼낸다(§9.3). 다음 open 부터는
+    // `.ydoc` 와 파일이 이미 같으므로 알릴 것이 없다.
+    const mismatch = entry.mismatch;
+    entry.mismatch = false;
     entry.watchers.set(watcher.clientId, watcher);
-    return { entry, state: encodeState(entry.doc), created: true };
+    return { entry, state: encodeState(entry.doc), created: true, mismatch };
   }
 
   /** doc 에서 나간다. 마지막 사람이면 grace 뒤에 정리한다. */
@@ -419,13 +429,28 @@ export class DocRegistry {
         entry.eol = onDisk.eol;
         entry.bom = onDisk.bom;
         entry.mismatch = onDisk.text !== entry.doc.getText(TEXT_TYPE).toString();
-      }
-      if (entry.mismatch) {
-        // 자동 병합하지 않는다(§9.3). doc 을 그대로 서비스하고 차이만 남긴다.
-        log('warn', 'doc 상태와 worktree 파일이 다릅니다 (doc 우선)', {
-          path: entry.filePath,
-          mismatch: true,
-        });
+
+        if (entry.mismatch) {
+          // 어긋났다(§9.3). 자동 병합은 하지 않되 **worktree 를 우선한다**. 파일에서 doc 을 새로
+          // 만들면(§8.10) 클라이언트 replica 와 겹쳐 텍스트가 중복되므로, 복원한 `.ydoc` 상태 위에서
+          // 본문만 파일 내용으로 갈아 끼운다 — 같은 CRDT 로 남으므로 중복이 생기지 않는다.
+          //
+          // 어긋날 때 파일이 더 새것이다: writeEntry 가 파일을 먼저 쓰고 `.ydoc` 를 나중에 쓰므로 둘이
+          // 갈리는 경우는 ① `.ydoc` 쓰기가 실패했거나 ② 서버에서 git 작업(pull·checkout)으로 파일이
+          // 바뀐 경우뿐이다. 둘 다 파일이 정답이라, doc 을 그대로 내보내면 다음 flush 가 파일을 덮어
+          // 되돌린다.
+          const ytext = entry.doc.getText(TEXT_TYPE);
+          const fileText = onDisk.text;
+          entry.doc.transact(() => {
+            ytext.delete(0, ytext.length);
+            if (fileText.length > 0) ytext.insert(0, fileText);
+          }, 'mismatch');
+          log('warn', 'doc 상태와 worktree 파일이 달랐습니다 (worktree 우선으로 맞춤)', {
+            path: entry.filePath,
+          });
+          // 맞춘 상태를 곧바로 영속화한다 — 다음 복원이 같은 경고를 반복하지 않게.
+          await writeDocState(this.collabDir, entry.filePath, Y.encodeStateAsUpdate(entry.doc));
+        }
       }
       return;
     }

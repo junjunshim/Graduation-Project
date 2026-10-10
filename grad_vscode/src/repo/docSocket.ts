@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as Y from 'yjs';
 
 import { ApiError, apiRequest, getServerBaseUrl } from '../api';
+import { getControlState, onDidChangeControlState } from './controlSocket';
 import { clearSession, getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
 import { branchSlug } from './repoTreeProvider';
 import { diffRange, normalizeEol, toRawOffset } from './text';
@@ -171,6 +172,16 @@ let docsLocked = false;
 /** 편집 권한 회수 통보(`perm`)로 읽기 전용이 되었는가(§12.9). 연결 잠금(`docsLocked`)과 별개다. */
 let writeRevoked = false;
 
+/**
+ * 제어 소켓이 방에 들어가 있는가(§12.10). 아니면 편집을 잠근다.
+ *
+ * presence(접속자 행)는 제어 소켓이 방에 들어가야 생기고, §12.9 의 권한 통보는 그 행을 기준으로
+ * 대상을 고른다. 그래서 제어 소켓이 끊긴 동안에는 `perm`(쓰기 회수)도 강제 이탈도 이 세션에
+ * 닿지 않는다 — heartbeat 안전망도 끊긴 소켓에는 오지 않는다. 그 틈에 권한을 잃은 사용자가
+ * 편집하면 서버는 그를 편집자로 모른 채 공유 doc 에 내용이 쌓인다.
+ */
+let controlJoined = false;
+
 /** 편집 연결 상태(§12.10). 상태 표시줄이 구독한다. */
 let docConnection: DocConnection = 'idle';
 
@@ -227,11 +238,13 @@ export function startDocSocket(context: vscode.ExtensionContext): void {
 
     started = true;
     extensionContext = context;
+    controlJoined = getControlState() === 'joined';
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument((event) => onDocumentChanged(event)),
         vscode.workspace.onDidCloseTextDocument((document) => onDocumentClosed(document)),
         vscode.window.onDidChangeActiveTextEditor((editor) => onActiveEditorChanged(editor)),
         onDidChangeSession(() => onSessionChanged()),
+        onDidChangeControlState((next) => applyControlGate(next === 'joined')),
         { dispose: () => stopDocSocket() }
     );
 }
@@ -504,6 +517,14 @@ function onDocumentChanged(event: vscode.TextDocumentChangeEvent): void {
 
     if (!entry.attached) {
         return; // 끊긴 세션 — 보낼 곳이 없다. 다시 열면 새로 받는다.
+    }
+
+    if (!controlJoined) {
+        // 제어 소켓이 끊긴 동안의 입력은 버린다(§12.10) — 서버는 이 사용자를 편집자로 모른다.
+        // 잠금이 걸리지 못한 환경(읽기 전용 명령 미지원)에서도 내용이 새지 않도록 여기서 한 번 더
+        // 막고, 버퍼를 doc 내용으로 되돌린다. 원격 편집은 계속 반영되므로 버퍼가 어긋나지 않는다.
+        void pushTextToEditor(entry);
+        return;
     }
 
     if (!entry.canWrite) {
@@ -1031,9 +1052,9 @@ async function teardown(): Promise<void> {
 // 재연결·재동기화(§12.10)
 // ---------------------------------------------------------------------------
 
-/** 활성 탭이 바뀌었다. 잠긴(또는 권한이 회수된) 동안이면 새로 앞으로 나온 우리 문서도 잠근다(§12.10). */
+/** 활성 탭이 바뀌었다. 잠긴(또는 권한이 회수된, 제어 소켓이 끊긴) 동안이면 새로 앞으로 나온 우리 문서도 잠근다(§12.10). */
 function onActiveEditorChanged(editor: vscode.TextEditor | undefined): void {
-    if ((!docsLocked && !writeRevoked) || !editor) {
+    if ((!docsLocked && !writeRevoked && controlJoined) || !editor) {
         return;
     }
 
@@ -1182,9 +1203,9 @@ function applyWriteRevocation(revoked: boolean): void {
 
     // 다시 허용되었다. 연결이 살아 있으면 그대로 풀고, 아니면 재연결 뒤 잠금 해제 경로가 푼다.
     for (const entry of watching.values()) {
-        void setEditorLocked(entry.uri, docsLocked);
+        void setEditorLocked(entry.uri, docsLocked || !controlJoined);
     }
-    if (state === 'active' && !docsLocked) {
+    if (state === 'active' && !docsLocked && controlJoined) {
         setDocConnection('active');
     }
     void vscode.window.showInformationMessage('Axis Share: 편집 권한이 복구되었습니다.');
@@ -1220,7 +1241,8 @@ function unlockEditors(notify: boolean): void {
         setDocConnection('active');
     }
     for (const entry of watching.values()) {
-        void setEditorLocked(entry.uri, writeRevoked);
+        // 제어 소켓이 아직 안 붙었으면 잠금을 유지한다(§12.10) — 그쪽이 풀 때 applyControlGate 가 푼다.
+        void setEditorLocked(entry.uri, writeRevoked || !controlJoined);
     }
 
     if (notify && !writeRevoked) {
@@ -1228,6 +1250,46 @@ function unlockEditors(notify: boolean): void {
             'Axis Share: 협업 서버에 다시 연결되었습니다. 서버 내용으로 맞췄습니다.'
         );
     }
+}
+
+/**
+ * 제어 소켓의 연결 여부를 편집 잠금에 반영한다(§12.10, §12.9).
+ *
+ * 잠그는 이유는 권한 통보다. 서버가 "누가 어느 브랜치에서 작업 중인지" 를 아는 근거는 접속자
+ * 행(presence)이고, 그 행은 제어 소켓이 방에 들어가야 생긴다. 그래서 제어 소켓이 끊긴 동안에는
+ * §12.9 의 통보(`perm`·강제 이탈)가 이 세션을 못 보고 지나간다 — heartbeat 안전망도 끊긴
+ * 소켓에는 오지 않는다. 그 틈의 편집은 서버가 모르는 채로 공유 doc 에 들어가므로, 다시 붙을
+ * 때까지 아예 보내지 않는다(`onDocumentChanged`).
+ *
+ * 문서 소켓과 달리 유예(3초)를 두지 않는다. 문서 소켓이 끊기면 편집은 어차피 전송되지 않지만
+ * (`attached=false`), 제어 소켓이 끊기면 문서 소켓은 멀쩡해서 그대로 전송된다 — presence 가
+ * 사라진 순간부터 위험하므로 즉시 잠근다.
+ */
+function applyControlGate(joined: boolean): void {
+    if (controlJoined === joined) {
+        return;
+    }
+
+    controlJoined = joined;
+
+    if (!joined) {
+        for (const entry of watching.values()) {
+            void setEditorLocked(entry.uri, true);
+        }
+        log('제어 소켓이 끊겨 편집을 잠갔습니다(presence 없음 — §12.9 통보를 받을 수 없습니다).');
+        return;
+    }
+
+    // 다시 붙었다 — presence 가 생기고 §12.9 통보도 다시 닿는다. 다른 이유로 잠겨 있으면
+    // (문서 소켓 끊김·권한 회수) 그 경로가 풀 때까지 그대로 둔다.
+    if (docsLocked || writeRevoked) {
+        return;
+    }
+
+    for (const entry of watching.values()) {
+        void setEditorLocked(entry.uri, false);
+    }
+    log('제어 소켓이 다시 붙어 편집 잠금을 풀었습니다.');
 }
 
 /** 재연결 예약과 유예 타이머를 버린다(§12.10). 잠금 자체는 `unlockEditors` 가 푼다. */

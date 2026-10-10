@@ -92,7 +92,8 @@ export function startConnectionStatus(context: vscode.ExtensionContext): void {
                 item,
                 '$(warning) Axis Share: 제어 연결 끊김',
                 'warning',
-                'presence·브랜치 이벤트가 멈춥니다. 브랜치 전환·삭제는 다시 연결된 뒤에 하세요(§12.10).'
+                'presence 가 없어 편집이 잠깁니다(§12.10). 이 동안에는 §12.9 의 권한 변경 통보도 닿지 않으므로, 다시 연결되면 서버 내용으로 맞춥니다.' +
+                ' 브랜치 전환·삭제도 다시 연결된 뒤에 하세요.'
             );
             return;
         }

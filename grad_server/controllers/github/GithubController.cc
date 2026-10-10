@@ -689,7 +689,9 @@ constexpr int kCollabCallWaitSeconds = 3;
 //   - 커밋: 편집은 디바운스(기본 2초) 뒤에 파일로 내려가므로, 안 기다리면 마지막 편집이 빠진 채 커밋된다.
 // collab 이 없거나 제때 응답하지 않으면 false 를 돌려주고 호출자는 그대로 진행한다 — collab 이 죽어
 // 있어도 되돌리기·커밋 자체를 실패시키지 않는다(그때는 메모리에 doc 이 없어 내려쓸 것도 없다).
-bool callCollabInternal(const std::string &path, const Json::Value &body) {
+// outData 를 넘기면 200 응답의 `data` 배열을 그대로 담아 준다 — 커밋 전 flush 가 `failed` 를 보는
+// 경로가 쓴다(§9.8). 응답을 못 받았거나 200 이 아니면 outData 는 건드리지 않는다.
+bool callCollabInternal(const std::string &path, const Json::Value &body, Json::Value *outData = nullptr) {
     const char *baseValue = std::getenv("COLLAB_BASE");
     const char *tokenValue = std::getenv("INTERNAL_TOKEN");
     const std::string collabBase = (baseValue != nullptr) ? std::string(baseValue) : std::string();
@@ -703,18 +705,28 @@ bool callCollabInternal(const std::string &path, const Json::Value &body) {
     // HttpClient 는 생성한 루프에서 호출해야 한다. 우리는 작업 스레드에 있으므로 메인 루프로 올리고,
     // 이 스레드는 promise 로 응답을 기다린다 — 기다리지 않으면 collab 의 쓰기와 git 작업이 겹친다.
     auto done = std::make_shared<std::promise<bool>>();
+    // 200 응답의 `data` 배열을 담아 둘 곳. 워커 스택이 아니라 shared_ptr 에 담는다 — 응답이 늦어
+    // 타임아웃으로 워커가 먼저 빠져나가도 콜백이 죽은 스택을 건드리지 않게 하기 위함이다.
+    auto payload = std::make_shared<Json::Value>(Json::arrayValue);
     std::future<bool> future = done->get_future();
-    app().getLoop()->queueInLoop([collabBase, token, path, body, repoId, done]() {
+    app().getLoop()->queueInLoop([collabBase, token, path, body, repoId, done, payload]() {
         auto client = HttpClient::newHttpClient(collabBase, app().getLoop());
         auto request = HttpRequest::newHttpJsonRequest(body);
         request->setMethod(Post);
         request->setPath(path);
         request->addHeader("X-Internal-Token", token);
 
-        client->sendRequest(request, [client, path, repoId, done](ReqResult result, const HttpResponsePtr &response) {
+        client->sendRequest(request, [client, path, repoId, done, payload](ReqResult result, const HttpResponsePtr &response) {
             const bool ok = (result == ReqResult::Ok && response != nullptr &&
                              response->getStatusCode() == k200OK);
-            if (!ok) {
+            if (ok) {
+                // 호출자가 응답 내용(예: flush 의 `failed`)을 봐야 하므로 `data` 배열을 옮겨 둔다.
+                Json::Value parsed;
+                Json::Reader reader;
+                if (reader.parse(std::string(response->getBody()), parsed) && parsed["data"].isArray()) {
+                    *payload = parsed["data"];
+                }
+            } else {
                 LOG_WARN << "collab 호출 실패. path=" << path << " repo=" << repoId
                          << " result=" << static_cast<int>(result)
                          << " status=" << ((response == nullptr) ? 0 : static_cast<int>(response->getStatusCode()));
@@ -727,7 +739,11 @@ bool callCollabInternal(const std::string &path, const Json::Value &body) {
         LOG_WARN << "collab 호출 응답 없음(기다리지 않고 진행). path=" << path << " repo=" << repoId;
         return false;
     }
-    return future.get();
+    const bool ok = future.get();
+    if (ok && outData != nullptr) {
+        *outData = *payload;
+    }
+    return ok;
 }
 
 // 되돌리기(§12.11.1): 열려 있는 doc 을 되돌린 내용으로 맞춘다.
@@ -751,6 +767,67 @@ bool flushCollabDocs(int repoId, const std::string &branch) {
     body["branch"] = branch;
     return callCollabInternal("/internal/collab/flush", body);
 }
+
+// 커밋 전용 flush(§12.11, §9.8): 200 응답이면서 내려쓰기 실패가 하나도 없어야 성공이다.
+//   - "열린 문서가 없다"(200, failed=0)는 성공으로 본다 — 그때는 파일이 이미 최신이다.
+//   - collab 이 죽었거나 제때 응답하지 않으면(타임아웃·5xx) 실패다.
+//   - 파일 일부가 못 내려갔으면(failed>0) 실패다.
+// 커밋은 이게 성공일 때만 진행한다 — 아니면 디바운스(기본 2초) 안의 마지막 편집이 조용히 빠진
+// 커밋이 만들어진다. 그래서 스테이징·되돌리기와 달리 커밋만 결과를 따진다.
+bool flushCollabDocsStrict(int repoId, const std::string &branch) {
+    Json::Value body;
+    body["repo_id"] = repoId;
+    body["branch"] = branch;
+
+    Json::Value data;
+    if (!callCollabInternal("/internal/collab/flush", body, &data)) {
+        return false;
+    }
+    // 응답 data 는 [{ flushed, failed }] 한 건이다(grad_collab server.ts). failed 가 0 보다 크면 실패.
+    if (data.isArray() && !data.empty() && data[0].isObject()) {
+        const Json::Value &failed = data[0]["failed"];
+        if (failed.isIntegral() && failed.asInt64() > 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 커밋 잠금 해제 가드(§1.3-7). `commit_started` 를 보낸 뒤로는 **어떤 이유로 끝나든**
+// `commit_finished` 가 나가야 한다 — 확장은 이 이벤트로만 커밋 입력 잠금을 푼다(§15.10).
+// 그래서 실패로 일찍 return 하거나 예외가 나도 잠금이 남지 않도록 소멸자에서 보낸다.
+// 성공 경로는 커밋 결과(sha·ahead…)를 담아 직접 보내고 `disarm()` 으로 이 가드를 끈다.
+class CommitLockGuard {
+public:
+    CommitLockGuard(int repoId, const std::string &branch, const std::string &email)
+        : repoId_(repoId), branch_(branch), email_(email) {
+    }
+
+    ~CommitLockGuard() {
+        if (!armed_) {
+            return;
+        }
+
+        // 커밋이 실제로 남았는지와 상관없이 목적은 '잠금 해제' 다 — 확장은 이 필드들을 보지 않는다.
+        Json::Value finished;
+        finished["type"] = "commit_finished";
+        finished["repo_id"] = repoId_;
+        finished["branch"] = branch_;
+        finished["email"] = email_;
+        finished["pushed"] = false;
+        GithubWebSocketController::broadcastToBranch(repoId_, branch_, finished);
+    }
+
+    void disarm() {
+        armed_ = false;
+    }
+
+private:
+    int repoId_;
+    std::string branch_;
+    std::string email_;
+    bool armed_ = true;
+};
 
 // 작업 트리·인덱스 상태가 바뀐 것을 같은 브랜치 접속자에게 알린다 (§15.10).
 // 커밋·push 는 전용 이벤트(commit_finished / push_finished)가 있으므로 여기서 다루지 않는다 —
@@ -2732,7 +2809,23 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             return failure;
         }
 
-        // 3) 커밋 시작을 같은 브랜치 접속자에게 알린다(§1.3-7). 확장은 이때 입력을 잠근다.
+        // 3) 같은 저장소의 커밋은 직렬화한다(§12.11: git index.lock 경합 방지).
+        std::lock_guard<std::mutex> commitGuard(*repoLock(repoId));
+
+        // 4) 커밋 전 강제 flush(§12.11, §9.8). 'git add' 는 collab 이 열린 doc 을 파일로 내려쓴
+        //    뒤에 해야 한다 — 편집은 디바운스(기본 2초) 뒤에 파일이 되므로, 안 기다리면 방금 친
+        //    내용이 커밋에서 빠진다. 다른 flush(스테이징·되돌리기·파일 삭제)와 달리 커밋은 결과를
+        //    따진다: collab 이 응답하지 않거나 일부 파일을 못 내려썼으면 커밋을 거부한다(P0908).
+        //    조용히 빠진 커밋을 만드는 것보다 사용자에게 다시 시도하게 하는 편이 낫기 때문이다.
+        if (!flushCollabDocsStrict(repoId, branch)) {
+            return errorResponse("P0908",
+                                 "협업 서버와 연결하지 못해 커밋하지 않았습니다. 잠시 뒤 다시 시도해 주세요.",
+                                 k503ServiceUnavailable);
+        }
+
+        // 5) 커밋 시작을 같은 브랜치 접속자에게 알린다(§1.3-7). 확장은 이때 입력을 잠근다.
+        //    flush 가 성공한 뒤에 알린다 — 거부로 끝날 때 다른 사용자의 입력 잠금이 남지 않게 하기
+        //    위함이다(잠금은 commit_finished 로만 풀린다).
         Json::Value started;
         started["type"] = "commit_started";
         started["repo_id"] = repoId;
@@ -2740,15 +2833,11 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         started["email"] = requester;
         GithubWebSocketController::broadcastToBranch(repoId, branch, started);
 
-        // 4) 같은 저장소의 커밋은 직렬화한다(§12.11: git index.lock 경합 방지).
-        std::lock_guard<std::mutex> commitGuard(*repoLock(repoId));
+        // 알림을 보낸 뒤부터는 어떤 실패로 끝나도 commit_finished 가 나가야 한다 — 아니면 이
+        // 브랜치 접속자 전원의 커밋 입력이 잠긴 채로 남는다(성공 경로는 아래에서 직접 보낸다).
+        CommitLockGuard lockGuard(repoId, branch, requester);
 
-        // 5) 커밋 대상 스테이징 → 커밋.
-        //    실제 'git add' 는 그 브랜치의 collab flush 가 끝난 뒤에 해야 한다(§12.11) — 편집은
-        //    디바운스(기본 2초) 뒤에 파일이 되므로, 안 기다리면 방금 친 내용이 커밋에서 빠진다.
-        //    collab 이 없거나 응답이 없으면 그대로 진행한다: 커밋 자체를 막지 않는다.
-        flushCollabDocs(repoId, branch);
-
+        // 6) 커밋 대상 스테이징 → 커밋.
         auto staged = paths.empty() ? GitRunner::run(workDir, {"add", "-A"})
                                     : GitRunner::stageAdd(workDir, paths);
         if (!staged.ok()) {
@@ -2774,11 +2863,11 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         }
         const std::string sha = trim(shaResult.out);
 
-        // 6) 커밋은 로컬에만 남긴다(§12.11). 원격 전송은 별도 push(POST /api/github/repos/push)가 맡는다.
+        // 7) 커밋은 로컬에만 남긴다(§12.11). 원격 전송은 별도 push(POST /api/github/repos/push)가 맡는다.
         //    그래서 커밋 로그는 pushed=false 로 남고, push 가 성공하면 mark_github_branch_pushed 가 뒤집는다.
         const bool pushed = false;
 
-        // 7) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다(§12.11).
+        // 8) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다(§12.11).
         Json::Value commitRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM create_github_commit_log($1, $2, $3, $4, $5, $6, $7)",
                                        requester, repoId, branch, sha, authorEmail, message, pushed),
@@ -2786,7 +2875,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             return errorResponse("P0807", "커밋 기록을 저장하지 못했습니다.", k500InternalServerError);
         }
 
-        // 8) 매칭된 업무가 아직 'todo' 면 첫 커밋으로 보고 'in_progress' 로 전환한다.
+        // 9) 매칭된 업무가 아직 'todo' 면 첫 커밋으로 보고 'in_progress' 로 전환한다.
         //    전환은 강제가 아니며, 실패해도 커밋 자체는 성공으로 둔다(§12.11).
         Json::Value transition(Json::objectValue);
         transition["applied"] = false;
@@ -2806,7 +2895,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             }
         }
 
-        // 9) 응답 조립(§3.2). 커밋은 로컬에만 남으므로 pushed=false 이고, 남은 push 대기 수(ahead)를 함께 알린다.
+        // 10) 응답 조립(§3.2). 커밋은 로컬에만 남으므로 pushed=false 이고, 남은 push 대기 수(ahead)를 함께 알린다.
         //    원격 전송은 별도 push 커맨드가 맡는다(§12.11) — 여기서는 push 하지 않는다.
         const SyncState sync = readSyncState(workDir, branch);
         commitRow["pushed"] = false;
@@ -2828,6 +2917,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         finished["pushed"] = false;
         finished["ahead"] = sync.ahead;
         GithubWebSocketController::broadcastToBranch(repoId, branch, finished);
+        lockGuard.disarm(); // 결과를 담아 직접 보냈으니 가드는 아무것도 하지 않게 한다.
 
         return successResponse(data, "커밋했습니다. 원격 전송은 push 로 따로 합니다.", k201Created);
     });

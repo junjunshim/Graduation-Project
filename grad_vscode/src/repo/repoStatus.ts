@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 
 import { apiRequest } from '../api';
 import { onDidReceiveControlEvent, type ControlEvent } from './controlSocket';
-import { localCopyUri } from './docSocket';
+import { getDocConnection, localCopyUri } from './docSocket';
 import { getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
 import { repoResourceUri } from './repoTreeProvider';
 
@@ -21,10 +21,12 @@ import { repoResourceUri } from './repoTreeProvider';
  *   1. 스테이징은 실제 `git add` 다. 그 앞에서 서버가 collab flush 를 기다리고, 커밋도 flush 뒤
  *      `git add` 를 한 번 더 한다 — 그래서 "스테이징 뒤에 친 내용" 까지 커밋에 들어간다(§12.11).
  *   2. `user.name` / `user.email` 이 없으면 커밋을 시작하지 않는다 — 커밋 자격은 그 둘이 정한다(§1.3-9).
- *   3. 커밋 순서(제어 소켓 `commit_started` → collab flush → git add/commit)는 서버가 정한다.
+ *   3. 커밋 순서(collab flush → 제어 소켓 `commit_started` → git add/commit)는 서버가 정한다.
  *      UI 는 그 순서에 끼어들지 않고, `commit_started` / `commit_finished` 로 잠금만 맞춘다.
  *   4. 커밋과 원격 전송(push)은 분리한다(2026-10-09). 커밋은 서버 로컬에만 남고 push 는 별도
  *      커맨드(`axis-share.push`)로 사용자가 원할 때만 한다 — 로컬에만 쌓아 두는 흐름을 허용한다.
+ *   5. 협업(문서 소켓)이 끊긴 동안에는 커밋을 시작하지 않는다(§9.8) — 마지막 편집이 파일로
+ *      내려가지 않은 채 커밋될 수 있어서다. 서버도 flush 가 실패하면 P0908 로 거부한다.
  */
 
 /** 커밋 메시지 입력창 안내(§15.7). 업무 코드를 넣으면 서버가 업무 상태를 전환한다(§2.6). */
@@ -189,6 +191,13 @@ export function commitBlockedReason(): string | undefined {
 
     if (remoteCommitting) {
         return '같은 브랜치의 다른 사용자가 커밋 중입니다…';
+    }
+
+    // 협업(문서 소켓)이 끊긴 동안에는 커밋하지 않는다(§9.8). 마지막 편집이 아직 파일로 내려가지
+    // 않았을 수 있다 — 서버도 그 경우 flush 가 실패해 P0908 로 거부한다.
+    const docState = getDocConnection();
+    if (docState === 'locked' || docState === 'reconnecting') {
+        return '협업 서버 연결이 끊겨 커밋할 수 없습니다. 다시 연결되면 시도해 주세요.';
     }
 
     const identity = readIdentity();
@@ -508,6 +517,15 @@ export async function commitInteractive(): Promise<void> {
 
     if (committing || remoteCommitting) {
         void vscode.window.showWarningMessage('Axis Share: 커밋이 진행 중입니다. 끝난 뒤 다시 시도해 주세요.');
+        return;
+    }
+
+    // 협업 연결이 끊긴 동안의 커밋은 서버가 P0908 로 거부한다 — 미리 막고 이유를 알려준다(§9.8).
+    const docState = getDocConnection();
+    if (docState === 'locked' || docState === 'reconnecting') {
+        void vscode.window.showWarningMessage(
+            'Axis Share: 협업 서버 연결이 끊겨 커밋할 수 없습니다. 다시 연결되면 시도해 주세요.'
+        );
         return;
     }
 

@@ -197,6 +197,26 @@ async function onOpen(client: RoomClient, filePath: string): Promise<void> {
     return;
   }
 
+  // 열린 doc 수 상한(§9.10). doc 하나가 곧 메모리이므로, 한 방(=브랜치)이 수백 개를 들고 있으면
+  // EC2 한 대에서 backend 와 메모리를 나눠 쓰는 구조가 위험해진다.
+  // **이미 열려 있는 파일**(참여자 추가)은 메모리를 더 쓰지 않으므로 상한과 무관하고,
+  // 읽기 전용 열람(read)은 doc 을 만들지 않으므로 여기 걸리지 않는다.
+  if (!room.docs.has(filePath) && room.docs.openCount >= config.maxOpenDocsPerBranch) {
+    log('warn', '열린 doc 수 상한 초과 — 열기를 거절합니다', {
+      repo: room.repo.repoId,
+      branch: room.repo.branch,
+      limit: config.maxOpenDocsPerBranch,
+    });
+    client.send(
+      errFrame(
+        'P0909',
+        `이 브랜치에서 동시에 열 수 있는 파일 수(${config.maxOpenDocsPerBranch}개)를 넘었습니다. 다른 파일을 닫고 다시 시도해 주세요.`,
+        { path: filePath },
+      ),
+    );
+    return;
+  }
+
   let opened: AcquireResult;
   try {
     opened = await room.docs.acquire(filePath, {

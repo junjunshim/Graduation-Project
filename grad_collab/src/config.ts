@@ -20,6 +20,11 @@ export interface CollabConfig {
   maxDocBytes: number;
   /** 읽기 전용 열람(§12.6) 한 건에 실어 보내는 최대 바이트. 넘으면 내용 없이 크기만 알린다. */
   maxReadOnlyBytes: number;
+  /**
+   * 한 브랜치(방)에서 **동시에 열어 둘 수 있는** 파일 수 상한(§9.10).
+   * doc 하나가 곧 메모리라, 한 방이 수백 개를 들고 있으면 EC2 한 대를 위험하게 만든다.
+   */
+  maxOpenDocsPerBranch: number;
 }
 
 function readPort(raw: string | undefined, fallback: number): number {
@@ -43,4 +48,5 @@ export const config: CollabConfig = {
   notifyDebounceMs: readPositiveInt(process.env.WORKTREE_NOTIFY_DEBOUNCE_MS, 400),
   maxDocBytes: readPositiveInt(process.env.MAX_DOC_BYTES, 512 * 1024),
   maxReadOnlyBytes: readPositiveInt(process.env.MAX_READONLY_BYTES, 4 * 1024 * 1024),
+  maxOpenDocsPerBranch: readPositiveInt(process.env.MAX_OPEN_DOCS_PER_BRANCH, 200),
 };

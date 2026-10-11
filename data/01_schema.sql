@@ -369,6 +369,7 @@ CREATE TABLE IF NOT EXISTS github_branches (
     name VARCHAR(255) NOT NULL,
     base_branch VARCHAR(255), -- 생성 시 기준 브랜치
     worktree_path TEXT,       -- 서버 worktree 경로
+    last_used_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- 마지막 사용 시각 — worktree 회수 판정(§13.8)
     work_item_id VARCHAR(50) REFERENCES work_items(work_item_id) ON DELETE SET NULL, -- 브랜치명 파싱 결과 (WI-101)
     created_by_email VARCHAR(100) REFERENCES users(email) ON DELETE SET NULL,
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
@@ -379,6 +380,7 @@ CREATE UNIQUE INDEX unique_branch_per_repo ON github_branches(repo_id, name) WHE
 CREATE INDEX idx_github_branches_repo_id ON github_branches(repo_id);
 CREATE INDEX idx_github_branches_work_item_id ON github_branches(work_item_id);
 CREATE INDEX idx_github_branches_is_deleted ON github_branches(is_deleted);
+CREATE INDEX idx_github_branches_last_used_at ON github_branches(last_used_at);
 
 -- 16. GitHub 브랜치 접속자 테이블 (휘발성 캐시 — 진실 원천은 WebSocket 연결 상태)
 CREATE TABLE IF NOT EXISTS github_branch_presence (

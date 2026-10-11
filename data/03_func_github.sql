@@ -659,6 +659,33 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+-- GitHubController::resolveWorkDir (브랜치 작업 디렉터리 사용 기록)
+-- 브랜치의 worktree 를 실제로 쓸 때마다 "마지막 사용 시각"을 남긴다. worktree 회수 판정
+-- (list_worktree_reclaim_candidates) 의 기준값이다 — 회수된 브랜치는 다시 열 때 되살아나므로 이 값은
+-- 지워지지 않는다. 10분 안에 이미 갱신됐으면 건너뛴다 — 조회 API 가 전부 UPDATE 를 동반하면
+-- 쓰기 부하가 조회 부하에 얹힌다(그래서 그보다 짧게 쓴 브랜치는 회수 후보에서 빠진다. 아래
+-- 후보 함수의 "최근 10분" 조건과 같은 값이어야 한다).
+-- 반환: 갱신한 branch_id. 0 이면 갱신하지 않았다(최근에 이미 기록됨·없는 브랜치).
+CREATE OR REPLACE FUNCTION touch_github_branch_worktree(
+    p_repo_id github_repositories.repo_id%TYPE,
+    p_branch_name github_branches.name%TYPE
+) RETURNS INTEGER AS $$
+DECLARE
+    v_branch_id github_branches.branch_id%TYPE;
+BEGIN
+    UPDATE github_branches
+    SET last_used_at = CURRENT_TIMESTAMP
+    WHERE repo_id = p_repo_id
+      AND name = p_branch_name
+      AND is_deleted = FALSE
+      AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes')
+    RETURNING branch_id INTO v_branch_id;
+
+    RETURN COALESCE(v_branch_id, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+
 -- GitHubController::joinBranch (제어 소켓 /api/github/ws)
 -- 접속 등록(멱등). 같은 connection_id 는 마지막으로 들어온 브랜치로 옮기고 last_seen_at 을 갱신한다.
 -- 반환: 그 브랜치의 현재 접속자 목록 (presence_updated 브로드캐스트용)
@@ -712,6 +739,10 @@ BEGIN
         RAISE EXCEPTION '[P0801]Branch is not registered on this repository: %', p_branch_name
         USING ERRCODE = 'P0801';
     END IF;
+
+    -- 4-1. 지금 이 브랜치를 쓰는 중이다 — worktree 회수 판정용 마지막 사용 시각을 갱신한다(§13.8).
+    --      이 함수가 브랜치 이름을 확정한 뒤라 여기가 가장 정확하다(접속만 해도 "사용"으로 본다).
+    PERFORM touch_github_branch_worktree(p_repo_id, p_branch_name);
 
     -- 5. 접속 등록 (있으면 브랜치 이동 + heartbeat, 없으면 삽입)
     UPDATE github_branch_presence
@@ -1447,3 +1478,62 @@ WHERE r.is_deleted = FALSE
       SELECT 1 FROM github_branches b
       WHERE b.repo_id = r.repo_id AND b.name = r.default_branch AND b.is_deleted = FALSE
   );
+
+
+-- ---------------------------------------------------------------------------
+-- worktree 회수 후보 (§13.8) — Scheduler::reclaimIdleWorktrees
+-- ---------------------------------------------------------------------------
+
+-- 브랜치마다 작업 파일 사본이 통째로 생기므로(§2.3) 디스크가 브랜치 수만큼 늘어난다. 그래서 서버가
+-- 주기적으로 "지금 아무도 안 쓰는" 브랜치의 작업 디렉터리를 회수한다. 회수는 삭제가 아니다 —
+-- 브랜치 행도, 커밋한 내용도 clone 의 ref·오브젝트에 그대로 남고, 다시 열면 git worktree add 로
+-- 같은 자리에 되살아난다(ensureWorktree). 실제 제거는 서버가 git 으로 한다 — DB 는 파일 시스템을
+-- 볼 수 없으므로 여기서는 "후보"와 "지금 지워도 되는가"만 판정한다.
+--
+-- 후보에서 빼는 것(하나라도 해당하면 그 브랜치는 건드리지 않는다):
+--   * 기본 브랜치 — clone 디렉터리 자체가 작업 트리라 지울 것이 없다(§2.3)
+--   * 접속자(presence)가 있는 브랜치 — 명단에 있으면 쓰는 중이다. 서버가 죽어 남은 유령 행에 걸리지
+--     않도록 하루 넘게 갱신되지 않은 행은 없는 것으로 본다.
+--   * 최근 10분 안에 쓴 브랜치 — touch_github_branch_worktree 의 갱신 주기와 같은 값이라, 켜 두고
+--     쓰는 브랜치가 후보가 되는 일이 없다.
+--
+-- idle 은 p_idle_days 보다 오래 안 쓴 후보라는 뜻이고, 0 이면 유휴 회수를 끈다. 저장소별 상한(LRU)
+-- 판정은 "디렉터리가 실제로 남아 있는가"를 알아야 하므로 서버가 한다 — 그래서 여기서는 저장소별로
+-- **사용 시각 내림차순**으로 정렬해 준다(앞쪽이 최근 사용 = 나중에 회수).
+CREATE OR REPLACE FUNCTION list_worktree_reclaim_candidates(
+    p_idle_days INTEGER
+) RETURNS TABLE (
+    repo_id INTEGER,
+    branch_id INTEGER,
+    branch_name VARCHAR(255),
+    local_path TEXT,
+    worktree_path TEXT,
+    used_at TIMESTAMPTZ,
+    idle BOOLEAN
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT b.repo_id,
+           b.branch_id,
+           b.name,
+           r.local_path,
+           b.worktree_path,
+           COALESCE(b.last_used_at, b.created_at),
+           (p_idle_days > 0 AND COALESCE(b.last_used_at, b.created_at) < CURRENT_TIMESTAMP - (p_idle_days * INTERVAL '1 day'))
+    FROM github_branches b
+    JOIN github_repositories r ON r.repo_id = b.repo_id
+    WHERE b.is_deleted = FALSE
+      AND r.is_deleted = FALSE
+      AND b.worktree_path IS NOT NULL
+      AND b.worktree_path <> ''
+      AND b.name <> r.default_branch
+      AND COALESCE(b.last_used_at, b.created_at) < CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+      AND NOT EXISTS (
+            SELECT 1
+            FROM github_branch_presence gp
+            WHERE gp.branch_id = b.branch_id
+              AND gp.last_seen_at > CURRENT_TIMESTAMP - INTERVAL '1 day'
+      )
+    ORDER BY b.repo_id, COALESCE(b.last_used_at, b.created_at) DESC;
+END;
+$$ LANGUAGE plpgsql;

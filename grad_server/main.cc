@@ -4,7 +4,131 @@
 #include <iostream>
 #include <cstdlib>
 #include <filesystem>
+#include <thread>
+#include <vector>
 #include "NotificationWebSocketController.h"
+#include "GitRunner.h"          // 브랜치 worktree 회수(§13.8)
+#include "WorkerLimiter.h"      // 무거운 작업 동시 실행 상한(§13.4)
+
+namespace {
+
+// worktree 회수 기본값 (§13.8). config.json 의 custom_config·env(WORKTREE_IDLE_DAYS / WORKTREE_MAX_PER_REPO)
+// 로 바꿀 수 있다. 30일은 "이번 달에 안 쓴 브랜치" 정도를 뜻하고, 20개는 저장소 하나가 동시에 들고 있을
+// 작업 사본 수 상한이다(사본 하나가 저장소 크기만큼 디스크를 쓴다).
+constexpr int kDefaultWorktreeIdleDays = 30;
+constexpr int kDefaultWorktreeMaxPerRepo = 20;
+
+// 로그 한 줄에 담기게 stderr 의 첫 줄만 남긴다(줄바꿈이 그대로 들어가면 로그가 여러 줄로 깨진다).
+std::string firstLine(const std::string &text) {
+    const auto pos = text.find('\n');
+    return (pos == std::string::npos) ? text : text.substr(0, pos);
+}
+
+// 브랜치 worktree 회수 (§13.8).
+//
+// 왜 하는가: 브랜치마다 작업 파일 사본이 통째로 생겨 디스크가 브랜치 수만큼 늘어난다(§2.3).
+// 회수는 삭제가 아니다 — 브랜치 행도, 커밋한 내용도 clone 의 ref·오브젝트에 그대로 남고, 다시 열면
+// ensureWorktree 가 같은 자리에 되살린다. 그래서 "오래 안 쓴 브랜치의 작업 디렉터리"만 캐시처럼 비운다.
+//
+// 두 규칙을 함께 본다:
+//   1) 유휴 회수 — idleDays 보다 오래 안 쓴 브랜치.
+//   2) 저장소별 상한 — 작업 디렉터리가 실제로 남아 있는 브랜치가 maxPerRepo 를 넘으면 오래 안 쓴 것부터.
+// 후보가 될 수 있는지(접속자 없음·기본 브랜치 아님·최근에 안 씀)는 DB 함수가 판정하고, 디렉터리가 실제로
+// 남아 있는지는 여기서 본다 — DB 는 파일 시스템을 모른다.
+//
+// 안전장치:
+//   - 접속자(presence)가 있거나 최근 10분 안에 쓴 브랜치는 후보에 오지 않는다(DB 함수).
+//   - 커밋하지 않은 변경(스테이징·수정·새 파일)이 남은 작업 트리는 지우지 않는다 — 지우면 되돌릴 수 없다.
+//   - 후보는 매번 새로 계산하므로, 지우지 못한 브랜치는 다음 실행에서 다시 시도된다.
+//
+// **워커 스레드에서만 부른다.** git 실행과 동기 DB 호출이 들어 있어 IO 스레드에서 돌리면 그 동안
+// 모든 요청이 멈춘다.
+void reclaimIdleWorktrees(int idleDays, int maxPerRepo) {
+    auto db = drogon::app().getDbClient();
+
+    struct Candidate {
+        int repoId = 0;
+        std::string branch;
+        std::string localPath;
+        std::string worktreePath;
+        bool idle = false;      // 유휴 규칙(idleDays)에 걸린 후보
+    };
+
+    // 후보는 저장소별 "사용 시각 내림차순"이다 — 앞에서부터 세면 그 순서가 곧 최근 사용 순서(LRU)다.
+    std::vector<Candidate> candidates;
+    for (const auto &row : db->execSqlSync("SELECT * FROM list_worktree_reclaim_candidates($1)", idleDays)) {
+        Candidate item;
+        item.repoId = row["repo_id"].as<int>();
+        item.branch = row["branch_name"].as<std::string>();
+        item.localPath = row["local_path"].as<std::string>();
+        item.worktreePath = row["worktree_path"].as<std::string>();
+        item.idle = row["idle"].as<bool>();
+        candidates.push_back(item);
+    }
+
+    // 지울 대상 고르기. 이미 회수된 브랜치는 후보에 계속 남지만 지울 것이 없으므로, 상한 계산에서도
+    // 빼야 "지금 디스크에 남아 있는 개수"를 정확히 세어 상한을 넘지 않게 된다.
+    std::vector<size_t> targets;
+    int present = 0;   // 지금 실제로 남아 있는 작업 디렉터리 수 — 상한 계산과 로그에 쓴다
+    int rank = 0;
+    int lastRepo = 0;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (i == 0 || candidates[i].repoId != lastRepo) {
+            lastRepo = candidates[i].repoId;
+            rank = 0;
+        }
+
+        std::error_code existsError;
+        if (!std::filesystem::exists(candidates[i].worktreePath, existsError) || existsError) {
+            continue;
+        }
+        present += 1;
+        rank += 1;
+
+        if (candidates[i].idle || (maxPerRepo > 0 && rank > maxPerRepo)) {
+            targets.push_back(i);
+        }
+    }
+
+    int removed = 0;
+    int skipped = 0;
+    for (size_t index : targets) {
+        const Candidate &item = candidates[index];
+
+        // 커밋하지 않은 변경이 남은 작업 트리는 지우지 않는다 — 추적되지 않는 파일도 사용자의 것이다.
+        auto status = app_utils::GitRunner::run(item.worktreePath, {"status", "--porcelain=v1", "--untracked-files=all"});
+        if (!status.ok() || !status.out.empty()) {
+            LOG_WARN << "[worktree] 커밋되지 않은 변경이 남아 있어 회수하지 않습니다: " << item.worktreePath;
+            skipped += 1;
+            continue;
+        }
+
+        auto removedResult = app_utils::GitRunner::worktreeRemove(item.localPath, item.worktreePath, true);
+        if (!removedResult.ok()) {
+            // git 이 모르는 디렉터리(과거 흔적·손으로 지운 worktree)면 직접 지우고 등록 정보를 청소한다.
+            LOG_WARN << "[worktree] git worktree remove 실패(" << removedResult.exitCode << ": "
+                     << firstLine(removedResult.err) << ") — 직접 지웁니다: " << item.worktreePath;
+            std::error_code removeError;
+            std::filesystem::remove_all(item.worktreePath, removeError);
+            app_utils::GitRunner::run(item.localPath, {"worktree", "prune"});
+            if (removeError) {
+                LOG_WARN << "[worktree] 직접 지우기도 실패했습니다: " << item.worktreePath << " ("
+                         << removeError.message() << ")";
+                skipped += 1;
+                continue;
+            }
+        }
+
+        removed += 1;
+        LOG_INFO << "[worktree] 회수 완료: repo=" << item.repoId << " branch=" << item.branch
+                 << (item.idle ? " (유휴)" : " (상한)");
+    }
+
+    LOG_INFO << "[Scheduler] worktree 회수 완료 — 삭제 " << removed << "개, 건너뜀 " << skipped
+             << "개 (남아 있는 작업 디렉터리 " << present << "개, 후보 " << candidates.size() << "개)";
+}
+
+}  // namespace
 
 int main() {
     // 0. 파일 업로드 기본 디렉터리 자동 생성
@@ -67,6 +191,18 @@ int main() {
             custom["jwt_secret"] = getEnv("JWT_SECRET", custom["jwt_secret"].asString());
             custom["access_token_expiry"]  = std::stoi(getEnv("ACCESS_TOKEN_EXPIRY", std::to_string(custom["access_token_expiry"].asInt())));
             custom["refresh_token_expiry"] = std::stoi(getEnv("REFRESH_TOKEN_EXPIRY", std::to_string(custom["refresh_token_expiry"].asInt())));
+
+            // 브랜치 worktree 회수 설정 (§13.8). config.json 에 없으면 기본값을 쓰고 env 가 있으면 덮어쓴다.
+            //  - worktree_idle_days   : 이 일수보다 오래 안 쓴 브랜치의 작업 디렉터리를 회수한다(0 이면 유휴 회수 없음).
+            //  - worktree_max_per_repo: 저장소 하나가 들고 있을 작업 디렉터리 수 상한(기본 브랜치는 세지 않는다, 0 이면 무제한).
+            const int worktreeIdleDays = custom.isMember("worktree_idle_days")
+                                             ? custom["worktree_idle_days"].asInt()
+                                             : kDefaultWorktreeIdleDays;
+            custom["worktree_idle_days"] = std::stoi(getEnv("WORKTREE_IDLE_DAYS", std::to_string(worktreeIdleDays)));
+            const int worktreeMaxPerRepo = custom.isMember("worktree_max_per_repo")
+                                               ? custom["worktree_max_per_repo"].asInt()
+                                               : kDefaultWorktreeMaxPerRepo;
+            custom["worktree_max_per_repo"] = std::stoi(getEnv("WORKTREE_MAX_PER_REPO", std::to_string(worktreeMaxPerRepo)));
         }
 
         drogon::app().loadConfigJson(config);
@@ -185,6 +321,40 @@ int main() {
 
     // 5. PostgreSQL 활동 알림(LISTEN/NOTIFY) 백그라운드 리스너 기동
     api::NotificationWebSocketController::startNotificationListener(dbConnInfo);
+
+    // 6. 브랜치 worktree 회수 (§13.8). 브랜치마다 작업 파일 사본이 통째로 생겨 디스크가 브랜치 수만큼
+    //      늘어나므로, 오래 안 쓴 브랜치의 작업 디렉터리를 회수한다. 회수된 브랜치는 다시 열 때
+    //      ensureWorktree 가 같은 자리에 되살리므로 사용자에게는 "처음 여는 데 조금 더 걸린다" 정도로만
+    //      보인다. git 실행 + 동기 DB 라 워커 스레드에서 돌리고, 동시 실행 수는 다른 무거운 작업과 같은
+    //      WorkerLimiter(Normal 차선)로 막는다(§13.4).
+    //
+    //      시작 60초 뒤 한 번, 그 뒤 24시간마다 돈다. `runEvery` 만 두면 배포로 컨테이너를 다시 띄울 때마다
+    //      타이머가 처음부터 다시 세어져 **하루보다 자주 배포하는 환경에서는 영영 실행되지 않는다.**
+    auto reclaimWorktrees = []() {
+        // 설정은 실행 시점의 값을 읽는다(config.json 또는 env 로 바꾼 값이 그대로 쓰인다).
+        const auto &custom = drogon::app().getCustomConfig();
+        const int idleDays = custom["worktree_idle_days"].asInt();
+        const int maxPerRepo = custom["worktree_max_per_repo"].asInt();
+
+        std::thread worker([idleDays, maxPerRepo]() {
+            auto &limiter = app_utils::WorkerLimiter::instance();
+            if (!limiter.acquire(app_utils::WorkerLimiter::Lane::Normal)) {
+                LOG_WARN << "[Scheduler] worktree 회수 건너뜀 — 동시 작업 한도 초과 (running=" << limiter.running()
+                         << ", waiting=" << limiter.waiting() << ")";
+                return;
+            }
+            try {
+                reclaimIdleWorktrees(idleDays, maxPerRepo);
+            } catch (const std::exception &e) {
+                LOG_ERROR << "[Scheduler] worktree 회수 실패: " << e.what();
+            }
+            limiter.release(app_utils::WorkerLimiter::Lane::Normal);
+        });
+        worker.detach();
+    };
+
+    drogon::app().getLoop()->runAfter(60.0, reclaimWorktrees);
+    drogon::app().getLoop()->runEvery(86400.0, reclaimWorktrees);
 
     //Run HTTP framework,the method will block in the internal event loop
     drogon::app().run();

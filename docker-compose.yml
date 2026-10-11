@@ -55,6 +55,12 @@ services:
       GIT_MAX_WAIT_MS: ${GIT_MAX_WAIT_MS:-20000}
       # DB 커넥션 수(사설 풀). 전체 한도보다 넉넉해야 워커가 커넥션을 기다리며 놀지 않는다.
       DB_POOL_SIZE: ${DB_POOL_SIZE:-8}
+      # 브랜치 worktree 회수 (TASK_11 §13.8). 브랜치마다 작업 사본이 통째로 생기므로 오래 안 쓴
+      # 브랜치의 작업 디렉터리를 하루 한 번 회수한다. 회수된 브랜치는 다시 열 때 되살아난다.
+      #  - WORKTREE_IDLE_DAYS  : 이 일수보다 오래 안 쓴 브랜치를 회수한다(0 이면 유휴 회수 없음).
+      #  - WORKTREE_MAX_PER_REPO: 저장소당 작업 디렉터리 수 상한, 오래 안 쓴 것부터(0 이면 무제한).
+      WORKTREE_IDLE_DAYS: ${WORKTREE_IDLE_DAYS:-30}
+      WORKTREE_MAX_PER_REPO: ${WORKTREE_MAX_PER_REPO:-20}
     volumes:
       - .:/app                  # 로컬 소스 수정을 컨테이너에 즉시 반영 (개발용)
       # 저장소 clone/worktree 전용 마운트.

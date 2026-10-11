@@ -426,6 +426,29 @@ bool findWorktreeForBranch(const std::string &repoDir, const std::string &branch
     return false;
 }
 
+// 잔여 디렉터리를 치운다. 회수(§13.8)·실패한 flush·손으로 지운 `.git` 파일 같은 이유로 worktree 자리에
+// git 이 모르는 디렉터리가 남아 있으면 `git worktree add` 가 "already exists" 로, 등록 정보만 .git 안에
+// 남아 있으면 "missing but already registered" 로 거부한다. 두 경우를 여기서 함께 정리한다.
+void clearStaleWorktreeDir(const std::string &repoDir, const std::string &worktreePath) {
+    std::error_code ec;
+    if (!std::filesystem::exists(worktreePath, ec) || ec) {
+        return;   // 자리가 비어 있으면 git 이 그대로 만든다
+    }
+
+    LOG_WARN << "worktree 자리에 잔여 디렉터리가 있어 치웁니다: " << worktreePath;
+    std::filesystem::remove_all(worktreePath, ec);
+    if (ec) {
+        LOG_WARN << "잔여 디렉터리를 지우지 못했습니다: " << worktreePath << " (" << ec.message() << ")";
+        return;
+    }
+
+    // 지워진 worktree 의 등록 정보가 .git 안에 남으면 다음 add 가 거부한다.
+    auto pruned = GitRunner::run(repoDir, {"worktree", "prune"});
+    if (!pruned.ok()) {
+        LOG_WARN << "worktree prune 실패 (" << repoDir << "): " << trim(pruned.err);
+    }
+}
+
 // 브랜치의 작업 디렉터리를 준비한다(이미 있으면 그대로 쓴다).
 //  - 로컬에 브랜치가 있으면 그대로 붙인다
 //  - 원격에만 있으면 origin/<branch> 에서 추적 브랜치를 만들어 붙인다
@@ -438,6 +461,9 @@ GitResult ensureWorktree(const std::string &localPath, const std::string &worktr
         ready.exitCode = 0;
         return ready;
     }
+
+    // 회수(§13.8)나 실패한 flush 로 그 자리에 남은 잔여 디렉터리를 치우고 git 등록 정보도 맞춘다.
+    clearStaleWorktreeDir(localPath, worktreePath);
 
     // 원격에만 있는 브랜치·기준 커밋을 쓰려면 먼저 원격을 최신화한다.
     auto fetched = GitRunner::fetchAll(localPath, auth);
@@ -540,6 +566,15 @@ bool resolveWorkDir(const std::string &requester, int repoId, const std::string 
         outError = errorResponse("P0807", "브랜치 작업 디렉터리를 준비하지 못했습니다: " + trim(ready.err),
                                  k500InternalServerError);
         return false;
+    }
+
+    // 이 브랜치의 작업 디렉터리를 실제로 쓴다 — 회수 판정용 마지막 사용 시각을 남긴다(§13.8).
+    // 조회·편집 모두 이 함수를 지나므로 기록 지점은 여기 하나면 충분하다. 기록이 실패해도 요청은
+    // 그대로 진행한다 — 회수 판정이 조금 늦어질 뿐, 응답을 실패시킬 이유가 없다.
+    try {
+        db->execSqlSync("SELECT touch_github_branch_worktree($1, $2)", repoId, branch);
+    } catch (const std::exception &e) {
+        LOG_WARN << "worktree 사용 시각 기록 실패 (" << branch << "): " << e.what();
     }
 
     outWorkDir = worktreePath;

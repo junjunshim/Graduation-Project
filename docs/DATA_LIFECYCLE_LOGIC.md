@@ -83,7 +83,25 @@ graph TD
 
 ---
 
-## 4. 관련 엔드포인트 규격 매핑
+## 4. 브랜치 worktree 회수 (Server-side Garbage Collection)
+
+GitHub 연동(TASK_11 — `.antigravitycli/agent/tasks/TASK_11_SERVER_LOCAL_REPO_VSCODE.md` §13.8)에서는 **브랜치마다 `git worktree` 로 작업 디렉터리 사본**을 만든다. 이 사본은 사용자가 만든 데이터가 아니라 **서버가 만든 파생물**이다. 그래서 15일 만료 하드 딜리트와 달리 "오래 안 쓴 것부터 회수"한다.
+
+- **회수 대상**: `repository/<node_id>/<repo_name>.worktrees/<branch_slug>` — 브랜치 작업 디렉터리. **브랜치 행과 커밋은 남는다**(clone 의 ref·오브젝트에 있으므로). 브랜치를 다시 열면 `ensureWorktree` 가 같은 자리에 되살린다.
+- **회수 조건**(하나라도 걸리면 회수하지 않는다):
+  - 기본 브랜치(clone 디렉터리 자체가 작업 트리라 지울 것이 없다)
+  - 접속자가 있는 브랜치(하루 넘게 갱신되지 않은 접속 기록은 유령으로 보고 무시한다)
+  - 최근 10분 안에 사용한 브랜치
+  - 커밋하지 않은 변경(스테이징·수정·새 파일)이 남은 작업 트리 — 사용자 데이터라서 지우지 않는다
+- **회수 대상이 아닌 것**: 리뷰 데코레이션(`reviews.json`)과 Yjs 영속화(`.ydoc`)는 작업 디렉터리 **밖**(`<repo>.collab/`)에 있다. 브랜치 삭제와 달리 회수는 이 둘을 지우지 않는다.
+- **회수 규칙**: ① `last_used_at` 이 `WORKTREE_IDLE_DAYS`(기본 30일)보다 오래된 브랜치 ② 저장소당 작업 디렉터리가 `WORKTREE_MAX_PER_REPO`(기본 20개)를 넘으면 오래 안 쓴 것부터(LRU)
+- **사용 시각 기록**: `github_branches.last_used_at` — 조회·편집이 모두 지나는 `resolveWorkDir` 와 제어 소켓 접속(`upsert_github_branch_presence`)이 갱신한다. 10분 안에 기록된 값은 다시 쓰지 않는다.
+- **실행 주기**: **시작 60초 뒤 1회 + 이후 24시간마다**. 15일 만료 정리와 같은 스케줄러에서 돌지만 각 작업은 워커 스레드 + `WorkerLimiter`(§13.4)로 실행해 IO 스레드를 막지 않는다. (`runEvery` 만 두면 배포로 컨테이너를 다시 띄울 때마다 타이머가 처음부터 다시 세어져 영영 실행되지 않는다.)
+- **잔여 디렉터리 자동 치유**: 회수 뒤 그 자리에 git 이 모르는 디렉터리가 남으면 `git worktree add` 가 거부하므로, 서버가 add 전에 치우고 `git worktree prune` 을 돌린다(`clearStaleWorktreeDir`).
+
+---
+
+## 5. 관련 엔드포인트 규격 매핑
 
 | 기능 | Method | URL | 명세서 문서 |
 | :--- | :--- | :--- | :--- |

@@ -166,6 +166,11 @@
             {
                 "command": "axis-share.openRangeDiff",
                 "title": "Axis Share: 커밋 변경 내용 보기"
+            },
+            {
+                "command": "axis-share.openRepoGraph",
+                "title": "Axis Share: 저장소 전체 그래프 보기",
+                "icon": "$(git-merge)"
             }
         ],
         "menus": {
@@ -226,9 +231,14 @@
                     "group": "navigation@7"
                 },
                 {
-                    "command": "axis-share.refresh",
+                    "command": "axis-share.openRepoGraph",
                     "when": "view == axis-share-graph",
                     "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-graph",
+                    "group": "navigation@2"
                 },
                 {
                     "command": "axis-share.toggleDecorations",

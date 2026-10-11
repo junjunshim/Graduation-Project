@@ -18,6 +18,7 @@ import { CONTEXT_HAS_REPO_SESSION, startControlSocket, stopControlSocket } from 
 import { startCursorRenderer, stopCursorRenderer } from './repo/cursorRenderer';
 import { openRepoFile, startDocSocket, stopDocSocket } from './repo/docSocket';
 import { createGraphView } from './repo/graphProvider';
+import { openRepositoryGraph, startRepositoryGraph } from './repo/repoGraphPanel';
 import { createPresenceView } from './repo/presenceProvider';
 import { createRefContentProvider, openIndexDiff, openItemDiff, openRangeDiff } from './repo/refContentProvider';
 import {
@@ -65,6 +66,8 @@ import {
  *   src/repo/repoFileDecorations.ts git 상태 파일 배지(§15.3)
  *   src/repo/changesProvider.ts    Changes 뷰 — 작업 트리 상태 + 커밋 탭(§15.3)
  *   src/repo/graphProvider.ts      Graph 뷰 — 커밋 현황과 원격 위치(§15.14)
+ *   src/repo/gitGraph.ts           커밋 그래프 레인 배치 — 화면 없는 순수 함수(§15.16)
+ *   src/repo/repoGraphPanel.ts     저장소 전체 그래프 — 웹뷰 패널(§15.16)
  *   src/repo/refContentProvider.ts diff — 버전 문서 공급 + 내장 diff 열기(§15.15, 1·2·3·4·5번)
  *   src/repo/decorations.ts        리뷰 데코레이션 목록·추가·이동·삭제·토글(§8.10, §15.6)
  *   src/repo/decorationRenderer.ts 인라인 리뷰 데코레이션 렌더(§15.6)
@@ -100,7 +103,8 @@ const COMMANDS: readonly string[] = [
     'axis-share.discard',
     'axis-share.openDiff',
     'axis-share.diffIndex',
-    'axis-share.openRangeDiff'
+    'axis-share.openRangeDiff',
+    'axis-share.openRepoGraph'
 ];
 
 /**
@@ -186,6 +190,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const graphView = createGraphView(context);
     createPresenceView(context);
     createReviewsView(context);
+
+    // 2-1) 저장소 전체 그래프 웹뷰(§15.16). Graph 뷰는 지금 브랜치를 일렬 목록으로 보여 주고,
+    //      "저장소 전체가 어떻게 갈라졌나" 는 이 웹뷰가 곡선으로 그린다. 커밋·세션이 바뀌면 스스로 다시 받는다.
+    startRepositoryGraph(context);
 
     // 3) 제어 소켓(§3.3). 세션·브랜치 변화를 구독해 스스로 붙고, 방 입장이 끝나면
     //    세션 컨텍스트 키(§15.2)를 켠다 — key 관리도 controlSocket 한 곳에서 한다(§15.10).
@@ -281,6 +289,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // Graph 뷰 — 커밋(부모↔커밋)과 요약(원격↔HEAD)을 펼친 파일 항목의 클릭(§15.15 4·5번).
         'axis-share.openRangeDiff': (...args: unknown[]) => {
             void openRangeDiff(args);
+        },
+        // Graph 뷰 타이틀의 $(git-merge) — 저장소 전체 그래프를 웹뷰 탭으로 연다(§15.16).
+        'axis-share.openRepoGraph': () => {
+            openRepositoryGraph();
         },
         // Changes 뷰 타이틀의 $(check). 메시지 입력은 이 커맨드가 직접 띄운다(§15.7).
         'axis-share.commit': () => {

@@ -1715,6 +1715,7 @@ void GithubController::getBranches(const HttpRequestPtr &req, std::function<void
 }
 
 // GET /api/github/repos/commits?repo_id=3&branch=main&limit=50 — 커밋 그래프
+// GET /api/github/repos/commits?repo_id=3&all=true&limit=200 — 저장소 전체 그래프(모든 브랜치, §15.16)
 // 서버 로컬 clone 의 실제 git 이력이다. 읽기 전용이라 GitHub 자격증명이 필요 없다.
 void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     int repoId = 0;
@@ -1724,6 +1725,10 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
     }
 
     const std::string branch = req->getParameter("branch");
+
+    // 저장소 전체(로컬 브랜치·원격 추적 참조·태그)를 한 번에 본다 — 익스텐션의 "저장소 전체 그래프"
+    // 웹뷰가 쓴다(§15.16). 값은 다른 곳과 같은 관례로 "true" 만 참으로 본다.
+    const bool allRefs = req->getParameter("all") == "true";
 
     // 그래프 한 번 그리는 비용 = 읽는 커밋 수다. 임의로 큰 값을 막으려고 상한을 둔다.
     constexpr int kDefaultLimit = 50;
@@ -1741,7 +1746,7 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, limit]() -> HttpResponsePtr {
+    runOffLoop(std::move(callback), [requester, repoId, branch, limit, allRefs]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         Json::Value repoRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
@@ -1749,16 +1754,26 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
         }
 
         const std::string localPath = repoRow["local_path"].asString();
-        const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
-        const std::string ref = resolveTreeish(localPath, requested);
 
-        if (ref.empty()) {
-            return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
+        // scope 는 실패 로그에 남길 "무엇을 읽으려 했는가" 다. 전체 그래프면 ref 가 없다.
+        std::string scope;
+        GitResult logResult;
+        if (allRefs) {
+            scope = "--all";
+            logResult = GitRunner::logAllWithParents(localPath, limit);
+        } else {
+            const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
+            scope = resolveTreeish(localPath, requested);
+
+            if (scope.empty()) {
+                return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
+            }
+
+            logResult = GitRunner::logWithParents(localPath, scope, limit);
         }
 
-        auto logResult = GitRunner::logWithParents(localPath, ref, limit);
         if (!logResult.ok()) {
-            LOG_WARN << "커밋 로그 조회 실패 (" << ref << "): " << trim(logResult.err);
+            LOG_WARN << "커밋 로그 조회 실패 (" << scope << "): " << trim(logResult.err);
             return errorResponse("P0807", "커밋 기록을 읽지 못했습니다: " + trim(logResult.err),
                                  k500InternalServerError);
         }

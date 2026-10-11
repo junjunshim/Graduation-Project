@@ -462,7 +462,7 @@ function relativeDate(value: string | undefined): string {
     return parsed.toLocaleDateString('ko-KR');
 }
 
-function isGraphCommit(value: unknown): value is GraphCommit {
+export function isGraphCommit(value: unknown): value is GraphCommit {
     return typeof value === 'object' && value !== null && typeof (value as { sha?: unknown }).sha === 'string';
 }
 

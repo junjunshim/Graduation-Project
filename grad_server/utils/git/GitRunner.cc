@@ -44,6 +44,10 @@ const char *kOverriddenEnvKeys[] = {
     "AXIS_GIT_LOGIN", "AXIS_GIT_TOKEN"
 };
 
+// 커밋 그래프 로그의 출력 형식. 필드 순서가 곧 계약이다 - %H %P %an %ae %aI %D %s.
+// 제목에 어떤 문자가 있어도 파싱이 깨지지 않도록 필드 구분자(US, 0x1f)·레코드 구분자(RS, 0x1e)를 쓴다.
+const char *kLogPretty = "--pretty=format:%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1e";
+
 bool isOverriddenKey(const std::string &entry) {
     for (const char *key : kOverriddenEnvKeys) {
         const size_t len = std::strlen(key);
@@ -404,10 +408,15 @@ GitResult GitRunner::lsTree(const std::string &repoDir, const std::string &ref, 
 
 GitResult GitRunner::logWithParents(const std::string &repoDir, const std::string &ref, int limit) {
     // 커밋 그래프는 부모 SHA 가 있어야 레인을 배치할 수 있다.
-    // 제목에 어떤 문자가 있어도 파싱이 깨지지 않도록 필드 구분자(US)·레코드 구분자(RS)를 쓴다.
     // --topo-order 는 브랜치별 커밋을 뭉쳐 두어 그래프가 세로로 흩어지지 않게 한다.
-    const std::string pretty = "--pretty=format:%H%x1f%P%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1e";
-    return run(repoDir, {"log", "--topo-order", "-n", std::to_string(limit), pretty, ref});
+    return run(repoDir, {"log", "--topo-order", "-n", std::to_string(limit), kLogPretty, ref});
+}
+
+GitResult GitRunner::logAllWithParents(const std::string &repoDir, int limit) {
+    // 저장소 전체 그래프(§15.16). --all 은 로컬 브랜치·원격 추적 참조·태그를 모두 포함하므로,
+    // 브랜치마다 로그를 따로 받아 클라이언트에서 합치는 일을 하지 않아도 된다.
+    // 출력 형식은 logWithParents 와 같아 같은 파서를 쓴다 - ref 인자만 없다.
+    return run(repoDir, {"log", "--all", "--topo-order", "-n", std::to_string(limit), kLogPretty});
 }
 
 GitResult GitRunner::lsFiles(const std::string &worktreeDir, std::vector<std::string> extraArgs) {

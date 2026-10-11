@@ -6,7 +6,7 @@
 
 namespace app_utils {
 
-// 무거운 작업(git 실행 + 동기 DB)의 **동시 실행 수** 상한 (TASK_11 §13.4).
+// 무거운 작업(git 실행 + 동기 DB)의 동시 실행 수 상한.
 //
 // 왜 필요한가: runOffLoop 는 요청마다 스레드를 하나 띄우고 그 안에서 git 을 fork 한다.
 // 상한이 없으면 동시 요청 수만큼 스레드와 git 프로세스가 생겨 메모리가 예측 불가능해지고,
@@ -14,7 +14,7 @@ namespace app_utils {
 //
 // 차선(lane)을 나눠 막는다:
 //   - Normal  : 파일 조회·스테이징·커밋 등 로컬 파일·DB 작업. 최대 6 (기본)
-//   - Network : clone / fetch / push. 최대 2 (기본) 이고 Normal 과 **합산**된다.
+//   - Network : clone / fetch / push. 최대 2 (기본) 이고 Normal 과 합산된다.
 //               원격 작업은 타임아웃이 분 단위라, 몇 건이 전체 자리를 다 잡으면
 //               파일 트리 조회까지 그 뒤에 줄을 선다. 그래서 합산 상한을 둔다.
 //   - Internal: collab 내부 API(티켓 소비·작업 경로 해석). 최대 8 (기본), 합산하지 않는다.
@@ -33,7 +33,7 @@ public:
     static WorkerLimiter &instance();
 
     // 슬롯을 잡는다. 대기 줄이 꽉 찼으면 기다리지 않고 false 를 준다(부르는 쪽이 503 으로 거부).
-    // 자리가 날 때까지는 여기서 블록된다 — **IO 스레드가 아니라 워커 스레드에서** 부른다.
+    // 자리가 날 때까지는 여기서 블록된다 — IO 스레드가 아니라 워커 스레드에서 부른다.
     bool acquire(Lane lane);
 
     // 슬롯을 돌려준다. acquire 가 true 를 준 경우에만 부른다.

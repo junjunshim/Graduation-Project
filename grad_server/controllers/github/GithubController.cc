@@ -31,20 +31,18 @@ using namespace app_utils;
 
 namespace {
 
-// 파일 크기 상한 (§6-10 / §12.6). 넘으면 읽기 전용으로만 다룬다.
+// 파일 크기 상한. 넘으면 읽기 전용으로만 다룬다.
 constexpr long long kMaxTextFileBytes = 512 * 1024;
 
-// 읽기 전용 **열람** 상한 (§12.6). 동시 편집은 못 해도 내용은 볼 수 있게 하는 한계다.
+// 읽기 전용 열람 상한. 동시 편집은 못 해도 내용은 볼 수 있게 하는 한계다.
 // collab 의 MAX_READONLY_BYTES 와 같은 값이어야 두 경로(편집·diff)가 같은 파일에서 같은 판단을 한다.
 constexpr long long kMaxReadOnlyFileBytes = 4 * 1024 * 1024;
 
-// GitHub 연동 권한 비트 (§3.2). 조회는 GITHUB_VIEW(bit 22), 저장소 추가/해제는 GITHUB_REPO_MANAGE(bit 24) 로 SQL 함수가 판정하고,
+// GitHub 연동 권한 비트. 조회는 GITHUB_VIEW(bit 22), 저장소 추가/해제는 GITHUB_REPO_MANAGE(bit 24) 로 SQL 함수가 판정하고,
 // worktree 편집(브랜치 생성·삭제, 커밋, push, 파일 조작)은 GITHUB_CHANGE(bit 23) 로 여기서 한 번 더 막는다.
 constexpr char kGithubChangeAuthority[] = "GITHUB_CHANGE";
 
-// ---------------------------------------------------------------------------
 // 응답 헬퍼
-// ---------------------------------------------------------------------------
 
 HttpResponsePtr makeJsonResponse(const Json::Value &body, HttpStatusCode code) {
     auto resp = HttpResponse::newHttpJsonResponse(body);
@@ -85,9 +83,7 @@ HttpResponsePtr dbErrorResponse(const orm::DrogonDbException &e) {
     return makeJsonResponse(ret, httpCode);
 }
 
-// ---------------------------------------------------------------------------
 // 값 변환 / 문자열 헬퍼
-// ---------------------------------------------------------------------------
 
 Json::Value rowsToArray(const orm::Result &result) {
     return parseIntegratedDataResult(result)["data"];
@@ -233,7 +229,7 @@ std::string resolveTreeish(const std::string &localPath, const std::string &bran
     return "";
 }
 
-// 임의 rev 검증(§15.15 diff 4·5번의 왼쪽/오른쪽). `<sha>`, `origin/<branch>`, `HEAD`, `<sha>^` 처럼
+// 임의 rev 검증. <sha>, origin/<branch>, HEAD, <sha>^ 처럼
 // 브랜치 이름으로 해석되지 않는 참조도 받는다. argv 로 그대로 넘어가므로 셸은 거치지 않지만,
 // git 옵션으로 오인될 수 있는 선행 '-' 와 tree-ish 구분자 ':' 는 허용 목록에서 뺀다.
 bool isValidRev(const std::string &rev) {
@@ -268,11 +264,9 @@ std::string resolveRev(const std::string &localPath, const std::string &rev) {
 // 부모 없는 첫 커밋(root)을 비교할 때 쓰는 빈 트리. git 이 모든 저장소에서 같은 해시를 쓴다.
 constexpr char kEmptyTreeSha[] = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-// ---------------------------------------------------------------------------
 // 환경/설정
-// ---------------------------------------------------------------------------
 
-// 자격증명 암호화 키는 환경변수에서만 읽는다. 없으면 자격증명을 저장하지 않는다 (§5, fail-closed).
+// 자격증명 암호화 키는 환경변수에서만 읽는다. 없으면 자격증명을 저장하지 않는다 (fail-closed).
 std::string credentialKey() {
     const char *value = std::getenv("GITHUB_TOKEN_KEY");
     return (value != nullptr) ? std::string(value) : std::string();
@@ -283,7 +277,7 @@ int accessTokenExpirySeconds() {
     return app().getCustomConfig()["access_token_expiry"].asInt();
 }
 
-// §3.2: clone 경로는 repository/<node_id>/<repo_name>.
+// clone 경로는 repository/<node_id>/<repo_name>.
 // data/03_func_github.sql 의 create_github_repository 와 같은 식이어야 한다.
 std::string localPathFor(int nodeId, const std::string &repoName) {
     return "repository/" + std::to_string(nodeId) + "/" + repoName;
@@ -323,14 +317,12 @@ std::string requesterEmail(const HttpRequestPtr &req) {
     return req->attributes()->get<std::string>("user_email");
 }
 
-// ---------------------------------------------------------------------------
 // 실행 헬퍼
-// ---------------------------------------------------------------------------
 
 // clone/fetch 같은 git 실행과 동기 DB 호출은 오래 걸린다.
 // 이벤트 루프를 막지 않도록 워커 스레드에서 실행하고, 응답만 원래 루프로 되돌린다.
 //
-// **동시 실행 수는 WorkerLimiter 가 막는다**(§13.4). 상한이 없으면 요청 수만큼 스레드와
+// 동시 실행 수는 WorkerLimiter 가 막는다. 상한이 없으면 요청 수만큼 스레드와
 // git 프로세스가 생겨 메모리가 예측 불가능해지고, DB 커넥션(사설 풀)이 마르면 무관한
 // 요청까지 줄을 선다. 원격 작업(clone/fetch/push)은 Lane::Network 로 넘겨 더 좁은 한도를 쓴다.
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
@@ -342,7 +334,7 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
         HttpResponsePtr resp;
 
         if (!limiter.acquire(lane)) {
-            // 동시 실행 상한과 대기 줄 상한을 모두 넘었다(§13.4). 더 기다리게 하면 그 대기가
+            // 동시 실행 상한과 대기 줄 상한을 모두 넘었다. 더 기다리게 하면 그 대기가
             // 곧 스레드 쌓기라, 즉시 거부하고 클라이언트가 다시 시도하게 한다.
             LOG_WARN << "동시 작업 한도 초과 — 요청을 거부합니다 (running=" << limiter.running()
                      << ", network=" << limiter.networkRunning()
@@ -369,15 +361,13 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
     worker.detach();
 }
 
-// 원격 작업(clone / fetch / push) 전용 입구. 타임아웃이 분 단위라 더 좁은 차선을 쓴다(§13.4).
+// 원격 작업(clone / fetch / push) 전용 입구. 타임아웃이 분 단위라 더 좁은 차선을 쓴다.
 void runNetworkOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
                        std::function<HttpResponsePtr()> &&work) {
     runOffLoop(std::move(callback), std::move(work), WorkerLimiter::Lane::Network);
 }
 
-// ---------------------------------------------------------------------------
-// 작업 트리 헬퍼 (§2.3: 브랜치 격리 = git worktree)
-// ---------------------------------------------------------------------------
+// 작업 트리 헬퍼 (브랜치 격리 = git worktree)
 
 // git worktree 는 작업 디렉터리에 '.git' 파일을 만든다. 그것으로 준비 여부를 판단한다.
 // DB 의 worktree_path 는 서버 프로세스 CWD 기준 상대 경로이고, git 에는 같은 값을 절대 경로로
@@ -426,8 +416,8 @@ bool findWorktreeForBranch(const std::string &repoDir, const std::string &branch
     return false;
 }
 
-// 잔여 디렉터리를 치운다. 회수(§13.8)·실패한 flush·손으로 지운 `.git` 파일 같은 이유로 worktree 자리에
-// git 이 모르는 디렉터리가 남아 있으면 `git worktree add` 가 "already exists" 로, 등록 정보만 .git 안에
+// 잔여 디렉터리를 치운다. 회수·실패한 flush·손으로 지운 .git 파일 같은 이유로 worktree 자리에
+// git 이 모르는 디렉터리가 남아 있으면 git worktree add 가 "already exists" 로, 등록 정보만 .git 안에
 // 남아 있으면 "missing but already registered" 로 거부한다. 두 경우를 여기서 함께 정리한다.
 void clearStaleWorktreeDir(const std::string &repoDir, const std::string &worktreePath) {
     std::error_code ec;
@@ -449,10 +439,9 @@ void clearStaleWorktreeDir(const std::string &repoDir, const std::string &worktr
     }
 }
 
-// 브랜치의 작업 디렉터리를 준비한다(이미 있으면 그대로 쓴다).
-//  - 로컬에 브랜치가 있으면 그대로 붙인다
-//  - 원격에만 있으면 origin/<branch> 에서 추적 브랜치를 만들어 붙인다
-//  - 둘 다 없으면 기준 브랜치에서 새로 만든다
+// 브랜치의 작업 디렉터리를 준비한다(이미 있으면 그대로 쓴다). 로컬에 브랜치가 있으면 그대로 붙이고,
+// 원격에만 있으면 origin/<branch> 에서 추적 브랜치를 만들어 붙이며, 둘 다 없으면 기준 브랜치에서
+// 새로 만든다.
 GitResult ensureWorktree(const std::string &localPath, const std::string &worktreePath,
                          const std::string &branch, const std::string &baseBranch,
                          const GitRunner::Auth *auth) {
@@ -462,7 +451,7 @@ GitResult ensureWorktree(const std::string &localPath, const std::string &worktr
         return ready;
     }
 
-    // 회수(§13.8)나 실패한 flush 로 그 자리에 남은 잔여 디렉터리를 치우고 git 등록 정보도 맞춘다.
+    // 회수나 실패한 flush 로 그 자리에 남은 잔여 디렉터리를 치우고 git 등록 정보도 맞춘다.
     clearStaleWorktreeDir(localPath, worktreePath);
 
     // 원격에만 있는 브랜치·기준 커밋을 쓰려면 먼저 원격을 최신화한다.
@@ -480,7 +469,7 @@ GitResult ensureWorktree(const std::string &localPath, const std::string &worktr
     return GitRunner::worktreeAdd(localPath, worktreePath, branch, baseBranch.empty() ? "HEAD" : baseBranch);
 }
 
-// 저장소가 연결된 노드에 대한 GITHUB_CHANGE(bit 23) 권한을 확인한다(§3.2).
+// 저장소가 연결된 노드에 대한 GITHUB_CHANGE(bit 23) 권한을 확인한다.
 // 통과하면 true, 아니면 outError 에 응답을 담고 false 를 돌려준다.
 bool requireGithubChange(const std::string &requester, int nodeId, HttpResponsePtr &outError) {
     auto authRows = app().getDbClient()->execSqlSync(
@@ -568,7 +557,7 @@ bool resolveWorkDir(const std::string &requester, int repoId, const std::string 
         return false;
     }
 
-    // 이 브랜치의 작업 디렉터리를 실제로 쓴다 — 회수 판정용 마지막 사용 시각을 남긴다(§13.8).
+    // 이 브랜치의 작업 디렉터리를 실제로 쓴다 — 회수 판정용 마지막 사용 시각을 남긴다.
     // 조회·편집 모두 이 함수를 지나므로 기록 지점은 여기 하나면 충분하다. 기록이 실패해도 요청은
     // 그대로 진행한다 — 회수 판정이 조금 늦어질 뿐, 응답을 실패시킬 이유가 없다.
     try {
@@ -595,7 +584,7 @@ std::vector<std::string> jsonStringArray(const Json::Value &value) {
     return items;
 }
 
-// CRLF 를 LF 로만 바꾼다(되돌리기 payload 용). collab 의 Yjs 텍스트는 LF 고정이고 flush 때 원본 EOL 을 복원한다(§9.4).
+// CRLF 를 LF 로만 바꾼다(되돌리기 payload 용). collab 의 Yjs 텍스트는 LF 고정이고 flush 때 원본 EOL 을 복원한다.
 std::string toLf(std::string text) {
     std::string out;
     out.reserve(text.size());
@@ -623,7 +612,7 @@ bool porcelainState(char code, std::string &state) {
 }
 
 // 'git status --porcelain=v1 --untracked-files=all -z' 결과를
-// 확장 SCM 뷰가 그대로 쓰는 [{path, state, staged}] 로 바꾼다 (§3.2).
+// 확장 SCM 뷰가 그대로 쓰는 [{path, state, staged}] 로 바꾼다.
 // X 는 index(staged), Y 는 작업 트리 쪽 변경이라 둘 다 있으면 두 항목으로 나눈다.
 Json::Value parseStatusPorcelain(const std::string &text) {
     Json::Value entries(Json::arrayValue);
@@ -678,7 +667,7 @@ Json::Value parseStatusPorcelain(const std::string &text) {
     return entries;
 }
 
-// 트리 변경 헬퍼(§12.5)의 정의는 파일 뒤쪽에 모아 두었다 — 여기서 먼저 쓰므로 미리 알린다.
+// 트리 변경 헬퍼의 정의는 파일 뒤쪽에 모아 두었다 — 여기서 먼저 쓰므로 미리 알린다.
 Json::Value filterNoiseEntries(const Json::Value &entries, const std::vector<std::string> &noise);
 std::vector<std::string> nestedWorktreePaths(const std::string &workDir);
 
@@ -711,7 +700,7 @@ std::string idAsString(const Json::Value &value) {
 }
 
 // 같은 저장소에서 커밋이 겹치면 git 이 index.lock 으로 실패한다.
-// 저장소 단위 뮤텍스를 돌려주어 커밋 구간을 직렬화한다 (§12.11).
+// 저장소 단위 뮤텍스를 돌려주어 커밋 구간을 직렬화한다.
 std::shared_ptr<std::mutex> repoLock(int repoId) {
     static std::mutex tableGuard;
     static std::map<int, std::shared_ptr<std::mutex>> table;
@@ -724,8 +713,8 @@ std::shared_ptr<std::mutex> repoLock(int repoId) {
     return entry;
 }
 
-// 현재 브랜치가 원격보다 얼마나 앞섰는지/뒤처졌는지 (§3.2 GET /api/github/repos/sync).
-// 커밋과 push 가 분리되어 있어(§12.11) 둘이 같은 계산을 공유한다.
+// 현재 브랜치가 원격보다 얼마나 앞섰는지/뒤처졌는지 (GET /api/github/repos/sync).
+// 커밋과 push 가 분리되어 있어 둘이 같은 계산을 공유한다.
 struct SyncState {
     bool hasUpstream = false;   // origin/<branch> 추적 ref 가 있는가
     std::string headSha;        // 로컬 HEAD
@@ -776,7 +765,7 @@ Json::Value syncToJson(const SyncState &state) {
     return out;
 }
 
-// 되돌리기(§12.11.1): 열려 있는 doc 을 되돌린 내용으로 맞춘다.
+// 되돌리기: 열려 있는 doc 을 되돌린 내용으로 맞춘다.
 bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &files) {
     if (files.empty()) {
         return true; // 되돌릴 doc 이 없다 — 맞출 것도 없다.
@@ -789,7 +778,7 @@ bool resetCollabDocs(int repoId, const std::string &branch, const Json::Value &f
     return callCollabInternal("/internal/collab/files/reset", body);
 }
 
-// 커밋 전 강제 flush(§12.11): 아직 파일로 내려가지 않은 편집을 먼저 내려쓴다.
+// 커밋 전 강제 flush: 아직 파일로 내려가지 않은 편집을 먼저 내려쓴다.
 // 이걸 빼면 편집 후 디바운스(2초) 안에 커밋했을 때 그 편집이 커밋에서 빠진다.
 bool flushCollabDocs(int repoId, const std::string &branch) {
     Json::Value body;
@@ -798,7 +787,7 @@ bool flushCollabDocs(int repoId, const std::string &branch) {
     return callCollabInternal("/internal/collab/flush", body);
 }
 
-// 커밋 전용 flush(§12.11, §9.8): 200 응답이면서 내려쓰기 실패가 하나도 없어야 성공이다.
+// 커밋 전용 flush: 200 응답이면서 내려쓰기 실패가 하나도 없어야 성공이다.
 //   - "열린 문서가 없다"(200, failed=0)는 성공으로 본다 — 그때는 파일이 이미 최신이다.
 //   - collab 이 죽었거나 제때 응답하지 않으면(타임아웃·5xx) 실패다.
 //   - 파일 일부가 못 내려갔으면(failed>0) 실패다.
@@ -823,10 +812,10 @@ bool flushCollabDocsStrict(int repoId, const std::string &branch) {
     return true;
 }
 
-// 커밋 잠금 해제 가드(§1.3-7). `commit_started` 를 보낸 뒤로는 **어떤 이유로 끝나든**
-// `commit_finished` 가 나가야 한다 — 확장은 이 이벤트로만 커밋 입력 잠금을 푼다(§15.10).
+// 커밋 잠금 해제 가드. commit_started 를 보낸 뒤로는 어떤 이유로 끝나든
+// commit_finished 가 나가야 한다 — 확장은 이 이벤트로만 커밋 입력 잠금을 푼다.
 // 그래서 실패로 일찍 return 하거나 예외가 나도 잠금이 남지 않도록 소멸자에서 보낸다.
-// 성공 경로는 커밋 결과(sha·ahead…)를 담아 직접 보내고 `disarm()` 으로 이 가드를 끈다.
+// 성공 경로는 커밋 결과(sha·ahead…)를 담아 직접 보내고 disarm() 으로 이 가드를 끈다.
 class CommitLockGuard {
 public:
     CommitLockGuard(int repoId, const std::string &branch, const std::string &email)
@@ -859,7 +848,7 @@ private:
     bool armed_ = true;
 };
 
-// 작업 트리·인덱스 상태가 바뀐 것을 같은 브랜치 접속자에게 알린다 (§15.10).
+// 작업 트리·인덱스 상태가 바뀐 것을 같은 브랜치 접속자에게 알린다.
 // 커밋·push 는 전용 이벤트(commit_finished / push_finished)가 있으므로 여기서 다루지 않는다 —
 // 스테이징·해제·되돌리기·fetch 처럼 "파일 상태만" 바뀌는 경우에 쓴다. 다른 사용자의 Changes 뷰가
 // 곧바로 따라오고, 요청자 자신도 받지만 디바운스된 재조회라 무해하다.
@@ -875,7 +864,7 @@ void broadcastStatusChanged(int repoId, const std::string &branch) {
     GithubWebSocketController::broadcastToBranch(repoId, branch, event);
 }
 
-// push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다 (§12.11).
+// push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다.
 std::string classifyPushFailure(const std::string &detail) {
     if (detail.find("Authentication failed") != std::string::npos ||
         detail.find("could not read Username") != std::string::npos ||
@@ -925,9 +914,7 @@ bool isRemoteAccessDenied(const std::string &detail) {
            detail.find("401") != std::string::npos;
 }
 
-// ---------------------------------------------------------------------------
-// 트리 변경 헬퍼 (§12.5: 파일·디렉터리 생성 / 이름변경 / 삭제)
-// ---------------------------------------------------------------------------
+// 트리 변경 헬퍼 (파일·디렉터리 생성 / 이름변경 / 삭제)
 
 // 확장이 보낸 저장소 상대 경로가 worktree 밖을 가리키지 않는지 검사한다.
 // 절대 경로·'..'·'.git'·빈 조각·역슬래시·널 문자를 모두 거부한다(collab 의 isSafeRelPath 와 같은 규칙).
@@ -1006,8 +993,8 @@ std::string ensureParentDir(const std::string &absPath) {
     return ec ? ec.message() : std::string();
 }
 
-// 이 작업 디렉터리 **안쪽**에 있는 다른 worktree 의 상대 경로를 모은다.
-// git 은 worktree 를 형제 디렉터리로 만든다(§2.3). 안쪽에 있다면 과거 상대 경로 버그의 흔적이고,
+// 이 작업 디렉터리 안쪽에 있는 다른 worktree 의 상대 경로를 모은다.
+// git 은 worktree 를 형제 디렉터리로 만든다. 안쪽에 있다면 과거 상대 경로 버그의 흔적이고,
 // 그 트리 전체가 clone 의 untracked 로 보인다 — 저장소 내용이 아니므로 조회에서 걸러낸다.
 std::vector<std::string> nestedWorktreePaths(const std::string &workDir) {
     std::vector<std::string> result;
@@ -1046,9 +1033,9 @@ std::vector<std::string> nestedWorktreePaths(const std::string &workDir) {
     return result;
 }
 
-// ls-tree(커밋된 트리)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목 이름을 **한 단계** 분량으로 모은다.
+// ls-tree(커밋된 트리)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목 이름을 한 단계 분량으로 모은다.
 //
-// 브랜치마다 작업 디렉터리가 따로 있으므로, 새로 만든 파일은 그것을 만든 브랜치에만 보인다(§6-9).
+// 브랜치마다 작업 디렉터리가 따로 있으므로, 새로 만든 파일은 그것을 만든 브랜치에만 보인다.
 // 인덱스에 올라간 파일(intent-to-add 포함)과 무시되지 않은 untracked 파일을 함께 보고,
 // 요청한 디렉터리보다 깊은 경로는 디렉터리 하나로 접는다 — 트리는 한 단계씩 펼치는 구조다.
 std::map<std::string, bool> worktreeOnlyNames(const std::string &workDir, const std::string &path) {
@@ -1121,8 +1108,8 @@ HttpResponsePtr respondWithStatus(const std::string &workDir, const std::string 
     return successResponse(entries, message, code);
 }
 
-// collab 에게 "이 경로들의 doc 을 버려라" 라고 알린다(파일 삭제·이름변경, §12.5).
-// collab 은 메모리의 doc 과 영속화된 `.ydoc` 를 함께 지운다 — 남겨 두면 다음 flush 가 지운 파일을 되살린다.
+// collab 에게 "이 경로들의 doc 을 버려라" 라고 알린다(파일 삭제·이름변경).
+// collab 은 메모리의 doc 과 영속화된 .ydoc 를 함께 지운다 — 남겨 두면 다음 flush 가 지운 파일을 되살린다.
 bool dropCollabDocs(int repoId, const std::string &branch, const std::vector<std::string> &paths) {
     if (paths.empty()) {
         return true;
@@ -1139,8 +1126,8 @@ bool dropCollabDocs(int repoId, const std::string &branch, const std::vector<std
     return callCollabInternal("/internal/collab/files/drop", body);
 }
 
-// collab 에게 "이 브랜치의 방과 영속화 상태를 버려라" 라고 알린다(브랜치 삭제, §9.7).
-// worktree 를 지운 **뒤**에 부르면 남은 doc 의 flush 가 그 디렉터리를 되살리므로 반드시 먼저 부른다.
+// collab 에게 "이 브랜치의 방과 영속화 상태를 버려라" 라고 알린다(브랜치 삭제).
+// worktree 를 지운 뒤에 부르면 남은 doc 의 flush 가 그 디렉터리를 되살리므로 반드시 먼저 부른다.
 bool dropCollabBranch(int repoId, const std::string &branch) {
     if (branch.empty()) {
         return true;
@@ -1152,7 +1139,7 @@ bool dropCollabBranch(int repoId, const std::string &branch) {
     return callCollabInternal("/internal/collab/branch/drop", body);
 }
 
-// 트리 변경을 같은 브랜치 접속자에게 알린다(§12.5). 확장은 이 이벤트로 Repository 트리를 다시 그린다.
+// 트리 변경을 같은 브랜치 접속자에게 알린다. 확장은 이 이벤트로 Repository 트리를 다시 그린다.
 void broadcastTreeChanged(int repoId, const std::string &branch, const std::string &type,
                           const std::string &path, const std::string &from = "") {
     if (branch.empty()) {
@@ -1171,9 +1158,7 @@ void broadcastTreeChanged(int repoId, const std::string &branch, const std::stri
 }
 }  // namespace
 
-// ===========================================================================
 // 저장소 연결 / 목록 / 해제
-// ===========================================================================
 
 // POST /api/github/repos — 저장소 연결 + 서버 로컬 clone
 void GithubController::connectRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -1296,9 +1281,7 @@ void GithubController::disconnectRepository(const HttpRequestPtr &req, std::func
     });
 }
 
-// ===========================================================================
 // 서버 로컬 저장소 조회
-// ===========================================================================
 
 // GET /api/github/repos/tree?repo_id=3&branch=main&path=src — 디렉터리 한 단계(파일 내용 제외)
 void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -1327,7 +1310,7 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
             return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
         }
 
-        // 디렉터리 단위 lazy 조회 (§12.3): 요청한 경로의 한 단계만 받는다.
+        // 디렉터리 단위 lazy 조회: 요청한 경로의 한 단계만 받는다.
         auto tree = GitRunner::lsTree(localPath, ref, path, true);
         if (!tree.ok()) {
             LOG_WARN << "ls-tree 실패 (" << ref << ":" << path << "): " << trim(tree.err);
@@ -1368,7 +1351,7 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
             present[name] = (type == "tree");
         }
 
-        // 커밋된 트리(ls-tree)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목을 덧붙인다(§6-9, §12.5).
+        // 커밋된 트리(ls-tree)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목을 덧붙인다.
         // 새로 만든 파일·디렉터리는 그것을 만든 브랜치의 worktree 에만 있으므로 다른 브랜치에는 나타나지 않는다.
         // (빈 디렉터리는 git 이 추적하지 않아 여기에도 나오지 않는다 — git 사용자에게는 익숙한 동작이다.)
         for (const auto &item : worktreeOnlyNames(localPath, path)) {
@@ -1388,9 +1371,9 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
     });
 }
 
-// GET /api/github/repos/file?repo_id=3&branch=main&path=src/a.ts&ref=index — 파일 내용(§15.15 diff 양쪽)
+// GET /api/github/repos/file?repo_id=3&branch=main&path=src/a.ts&ref=index — 파일 내용
 // ref 가 비었거나 head 면 브랜치 tip(= HEAD)의 커밋된 내용, index 면 worktree 인덱스(스테이징된 내용),
-// 그 밖에는 임의 rev(`<sha>`, `origin/<branch>`, `<sha>^`; diff 4·5번)다.
+// 그 밖에는 임의 rev(<sha>, origin/<branch>, <sha>^; diff 4·5번)다.
 // '그 버전에 파일이 없음'(HEAD 에 없는 새 파일 / 인덱스에 안 올라간 파일)은 404 이고, 호출자는 빈 문서로 본다.
 void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     int repoId = 0;
@@ -1409,9 +1392,9 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
     // 클라이언트가 캐시한 시각(직전 응답의 modified_at). 같으면 내용을 다시 보내지 않는다.
     const std::string since = req->getParameter("since");
 
-    // 어느 버전을 읽을지(§15.15 diff 의 왼쪽/오른쪽). "index" = 그 브랜치 worktree 의 **인덱스**(스테이징된 내용),
+    // 어느 버전을 읽을지. "index" = 그 브랜치 worktree 의 인덱스(스테이징된 내용),
     // 비어 있거나 "head" = 브랜치 tip(= HEAD) 의 커밋된 내용(기존 동작 그대로),
-    // 그 밖에는 임의 rev(`<sha>`, `origin/<branch>`, `<sha>^`) — diff 4·5번이 쓴다.
+    // 그 밖에는 임의 rev(<sha>, origin/<branch>, <sha>^) — diff 4·5번이 쓴다.
     const std::string refKind = trim(req->getParameter("ref"));
     if (!refKind.empty() && refKind != "head" && refKind != "index" && !isValidRev(refKind)) {
         callback(errorResponse("400", "알 수 없는 ref 입니다: " + refKind + " (head|index|<rev>)", k400BadRequest));
@@ -1429,12 +1412,12 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         const std::string localPath = repoRow["local_path"].asString();
         const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
 
-        // 1) 어느 버전을 읽을지 정한다(§15.15 diff 의 왼쪽).
+        // 1) 어느 버전을 읽을지 정한다.
         //    - index: 그 브랜치 worktree 의 인덱스. clone 이 아니라 worktree 에 있으므로 상태·스테이징과
         //      같은 경로 해석(resolveWorkDir)을 쓴다.
         //    - 그 밖: 브랜치 tip(= HEAD)의 커밋된 내용.
-        //    인덱스는 **일부러 flush 하지 않는다** — "스테이징 이후 무엇을 더 바꿨는가"를 보려면
-        //    스테이징 시점 내용이 그대로 남아 있어야 한다(§15.15).
+        //    인덱스는 일부러 flush 하지 않는다 — "스테이징 이후 무엇을 더 바꿨는가"를 보려면
+        //    스테이징 시점 내용이 그대로 남아 있어야 한다.
         const bool wantIndex = (refKind == "index");
         const bool wantHead = refKind.empty() || refKind == "head";
 
@@ -1457,7 +1440,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
             }
             spec = treeishOf(refLabel, path);
         } else {
-            // 임의 rev(§15.15 diff 4·5번) — 커밋 SHA 와 원격 추적 참조가 여기로 온다.
+            // 임의 rev — 커밋 SHA 와 원격 추적 참조가 여기로 온다.
             // clone 의 객체 저장소만 보면 되므로(readDir = localPath) clone 디렉터리에서 읽는다.
             refLabel = resolveRev(localPath, refKind);
             if (refLabel.empty()) {
@@ -1467,7 +1450,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         }
 
         // 2) 캐시 검증 토큰. HEAD 쪽은 그 경로의 마지막 커밋 시각이고, 인덱스는 커밋 시각이 없으므로
-        //    **스테이징된 blob 해시**를 쓴다(내용이 같으면 해시도 같다). 인덱스는 여기서 존재 여부도 본다 —
+        //    스테이징된 blob 해시를 쓴다(내용이 같으면 해시도 같다). 인덱스는 여기서 존재 여부도 본다 —
         //    인덱스에 없으면(새 파일을 스테이징하지 않았거나 삭제를 스테이징했거나) "그 버전에 없음"이 정답이다.
         std::string version;
         if (wantIndex) {
@@ -1527,8 +1510,8 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         data["changed"] = true;
         data["modified_at"] = version;
 
-        // 4) 동시 편집 상한(512KB) 초과는 읽기 전용 (§12.6). 읽기 전용 열람 상한(4MB) 안이면 **내용을
-        //    그대로 실어 보낸다** — 그래야 큰 텍스트 파일도 diff(§15.15)와 앱의 "저장소 자세히 보기" 가
+        // 4) 동시 편집 상한(512KB) 초과는 읽기 전용. 읽기 전용 열람 상한(4MB) 안이면 내용을
+        //    그대로 실어 보낸다 — 그래야 큰 텍스트 파일도 diff와 앱의 "저장소 자세히 보기" 가
         //    내용을 보여 줄 수 있다. 널 바이트가 있으면(바이너리) JSON 문자열로 실을 수 없고, 상한을
         //    넘으면 실어 봐야 쓸모가 없으므로 그때만 내용을 빼고 크기만 알린다(content_omitted).
         if (size > kMaxTextFileBytes) {
@@ -1566,7 +1549,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
             data["read_only"] = true;
             data["reason"] = "binary";
             data["encoding"] = "binary";
-            // 내용을 싣지 않았다 — diff(§15.15)의 왼쪽과 앱 미리보기가 이 표시로 판단한다.
+            // 내용을 싣지 않았다 — diff의 왼쪽과 앱 미리보기가 이 표시로 판단한다.
             data["content_omitted"] = true;
             return successResponse(singleItemArray(data), "바이너리 파일이라 읽기 전용으로 표시했습니다.");
         }
@@ -1577,9 +1560,9 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
     });
 }
 
-// GET /api/github/repos/diff?repo_id=1&base=<rev>&target=<rev> — 두 버전 사이에 바뀐 파일 목록(§15.15 diff 4·5번)
+// GET /api/github/repos/diff?repo_id=1&base=<rev>&target=<rev> — 두 버전 사이에 바뀐 파일 목록
 // Graph 뷰가 커밋(부모 → 커밋)이나 원격(origin/<branch> → HEAD)을 펼칠 때 쓴다.
-// 여기서는 **목록만** 만든다 — 파일마다 GET /api/github/repos/file?ref=<rev> 로 양쪽 내용을 받아
+// 여기서는 목록만 만든다 — 파일마다 GET /api/github/repos/file?ref=<rev> 로 양쪽 내용을 받아
 // VS Code 내장 diff 가 비교하는 것이 4·5번의 방식이다(서버는 diff 텍스트를 만들지 않는다).
 // base 가 비면 첫 커밋(root)으로 보고 빈 트리와 비교한다 — 전부 추가로 보인다.
 void GithubController::getRepositoryRange(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -1625,7 +1608,7 @@ void GithubController::getRepositoryRange(const HttpRequestPtr &req, std::functi
             return errorResponse("P0807", "변경 목록을 읽지 못했습니다: " + trim(diff.err), k500InternalServerError);
         }
 
-        // 3) 확장이 그대로 쓰는 [{path, state, from?}] 로 옮긴다(§3.2 status 와 같은 상태 이름).
+        // 3) 확장이 그대로 쓰는 [{path, state, from?}] 로 옮긴다(status 와 같은 상태 이름).
         Json::Value items(Json::arrayValue);
         const std::vector<std::string> tokens = splitNul(diff.out);
         std::size_t index = 0;
@@ -1750,7 +1733,7 @@ void GithubController::getBranches(const HttpRequestPtr &req, std::function<void
 }
 
 // GET /api/github/repos/commits?repo_id=3&branch=main&limit=50 — 커밋 그래프
-// GET /api/github/repos/commits?repo_id=3&all=true&limit=200 — 저장소 전체 그래프(모든 브랜치, §15.16)
+// GET /api/github/repos/commits?repo_id=3&all=true&limit=200 — 저장소 전체 그래프(모든 브랜치)
 // 서버 로컬 clone 의 실제 git 이력이다. 읽기 전용이라 GitHub 자격증명이 필요 없다.
 void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     int repoId = 0;
@@ -1762,7 +1745,7 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
     const std::string branch = req->getParameter("branch");
 
     // 저장소 전체(로컬 브랜치·원격 추적 참조·태그)를 한 번에 본다 — 익스텐션의 "저장소 전체 그래프"
-    // 웹뷰가 쓴다(§15.16). 값은 다른 곳과 같은 관례로 "true" 만 참으로 본다.
+    // 웹뷰가 쓴다. 값은 다른 곳과 같은 관례로 "true" 만 참으로 본다.
     const bool allRefs = req->getParameter("all") == "true";
 
     // 그래프 한 번 그리는 비용 = 읽는 커밋 수다. 임의로 큰 값을 막으려고 상한을 둔다.
@@ -1862,9 +1845,7 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
     });
 }
 
-// ===========================================================================
 // 사용자 GitHub 자격증명 (PAT)
-// ===========================================================================
 
 // GET /api/github/credentials — 내 자격증명 상태 (토큰은 절대 넣지 않는다)
 void GithubController::getCredentialStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -1876,7 +1857,7 @@ void GithubController::getCredentialStatus(const HttpRequestPtr &req, std::funct
     });
 }
 
-// POST /api/github/credentials — PAT 등록 (§6-11). GitHub API 로 검증한 뒤 암호화해 저장한다.
+// POST /api/github/credentials — PAT 등록. GitHub API 로 검증한 뒤 암호화해 저장한다.
 void GithubController::registerCredential(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
     if (!jsonPtr || !validateStrings(jsonPtr, "token")) {
@@ -1971,9 +1952,7 @@ void GithubController::disconnectCredential(const HttpRequestPtr &req, std::func
     });
 }
 
-// ===========================================================================
-// 브랜치 접속자 / 수명주기 (§1.3-5, §1.3-10)
-// ===========================================================================
+// 브랜치 접속자 / 수명주기
 
 // GET /api/github/repos/presence?repo_id=3 — 브랜치별 접속자
 void GithubController::getPresence(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -2059,7 +2038,7 @@ void GithubController::createBranch(const HttpRequestPtr &req, std::function<voi
             }
         }
 
-        // 브랜치 생성은 같은 저장소의 모든 접속자에게 알린다(§1.3-5).
+        // 브랜치 생성은 같은 저장소의 모든 접속자에게 알린다.
         Json::Value created;
         created["type"] = "branch_created";
         created["repo_id"] = repoId;
@@ -2122,7 +2101,7 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
         }
 
         // 0) 기본 브랜치는 지울 수 없다. 지우면 저장소의 기준 브랜치가 사라져 clone·worktree 해석이
-        //    어긋난다 — 확장도 이 브랜치는 삭제 항목으로 주지 않는다(§1.3-10).
+        //    어긋난다 — 확장도 이 브랜치는 삭제 항목으로 주지 않는다.
         if (isDefault) {
             return errorResponse("400", "기본 브랜치는 삭제할 수 없습니다: " + name, k400BadRequest);
         }
@@ -2158,9 +2137,9 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
             }
         }
 
-        // 3) collab 의 방·`.ydoc`·리뷰 인덱스를 먼저 버린다(§9.7). 순서를 뒤집으면 남은 doc 의 flush 가
-        //    곧 지울 작업 디렉터리를 되살리고(`writeAtomic` 의 mkdir), 같은 이름 브랜치를 다시 만들었을 때
-        //    열기(§9.3 — `.ydoc` 우선)가 옛 내용을 복원한다.
+        // 3) collab 의 방·.ydoc·리뷰 인덱스를 먼저 버린다. 순서를 뒤집으면 남은 doc 의 flush 가
+        //    곧 지울 작업 디렉터리를 되살리고(writeAtomic 의 mkdir), 같은 이름 브랜치를 다시 만들었을 때
+        //    열기(.ydoc 우선)가 옛 내용을 복원한다.
         dropCollabBranch(repoId, name);
 
         // 4) 작업 디렉터리 → 로컬 브랜치 → DB 행 순서로 정리한다.
@@ -2186,7 +2165,7 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
 
         auto result = db->execSqlSync("SELECT * FROM delete_github_branch($1, $2, $3)", requester, repoId, name);
 
-        // 삭제 확정을 같은 저장소 전체에 알린다. 그 브랜치에 있던 사용자는 클라이언트가 기본 브랜치로 옮긴다(§1.3-10).
+        // 삭제 확정을 같은 저장소 전체에 알린다. 그 브랜치에 있던 사용자는 클라이언트가 기본 브랜치로 옮긴다.
         Json::Value deleted;
         deleted["type"] = "branch_deleted";
         deleted["repo_id"] = repoId;
@@ -2198,9 +2177,7 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
     });
 }
 
-// ===========================================================================
-// 작업 트리: 상태 / 스테이징 / 수동 fetch (§1.3-8, §1.4)
-// ===========================================================================
+// 작업 트리: 상태 / 스테이징 / 수동 fetch
 
 // GET /api/github/repos/status?repo_id=3&branch=WI-101-login — 커밋 직전 상태
 void GithubController::getStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -2236,7 +2213,7 @@ void GithubController::getStatus(const HttpRequestPtr &req, std::function<void(c
 
 // POST /api/github/repos/stage — 실제 'git add' 로 인덱스에 올린다.
 // 편집은 collab 이 디바운스(기본 2초) 뒤에 파일로 내려가므로, 그 전에 누르면 디스크의 옛 내용이
-// 인덱스에 올라갈 수 있다 — 그래서 add 앞에서 그 방을 강제 flush 한다(§12.11).
+// 인덱스에 올라갈 수 있다 — 그래서 add 앞에서 그 방을 강제 flush 한다.
 void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
     if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
@@ -2274,7 +2251,7 @@ void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(
             return errorResponse("P0807", "스테이징하지 못했습니다: " + trim(staged.err), k500InternalServerError);
         }
 
-        // 인덱스가 바뀌었다 — 같은 브랜치의 다른 사용자도 Staged/Changes 그룹을 다시 그린다(§15.10).
+        // 인덱스가 바뀌었다 — 같은 브랜치의 다른 사용자도 Staged/Changes 그룹을 다시 그린다.
         broadcastStatusChanged(repoId, branch);
 
         GitResult statusResult;
@@ -2317,7 +2294,7 @@ void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<voi
             return errorResponse("P0807", "스테이징을 해제하지 못했습니다: " + trim(unstaged.err), k500InternalServerError);
         }
 
-        // 해제도 인덱스를 바꾼다 — 같은 브랜치의 다른 사용자도 그룹을 다시 그린다(§15.10).
+        // 해제도 인덱스를 바꾼다 — 같은 브랜치의 다른 사용자도 그룹을 다시 그린다.
         broadcastStatusChanged(repoId, branch);
 
         GitResult statusResult;
@@ -2326,7 +2303,7 @@ void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<voi
     });
 }
 
-// POST /api/github/repos/discard — 되돌리기(§12.11.1).
+// POST /api/github/repos/discard — 되돌리기.
 // 수정한 내용을 버리고 이전(HEAD) 상태로 되돌린다. HEAD 에 없는 파일(새로 만든 파일)은 지운다.
 // 되돌릴 수 없으므로 확인은 확장(UI)이 받는다. 여기서는 순서만 지킨다:
 //   ① 되돌릴 내용을 정한다 → ② collab 이 열고 있는 doc 을 먼저 맞춘다 → ③ 작업 트리·인덱스를 git 으로 되돌린다.
@@ -2358,14 +2335,14 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
             return failure;
         }
 
-        // 커밋과 같은 이유로 저장소 단위로 직렬화한다(index.lock 경합 방지, §12.11).
+        // 커밋과 같은 이유로 저장소 단위로 직렬화한다(index.lock 경합 방지).
         std::lock_guard<std::mutex> guard(*repoLock(repoId));
 
         // 1) 되돌릴 내용을 git 에서 먼저 읽는다. HEAD 에 있으면 그 내용, 없으면 새로 만든 파일이라 지운다.
         Json::Value files(Json::arrayValue);   // collab 에게 줄 되돌리기 목록
         std::vector<std::string> tracked;      // git restore 대상
         std::vector<std::string> fresh;        // 지울 대상(HEAD 에 없음)
-        // collab 은 512KB 를 넘는 파일을 doc 으로 열지 않는다(§12.6). 그런 파일은 되돌릴 doc 이 없으니
+        // collab 은 512KB 를 넘는 파일을 doc 으로 열지 않는다. 그런 파일은 되돌릴 doc 이 없으니
         // 통보에서도 뺀다 — 본문이 커져 내부 통보가 통째로 실패하는 편이 더 나쁘다.
         constexpr std::size_t kCollabDocLimit = 512 * 1024;
         constexpr std::size_t kResetPayloadLimit = 8 * 1024 * 1024;
@@ -2400,8 +2377,8 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
             files.append(file);
         }
 
-        // 2) collab 을 먼저 맞추고 **끝날 때까지 기다린다**. 열려 있는 doc 이 옛 텍스트를 그대로 들고 있으면
-        //    다음 flush 가 되돌리기를 무르고, 늦게 도착한 그 쓰기가 아래 git 체크아웃과 겹치면 `File exists` 로 죽는다.
+        // 2) collab 을 먼저 맞추고 끝날 때까지 기다린다. 열려 있는 doc 이 옛 텍스트를 그대로 들고 있으면
+        //    다음 flush 가 되돌리기를 무르고, 늦게 도착한 그 쓰기가 아래 git 체크아웃과 겹치면 File exists 로 죽는다.
         resetCollabDocs(repoId, branch, files);
 
         // 3) 작업 트리와 인덱스를 되돌린다.
@@ -2409,7 +2386,7 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
             auto restored = GitRunner::run(workDir, {"restore", "--source=HEAD", "--staged", "--worktree", "--", path});
             if (!restored.ok()) {
                 // git 체크아웃은 그 경로가 비어 있다고 본 뒤 O_CREAT|O_EXCL 로 새로 만든다(entry.c). 위에서 collab 을
-                // 기다렸어도 그 사이 누가 그 경로를 만들면 `File exists` 로 죽는다 — 경로를 비우고 한 번 더 시도한다.
+                // 기다렸어도 그 사이 누가 그 경로를 만들면 File exists 로 죽는다 — 경로를 비우고 한 번 더 시도한다.
                 std::error_code ignored;
                 std::filesystem::remove(workDir + "/" + path, ignored);
                 restored = GitRunner::run(workDir, {"restore", "--source=HEAD", "--staged", "--worktree", "--", path});
@@ -2425,7 +2402,7 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
             std::filesystem::remove(workDir + "/" + path, ec);
         }
 
-        // 인덱스·작업 트리가 바뀌었다 — 같은 브랜치의 다른 사용자에게도 알린다(§15.10).
+        // 인덱스·작업 트리가 바뀌었다 — 같은 브랜치의 다른 사용자에게도 알린다.
         broadcastStatusChanged(repoId, branch);
 
         GitResult statusResult;
@@ -2438,16 +2415,14 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
     });
 }
 
-// ===========================================================================
-// 트리 변경: 파일·디렉터리 생성 / 이름변경·이동 / 삭제 (§12.5)
-// ===========================================================================
+// 트리 변경: 파일·디렉터리 생성 / 이름변경·이동 / 삭제
 //
 // 파일 시스템 변경은 서버(C++)가 수행하고 결과를 이벤트로 알린다 — 클라이언트는 요청만 하고 직접 만들지 않는다.
-// 브랜치마다 작업 디렉터리(worktree)가 다르므로, 같은 요청도 브랜치마다 다른 곳에 반영된다(§2.3).
+// 브랜치마다 작업 디렉터리(worktree)가 다르므로, 같은 요청도 브랜치마다 다른 곳에 반영된다.
 //
 // 공통 순서
 //   ① 경로 검증(worktree 밖 탈출 금지)
-//   ② collab 강제 flush — 아직 파일이 되지 않은 편집을 먼저 내려쓴다(§9.4). 커밋과 같은 이유다.
+//   ② collab 강제 flush — 아직 파일이 되지 않은 편집을 먼저 내려쓴다. 커밋과 같은 이유다.
 //   ③ git / 파일 시스템 조작 — 추적되는 경로는 git(rm·mv)으로 인덱스까지 맞추고, untracked 는 파일만 고친다.
 //   ④ collab doc 정리 — 남겨 두면 다음 flush 가 지운 파일이나 옛 경로를 되살린다.
 //   ⑤ 브로드캐스트 — 같은 브랜치 접속자의 트리·변경 목록이 즉시 따라온다.
@@ -2481,7 +2456,7 @@ void GithubController::createFileEntry(const HttpRequestPtr &req, std::function<
             return failure;
         }
 
-        // 같은 저장소의 git 조작은 직렬화한다(index.lock 경합 방지, §12.11).
+        // 같은 저장소의 git 조작은 직렬화한다(index.lock 경합 방지).
         std::lock_guard<std::mutex> guard(*repoLock(repoId));
 
         if (worktreePathExists(workDir, path)) {
@@ -2518,7 +2493,7 @@ void GithubController::createFileEntry(const HttpRequestPtr &req, std::function<
 }
 
 // POST /api/github/repos/dirs — 디렉터리 생성.
-// git 은 빈 디렉터리를 추적하지 않으므로 그 안에 파일을 만들기 전에는 트리에 나타나지 않는다(§15.3).
+// git 은 빈 디렉터리를 추적하지 않으므로 그 안에 파일을 만들기 전에는 트리에 나타나지 않는다.
 void GithubController::createDirectory(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
     if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "path")) {
@@ -2567,9 +2542,9 @@ void GithubController::createDirectory(const HttpRequestPtr &req, std::function<
 }
 
 // PATCH /api/github/repos/files — 이름변경·이동.
-// 추적되는 경로는 git mv 로 옮겨 인덱스까지 함께 옮긴다(그래야 이름변경이 한 항목으로 보인다, §15.15).
+// 추적되는 경로는 git mv 로 옮겨 인덱스까지 함께 옮긴다(그래야 이름변경이 한 항목으로 보인다).
 // untracked 는 파일 시스템에서 옮긴다. 어느 쪽이든 옮긴 뒤 옛 경로의 collab doc 을 버린다 —
-// 남겨 두면 다음 flush 가 옛 경로를 되살린다. 새 경로는 열 때 작업 트리 파일에서 읽는다(§12.5).
+// 남겨 두면 다음 flush 가 옛 경로를 되살린다. 새 경로는 열 때 작업 트리 파일에서 읽는다.
 void GithubController::renameFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
     if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "from", "to")) {
@@ -2637,7 +2612,7 @@ void GithubController::renameFileEntry(const HttpRequestPtr &req, std::function<
             }
         }
 
-        // 옛 경로의 doc 과 `.ydoc` 를 버린다(디렉터리 이동이면 그 아래 전부를 collab 이 함께 정리한다).
+        // 옛 경로의 doc 과 .ydoc 를 버린다(디렉터리 이동이면 그 아래 전부를 collab 이 함께 정리한다).
         dropCollabDocs(repoId, branch, {from});
 
         broadcastTreeChanged(repoId, branch, "file_moved", to, from);
@@ -2647,7 +2622,7 @@ void GithubController::renameFileEntry(const HttpRequestPtr &req, std::function<
 }
 
 // DELETE /api/github/repos/files — 삭제.
-// 커밋되지 않은 변경이 있으면 먼저 force 를 요구한다(브랜치 삭제와 같은 사고방식, §12.5 삭제 규칙).
+// 커밋되지 않은 변경이 있으면 먼저 force 를 요구한다(브랜치 삭제와 같은 사고방식).
 // 확인(모달)은 확장이 받고, 서버는 force 로만 그 확인을 건너뛴다.
 void GithubController::deleteFileEntry(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     // DELETE 는 본문을 못 쓰는 클라이언트가 있어 쿼리 파라미터도 받는다(브랜치 삭제와 같은 규칙).
@@ -2746,7 +2721,7 @@ void GithubController::deleteFileEntry(const HttpRequestPtr &req, std::function<
 }
 
 // POST /api/github/repos/fetch — 수동 fetch --all --prune.
-// 자동 fetch 만 두면 push 가 non-fast-forward 로 막히므로 수동 트리거를 반드시 둔다(§1.4).
+// 자동 fetch 만 두면 push 가 non-fast-forward 로 막히므로 수동 트리거를 반드시 둔다.
 void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     Json::Value body;
     if (auto jsonPtr = req->getJsonObject()) {
@@ -2773,7 +2748,7 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
         }
         const std::string localPath = repoRow["local_path"].asString();
 
-        // fetch 는 공유 로컬 저장소의 ref 를 갱신하는 쓰기 작업이라 편집 권한을 요구한다(§3.2).
+        // fetch 는 공유 로컬 저장소의 ref 를 갱신하는 쓰기 작업이라 편집 권한을 요구한다.
         HttpResponsePtr denied;
         if (!requireGithubChange(requester, repoRow["node_id"].asInt(), denied)) {
             return denied;
@@ -2802,7 +2777,7 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
             return errorResponse("P0807", "원격 저장소를 가져오지 못했습니다: " + detail, k502BadGateway);
         }
 
-        // fetch 는 원격 추적 ref 만 바꾸지만 ahead/behind 뱃지도 상태다 — 다른 사용자에게도 알린다(§15.10).
+        // fetch 는 원격 추적 ref 만 바꾸지만 ahead/behind 뱃지도 상태다 — 다른 사용자에게도 알린다.
         // (요청에 브랜치가 없으면 어느 방으로 보낼지 알 수 없어 건너뛴다.)
         broadcastStatusChanged(repoId, branch);
 
@@ -2815,9 +2790,8 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
         return successResponse(data, "원격 저장소를 최신으로 맞췄습니다.");
     });
 }
-// ===========================================================================
-// 커밋 (§3.2 POST /api/github/repos/commits, §12.11 커밋 파이프라인)
-// ===========================================================================
+
+// 커밋 (POST /api/github/repos/commits)
 
 // POST /api/github/repos/commits — 커밋(+push)
 void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -2840,10 +2814,10 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         return;
     }
 
-    // paths 를 생략하면 커밋되지 않은 변경 전체를 커밋한다(§3.2).
+    // paths 를 생략하면 커밋되지 않은 변경 전체를 커밋한다.
     const std::vector<std::string> paths = jsonStringArray((*jsonPtr)["paths"]);
 
-    // identity 는 '검증만' 한다(§2.4). 실제 작성자는 서버가 확정한다.
+    // identity 는 '검증만' 한다. 실제 작성자는 서버가 확정한다.
     std::string identityName;
     std::string identityEmail;
     const Json::Value &identity = (*jsonPtr)["identity"];
@@ -2861,7 +2835,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
                [requester, repoId, branch, message, paths, identityName, identityEmail]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
-        // 1) 로그인 계정에서 작성자를 확정한다(요청 바디를 신뢰하지 않는다, §12.11).
+        // 1) 로그인 계정에서 작성자를 확정한다(요청 바디를 신뢰하지 않는다).
         Json::Value userRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_user_profile($1, $2)", requester, requester), userRow)) {
             return errorResponse("P0001", "로그인 사용자를 찾을 수 없습니다.", k404NotFound);
@@ -2884,10 +2858,10 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             return failure;
         }
 
-        // 3) 같은 저장소의 커밋은 직렬화한다(§12.11: git index.lock 경합 방지).
+        // 3) 같은 저장소의 커밋은 직렬화한다(git index.lock 경합 방지).
         std::lock_guard<std::mutex> commitGuard(*repoLock(repoId));
 
-        // 4) 커밋 전 강제 flush(§12.11, §9.8). 'git add' 는 collab 이 열린 doc 을 파일로 내려쓴
+        // 4) 커밋 전 강제 flush. 'git add' 는 collab 이 열린 doc 을 파일로 내려쓴
         //    뒤에 해야 한다 — 편집은 디바운스(기본 2초) 뒤에 파일이 되므로, 안 기다리면 방금 친
         //    내용이 커밋에서 빠진다. 다른 flush(스테이징·되돌리기·파일 삭제)와 달리 커밋은 결과를
         //    따진다: collab 이 응답하지 않거나 일부 파일을 못 내려썼으면 커밋을 거부한다(P0908).
@@ -2898,7 +2872,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
                                  k503ServiceUnavailable);
         }
 
-        // 5) 커밋 시작을 같은 브랜치 접속자에게 알린다(§1.3-7). 확장은 이때 입력을 잠근다.
+        // 5) 커밋 시작을 같은 브랜치 접속자에게 알린다. 확장은 이때 입력을 잠근다.
         //    flush 가 성공한 뒤에 알린다 — 거부로 끝날 때 다른 사용자의 입력 잠금이 남지 않게 하기
         //    위함이다(잠금은 commit_finished 로만 풀린다).
         Json::Value started;
@@ -2938,11 +2912,11 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         }
         const std::string sha = trim(shaResult.out);
 
-        // 7) 커밋은 로컬에만 남긴다(§12.11). 원격 전송은 별도 push(POST /api/github/repos/push)가 맡는다.
+        // 7) 커밋은 로컬에만 남긴다. 원격 전송은 별도 push(POST /api/github/repos/push)가 맡는다.
         //    그래서 커밋 로그는 pushed=false 로 남고, push 가 성공하면 mark_github_branch_pushed 가 뒤집는다.
         const bool pushed = false;
 
-        // 8) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다(§12.11).
+        // 8) 커밋 로그를 남기고 메시지의 WI-xxx 를 업무로 해석한다.
         Json::Value commitRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM create_github_commit_log($1, $2, $3, $4, $5, $6, $7)",
                                        requester, repoId, branch, sha, authorEmail, message, pushed),
@@ -2951,7 +2925,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         }
 
         // 9) 매칭된 업무가 아직 'todo' 면 첫 커밋으로 보고 'in_progress' 로 전환한다.
-        //    전환은 강제가 아니며, 실패해도 커밋 자체는 성공으로 둔다(§12.11).
+        //    전환은 강제가 아니며, 실패해도 커밋 자체는 성공으로 둔다.
         Json::Value transition(Json::objectValue);
         transition["applied"] = false;
         const std::string matchedId = idAsString(commitRow["matched_work_item_id"]);
@@ -2970,8 +2944,8 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
             }
         }
 
-        // 10) 응답 조립(§3.2). 커밋은 로컬에만 남으므로 pushed=false 이고, 남은 push 대기 수(ahead)를 함께 알린다.
-        //    원격 전송은 별도 push 커맨드가 맡는다(§12.11) — 여기서는 push 하지 않는다.
+        // 10) 응답 조립. 커밋은 로컬에만 남으므로 pushed=false 이고, 남은 push 대기 수(ahead)를 함께 알린다.
+        //    원격 전송은 별도 push 커맨드가 맡는다 — 여기서는 push 하지 않는다.
         const SyncState sync = readSyncState(workDir, branch);
         commitRow["pushed"] = false;
         commitRow["ahead"] = sync.ahead;
@@ -2982,7 +2956,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         Json::Value data(Json::arrayValue);
         data.append(commitRow);
 
-        // 커밋 결과를 같은 브랜치 접속자에게 알린다(§1.3-7). 확장은 이때 입력 잠금을 풀고 트리를 새로 고친다.
+        // 커밋 결과를 같은 브랜치 접속자에게 알린다. 확장은 이때 입력 잠금을 풀고 트리를 새로 고친다.
         Json::Value finished;
         finished["type"] = "commit_finished";
         finished["repo_id"] = repoId;
@@ -2998,8 +2972,8 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
     });
 }
 
-// GET /api/github/repos/sync?repo_id=3&branch=main — 현재 브랜치가 원격보다 얼마나 앞섰는지 (§3.2).
-// 커밋·push 버튼의 상태와 graph 뷰(§15.13)의 "원격 위치" 표시가 이 값을 쓴다.
+// GET /api/github/repos/sync?repo_id=3&branch=main — 현재 브랜치가 원격보다 얼마나 앞섰는지.
+// 커밋·push 버튼의 상태와 graph 뷰의 "원격 위치" 표시가 이 값을 쓴다.
 void GithubController::getSync(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     int repoId = 0;
     if (!parseInt(req->getParameter("repo_id"), repoId)) {
@@ -3026,9 +3000,9 @@ void GithubController::getSync(const HttpRequestPtr &req, std::function<void(con
     });
 }
 
-// POST /api/github/repos/push — 커밋한 내용을 원격으로 올린다 (§3.2, §12.11).
+// POST /api/github/repos/push — 커밋한 내용을 원격으로 올린다.
 // 커밋(로컬 저장)과 분리된 별도 동작이다 — 로컬에만 쌓아 두고 싶은 경우를 위해 push 를 따로 둔다.
-// push 는 요청한 사용자의 자격증명으로만 하며(§6-4), 성공하면 그 브랜치의 미push 커밋 로그를 확정한다.
+// push 는 요청한 사용자의 자격증명으로만 하며, 성공하면 그 브랜치의 미push 커밋 로그를 확정한다.
 void GithubController::pushRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
     if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
@@ -3062,7 +3036,7 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
             return successResponse(singleItemArray(data), "원격에 올릴 커밋이 없습니다.");
         }
 
-        // 자격증명이 없으면 커밋은 그대로 두고 사유만 알린다(§12.11).
+        // 자격증명이 없으면 커밋은 그대로 두고 사유만 알린다.
         GitRunner::Auth auth;
         const GitRunner::Auth *authPtr = nullptr;
         const std::string token = userToken(db, requester);
@@ -3081,7 +3055,7 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
             return successResponse(singleItemArray(data), "GitHub 자격증명이 없어 push 하지 못했습니다.");
         }
 
-        // 같은 저장소의 커밋·push 는 직렬화한다(§12.11: index.lock 경합 방지).
+        // 같은 저장소의 커밋·push 는 직렬화한다(index.lock 경합 방지).
         std::lock_guard<std::mutex> pushGuard(*repoLock(repoId));
 
         auto pushedResult = GitRunner::push(workDir, branch, authPtr);
@@ -3127,11 +3101,9 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
     });
 }
 
-// ===========================================================================
-// 앱 → 확장 핸드오프 / 확장 세션 (§3.4, §12.1)
-// ===========================================================================
+// 앱 → 확장 핸드오프 / 확장 세션
 
-// POST /api/github/handoff — 앱이 VSCode 확장에 넘길 1회용 코드를 발급한다 (§3.4).
+// POST /api/github/handoff — 앱이 VSCode 확장에 넘길 1회용 코드를 발급한다.
 // 토큰을 vscode:// URI 에 싣지 않기 위한 우회로이고, 실제 토큰은 확장이 교환 단계에서 받는다.
 void GithubController::createHandoffCode(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
@@ -3153,7 +3125,7 @@ void GithubController::createHandoffCode(const HttpRequestPtr &req, std::functio
     });
 }
 
-// POST /api/github/sessions — 1회용 코드를 확장 전용 토큰으로 교환한다 (§3.4, §12.1).
+// POST /api/github/sessions — 1회용 코드를 확장 전용 토큰으로 교환한다.
 // 인증 없는 라우트다(JwtFilter 미적용) — 확장은 이 호출로 토큰을 처음 받기 때문이다.
 void GithubController::exchangeSession(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
@@ -3180,11 +3152,11 @@ void GithubController::exchangeSession(const HttpRequestPtr &req, std::function<
         Json::Value tokens = AuthController::generateToken(email);
 
         // 3) 리프레시 토큰만 확장 전용 테이블에 남긴다.
-        //    앱의 user_refresh_tokens 와 분리해야 서로의 세션을 무효화하지 않는다(§12.1).
+        //    앱의 user_refresh_tokens 와 분리해야 서로의 세션을 무효화하지 않는다.
         db->execSqlSync("SELECT * FROM create_github_extension_token($1, $2, $3)",
                         email, tokens["refresh_token"].asString(), tokens["refresh_token_expiry"].asString());
 
-        // 4) 응답 조립. 토큰은 이 응답에서만 나가고 로그·에러 메시지에는 넣지 않는다(§5).
+        // 4) 응답 조립. 토큰은 이 응답에서만 나가고 로그·에러 메시지에는 넣지 않는다.
         //    user_name 은 확장이 커밋 이름 기본값으로 쓴다(커밋 이메일은 서버가 계정 이메일로 강제한다).
         Json::Value item;
         item["access_token"] = tokens["access_token"];
@@ -3201,7 +3173,7 @@ void GithubController::exchangeSession(const HttpRequestPtr &req, std::function<
     });
 }
 
-// POST /api/github/sessions/refresh — 확장 토큰 자동 갱신 (§12.1).
+// POST /api/github/sessions/refresh — 확장 토큰 자동 갱신.
 // 앱의 /api/users/refresh 와 같은 방식이되, 확장 전용 테이블만 본다(앱 세션과 분리).
 void GithubController::refreshSession(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();

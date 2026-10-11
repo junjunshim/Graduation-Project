@@ -16,7 +16,7 @@ struct GitResult {
 };
 
 // 저장소는 사용자가 가져온 외부 코드이므로 그 안의 git 설정을 신뢰하지 않는다.
-// TASK_11 §5 하드닝 요구사항을 항상 강제한다.
+// 하드닝 요구사항을 항상 강제한다.
 //
 //  - 인자를 argv 배열로 넘겨 셸을 거치지 않는다 (인자 주입 차단)
 //  - 매 호출 앞에 -c core.hooksPath=/dev/null -c commit.gpgsign=false 를 붙인다
@@ -55,7 +55,7 @@ public:
     // 커밋 그래프용 로그. 부모 SHA 까지 있어야 레인을 배치할 수 있다.
     // 필드 구분자(US, 0x1f)·레코드 구분자(RS, 0x1e)로 받아 제목에 구분자가 있어도 안전하다.
     static GitResult logWithParents(const std::string &repoDir, const std::string &ref, int limit);
-    // 저장소 전체 이력(로컬 브랜치·원격 추적 참조·태그)을 한 번에 받는다 — 전체 그래프 웹뷰용(§15.16).
+    // 저장소 전체 이력(로컬 브랜치·원격 추적 참조·태그)을 한 번에 받는다 — 전체 그래프 웹뷰용.
     // 출력 형식이 logWithParents 와 같아 같은 파서를 쓴다. ref 인자만 없다.
     static GitResult logAllWithParents(const std::string &repoDir, int limit);
     static GitResult status(const std::string &worktreeDir);
@@ -67,7 +67,7 @@ public:
     static GitResult deleteBranch(const std::string &repoDir, const std::string &branch, bool force = false);
     static GitResult stageAdd(const std::string &worktreeDir, const std::vector<std::string> &paths);
     static GitResult stageRemove(const std::string &worktreeDir, const std::vector<std::string> &paths);
-    // 트리 변경(§12.5). 추적되는 경로는 git 으로, 추적되지 않는 경로는 파일 시스템으로 다룬다.
+    // 트리 변경. 추적되는 경로는 git 으로, 추적되지 않는 경로는 파일 시스템으로 다룬다.
     static GitResult mv(const std::string &worktreeDir, const std::string &from, const std::string &to);
     static GitResult rmPath(const std::string &worktreeDir, const std::string &path);
     static GitResult commit(const std::string &worktreeDir, const std::string &message,
@@ -80,7 +80,7 @@ public:
     static GitResult push(const std::string &worktreeDir, const std::string &branch, const Auth *auth);
     static GitResult currentBranch(const std::string &worktreeDir);
 
-    // 커밋 아이덴티티 문자열 검증 (§5: 빈 값·CR/LF·'<'·'>' 거부로 로그 위조 방지)
+    // 커밋 아이덴티티 문자열 검증 (빈 값·CR/LF·'<'·'>' 거부로 로그 위조 방지)
     static bool isValidIdentity(const std::string &value);
 };
 

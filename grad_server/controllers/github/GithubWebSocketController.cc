@@ -27,7 +27,7 @@ std::string toJsonString(const Json::Value &value)
     return Json::writeString(writer, value);
 }
 
-// 방 키는 §3.3 규칙: repo:{repo_id}:branch:{branch}
+// 방 키 형식: repo:{repo_id}:branch:{branch}
 std::string roomKeyOf(int repoId, const std::string &branch)
 {
     return "repo:" + std::to_string(repoId) + ":branch:" + branch;
@@ -66,7 +66,7 @@ std::string extractErrorCode(const std::string &message)
     return "500";
 }
 
-// 강제 종료 통보(`repo_closed`)를 보낸 뒤 실제로 소켓을 닫기까지의 여유(초). 곧바로 forceClose 하면
+// 강제 종료 통보(repo_closed)를 보낸 뒤 실제로 소켓을 닫기까지의 여유(초). 곧바로 forceClose 하면
 // 큐에 남은 프레임이 버려질 수 있어, 확장이 "왜 끊겼는지" 를 못 보게 된다.
 constexpr double kCloseAfterNotifySeconds = 0.25;
 
@@ -384,7 +384,7 @@ bool GithubWebSocketController::broadcastToRepository(int repo_id, const Json::V
 // 같은 모양이다 — 누구를 고르는지만 다르다. 그래서 고르기와 알리고-닫기를 나눠 둔다.
 namespace
 {
-// 이 연결들에게 `repo_closed` 를 보낸 뒤 잠시 뒤에 닫는다. **이벤트 루프 스레드에서만** 부른다 —
+// 이 연결들에게 repo_closed 를 보낸 뒤 잠시 뒤에 닫는다. 이벤트 루프 스레드에서만 부른다 —
 // 소켓 API(send/forceClose)를 만지기 때문이다. 바로 닫지 않고 기다리는 이유는, 큐에 남은 프레임이
 // 버려지면 확장이 "왜 끊겼는지"를 못 보게 되기 때문이다.
 void notifyAndCloseConnections(const std::vector<WebSocketConnectionPtr> &targets, const std::string &reason,
@@ -505,7 +505,7 @@ void GithubWebSocketController::handleNewConnection(const HttpRequestPtr &req, c
     wsConnPtr->setContext(session);
 
     // 2. 첫 프레임 auth 를 기다린다. 제한 시간을 넘기면 자원을 붙잡지 않도록 연결을 닫는다.
-    //    쿼리 토큰은 받지 않는다 — 토큰이 URL·프록시 로그에 남지 않게 하기 위함이다(§3.4).
+    //    쿼리 토큰은 받지 않는다 — 토큰이 URL·프록시 로그에 남지 않게 하기 위함이다.
     std::weak_ptr<WebSocketConnection> weakConn = wsConnPtr;
     drogon::app().getLoop()->runAfter(AUTH_DEADLINE_SECONDS, [weakConn, session]() {
         auto conn = weakConn.lock();
@@ -544,7 +544,7 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
     // 1. 인증 전 연결은 auth 프레임 하나만 허용한다.
     if (!session->authenticated)
     {
-        // §3.3 표는 소문자 auth 를 쓴다. 알림 소켓과 같은 대문자 AUTH 도 함께 받아 준다.
+        // 인증 프레임 이름은 소문자 auth 를 쓴다. 알림 소켓과 같은 대문자 AUTH 도 함께 받아 준다.
         if (messageType != "auth" && messageType != "AUTH")
         {
             LOG_WARN << "GitHub WebSocket handshake failed: the first frame must be an auth message.";
@@ -610,7 +610,7 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
 
     if (messageType == "leave")
     {
-        // §3.3 의 leave 는 repo_id/branch 를 함께 받지만, 접속자 행은 connection_id 로만 찾는다.
+        // leave 는 repo_id/branch 를 함께 받지만, 접속자 행은 connection_id 로만 찾는다.
         if (session->repo_id != 0 && !session->branch.empty())
         {
             removeFromRoom(roomKeyOf(session->repo_id, session->branch), wsConnPtr);
@@ -634,7 +634,7 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
             {
                 // 접속자 행을 되살릴 수 없다 = 그 저장소를 볼 수 없다(P0103) 또는 워크스페이스가
                 // 삭제됐다(P0815). 권한 변경 통보를 놓쳤더라도 여기서 끊으면 세션이 스스로 정리된다 —
-                // 확장은 `err` 를 받고 그 방을 포기한다(§12.9). 일시적 DB 장애는 다시 시도하게 두고
+                // 확장은 err 를 받고 그 방을 포기한다. 일시적 DB 장애는 다시 시도하게 두고
                 // 로그만 남긴다.
                 const std::string code = extractErrorCode(e.base().what());
                 if (code == "P0103" || code == "P0815")
@@ -712,8 +712,8 @@ void GithubWebSocketController::enterRoom(const WebSocketConnectionPtr &wsConnPt
     }
 
     // 4. 새 접속자 목록을 저장소 전체에 알린다(요청자 포함).
-    //    Editing 뷰가 접속자를 브랜치별로 보여 주려면(§15.5) 방 하나가 아니라 저장소의 모든 방이
-    //    이 목록을 알아야 한다. `presence_updated` 는 자기 branch 를 담으므로 받는 쪽이 구분한다.
+    //    Editing 뷰가 접속자를 브랜치별로 보여 주려면 방 하나가 아니라 저장소의 모든 방이
+    //    이 목록을 알아야 한다. presence_updated 는 자기 branch 를 담으므로 받는 쪽이 구분한다.
     broadcastToRepository(repo_id, presenceEvent(repo_id, branch, presence));
 }
 

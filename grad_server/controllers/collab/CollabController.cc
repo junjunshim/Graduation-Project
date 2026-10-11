@@ -25,27 +25,23 @@ using namespace app_utils;
 
 namespace {
 
-// ---------------------------------------------------------------------------
 // 상수
-// ---------------------------------------------------------------------------
 
-// 티켓 TTL(초). 핸드오프 코드(§3.4)와 같은 값이다.
+// 티켓 TTL(초). 핸드오프 코드와 같은 값이다.
 constexpr int kTicketTtlSeconds = 60;
 
-// collab ↔ backend 내부 인증 헤더. 두 컨테이너만 아는 값이고 외부에 노출하지 않는다(§9.2).
+// collab ↔ backend 내부 인증 헤더. 두 컨테이너만 아는 값이고 외부에 노출하지 않는다.
 constexpr char kInternalTokenHeader[] = "X-Internal-Token";
 
-// 협업 편집의 쓰기 권한. 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE(bit 23) 를 쓴다(§12.9).
+// 협업 편집의 쓰기 권한. 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE(bit 23) 를 쓴다.
 // VIEWER 는 read-only 티켓을, MEMBER 이상은 can_write=true 티켓을 받는다.
 constexpr char kWriteAuthority[] = "GITHUB_CHANGE";
 
-// 세션 권한 재확인(§12.9) 한 요청에 담을 수 있는 최대 세션 수. collab 은 "방 수 × 사용자 수"를
+// 세션 권한 재확인 한 요청에 담을 수 있는 최대 세션 수. collab 은 "방 수 × 사용자 수"를
 // 한 번에 보내므로 정상 사용에서는 닿지 않는다 — 비정상 입력 방어용 상한이다.
 constexpr std::size_t kMaxRecheckSessions = 1000;
 
-// ---------------------------------------------------------------------------
 // 응답 헬퍼 (GithubController 와 같은 규격: {status, data[], message})
-// ---------------------------------------------------------------------------
 
 HttpResponsePtr makeJsonResponse(const Json::Value &body, HttpStatusCode code) {
     auto resp = HttpResponse::newHttpJsonResponse(body);
@@ -104,7 +100,7 @@ std::string requesterEmail(const HttpRequestPtr &req) {
 
 // DB 동기 호출은 이벤트 루프를 막으므로 워커 스레드에서 실행하고 응답만 되돌린다.
 //
-// 동시 실행 수는 WorkerLimiter 의 Internal 차선이 막는다(§13.4). 이 API 는 편집을 시작하는
+// 동시 실행 수는 WorkerLimiter 의 Internal 차선이 막는다. 이 API 는 편집을 시작하는
 // 경로(티켓 소비·작업 경로 해석)라, GitHub 의 git 작업(clone/fetch/push)과 자리를 겨루지 않게
 // 별도 차선으로 센다 — git 이 도는 동안 파일을 못 열면 안 된다.
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
@@ -136,9 +132,7 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
     worker.detach();
 }
 
-// ---------------------------------------------------------------------------
 // 내부 토큰 / 시간 / 난수
-// ---------------------------------------------------------------------------
 
 // INTERNAL_TOKEN 은 환경변수에서만 읽는다. 없으면 티켓 소비를 전부 거부한다(fail-closed).
 std::string internalToken() {
@@ -189,9 +183,7 @@ std::string randomToken() {
     return token;
 }
 
-// ---------------------------------------------------------------------------
-// 경로 유틸 (§9.4 / §13.3.1)
-// ---------------------------------------------------------------------------
+// 경로 유틸
 
 // 서버 CWD 기준 저장소 경로의 접두사. DB 가 만드는 local_path 는 항상 이 값으로 시작한다.
 constexpr char kRepositoryPrefix[] = "repository/";
@@ -226,9 +218,7 @@ bool directoryReady(const std::string &cwdRelativePath) {
     return std::filesystem::is_directory(absolute, ec);
 }
 
-// ---------------------------------------------------------------------------
 // 1회용 협업 티켓 저장소 (메모리)
-// ---------------------------------------------------------------------------
 
 // 티켓은 TTL 60초·1회용이고, 발급자(C++)와 소비자(collab)가 내부 API 로 이 프로세스에만
 // 물어본다. 백엔드 인스턴스가 하나인 현재 배포에서는 메모리 저장이면 충분하므로
@@ -292,12 +282,10 @@ class TicketStore {
 
 } // namespace
 
-// ===========================================================================
-// 확장 → C++ : 협업 티켓 발급 (§3.2, §12.1)
-// ===========================================================================
+// 확장 → C++ : 협업 티켓 발급
 
 // 확장은 앱에서 받은 JWT 로 이 API 를 부르고, 받은 티켓으로 문서 소켓에 붙는다.
-// 티켓에는 브랜치를 담지 않는다 — 브랜치 전환은 그때 C++ 에 권한을 다시 묻는다(§12.9).
+// 티켓에는 브랜치를 담지 않는다 — 브랜치 전환은 그때 C++ 에 권한을 다시 묻는다.
 void CollabController::issueTicket(const HttpRequestPtr &req,
                                    std::function<void(const HttpResponsePtr &)> &&callback) {
     auto jsonPtr = req->getJsonObject();
@@ -322,7 +310,7 @@ void CollabController::issueTicket(const HttpRequestPtr &req,
         }
         const int nodeId = repo["node_id"].asInt();
 
-        // 1-1) 노드가 삭제되었으면(그 서브트리까지 연쇄 소프트 딜리트) 세션을 열 이유가 없다(§12.9).
+        // 1-1) 노드가 삭제되었으면(그 서브트리까지 연쇄 소프트 딜리트) 세션을 열 이유가 없다.
         //      접속 등록(P0815)이 최종 방어선이지만, 여기서 먼저 막아 문서 소켓이 붙을 기회를 주지 않는다.
         if (db->execSqlSync("SELECT 1 FROM organization_nodes WHERE node_id = $1 AND is_deleted = FALSE",
                             nodeId)
@@ -362,9 +350,7 @@ void CollabController::issueTicket(const HttpRequestPtr &req,
     });
 }
 
-// ===========================================================================
 // collab → C++ : 티켓 소비 (내부 전용)
-// ===========================================================================
 
 // collab 사이드카가 문서 소켓의 쿼리 티켓을 검증할 때 부른다. JWT 를 해석하지 않고
 // 이 API 하나로 세션(사용자·저장소·권한)을 확정한다. 성공하면 티켓은 즉시 소비된다.
@@ -401,12 +387,11 @@ void CollabController::consumeTicket(const HttpRequestPtr &req,
     item["can_write"] = ticket.canWrite;
     callback(successResponse(singleItemArray(item), "티켓을 확인했습니다."));
 }
-// ===========================================================================
-// collab → C++ : 브랜치 작업 디렉터리 해석 (내부 전용, §9.4 / §13.3.1)
-// ===========================================================================
+
+// collab → C++ : 브랜치 작업 디렉터리 해석 (내부 전용)
 
 // collab 은 DB 도 git 도 모른다. 문서 소켓이 방에 들어갈 때 이 API 로 (저장소, 브랜치)의
-// 작업 디렉터리와 `.ydoc` 영속화 디렉터리를 물어본다. 경로의 진실은 DB 한 곳에 두고,
+// 작업 디렉터리와 .ydoc 영속화 디렉터리를 물어본다. 경로의 진실은 DB 한 곳에 두고,
 // 여기서는 형태(접두사·상위 탈출)와 "실제로 존재하는가"만 검증해 볼륨 상대 경로로 바꿔 준다.
 void CollabController::resolvePath(const HttpRequestPtr &req,
                                    std::function<void(const HttpResponsePtr &)> &&callback) {
@@ -453,7 +438,7 @@ void CollabController::resolvePath(const HttpRequestPtr &req,
         const std::string branchSlug = row["branch_slug"].as<std::string>();
         const int nodeId = row["node_id"].as<int>();
 
-        // 2-1) 노드가 삭제된 저장소는 열 수 없다(§12.9). 접속 등록(P0815)과 같은 이유다 —
+        // 2-1) 노드가 삭제된 저장소는 열 수 없다. 접속 등록(P0815)과 같은 이유다 —
         //      캐시가 비워진 뒤 다시 붙는 세션이 옛 경로로 방을 여는 것을 막는다.
         if (db->execSqlSync("SELECT 1 FROM organization_nodes WHERE node_id = $1 AND is_deleted = FALSE",
                             nodeId)
@@ -472,7 +457,7 @@ void CollabController::resolvePath(const HttpRequestPtr &req,
         }
 
         // 3) DB 불변식을 한 번 더 확인한다. 기본 브랜치는 clone 디렉터리 자체가 작업 트리이고,
-        //    나머지는 `.worktrees/<slug>` 를 쓴다(§2.3). 어긋나면 collab 에 엉뚱한 경로를 주게 된다.
+        //    나머지는 .worktrees/<slug> 를 쓴다. 어긋나면 collab 에 엉뚱한 경로를 주게 된다.
         const bool isDefault = (branch == defaultBranch);
         if (isDefault) {
             if (worktreePath != localPath) {
@@ -507,12 +492,10 @@ void CollabController::resolvePath(const HttpRequestPtr &req,
     });
 }
 
-// ===========================================================================
-// collab → C++ : worktree 변경 알림 (내부 전용, §9.9 / §15.10)
-// ===========================================================================
+// collab → C++ : worktree 변경 알림 (내부 전용)
 
 // collab 이 worktree 파일을 실제로 내려쓴 직후 부른다. 여기서는 그 브랜치 방의 접속자에게
-// worktree_changed 를 중계하기만 한다 — 같은 브랜치의 Changes 뷰가 즉시 다시 그린다(§15.10).
+// worktree_changed 를 중계하기만 한다 — 같은 브랜치의 Changes 뷰가 즉시 다시 그린다.
 // flush 는 collab 이 이미 끝냈으므로 DB·git 을 건드리지 않는다(순수 브로드캐스트).
 // 아무도 듣고 있지 않으면 중계는 no-op 이지만 실패는 아니다.
 void CollabController::notifyWorktreeChanged(const HttpRequestPtr &req,
@@ -561,13 +544,11 @@ void CollabController::notifyWorktreeChanged(const HttpRequestPtr &req,
     callback(successResponse(singleItemArray(item), "worktree 변경을 알렸습니다."));
 }
 
-// ===========================================================================
-// collab → C++ : 세션 권한 재확인 (내부 전용, §12.9)
-// ===========================================================================
+// collab → C++ : 세션 권한 재확인 (내부 전용)
 
 // collab 이 자기 세션 목록(사용자 × 저장소)을 들고 주기적으로 물어본다. 권한 변경 통보가 유실된
 // 경우(제어 소켓이 끊긴 우회 클라이언트, 통보 HTTP 의 일시 실패, 노드 삭제를 놓친 경우)의
-// 안전망이다 — 판정은 DB 함수 하나가 한다(`get_collab_session_permissions`), C++ 은 결과를 나른다.
+// 안전망이다 — 판정은 DB 함수 하나가 한다(get_collab_session_permissions), C++ 은 결과를 나른다.
 //
 // 없는 세션(저장소 연결 해제·노드 삭제·사용자 삭제)은 can_view=false 로 돌아온다. collab 은 그
 // 세션을 끝내므로(강제 이탈), 지워진 저장소를 계속 편집하는 상태가 한 주기 안에 정리된다.
@@ -626,7 +607,7 @@ void CollabController::recheckPermissions(const HttpRequestPtr &req,
         auto db = app().getDbClient();
         auto rows = db->execSqlSync("SELECT * FROM get_collab_session_permissions($1::JSONB)", sessionsJson);
 
-        // 응답 모양은 통보(`/internal/collab/permission`)와 같다 — collab 이 같은 코드로 반영한다.
+        // 응답 모양은 통보(/internal/collab/permission)와 같다 — collab 이 같은 코드로 반영한다.
         Json::Value items(Json::arrayValue);
         int viewLost = 0;
         int readOnly = 0;
@@ -648,7 +629,7 @@ void CollabController::recheckPermissions(const HttpRequestPtr &req,
             }
         }
 
-        // 바뀐 세션이 없어도 한 줄 남긴다 — 재확인이 살아 있는지 확인할 유일한 신호다(§12.13).
+        // 바뀐 세션이 없어도 한 줄 남긴다 — 재확인이 살아 있는지 확인할 유일한 신호다.
         LOG_INFO << "세션 권한 재확인: sessions=" << rows.size() << " 보기상실=" << viewLost
                  << " 읽기전용=" << readOnly;
         return successResponse(items, "세션 권한을 확인했습니다.");

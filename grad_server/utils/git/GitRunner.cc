@@ -27,7 +27,7 @@ namespace {
 
 // git 이 자격 증명을 물어볼 때 실행하는 스크립트.
 // 프롬프트 문자열에 따라 아이디와 토큰을 구분해 돌려주고, 토큰은 환경변수로만 전달한다
-// (argv·remote URL·.git/config 어디에도 남기지 않기 위함 - §5).
+// (argv·remote URL·.git/config 어디에도 남기지 않기 위함).
 const char *kAskpassScript =
     "#!/bin/sh\n"
     "case \"$1\" in\n"
@@ -113,7 +113,7 @@ std::string firstLine(const std::string &text) {
     return pos == std::string::npos ? text : text.substr(0, pos);
 }
 
-// git 은 workDir 로 chdir 한 뒤 실행되므로(§run), 인자로 넘긴 상대 경로는 repo 디렉터리 기준으로
+// git 은 workDir 로 chdir 한 뒤 실행되므로, 인자로 넘긴 상대 경로는 repo 디렉터리 기준으로
 // 해석된다. 예를 들어 worktree add 에 DB 의 상대 경로(repository/2/A.worktrees/x)를 그대로 넘기면
 // 저장소 안쪽에 repository/2/A.worktrees/x 가 만들어져 버린다.
 // git 에 넘기기 직전에 프로세스 CWD 기준 절대 경로로 바꿔, DB 값의 기준과 git 의 해석 기준을 맞춘다.
@@ -164,7 +164,7 @@ GitResult GitRunner::run(const std::string &workDir,
     // 한글 등 비ASCII 경로를 8진수로 이스케이프하지 않는다 (경로가 그대로 JSON 으로 나간다)
     full.push_back("-c");
     full.push_back("core.quotepath=false");
-    // 서브모듈을 재귀적으로 건드리지 않는다 — 저장소 안 .gitmodules 는 신뢰할 수 없는 입력이다(§5)
+    // 서브모듈을 재귀적으로 건드리지 않는다 — 저장소 안 .gitmodules 는 신뢰할 수 없는 입력이다
     full.push_back("-c");
     full.push_back("submodule.recurse=false");
     full.insert(full.end(), args.begin(), args.end());
@@ -385,7 +385,7 @@ GitResult GitRunner::listRefs(const std::string &repoDir) {
 
 GitResult GitRunner::lsTree(const std::string &repoDir, const std::string &ref, const std::string &path,
                          bool withSize) {
-    // 디렉터리 단위 lazy 조회 (§12.3). path 가 비면 루트 한 단계만 나온다.
+    // 디렉터리 단위 lazy 조회. path 가 비면 루트 한 단계만 나온다.
     // '<ref>:<path>' treeish 표기를 쓴다. git 은 첫 ':' 앞을 ref 로 해석하므로
     // 브랜치 이름에 '/' 가 있어도 (feature/x) 모호해지지 않는다.
     std::string clean = path;
@@ -413,7 +413,7 @@ GitResult GitRunner::logWithParents(const std::string &repoDir, const std::strin
 }
 
 GitResult GitRunner::logAllWithParents(const std::string &repoDir, int limit) {
-    // 저장소 전체 그래프(§15.16). --all 은 로컬 브랜치·원격 추적 참조·태그를 모두 포함하므로,
+    // 저장소 전체 그래프. --all 은 로컬 브랜치·원격 추적 참조·태그를 모두 포함하므로,
     // 브랜치마다 로그를 따로 받아 클라이언트에서 합치는 일을 하지 않아도 된다.
     // 출력 형식은 logWithParents 와 같아 같은 파서를 쓴다 - ref 인자만 없다.
     return run(repoDir, {"log", "--all", "--topo-order", "-n", std::to_string(limit), kLogPretty});
@@ -456,8 +456,8 @@ GitResult GitRunner::worktreeAdd(const std::string &repoDir, const std::string &
     // worktree 가 만들어지고, DB 의 worktree_path(프로세스 CWD 기준)와 어긋나 버린다.
     const std::string target = absoluteFsPath(worktreeDir);
 
-    // 저장소 디렉터리 **안쪽**에 worktree 를 만들면 clone 의 작업 트리가 그 worktree 전체를
-    // 추적되지 않은 파일로 보게 된다(§2.3 — 브랜치 작업 디렉터리는 형제 디렉터리로 분리한다).
+    // 저장소 디렉터리 안쪽에 worktree 를 만들면 clone 의 작업 트리가 그 worktree 전체를
+    // 추적되지 않은 파일로 보게 된다.
     // git 은 인자로 받은 상대 경로를 repoDir 기준으로 해석하므로, 과거처럼 상대 경로가 새어 들어오면
     // 여기서 막는다(위 absoluteFsPath 주석의 버그가 되살아나도 트리가 오염되지 않게).
     const std::string repoAbs = absoluteFsPath(repoDir);
@@ -522,13 +522,13 @@ GitResult GitRunner::mv(const std::string &worktreeDir, const std::string &from,
 
 GitResult GitRunner::rmPath(const std::string &worktreeDir, const std::string &path) {
     // -r 로 디렉터리까지, -f 로 수정·스테이징된 내용이 있어도 강제로 지운다.
-    // 되돌릴 수 없으므로 확인은 호출자(API)가 받는다(§12.5).
+    // 되돌릴 수 없으므로 확인은 호출자(API)가 받는다.
     return run(worktreeDir, {"rm", "-r", "-f", "-q", "--", path});
 }
 
 GitResult GitRunner::commit(const std::string &worktreeDir, const std::string &message,
                             const std::string &authorName, const std::string &authorEmail) {
-    // 아이덴티티는 요청자를 검증한 값으로만 채운다 (§2.4: 요청 body 를 신뢰하지 않는다)
+    // 아이덴티티는 요청자를 검증한 값으로만 채운다
     if (!isValidIdentity(authorName) || !isValidIdentity(authorEmail)) {
         GitResult r;
         r.err = "커밋 아이덴티티가 유효하지 않습니다";
@@ -550,7 +550,7 @@ GitResult GitRunner::commit(const std::string &worktreeDir, const std::string &m
 }
 
 GitResult GitRunner::push(const std::string &worktreeDir, const std::string &branch, const Auth *auth) {
-    // push 는 요청한 사용자의 토큰으로만 수행한다 (§6-4)
+    // push 는 요청한 사용자의 토큰으로만 수행한다
     return run(worktreeDir, {"push", "origin", branch}, auth, 300);
 }
 

@@ -14,7 +14,7 @@ namespace app_utils
 {
 namespace
 {
-// collab 내부 API 를 부르고 **응답을 기다리는** 상한(초). 같은 호스트 안이라 짧아도 충분하고,
+// collab 내부 API 를 부르고 응답을 기다리는 상한(초). 같은 호스트 안이라 짧아도 충분하고,
 // 이 시간을 넘기면 collab 이 죽었다고 보고 그냥 진행한다.
 constexpr int kCollabCallWaitSeconds = 3;
 
@@ -22,7 +22,7 @@ constexpr int kCollabCallWaitSeconds = 3;
 // 그래도 호출 경로가 하나뿐이라 같은 상한을 그대로 쓴다.
 constexpr char kPermissionPath[] = "/internal/collab/permission";
 
-// 저장소(방)를 통째로 닫으라는 통보(노드 삭제, §12.9). 권한 변경과 달리 저장소 여러 개를 한 번에 보낸다.
+// 저장소(방)를 통째로 닫으라는 통보. 권한 변경과 달리 저장소 여러 개를 한 번에 보낸다.
 constexpr char kRepoClosePath[] = "/internal/collab/repo/close";
 }  // namespace
 
@@ -44,7 +44,7 @@ bool callCollabInternal(const std::string &path, const Json::Value &body, Json::
     // HttpClient 는 생성한 루프에서 호출해야 한다. 우리는 작업 스레드에 있으므로 메인 루프로 올리고,
     // 이 스레드는 promise 로 응답을 기다린다 — 기다리지 않으면 collab 의 쓰기와 git 작업이 겹친다.
     auto done = std::make_shared<std::promise<bool>>();
-    // 200 응답의 `data` 배열을 담아 둘 곳. 워커 스택이 아니라 shared_ptr 에 담는다 — 응답이 늦어
+    // 200 응답의 data 배열을 담아 둘 곳. 워커 스택이 아니라 shared_ptr 에 담는다 — 응답이 늦어
     // 타임아웃으로 워커가 먼저 빠져나가도 콜백이 죽은 스택을 건드리지 않게 하기 위함이다.
     auto payload = std::make_shared<Json::Value>(Json::arrayValue);
     std::future<bool> future = done->get_future();
@@ -59,7 +59,7 @@ bool callCollabInternal(const std::string &path, const Json::Value &body, Json::
             const bool ok = (result == ReqResult::Ok && response != nullptr &&
                              response->getStatusCode() == k200OK);
             if (ok) {
-                // 호출자가 응답 내용(예: flush 의 `failed`)을 봐야 하므로 `data` 배열을 옮겨 둔다.
+                // 호출자가 응답 내용(예: flush 의 failed)을 봐야 하므로 data 배열을 옮겨 둔다.
                 Json::Value parsed;
                 Json::Reader reader;
                 if (reader.parse(std::string(response->getBody()), parsed) && parsed["data"].isArray()) {

@@ -11,11 +11,10 @@
 #include <thread>
 #include <vector>
 
+using namespace api;
 using namespace drogon;
 using namespace app_utils;
 
-namespace api
-{
 namespace
 {
 // 보기 권한을 잃어 강제 이탈시킨 사용자에게 보여 줄 문구와 close reason. 제어 소켓과 문서 소켓이
@@ -23,9 +22,9 @@ namespace
 constexpr char kAuthorityLostMessage[] = "이 워크스페이스에 대한 권한이 없어 연결을 종료했습니다.";
 constexpr char kAuthorityLostReason[] = "authority_lost";
 
-// 노드 권한이 바뀐 뒤, 그 노드의 서브트리 저장소에 **지금 붙어 있는** 사용자의 새 권한을 읽어
-// 두 소켓에 반영한다. 판정은 DB 함수(`get_collab_permission_targets`) 하나가 한다 — C++ 은 그
-// 결과를 나르기만 한다(§12.9). 워커 스레드에서 부른다(동기 DB + 내부 HTTP 호출).
+// 노드 권한이 바뀐 뒤, 그 노드의 서브트리 저장소에 지금 붙어 있는 사용자의 새 권한을 읽어
+// 두 소켓에 반영한다. 판정은 DB 함수(get_collab_permission_targets) 하나가 한다 — C++ 은 그
+// 결과를 나르기만 한다. 워커 스레드에서 부른다(동기 DB + 내부 HTTP 호출).
 void notifyAuthorityChanged(const orm::DbClientPtr &db, int node_id)
 {
     auto rows = db->execSqlSync(
@@ -52,7 +51,7 @@ void notifyAuthorityChanged(const orm::DbClientPtr &db, int node_id)
     for (const auto &repo : byRepo)
     {
         const int repoId = repo.first;
-        // 1. 문서 소켓(collab)에 알린다 — 쓰기 회수·복구는 `perm`, 보기 상실은 세션 종료.
+        // 1. 문서 소켓(collab)에 알린다 — 쓰기 회수·복구는 perm, 보기 상실은 세션 종료.
         notifyPermissionChanged(repoId, repo.second);
 
         // 2. 제어 소켓은 이 서버가 직접 닫는다. 접속자 행 정리와 남은 사람 알림은 소켓 종료
@@ -75,7 +74,7 @@ void notifyAuthorityChanged(const orm::DbClientPtr &db, int node_id)
 }
 }  // namespace
 
-void notifyAuthorityChangedAsync(int node_id)
+void api::notifyAuthorityChangedAsync(int node_id)
 {
     if (node_id <= 0)
     {
@@ -95,7 +94,7 @@ void notifyAuthorityChangedAsync(int node_id)
     worker.detach();
 }
 
-void closeNodeSessionsAsync(int node_id)
+void api::closeNodeSessionsAsync(int node_id)
 {
     if (node_id <= 0)
     {
@@ -134,4 +133,3 @@ void closeNodeSessionsAsync(int node_id)
     });
     worker.detach();
 }
-}  // namespace api

@@ -55,7 +55,7 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
             resp->setStatusCode(k201Created);
             callback(resp);
 
-            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 권한이 바뀌었으니 협업 세션에도 알린다. 응답을 붙잡지 않는다 —
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
@@ -126,7 +126,7 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
             resp->setStatusCode(k200OK);
             callback(resp);
 
-            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 권한이 바뀌었으니 협업 세션에도 알린다. 응답을 붙잡지 않는다 —
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
@@ -199,7 +199,7 @@ void RoleController::createRoleDefinition(const HttpRequestPtr &req, std::functi
             resp->setStatusCode(k201Created);
             callback(resp);
 
-            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 권한이 바뀌었으니 협업 세션에도 알린다. 응답을 붙잡지 않는다 —
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
@@ -261,7 +261,7 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
             resp->setStatusCode(k200OK);
             callback(resp);
 
-            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 권한이 바뀌었으니 협업 세션에도 알린다. 응답을 붙잡지 않는다 —
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
@@ -311,7 +311,7 @@ void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::functi
             resp->setStatusCode(k200OK);
             callback(resp);
 
-            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 권한이 바뀌었으니 협업 세션에도 알린다. 응답을 붙잡지 않는다 —
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
@@ -417,7 +417,7 @@ void RoleController::deleteRoleDefinition(const HttpRequestPtr &req, std::functi
             resp->setStatusCode(k200OK);
             callback(resp);
 
-            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 권한이 바뀌었으니 협업 세션에도 알린다. 응답을 붙잡지 않는다 —
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
@@ -529,7 +529,7 @@ void RoleController::removeRole(const HttpRequestPtr &req, std::function<void(co
             resp->setStatusCode(k200OK);
             callback(resp);
 
-            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 권한이 바뀌었으니 협업 세션에도 알린다. 응답을 붙잡지 않는다 —
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },

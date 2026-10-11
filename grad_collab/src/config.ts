@@ -18,6 +18,8 @@ export interface CollabConfig {
   notifyDebounceMs: number;
   /** 동시 편집을 허용하는 파일 크기 상한(§6-10, 512KB). */
   maxDocBytes: number;
+  /** 읽기 전용 열람(§12.6) 한 건에 실어 보내는 최대 바이트. 넘으면 내용 없이 크기만 알린다. */
+  maxReadOnlyBytes: number;
 }
 
 function readPort(raw: string | undefined, fallback: number): number {
@@ -40,4 +42,5 @@ export const config: CollabConfig = {
   autosaveIntervalMs: readPositiveInt(process.env.AUTOSAVE_INTERVAL_MS, 30_000),
   notifyDebounceMs: readPositiveInt(process.env.WORKTREE_NOTIFY_DEBOUNCE_MS, 400),
   maxDocBytes: readPositiveInt(process.env.MAX_DOC_BYTES, 512 * 1024),
+  maxReadOnlyBytes: readPositiveInt(process.env.MAX_READONLY_BYTES, 4 * 1024 * 1024),
 };

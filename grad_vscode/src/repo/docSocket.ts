@@ -51,6 +51,44 @@ export type DocState = 'disconnected' | 'joining' | 'active';
  */
 export type DocConnection = 'idle' | 'joining' | 'active' | 'reconnecting' | 'locked' | 'readonly';
 
+/**
+ * 편집할 수 없어 collab 이 열기를 거절했다(P0905, §12.6).
+ * 부르는 쪽은 이 오류를 보고 **읽기 전용 열람**으로 넘어간다 — 오류로 끝내지 않는다.
+ */
+export class NotEditableError extends Error {
+    constructor(
+        readonly reason: string,
+        message: string
+    ) {
+        super(message);
+        this.name = 'NotEditableError';
+    }
+}
+
+/**
+ * 읽기 전용으로 열 수 있는 이유들(collab `ReadFailureReason` 과 같은 값).
+ * `missing`·`not_file` 은 읽을 것이 없으므로 여기 없다.
+ */
+const VIEWABLE_REASONS = new Set(['binary', 'too_large', 'not_utf8']);
+
+/** 읽기 전용인 이유를 화면 문구로 바꾼다(§12.6). */
+const READ_ONLY_REASONS: Record<string, string> = {
+    too_large: '크기가 커서 동시 편집을 지원하지 않습니다',
+    binary: '바이너리 파일입니다',
+    not_utf8: 'UTF-8 로 읽을 수 없습니다',
+    missing: '작업 디렉터리에 없습니다',
+    not_file: '파일이 아닙니다'
+};
+
+/** 읽기 전용 열람 결과(`read` → `file` 프레임, §12.6). */
+export type ReadOnlyFile = {
+    readonly path: string;
+    readonly size: number;
+    /** `utf-8` = 본문, `base64` = 바이너리, `none` = 상한 초과로 내용 없음(크기만). */
+    readonly encoding: 'utf-8' | 'base64' | 'none';
+    readonly content: string;
+};
+
 /** 서버가 확인해 준 `opened` 프레임에서 이 모듈이 쓰는 필드만 추린 것. */
 type OpenedFrame = {
     path: string;
@@ -208,6 +246,12 @@ const openWaiters = new Map<
     { resolve: (frame: OpenedFrame) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
 >();
 
+/** 경로별 `file` 대기자 — 편집할 수 없는 파일의 읽기 전용 열람(§12.6). */
+const readWaiters = new Map<
+    string,
+    { resolve: (file: ReadOnlyFile) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
+>();
+
 /** 지금 열려 있는 파일들. 경로가 키다(§12.4 — 같은 파일을 두 번 열지 않는다). */
 const watching = new Map<string, Watching>();
 
@@ -222,6 +266,9 @@ const openFileWatchers = new Map<string, FileWatcher[]>();
 
 /** 같은 오류를 반복해 알리지 않는다(§9.8). */
 const warnedCodes = new Set<string>();
+
+/** 읽기 전용으로 연 파일의 안내를 되풀이하지 않는다(`<경로>:<이유>`). */
+const readOnlyNotices = new Set<string>();
 
 const openDocsEmitter = new vscode.EventEmitter<void>();
 const cursorEmitter = new vscode.EventEmitter<RemoteCursorFrame>();
@@ -359,6 +406,11 @@ async function openFile(path: string): Promise<void> {
             await applyServerFrame(existing, await requestOpen(path));
             await reveal(existing.uri);
         } catch (error) {
+            if (error instanceof NotEditableError) {
+                await openReadOnly(session.repoId, branch, path, error.reason, error.message);
+                return;
+            }
+
             const message = describe(error);
             log(`파일을 다시 열지 못했습니다(${path}): ${message}`);
             void vscode.window.showWarningMessage(`Axis Share: ${message}`);
@@ -371,10 +423,106 @@ async function openFile(path: string): Promise<void> {
         const opened = await requestOpen(path);
         await materialize(session.repoId, branch, opened);
     } catch (error) {
+        if (error instanceof NotEditableError) {
+            // 편집할 수 없는 파일이다 — 오류로 끝내지 않고 읽기 전용으로 열어 준다(§12.6).
+            await openReadOnly(session.repoId, branch, path, error.reason, error.message);
+            return;
+        }
+
         const message = describe(error);
         log(`파일을 열지 못했습니다(${path}): ${message}`);
         void vscode.window.showWarningMessage(`Axis Share: ${message}`);
     }
+}
+
+/**
+ * 편집할 수 없는 파일을 **읽기 전용으로** 연다(§12.6).
+ *
+ * 내용은 collab 의 `read`/`file` 로 받는다 — 편집 경로와 마찬가지로 파일 내용의 출처는 하나다(§12.4).
+ * 받은 내용은 편집 세션과 **같은 로컬 사본 경로**에 내려쓰지만 `watching` 에는 넣지 않는다:
+ * Yjs doc 이 없으므로 다른 사용자와 공유되지 않고, 내 키보드 입력이 서버로 갈 일도 없다.
+ * 그래서 이 문서는 사이드바의 "편집 중" 목록에도 뜨지 않는다(§15.5).
+ *
+ * 바이너리는 텍스트가 아니므로 바이트 그대로 내려쓰고 VS Code 에 맡긴다(`vscode.open`) —
+ * 이미지·PDF 는 미리보기로 열리고, 그 밖의 형식은 VS Code 가 스스로 판단한다(§12.6 은 바이너리를
+ * "에디터로 열지 않고 미리보기만" 이라고 정했다).
+ */
+async function openReadOnly(
+    repoId: number,
+    branch: string,
+    path: string,
+    reason: string,
+    denialMessage: string
+): Promise<void> {
+    if (!VIEWABLE_REASONS.has(reason)) {
+        // 읽을 것이 없는 이유(missing·not_file)다 — 서버 문구를 그대로 보여 준다.
+        void vscode.window.showWarningMessage(`Axis Share: ${denialMessage}`);
+        return;
+    }
+
+    let file: ReadOnlyFile;
+    try {
+        await ensureJoined(repoId, branch);
+        file = await requestRead(path);
+    } catch (error) {
+        const message = describe(error);
+        log(`읽기 전용으로 열지 못했습니다(${path}): ${message}`);
+        void vscode.window.showWarningMessage(`Axis Share: ${message}`);
+        return;
+    }
+
+    if (file.encoding === 'none') {
+        void vscode.window.showInformationMessage(
+            `Axis Share: ${path} 는 ${formatBytes(file.size)} 라 열 수 없습니다. ` +
+                '읽기 전용 미리보기도 이 크기는 지원하지 않습니다.'
+        );
+        return;
+    }
+
+    const uri = localCopyUri(repoId, branch, path);
+    const body =
+        file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : Buffer.from(file.content, 'utf8');
+
+    try {
+        await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
+        await vscode.workspace.fs.writeFile(uri, body);
+
+        if (file.encoding === 'base64') {
+            // 바이너리 — VS Code 가 이미지 미리보기 등으로 처리한다.
+            await vscode.commands.executeCommand('vscode.open', uri, { preview: false });
+        } else {
+            const document = await vscode.workspace.openTextDocument(uri);
+            await vscode.window.showTextDocument(document, { preview: false });
+            // 이 세션에서만 편집을 잠근다 — 디스크에 쓴 것은 사본이므로 저장해도 서버에 가지 않는다.
+            await setEditorLocked(uri, true);
+        }
+    } catch (error) {
+        log(`읽기 전용 사본을 열지 못했습니다(${path}): ${describe(error)}`);
+        void vscode.window.showWarningMessage(`Axis Share: ${path} 를 읽기 전용으로 열지 못했습니다.`);
+        return;
+    }
+
+    // 같은 파일을 다시 눌러도 같은 안내를 되풀이하지 않는다.
+    const noticeKey = `${path}:${reason}`;
+    if (!readOnlyNotices.has(noticeKey)) {
+        readOnlyNotices.add(noticeKey);
+        void vscode.window.showInformationMessage(
+            `Axis Share: ${path} 는 ${READ_ONLY_REASONS[reason]} — 읽기 전용으로 열었습니다. ` +
+                '내용은 서버로 전송되지 않습니다.'
+        );
+    }
+}
+
+/** 바이트 수를 사람이 읽기 좋게 바꾼다(안내 문구용). */
+function formatBytes(size: number): string {
+    if (size < 1024) {
+        return `${size}B`;
+    }
+    if (size < 1024 * 1024) {
+        return `${(size / 1024).toFixed(1)}KB`;
+    }
+
+    return `${(size / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 /**
@@ -952,6 +1100,24 @@ function requestOpen(path: string): Promise<OpenedFrame> {
     });
 }
 
+/** `read` 를 보내고 `file` 을 기다린다 — 편집할 수 없는 파일의 내용을 한 번 받아 온다(§12.6). */
+function requestRead(path: string): Promise<ReadOnlyFile> {
+    return new Promise<ReadOnlyFile>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            readWaiters.delete(path);
+            reject(new Error(`파일을 읽는 요청이 시간 안에 끝나지 않았습니다: ${path}`));
+        }, OPEN_TIMEOUT_MS);
+
+        readWaiters.set(path, { resolve, reject, timer });
+
+        if (!send({ type: 'read', path })) {
+            clearTimeout(timer);
+            readWaiters.delete(path);
+            reject(new Error('협업 서버에 연결되어 있지 않습니다.'));
+        }
+    });
+}
+
 // ---------------------------------------------------------------------------
 // 프레임 처리
 // ---------------------------------------------------------------------------
@@ -976,6 +1142,9 @@ function handleFrame(text: string): void {
             return;
         case 'opened':
             resolveOpen(frame);
+            return;
+        case 'file':
+            resolveRead(frame);
             return;
         case 'update':
             applyRemoteUpdate(frame);
@@ -1059,17 +1228,86 @@ function resolveOpen(frame: Record<string, unknown>): void {
     });
 }
 
-/** `err` 프레임(§9.5). 대기 중인 열기 요청은 이 오류로 실패한 것으로 본다 — 프레임에 path 가 없다. */
+/** `file` 프레임 — 읽기 전용 열람 내용(§12.6). */
+function resolveRead(frame: Record<string, unknown>): void {
+    const path = asString(frame.path);
+    if (path === undefined) {
+        return;
+    }
+
+    const waiter = readWaiters.get(path);
+    if (!waiter) {
+        return;
+    }
+
+    readWaiters.delete(path);
+    clearTimeout(waiter.timer);
+    waiter.resolve({
+        path,
+        size: typeof frame.size === 'number' ? frame.size : 0,
+        encoding: frame.encoding === 'base64' ? 'base64' : frame.encoding === 'none' ? 'none' : 'utf-8',
+        content: asString(frame.content) ?? ''
+    });
+}
+
+/** 열기 대기자 하나를 실패시킨다. `denial` 이 있으면 읽기 전용으로 이어 갈 오류로 실패한다(§12.6). */
+function failOpenWaiter(key: string, message: string, denial: string | undefined): void {
+    const waiter = openWaiters.get(key);
+    if (!waiter) {
+        return;
+    }
+
+    clearTimeout(waiter.timer);
+    openWaiters.delete(key);
+    waiter.reject(denial === undefined ? new Error(message) : new NotEditableError(denial, message));
+}
+
+/** 읽기 대기자 하나를 실패시킨다. 읽기는 다른 길이 없다 — 언제나 실패다. */
+function failReadWaiter(key: string, message: string): void {
+    const waiter = readWaiters.get(key);
+    if (!waiter) {
+        return;
+    }
+
+    clearTimeout(waiter.timer);
+    readWaiters.delete(key);
+    waiter.reject(new Error(message));
+}
+
+/**
+ * `err` 프레임(§9.5). `path` 가 실려 오면 그 요청만 실패시킨다 — 없는 파일 하나 때문에 다른 파일의
+ * 열기가 휩쓸리지 않게 하려는 것이다.
+ *
+ * `P0905`(편집 불가)에 `reason` 이 실려 오면 **실패가 아니라 다른 길로 가라는 신호**다(§12.6).
+ * 열기 대기자는 그 이유를 실은 `NotEditableError` 로 실패하고, 부르는 쪽이 읽기 전용 열람으로 잇는다.
+ * 그래서 이 경우에는 알림을 띄우지 않는다 — 읽기 전용으로 잘 열리기 때문이다.
+ */
 function handleServerError(frame: Record<string, unknown>): void {
     const code = asString(frame.code) ?? 'unknown';
     const message = asString(frame.message) ?? '알 수 없는 오류가 발생했습니다.';
+    const path = asString(frame.path);
+    const reason = asString(frame.reason);
     log(`문서 소켓 오류 ${code}: ${message}`);
 
-    for (const waiter of openWaiters.values()) {
-        clearTimeout(waiter.timer);
-        waiter.reject(new Error(message));
+    // 편집 불가(P0905 + 이유)는 실패가 아니라 "다른 길로 가라"는 신호다(§12.6).
+    const denial = code === 'P0905' && reason !== undefined ? reason : undefined;
+
+    if (path === undefined) {
+        // 어느 요청의 오류인지 알 수 없는 프레임이다 — 대기 중인 요청을 전부 실패시킨다.
+        for (const key of [...openWaiters.keys()]) {
+            failOpenWaiter(key, message, denial);
+        }
+        for (const key of [...readWaiters.keys()]) {
+            failReadWaiter(key, message);
+        }
+    } else {
+        failOpenWaiter(path, message, denial);
+        failReadWaiter(path, message);
     }
-    openWaiters.clear();
+
+    if (denial !== undefined) {
+        return; // 읽기 전용으로 열리므로 여기서 겹쳐 알리지 않는다(§12.6).
+    }
 
     // 같은 코드로 반복해 알리지 않는다(§9.8).
     if (warnedCodes.has(code)) {
@@ -1101,6 +1339,12 @@ function handleSocketClosed(): void {
         waiter.reject(new Error('협업 서버 연결이 끊어졌습니다.'));
     }
     openWaiters.clear();
+
+    for (const waiter of readWaiters.values()) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error('협업 서버 연결이 끊어졌습니다.'));
+    }
+    readWaiters.clear();
 
     // 붙어 있던 문서는 전부 "떨어짐" 으로 표시한다 — 끊긴 동안에는 편집을 보내지 않는다.
     for (const entry of watching.values()) {
@@ -1146,6 +1390,12 @@ async function teardown(): Promise<void> {
         waiter.reject(new Error('협업 세션이 종료되었습니다.'));
     }
     openWaiters.clear();
+
+    for (const waiter of readWaiters.values()) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error('협업 세션이 종료되었습니다.'));
+    }
+    readWaiters.clear();
 
     if (closing) {
         try {

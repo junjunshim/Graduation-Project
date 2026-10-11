@@ -8,6 +8,7 @@ export type ClientFrame =
   | { type: 'join'; repo_id: number; branch: string }
   | { type: 'open'; path: string }
   | { type: 'close'; path: string }
+  | { type: 'read'; path: string }
   | { type: 'update'; path: string; update: string }
   | { type: 'cursor'; path: string; startRel?: unknown; endRel?: unknown; activeRel?: unknown }
   | {
@@ -34,6 +35,7 @@ const REQUIRED_FIELDS: Record<string, ReadonlyArray<string>> = {
   join: ['repo_id', 'branch'],
   open: ['path'],
   close: ['path'],
+  read: ['path'],
   update: ['path', 'update'],
   cursor: ['path'],
   deco_add: ['path', 'id'],

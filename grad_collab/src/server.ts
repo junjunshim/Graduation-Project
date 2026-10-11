@@ -17,7 +17,7 @@ import { ClientFrame, parseClientFrame } from './protocol';
 import { CollabResolveError, resolveRepo } from './repoResolver';
 import { ReviewRecord } from './reviewIndex';
 import { Room, RoomClient, RoomRegistry } from './rooms';
-import { FileNotEditableError, removeCollabDir } from './store';
+import { FileNotEditableError, readForView, removeCollabDir, type ViewFile } from './store';
 
 // 문서 소켓 서버 (TASK_11 §9.2 / §9.5 / §14.1).
 //
@@ -84,8 +84,8 @@ function rawFrameToString(data: WsRawData): string {
   return data.toString('utf8');
 }
 
-function errFrame(code: string, message: string): Record<string, unknown> {
-  return { type: 'err', code, message };
+function errFrame(code: string, message: string, extra?: Record<string, unknown>): Record<string, unknown> {
+  return { type: 'err', code, message, ...extra };
 }
 
 /** join 없이 open/update 를 보내는 것은 확장 쪽 순서 버그다. 원인이 보이게 알려 준다. */
@@ -206,8 +206,9 @@ async function onOpen(client: RoomClient, filePath: string): Promise<void> {
     });
   } catch (error) {
     // 바이너리·대용량·비 UTF-8·없는 파일은 P0905(읽기 전용 안내), 그 외는 P0906(flush 실패 계열).
+    // `path`·`reason` 을 함께 담는다 — 확장은 그 값으로 곧바로 읽기 전용 열람(`read`)으로 넘어간다(§12.6).
     if (error instanceof FileNotEditableError) {
-      client.send(errFrame('P0905', error.message));
+      client.send(errFrame('P0905', error.message, { path: filePath, reason: error.reason }));
       return;
     }
     log('error', '파일 열기 실패', { path: filePath, reason: (error as Error).message });
@@ -271,6 +272,51 @@ function onClose(client: RoomClient, filePath: string): void {
     client.id,
   );
   room.announceFileWatchers(filePath);
+}
+
+/**
+ * 읽기 전용 열람(§12.6). 편집할 수 없는 파일(바이너리·대용량·비 UTF-8)의 **내용**을 한 번 보내 준다.
+ *
+ * `open` 과 나눠 둔 이유: `open` 은 Yjs doc 을 만들고 참여자 표시를 바꾸는 **편집 세션**인데,
+ * 읽기 전용 파일은 그 둘 다 필요 없다. doc 을 만들지 않으므로 flush 대상도 아니고, 사이드바의
+ * "편집 중" 목록에도 뜨지 않는다(§15.5).
+ *
+ * 내용이 상한(`maxReadOnlyBytes`)을 넘으면 크기만 알린다(`encoding: 'none'`) — 확장은 그때
+ * "미리보기를 지원하지 않는다" 안내를 띄운다.
+ */
+async function onRead(client: RoomClient, filePath: string): Promise<void> {
+  const room = requireRoom(client);
+  if (!room) return;
+
+  if (!isSafeRelPath(filePath)) {
+    client.send(errFrame('400', `경로가 올바르지 않습니다: ${filePath}`));
+    return;
+  }
+
+  let view: ViewFile;
+  try {
+    view = await readForView(room.repo.worktreeDir, filePath, config.maxReadOnlyBytes);
+  } catch (error) {
+    if (error instanceof FileNotEditableError) {
+      client.send(errFrame('P0905', error.message, { path: filePath, reason: error.reason }));
+      return;
+    }
+    log('error', '읽기 전용 열람 실패', { path: filePath, reason: (error as Error).message });
+    client.send(errFrame('P0906', `파일을 읽지 못했습니다: ${filePath}`));
+    return;
+  }
+
+  if (view.kind === 'text') {
+    client.send({ type: 'file', path: filePath, encoding: 'utf-8', size: view.size, content: view.text });
+    return;
+  }
+  if (view.kind === 'binary') {
+    client.send({ type: 'file', path: filePath, encoding: 'base64', size: view.size, content: view.base64 });
+    return;
+  }
+
+  // 너무 커서 실어 보내지 못했다 — 크기만 알려 준다.
+  client.send({ type: 'file', path: filePath, encoding: 'none', size: view.size, content: '' });
 }
 
 // --- 실시간 편집 ---------------------------------------------------------------------------
@@ -455,6 +501,8 @@ function handleFrame(client: RoomClient, frame: ClientFrame): Promise<void> | vo
       return onOpen(client, frame.path);
     case 'close':
       return onClose(client, frame.path);
+    case 'read':
+      return onRead(client, frame.path);
     case 'update':
       return onUpdate(client, frame.path, frame.update);
     case 'cursor':

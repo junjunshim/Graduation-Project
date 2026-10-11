@@ -52,7 +52,7 @@ VSCode 확장과 backend(C++) 사이에서 **텍스트의 진실**을 갖는 Nod
 
 ## 문서 소켓 프로토콜
 
-프레임은 **JSON 텍스트 + base64** 다(§9.5, 1차). 크기 상한 4MB.
+프레임은 **JSON 텍스트 + base64** 다(§9.5, 1차). **클라이언트 → collab** 프레임의 상한은 4MB 다(초과하면 `P0905` 로 거절). **collab → 클라이언트**는 그 상한을 넘을 수 있다 — 읽기 전용 열람(`file`)이 그렇다(상한 `MAX_READONLY_BYTES`, 기본 4MB → base64 약 5.3MB, §12.6).
 
 클라이언트 → collab:
 
@@ -61,6 +61,7 @@ VSCode 확장과 backend(C++) 사이에서 **텍스트의 진실**을 갖는 Nod
 | `join` | `{ repo_id, branch }` | 브랜치 방 입장(방이 없으면 만든다) |
 | `open` | `{ path }` | 파일 doc 참여(없으면 worktree 파일에서 생성) |
 | `close` | `{ path }` | 파일 doc 이탈 |
+| `read` | `{ path }` | 편집할 수 없는 파일(바이너리·대용량·비 UTF-8)의 내용 1회 조회 — 읽기 전용 열람(§12.6). doc 을 만들지 않는다 |
 | `update` | `{ path, update }` | Yjs 델타(base64) |
 | `cursor` | `{ path, startRel, endRel, activeRel }` | 커서·선택 영역(저장하지 않음) |
 | `deco_add` | `{ path, id, ... }` | 리뷰 데코레이션(추가 필드는 그대로 보관) |
@@ -74,6 +75,7 @@ collab → 클라이언트:
 |:---|:---|:---|
 | `joined` | `{ branch, default_branch, is_default, can_write }` | 방 입장 완료 |
 | `opened` | `{ path, state, eol, can_write, mismatch, watchers }` | doc 초기 상태 |
+| `file` | `{ path, encoding, size, content }` | `read` 응답. `encoding` 은 `utf-8`(본문) · `base64`(바이너리) · `none`(상한 초과라 크기만) |
 | `update` | `{ path, update, from }` | 같은 파일 편집자에게 팬아웃 |
 | `cursor` | `{ path, userEmail, userName, startRel, endRel, activeRel }` | 팬아웃 |
 | `deco` | `{ path, id, userEmail, userName, ... }` | 팬아웃(작성자는 세션 값으로 확정) |
@@ -81,8 +83,11 @@ collab → 클라이언트:
 | `flushed` | `{ path }` | flush 완료(커밋 전 대기 해제) |
 | `perm` | `{ can_write }` | 쓰기 권한 변경 통보(§12.9) — false 면 확장이 즉시 읽기 전용으로 전환한다 |
 | `repo_closed` | `{ repo_id, reason, message }` | 저장소와의 인연이 끝났다(§12.9). `node_deleted`(노드 삭제, 저장소 전체) 또는 `authority_lost`(보기 권한 상실, 그 사람만). 확장은 편집 세션을 정리하고, 제어 소켓도 backend 가 따로 끊는다 |
-| `peer_join` / `peer_leave` | `{ path, userEmail, userName? }` | **파일 doc 참여자** 변동 |
-| `err` | `{ code, message }` | 오류(P09xx) |
+| `peer_join` / `peer_leave` | `{ path, userEmail, userName? }` | **파일 doc 참여자** 변동 — 그 파일을 연 사람에게만 간다 |
+| `open_files` | `{ branch, files: [{ path, watchers }] }` | 입장 직후 1회 — 방에 지금 열려 있는 파일과 사람(§15.5) |
+| `file_watchers` | `{ path, watchers: [{ email, name }] }` | 그 파일의 참여자 **집합**이 바뀌었다. 방 전체에 가며, 빈 배열이면 목록에서 지운다 |
+| `doc_reset` | `{ path, deleted, reason? }` | 되돌리기·트리 변경·브랜치 삭제로 그 doc 을 버렸다 — 클라이언트는 탭을 닫는다(§12.11.1) |
+| `err` | `{ code, message, path?, reason? }` | 오류(P09xx). `P0905` 에는 어느 파일이 왜 편집 불가인지(`path`·`reason`)를 함께 싣는다 — 확장이 읽기 전용 열람(`read`)으로 잇는다(§12.6) |
 
 - **`opened` 를 받은 뒤에만 `update` 를 보낸다**(§9.6). 소켓별로 프레임을 순서대로 처리한다.
 - `opened.state` 에는 텍스트뿐 아니라 **데코레이션도 함께 들어 있다**(같은 `Y.Doc` 상태).
@@ -95,7 +100,7 @@ collab → 클라이언트:
 | `P0901` | 티켓이 만료되었거나 이미 사용됨 |
 | `P0902` | 이 저장소에 편집 권한이 없음(read-only 티켓) |
 | `P0903` | 협업 서버를 사용할 수 없음(내부 토큰 미설정·backend 연결 실패) |
-| `P0905` | 편집할 수 없는 파일(없음·바이너리·512KB 초과·비 UTF-8) |
+| `P0905` | 편집할 수 없는 파일(없음·바이너리·512KB 초과·비 UTF-8). `path`·`reason` 동봉 — 확장은 그 값으로 읽기 전용 열람(`read`/`file`)으로 넘어간다 |
 | `P0906` | flush 실패 / 파일을 열지 못함 |
 | `P0801` | 등록되지 않은 저장소·브랜치 |
 | `P0807` | 저장소 경로 정보가 올바르지 않거나 작업 디렉터리가 준비되지 않음 |

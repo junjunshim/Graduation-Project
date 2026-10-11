@@ -108,6 +108,63 @@ export async function tryReadFileText(
   }
 }
 
+// --- 읽기 전용 열람 (§12.6) ----------------------------------------------------------------
+
+/**
+ * 읽기 전용 열람용으로 읽은 파일 1건. 편집(`FileText`)과 달리 크기 상한이 훨씬 크고,
+ * 바이너리는 base64 로 돌려준다 — 에디터 텍스트로는 그릴 수 없기 때문이다.
+ */
+export type ViewFile =
+  | { kind: 'text'; size: number; text: string }
+  | { kind: 'binary'; size: number; base64: string }
+  | { kind: 'too_large_view'; size: number };
+
+/**
+ * worktree 파일을 **읽기 전용 열람용**으로 읽는다(§12.6).
+ *
+ * 편집용 `readFileText` 와 다른 점 셋:
+ *   1. 크기 상한이 `maxDocBytes`(512KB)가 아니라 `maxBytes`(기본 4MB)다 — 큰 파일도 보여 준다.
+ *   2. UTF-8 이 아니어도 예외를 던지지 않는다. 손상 바이트를 대체 문자로 바꿔 보여 준다 —
+ *      목적이 "편집할 수 있다"가 아니라 "볼 수 있다"이기 때문이다.
+ *   3. 바이너리는 base64 로 돌려준다. 확장이 알맞은 방법(미리보기·저장)으로 처리한다.
+ *
+ * 상한을 넘는 파일은 내용 없이 크기만 알린다(`too_large_view`) — 소켓 한 프레임이 저장소보다
+ * 커지면 안 된다.
+ */
+export async function readForView(
+  worktreeDir: string,
+  filePath: string,
+  maxBytes: number,
+): Promise<ViewFile> {
+  const abs = safeJoin(worktreeDir, filePath);
+
+  let stat;
+  try {
+    stat = await fsp.stat(abs);
+  } catch {
+    throw new FileNotEditableError('missing', `작업 디렉터리에 없는 파일입니다: ${filePath}`);
+  }
+  if (!stat.isFile()) {
+    throw new FileNotEditableError('not_file', `파일이 아닙니다: ${filePath}`);
+  }
+  if (stat.size > maxBytes) {
+    return { kind: 'too_large_view', size: stat.size };
+  }
+
+  const raw = await fsp.readFile(abs);
+  if (looksBinary(raw, filePath)) {
+    return { kind: 'binary', size: raw.length, base64: raw.toString('base64') };
+  }
+
+  // 손상 바이트는 대체 문자로 바꾼다(fatal: false). BOM 은 보이지 않게 떼어 낸다.
+  const body = new TextDecoder('utf-8').decode(raw);
+  return {
+    kind: 'text',
+    size: raw.length,
+    text: body.charCodeAt(0) === 0xfeff ? body.slice(1) : body,
+  };
+}
+
 // 같은 디렉터리에 임시 파일을 쓰고 rename 으로 교체한다. 부분 쓰기가 남지 않는다(§9.4).
 async function writeAtomic(absPath: string, data: Buffer): Promise<void> {
   const dir = path.dirname(absPath);

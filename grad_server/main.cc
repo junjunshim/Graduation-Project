@@ -155,7 +155,7 @@ void purgeExpiredDeletedData() {
     auto db = drogon::app().getDbClient();
 
     // 서버가 관리하는 경로만 지운다. DB 값이 오염돼도 이 접두사 밖은 건드리지 않는다.
-    // 업무 첨부는 업로드 당시 상대 경로를 그대로 저장해 './uploads/...' 로 들어오고,
+    // 업무·정기 일정 첨부는 업로드 당시 상대 경로를 그대로 저장해 './uploads/...' 로 들어오고,
     // 저장소 회수 경로는 'repository/...' 다. 앞의 './' 만 떼고 접두사를 본다.
     const auto isManagedPath = [](std::string path) {
         if (path.rfind("./", 0) == 0) {
@@ -164,9 +164,21 @@ void purgeExpiredDeletedData() {
         return path.rfind("uploads/", 0) == 0 || path.rfind("repository/", 0) == 0;
     };
 
-    std::vector<int> failedFileIds;  // 디스크에서 못 지운 첨부 파일 — 이 행은 남겨 다음 회차에 다시 시도한다
-    std::vector<int> failedRepoIds;  // 디스크에서 못 지운 clone/worktree — 이 저장소 행은 남긴다
-    int removed = 0;                 // 실제로 지운 경로 수(로그용)
+    std::vector<int> failedFileIds;           // 업무 첨부를 못 지웠다 — 이 행은 남겨 다음 회차에 다시 시도한다
+    std::vector<int> failedRecurringFileIds;  // 정기 일정 첨부를 못 지웠다 — 이 행도 남긴다
+    std::vector<int> failedRepoIds;           // clone/worktree 를 못 지웠다 — 이 저장소 행은 남긴다
+    int removed = 0;                          // 실제로 지운 경로 수(로그용)
+
+    // 지우지 못한 id 는 ref_type 별로 따로 모은다 — purge 함수가 각각 다른 표를 보기 때문이다.
+    const auto markFailed = [&](const std::string &refType, int refId) {
+        if (refType == "FILE") {
+            failedFileIds.push_back(refId);
+        } else if (refType == "RECURRING_FILE") {
+            failedRecurringFileIds.push_back(refId);
+        } else {
+            failedRepoIds.push_back(refId);
+        }
+    };
 
     for (const auto &row : db->execSqlSync("SELECT * FROM list_expired_deleted_paths()")) {
         const std::string refType = row["ref_type"].as<std::string>();
@@ -180,7 +192,7 @@ void purgeExpiredDeletedData() {
         // 행을 지워버리면 경로를 다시 알 수 없어 영구 잔여물이 된다.
         if (!isManagedPath(entryPath)) {
             LOG_WARN << "[Scheduler] Skipped unexpected cleanup path: " << entryPath;
-            (refType == "FILE" ? failedFileIds : failedRepoIds).push_back(refId);
+            markFailed(refType, refId);
             continue;
         }
 
@@ -192,7 +204,7 @@ void purgeExpiredDeletedData() {
         std::filesystem::remove_all(entryPath, ec);
         if (ec) {
             LOG_WARN << "[Scheduler] Failed to remove path: " << entryPath << " (" << ec.message() << ")";
-            (refType == "FILE" ? failedFileIds : failedRepoIds).push_back(refId);
+            markFailed(refType, refId);
             continue;
         }
         removed += 1;
@@ -204,26 +216,33 @@ void purgeExpiredDeletedData() {
         ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
     };
     dedupe(failedFileIds);
+    dedupe(failedRecurringFileIds);
     dedupe(failedRepoIds);
 
-    auto purged = db->execSqlSync(
-        "SELECT * FROM purge_expired_deleted_data($1, $2)", joinIds(failedFileIds), joinIds(failedRepoIds));
+    auto purged = db->execSqlSync("SELECT * FROM purge_expired_deleted_data($1, $2, $3)", joinIds(failedFileIds),
+                                  joinIds(failedRepoIds), joinIds(failedRecurringFileIds));
 
     int purgedFiles = 0;
+    int purgedRecurringFiles = 0;
+    int purgedRules = 0;
     int purgedItems = 0;
     int purgedRepos = 0;
     int purgedNodes = 0;
     for (const auto &row : purged) {  // 집계 한 줄이라 반복은 한 번뿐이다
         purgedFiles = row["purged_files"].as<int>();
+        purgedRecurringFiles = row["purged_recurring_files"].as<int>();
+        purgedRules = row["purged_rules"].as<int>();
         purgedItems = row["purged_work_items"].as<int>();
         purgedRepos = row["purged_repos"].as<int>();
         purgedNodes = row["purged_nodes"].as<int>();
     }
 
     LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed paths: " << removed
-             << ", purged rows: files=" << purgedFiles << " work_items=" << purgedItems
-             << " repos=" << purgedRepos << " nodes=" << purgedNodes << ", 보류(다음 회차 재시도): files="
-             << failedFileIds.size() << " repos=" << failedRepoIds.size();
+             << ", purged rows: files=" << purgedFiles << " recurring_files=" << purgedRecurringFiles
+             << " rules=" << purgedRules << " work_items=" << purgedItems << " repos=" << purgedRepos
+             << " nodes=" << purgedNodes
+             << ", 보류(다음 회차 재시도): files=" << failedFileIds.size()
+             << " recurring_files=" << failedRecurringFileIds.size() << " repos=" << failedRepoIds.size();
 }
 
 }  // namespace

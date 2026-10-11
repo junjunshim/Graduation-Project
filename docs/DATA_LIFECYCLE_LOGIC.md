@@ -73,14 +73,14 @@ graph TD
 
 ## 3. 15일 경과 시 자동 영구 삭제 (Hard Delete & Garbage Collection)
 
-- **정리 대상**: `is_deleted = true`이고 `updated_at < CURRENT_TIMESTAMP - INTERVAL '15 days'`인 노드, 업무, 첨부 파일, 저장소 연결 해제 레코드
+- **정리 대상**: `is_deleted = true`이고 `updated_at < CURRENT_TIMESTAMP - INTERVAL '15 days'`인 노드, 업무, 첨부 파일(`work_item_files`), 정기 일정 규칙(`recurring_rules`)과 그 첨부 파일(`recurring_rule_files`), 저장소 연결 해제 레코드
 - **지우는 순서 (물리 파일 → DB 행)**: 되돌릴 수 있는 쪽이 먼저다.
   1. `list_expired_deleted_paths()` 로 만료 대상의 **물리 경로만** 모은다 — 아무것도 지우지 않는다
-  2. 서버가 디스크에서 지운다 — `uploads/`·`repository/` 접두사 밖은 건드리지 않는다(DB 값이 오염돼도 안전)
-  3. 지우지 못한 항목의 id 를 `purge_expired_deleted_data(failed_file_ids, failed_repo_ids)` 로 넘겨 **성공한 행만** `DELETE`
+  2. 서버가 디스크에서 지운다 — `uploads/`(업무·정기 일정 첨부)·`repository/` 접두사 밖은 건드리지 않는다(DB 값이 오염돼도 안전)
+  3. 지우지 못한 항목의 id 를 `purge_expired_deleted_data(failed_file_ids, failed_repo_ids, failed_recurring_file_ids)` 로 넘겨 **성공한 행만** `DELETE`
 - **재시도**: 순서를 뒤집으면(행을 먼저 지우면) 파일 삭제에 실패한 경로를 다시 알 수 없어 영구 잔여물이 된다. 지금 구조에서는 실패한 항목의 행이 남아 **다음 회차에 자동으로 다시 시도**된다.
 - **경계 일관성**: 행 삭제(3단계)의 기준 시각을 경로 수집(1단계)보다 1시간 뒤로 미룬다. 두 단계 사이에 15일 경계를 갓 넘긴 행이 경로를 모은 적 없이 지워지는 것을 막는다.
-- **CASCADE 보호**: 저장소를 지우면 브랜치·접속자·커밋 기록이, 업무를 지우면 댓글·파일 행이, 노드를 지우면 그 아래 저장소 행이 `ON DELETE CASCADE` 로 함께 사라진다. 그래서 지우지 못한 것에 걸린 상위 행은 purge 함수가 함께 남긴다.
+- **CASCADE 보호**: 저장소를 지우면 브랜치·접속자·커밋 기록이, 업무를 지우면 댓글·파일 행이, 정기 일정 규칙을 지우면 첨부·체크리스트가, 노드를 지우면 그 아래 저장소 행과 정기 일정 규칙이 `ON DELETE CASCADE` 로 함께 사라진다. 그래서 지우지 못한 것에 걸린 상위 행은 purge 함수가 함께 남긴다.
 - **실행 주기**: C++ Drogon 서버 기동 **60초 뒤 1회 + 이후 24시간마다**. `runEvery` 만 두면 배포로 프로세스를 다시 띄울 때마다 타이머가 처음부터 다시 세어져 하루보다 자주 배포하는 환경에서는 영영 실행되지 않는다. 실제 작업은 워커 스레드 + `WorkerLimiter`(§13.4)에서 돌아 IO 스레드를 막지 않는다.
 
 ---

@@ -1,0 +1,84 @@
+/* 커밋 그래프. 선은 SVG, 글자는 오른쪽 컬럼에 둔다. */
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 2px 0 0;
+  list-style: none;
+  overflow-y: auto;
+  max-height: 22rem;
+}
+
+/* 행 높이는 컴포넌트의 ROW_HEIGHT(40px)와 같아야 선과 글자가 어긋나지 않는다. */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  height: 40px;
+  min-width: 0;
+}
+
+.graph {
+  flex: 0 0 auto;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.titleLine {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.subject {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.refChip {
+  flex: 0 0 auto;
+  max-width: 6.5rem;
+  overflow: hidden;
+  border: 1px solid var(--line-default);
+  border-radius: 999px;
+  background: var(--surface-panel-subtle);
+  padding: 0 5px;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 커밋 점. 테두리를 패널 배경색으로 둬서 위를 지나는 선과 구분된다. */
+.node {
+  stroke: var(--surface-panel);
+  stroke-width: 1.5;
+}
+
+.line {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}

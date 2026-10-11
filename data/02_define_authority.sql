@@ -18,26 +18,30 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 ('NODE_SUB_CREATE', 13, '하위 노드 생성 가능'),
 ('NODE_ADD_ROLE', 14,'사용자에게 역할 부여 가능'),
 ('ROLE_CHANGE', 15, '역할 생성 및 권한 변경 가능'),
--- Integration Bits (16-19)
+-- Integration Bits (16-17)
 ('FILE_VIEW', 16, '파일 조회 및 다운로드 가능'),
 ('FILE_CHANGE', 17, '파일 등록 및 삭제 가능'),
--- (bit 18, 19 reserved)
--- History Bits (20-23)
+-- (bit 18, 19 reserved)  향후 외부 연동(통합) 확장용 예약
+-- History Bits (20-21)
 ('HISTORY_PERSONAL_VIEW', 20, '개인 히스토리 식별 가능'),
 ('HISTORY_ALL_VIEW', 21, '노드의 모든 히스토리 식별 가능'),
--- (bit 22 reserved)
-('DENY', 23, '하위 비트 상관없이 모든 권한 X');
+-- GitHub Integration (22-24)
+('GITHUB_VIEW', 22, '연결된 저장소(저장소/브랜치/커밋/파일) 조회 가능'),
+('GITHUB_CHANGE', 23, '저장소 편집 — 브랜치 생성/삭제, 커밋, push, 파일 조작 가능'),
+('GITHUB_REPO_MANAGE', 24, '원격 저장소 추가(연결)/해제 가능'),
+-- (bit 25 ~ 30 reserved)
+('DENY', 31, '하위 비트 상관없이 모든 권한 X');
 
 -- Role Default Permissions
--- admin => deny 비트(23) 제외 모두 1
--- manager => bit 0~6, 8~11, 13~17, 20, 21 ON (bit 12 NODE_INFO_CHANGE 제외) -> B'001100111110111101111111'
--- member  => bit 0~2, 4~6, 8, 9, 16, 17, 20, 21 ON                      -> B'001100110000001101110111'
--- viewer  => bit 0, 1, 4, 5, 16, 20, 21 ON                               -> B'001100010000000000110011'
+-- admin => DENY 비트(31) 제외 모두 1 (예약 비트도 ON — 신규 권한을 추가해도 ADMIN 마스크는 고칠 필요가 없다)
+-- manager => bit 0~6, 8~11, 13~17, 20~23 ON (bit 12 NODE_INFO_CHANGE, bit 24 GITHUB_REPO_MANAGE 제외) -> B'00000000111100111110111101111111'
+-- member  => bit 0~2, 4~6, 8, 9, 16, 17, 20~23 ON                                              -> B'00000000111100110000001101110111'
+-- viewer  => bit 0, 1, 4, 5, 16, 20, 21, 22 ON                                                 -> B'00000000011100010000000000110011'
 
 INSERT INTO role_defaults (role, default_authority) VALUES
-('ADMIN',   B'011111111111111111111111'),
-('MANAGER', B'001100111110111101111111'),
-('MEMBER',  B'001100110000001101110111'),
-('VIEWER',  B'001100010000000000110011');
+('ADMIN',   B'01111111111111111111111111111111'),
+('MANAGER', B'00000000111100111110111101111111'),
+('MEMBER',  B'00000000111100110000001101110111'),
+('VIEWER',  B'00000000011100010000000000110011');
 
 UPDATE role_defaults SET is_top_role = TRUE WHERE role = 'ADMIN';

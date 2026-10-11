@@ -2,6 +2,8 @@
 #include "RoleAssignments.h"
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
+#include "AuthorityBits.h"
+#include "CollabAuthorityNotifier.h"
 #include <json/json.h>
 
 using namespace api;
@@ -44,7 +46,7 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
     dbClient->execSqlAsync(
         sql,
         // [성공 콜백]
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             // DB 결과를 프론트엔드 응답용 JSON으로 변환
             Json::Value ret = parseIntegratedDataResult(result);
             
@@ -52,6 +54,10 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k201Created);
             callback(resp);
+
+            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
+            notifyAuthorityChangedAsync(node_id);
         },
         // [실패 콜백]
         [callback](const orm::DrogonDbException &e) {
@@ -111,7 +117,7 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
     dbClient->execSqlAsync(
         sql,
         // [성공 콜백]
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             // DB 결과를 프론트엔드 응답용 JSON으로 변환
             Json::Value ret = parseIntegratedDataResult(result);
 
@@ -119,6 +125,10 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
             callback(resp);
+
+            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
+            notifyAuthorityChangedAsync(node_id);
         },
         // [실패 콜백]
         [callback](const orm::DrogonDbException &e) {
@@ -165,11 +175,11 @@ void RoleController::createRoleDefinition(const HttpRequestPtr &req, std::functi
     std::string role_name = (*jsonPtr)["role_name"].asString();
     std::string authority = (*jsonPtr)["authority"].asString();
 
-    if (authority.length() != 24) {
+    if (authority.length() != kAuthorityBitLength) {
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "authority는 24비트 2진수 문자열이어야 합니다.";
+        ret["message"] = "authority는 " + std::to_string(kAuthorityBitLength) + "비트 2진수 문자열이어야 합니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -183,11 +193,15 @@ void RoleController::createRoleDefinition(const HttpRequestPtr &req, std::functi
 
     dbClient->execSqlAsync(
         sql,
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             Json::Value ret = parseIntegratedDataResult(result);
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k201Created);
             callback(resp);
+
+            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
+            notifyAuthorityChangedAsync(node_id);
         },
         [callback](const orm::DrogonDbException &e) {
             Json::Value ret = parseDbError(e);
@@ -223,11 +237,11 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
     int role_id = (*jsonPtr)["role_id"].asInt();
     std::string authority = (*jsonPtr)["authority"].asString();
 
-    if (authority.length() != 24) {
+    if (authority.length() != kAuthorityBitLength) {
         Json::Value ret;
         ret["status"] = "error";
         ret["code"] = "400";
-        ret["message"] = "authority는 24비트 2진수 문자열이어야 합니다.";
+        ret["message"] = "authority는 " + std::to_string(kAuthorityBitLength) + "비트 2진수 문자열이어야 합니다.";
 
         auto resp = HttpResponse::newHttpJsonResponse(ret);
         resp->setStatusCode(k400BadRequest);
@@ -241,11 +255,15 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
 
     dbClient->execSqlAsync(
         sql,
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             Json::Value ret = parseIntegratedDataResult(result);
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
             callback(resp);
+
+            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
+            notifyAuthorityChangedAsync(node_id);
         },
         [callback](const orm::DrogonDbException &e) {
             Json::Value ret = parseDbError(e);
@@ -287,11 +305,15 @@ void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::functi
 
     dbClient->execSqlAsync(
         sql,
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             Json::Value ret = parseIntegratedDataResult(result);
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
             callback(resp);
+
+            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
+            notifyAuthorityChangedAsync(node_id);
         },
         [callback](const orm::DrogonDbException &e) {
             Json::Value ret = parseDbError(e);
@@ -389,11 +411,15 @@ void RoleController::deleteRoleDefinition(const HttpRequestPtr &req, std::functi
 
     dbClient->execSqlAsync(
         sql,
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             Json::Value ret = parseIntegratedDataResult(result);
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
             callback(resp);
+
+            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
+            notifyAuthorityChangedAsync(node_id);
         },
         [callback](const orm::DrogonDbException &e) {
             Json::Value ret = parseDbError(e);
@@ -497,11 +523,15 @@ void RoleController::removeRole(const HttpRequestPtr &req, std::function<void(co
 
     dbClient->execSqlAsync(
         sql,
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             Json::Value ret = parseIntegratedDataResult(result);
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
             callback(resp);
+
+            // 권한이 바뀌었으니 협업 세션에도 알린다(§12.9). 응답을 붙잡지 않는다 —
+            // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
+            notifyAuthorityChangedAsync(node_id);
         },
         [callback](const orm::DrogonDbException &e) {
             Json::Value ret = parseDbError(e);

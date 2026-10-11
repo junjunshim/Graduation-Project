@@ -4,11 +4,16 @@ export type AuthorityBitInfo = {
   bit: number
   key: string
   label: string
-  category: 'space' | 'work' | 'file' | 'manage' | 'role' | 'history' | 'special'
+  category: 'space' | 'work' | 'file' | 'manage' | 'role' | 'history' | 'integration' | 'special'
   categoryLabel: string
   description: string
   prerequisites: number[] // 이 권한이 켜지기 위해 반드시 켜져 있어야 하는 부모 비트 목록
 }
+
+// 권한 비트 폭과 특수 비트 위치의 단일 정의 지점.
+// 서버는 data/00_domain_authority.sql(authority_mask) / grad_server/utils/common/AuthorityBits.h 를 사용한다.
+export const AUTHORITY_BIT_WIDTH = 32
+export const AUTHORITY_DENY_BIT = 31
 
 export const AUTHORITY_BITS: AuthorityBitInfo[] = [
   // 1. 공간/노드 (Bit 0 ~ 3)
@@ -134,6 +139,35 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     prerequisites: [16, 4, 0],
   },
 
+  // 3-1. GitHub 통합 (Bit 22 ~ 24)
+  {
+    bit: 22,
+    key: 'GITHUB_VIEW',
+    label: '저장소 조회',
+    category: 'integration',
+    categoryLabel: '통합 (GitHub)',
+    description: '연결된 저장소의 구조·브랜치·커밋·파일을 조회하고 실시간 편집 세션에 접속합니다.',
+    prerequisites: [0],
+  },
+  {
+    bit: 23,
+    key: 'GITHUB_CHANGE',
+    label: '저장소 편집',
+    category: 'integration',
+    categoryLabel: '통합 (GitHub)',
+    description: '저장소 작업 트리에서 브랜치 생성/삭제, 커밋, push, 파일·디렉터리 조작을 수행합니다.',
+    prerequisites: [22, 0],
+  },
+  {
+    bit: 24,
+    key: 'GITHUB_REPO_MANAGE',
+    label: '저장소 추가/해제',
+    category: 'integration',
+    categoryLabel: '통합 (GitHub)',
+    description: '워크스페이스에 원격 저장소를 추가(연결)하거나 연결을 해제합니다.',
+    prerequisites: [22, 0],
+  },
+
   // 4. 공간 관리 (Bit 12 ~ 13)
   {
     bit: 12,
@@ -170,7 +204,7 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     label: '역할 권한 정의/수정',
     category: 'role',
     categoryLabel: '역할 및 인원 관리',
-    description: '커스텀 역할을 생성하고 각 역할의 24비트 권한을 편집합니다.',
+    description: `커스텀 역할을 생성하고 각 역할의 ${AUTHORITY_BIT_WIDTH}비트 권한을 편집합니다.`,
     prerequisites: [14, 1, 0],
   },
 
@@ -194,9 +228,9 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     prerequisites: [20, 1, 0],
   },
 
-  // 7. 특수 제어 (Bit 23)
+  // 7. 특수 제어 (절대 거부)
   {
-    bit: 23,
+    bit: AUTHORITY_DENY_BIT,
     key: 'DENY',
     label: '절대 거부 (DENY)',
     category: 'special',
@@ -207,10 +241,10 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
 ]
 
 export const DEFAULT_ROLE_AUTHORITIES: Record<StandardRoleName, string> = {
-  ADMIN: '011111111111111111111111',
-  MANAGER: '001100111110111101111111',
-  MEMBER: '001100110000001101110111',
-  VIEWER: '001100010000000000110011',
+  ADMIN: '01111111111111111111111111111111',
+  MANAGER: '00000000111100111110111101111111',
+  MEMBER: '00000000111100110000001101110111',
+  VIEWER: '00000000011100010000000000110011',
 }
 
 export type AuthorityPreset = {
@@ -225,35 +259,35 @@ export const AUTHORITY_PRESETS: AuthorityPreset[] = [
     id: 'manager',
     label: '관리자형 (Manager)',
     description: '공간/역할/업무 전체 관리 및 모든 이력 조회',
-    bitmask: '001100111110111101111111',
+    bitmask: '00000000111100111110111101111111',
   },
   {
     id: 'member',
     label: '일반 멤버형 (Member)',
     description: '본인 업무 생성/수정, 타인 업무 상세/전체 이력 조회 및 파일 관리',
-    bitmask: '001100110000001101110111',
+    bitmask: '00000000111100110000001101110111',
   },
   {
     id: 'viewer',
     label: '읽기 전용형 (Viewer)',
     description: '노드 멤버/업무 상세/파일/이력 조회',
-    bitmask: '001100010000000000110011',
+    bitmask: '00000000011100010000000000110011',
   },
   {
     id: 'clear',
     label: '모든 권한 해제',
     description: '공간 기본 조회만 남기고 모든 권한 해제',
-    bitmask: '000000000000000000000001',
+    bitmask: '00000000000000000000000000000001',
   },
 ]
 
-// 24비트 문자열을 비트 인덱스 Set으로 변환
+// 권한 비트 문자열을 비트 인덱스 Set으로 변환
 export function parseAuthorityBitSet(bitmaskStr: string): Set<number> {
   const set = new Set<number>()
-  const padded = bitmaskStr.trim().padStart(24, '0')
-  for (let bit = 0; bit < 24; bit++) {
-    // Big-Endian: Bit 23이 맨 앞(index 0), Bit 0이 맨 끝(index 23)
-    const charIndex = 23 - bit
+  const padded = bitmaskStr.trim().padStart(AUTHORITY_BIT_WIDTH, '0')
+  for (let bit = 0; bit < AUTHORITY_BIT_WIDTH; bit++) {
+    // Big-Endian: 가장 높은 비트가 맨 앞(index 0), Bit 0이 맨 끝
+    const charIndex = AUTHORITY_BIT_WIDTH - 1 - bit
     if (padded[charIndex] === '1') {
       set.add(bit)
     }
@@ -261,23 +295,24 @@ export function parseAuthorityBitSet(bitmaskStr: string): Set<number> {
   return set
 }
 
-// 비트 인덱스 Set을 24자리 2진수 문자열로 변환
+// 비트 인덱스 Set을 권한 비트 폭 길이의 2진수 문자열로 변환
 export function stringifyAuthorityBitSet(set: Set<number>): string {
-  const chars = new Array(24).fill('0')
+  const chars = new Array(AUTHORITY_BIT_WIDTH).fill('0')
   set.forEach((bit) => {
-    if (bit >= 0 && bit < 24) {
-      const charIndex = 23 - bit
+    if (bit >= 0 && bit < AUTHORITY_BIT_WIDTH) {
+      const charIndex = AUTHORITY_BIT_WIDTH - 1 - bit
       chars[charIndex] = '1'
     }
   })
   return chars.join('')
 }
 
-// 24자리 2진수 문자열을 Hex 문자열(0x...)로 변환
+// 권한 비트 문자열을 Hex 문자열(0x...)로 변환
 export function bitmaskToHex(bitmaskStr: string): string {
+  const hexWidth = AUTHORITY_BIT_WIDTH / 4
   const num = parseInt(bitmaskStr, 2)
-  if (isNaN(num)) return '0x000000'
-  return '0x' + num.toString(16).toUpperCase().padStart(6, '0')
+  if (isNaN(num)) return '0x' + '0'.repeat(hexWidth)
+  return '0x' + num.toString(16).toUpperCase().padStart(hexWidth, '0')
 }
 
 // 특정 비트를 토글했을 때 의존성 체인(Cascade Enable / Cascade Disable) 계산

@@ -1,71 +1,43 @@
-# grad-vscode README
+# Axis Share
 
-This is the README for your extension "grad-vscode". After writing up a brief description, we recommend including the following sections.
+Axis Flow 워크스페이스의 원격 저장소를 VSCode 에서 **실시간으로 함께 편집**하는 확장(guest 클라이언트)입니다.
 
-## Features
+## 무엇을 하는 확장인가
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- 앱(Axis Flow)에서 저장소를 연결하고 **"VSCode 로 실시간 편집"** 을 누르면, 앱이 `vscode://junjunshim.axis-share/auth?...` URI 로 이 확장을 깨웁니다.
+- 확장은 전달받은 1회용 코드를 서버 토큰으로 교환한 뒤, 서버에 보관된 저장소의 **브랜치별 작업 디렉터리**를 사이드바에 띄웁니다.
+- 편집은 파일 전체를 미리 받지 않습니다. **디렉터리 구조만** 먼저 받고, 파일 내용은 열 때 가져옵니다.
+- 같은 브랜치에 있는 사람들끼리만 실시간으로 공유됩니다(브랜치가 작업 단위).
+- 커밋도 저장소가 아니라 **브랜치 단위**입니다.
 
-For example if there is an image subfolder under your extension project workspace:
+## 사이드바
 
-\!\[feature X\]\(images/feature-x.png\)
+| 뷰 | 내용 |
+|:---|:---|
+| Repository | 저장소 디렉터리/파일 트리, 브랜치 전환·생성·삭제, git 상태 배지(`M`/`A`/`U`/`D`), 파일 만들기·이름 바꾸기·삭제·경로 복사 |
+| Changes | 현재 브랜치의 작업 트리 상태. 스테이징/해제, 되돌리기, 커밋, push, diff(작업 트리·스테이징·커밋별) |
+| Graph | 현재 브랜치의 커밋 흐름과 원격(ref) 위치. 타이틀의 `$(git-merge)` 로 **저장소 전체 그래프**(모든 브랜치·태그)를 웹뷰 탭으로 연다 |
+| Editing | 이 브랜치에서 편집 중인 사용자와 그들이 열어 둔 파일 |
+| Reviews | 브랜치의 리뷰 데코레이션(오타·문법·논리·기타·강조) |
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+사이드바 다섯 뷰는 모두 VS Code `TreeView` 입니다 — 접기/펼치기, 컨텍스트 메뉴, 테마, 접근성이 그대로 붙습니다. 예외로 **저장소 전체 그래프**만 웹뷰 탭입니다(분기·머지 곡선은 셀 단위로 그릴 수 없습니다). 커밋을 펼쳐 바뀐 파일을 보고 diff 를 여는 흐름은 사이드바 Graph 뷰에 그대로 있습니다.
 
-## Requirements
+커밋 UI 는 VS Code 네이티브 **소스 제어(SCM)** 를 쓰지 않고 **Changes 뷰**에서 처리합니다. 커밋하려면 `user.name` / `user.email`(설정 `axis-share.user.name` / `axis-share.user.email`)이 설정되어 있어야 하며, 커밋과 push 는 분리되어 있습니다.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+## 개발
 
-## Extension Settings
+```bash
+npm install
+npm run compile     # 타입 검사 + lint + 번들(dist/extension.js)
+npm test            # 확장 호스트 테스트
+```
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+- F5 로 확장 호스트를 띄워 확인합니다(`.vscode/launch.json`).
+- 서버 주소는 설정 `axis-share.serverUrl` 로 바꿉니다(기본 `https://axisflow.team/api`).
+- 설계 기준 문서: `.antigravitycli/agent/tasks/TASK_11_SERVER_LOCAL_REPO_VSCODE.md`
+  - §15 = 사이드바 UI 설계, §15.13 = 확장 식별자·매니페스트 기준값
 
-For example:
+## 현재 상태
 
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**1차 구현이 끝나 실환경(EC2)에서 검증하는 단계입니다.** 파일 트리·브랜치, 실시간 편집/커서·리뷰 데코레이션, Changes(상태·스테이징·커밋·push·diff), Graph(브랜치 커밋 목록 + 저장소 전체 그래프 웹뷰) 를 포함합니다.
+남은 항목은 위 설계 문서의 §7(검증) · §11(M8, work item 연동) 을 봅니다.

@@ -95,7 +95,7 @@
             "is_top_role" : true,
             "node_id" : 4,
             "role" : "ADMIN",
-            "authority" : "011111111111111111111111",
+            "authority" : "01111111111111111111111111111111",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
         },
         {
@@ -191,9 +191,7 @@
 | name | String | user | 사용자 이름 |
 | user_name | String | role | 역할이 배정된 사용자 이름 |
 | role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
-| role_id | Integer | role, authority | 역할 정의(AUTHORITY) 식별 id |
-| is_top_role | Boolean | role, authority | 최상위 역할(ADMIN) 여부 |
-| authority | String | authority | 24비트 권한 문자열 |
+| authority | String | authority | 32비트 권한 문자열 |
 | comment_id | Integer | mention | 멘션이 발생한 댓글 식별 ID |
 | work_item_id | String | mention, file | 연관된 업무 식별 ID |
 | author_user_id | String | mention | 멘션 댓글 작성자 id |

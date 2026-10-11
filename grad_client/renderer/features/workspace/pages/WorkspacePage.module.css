@@ -80,6 +80,7 @@
 .page.tasksPage,
 .page.schedulesPage,
 .page.filesPage,
+.page.githubPage,
 .page.membersPage,
 .page.rolesPage {
   min-height: 0;

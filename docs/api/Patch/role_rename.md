@@ -90,7 +90,7 @@
 | is_top_role | Boolean | 필수 | 최상위 역할(ADMIN) 여부 |
 | node_id | Integer | 필수 | 소속 노드의 id |
 | role | String | 필수 | 변경된 새 역할 이름 |
-| authority | String | 필수 | 24비트 권한 문자열 |
+| authority | String | 필수 | 32비트 권한 문자열 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |
 
 - Data Elements (ROLE)

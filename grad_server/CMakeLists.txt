@@ -50,7 +50,9 @@ aux_source_directory(controllers/role CTL_ROLE_SRC)
 aux_source_directory(controllers/context CTL_CONTEXT_SRC)
 aux_source_directory(controllers/notification CTL_NOTIFICATION_SRC)
 aux_source_directory(controllers/recurring CTL_RECURRING_SRC)
-set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC} ${CTL_RECURRING_SRC})
+aux_source_directory(controllers/github CTL_GITHUB_SRC)
+aux_source_directory(controllers/collab CTL_COLLAB_SRC)
+set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC} ${CTL_RECURRING_SRC} ${CTL_GITHUB_SRC} ${CTL_COLLAB_SRC})
 
 aux_source_directory(filters/auth FILTER_SRC)
 aux_source_directory(plugins PLUGIN_SRC)
@@ -62,6 +64,8 @@ aux_source_directory(models/role MODEL_ROLE_SRC)
 set(MODEL_SRC ${MODEL_AUTH_SRC} ${MODEL_NODE_SRC} ${MODEL_WORK_SRC} ${MODEL_ROLE_SRC})
 
 aux_source_directory(utils/common UTIL_SRC)
+aux_source_directory(utils/git UTIL_GIT_SRC)
+aux_source_directory(utils/collab UTIL_COLLAB_SRC)
 
 drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
                     ${CMAKE_CURRENT_BINARY_DIR})
@@ -82,12 +86,16 @@ target_include_directories(${PROJECT_NAME}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/context
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/notification
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/recurring
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/github
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/collab
                                    ${CMAKE_CURRENT_SOURCE_DIR}/filters/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/node
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/work
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/role
-                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/common)
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/common
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/git
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/collab)
 target_sources(${PROJECT_NAME}
                PRIVATE
                ${SRC_DIR}
@@ -95,7 +103,9 @@ target_sources(${PROJECT_NAME}
                ${FILTER_SRC}
                ${PLUGIN_SRC}
                ${MODEL_SRC}
-               ${UTIL_SRC})
+               ${UTIL_SRC}
+               ${UTIL_GIT_SRC}
+               ${UTIL_COLLAB_SRC})
 # ##############################################################################
 # uncomment the following line for dynamically loading views 
 # set_property(TARGET ${PROJECT_NAME} PROPERTY ENABLE_EXPORTS ON)

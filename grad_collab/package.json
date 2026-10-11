@@ -1,0 +1,25 @@
+{
+  "name": "axis-collab",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Axis Share 협업 문서 서버 (Yjs 권위 서버, TASK_11 §9 / §14)",
+  "license": "UNLICENSED",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "check-types": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "yjs": "^13.6.20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.2"
+  }
+}

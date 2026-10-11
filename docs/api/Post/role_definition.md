@@ -1,5 +1,5 @@
 # 역할 생성 api
-- 노드 내 새로운 역할(커스텀 역할)을 생성하고 24비트 초기 권한을 설정하는 api (15번 비트 ROLE_CHANGE 권한 필요)
+- 노드 내 새로운 역할(커스텀 역할)을 생성하고 32비트 초기 권한을 설정하는 api (15번 비트 ROLE_CHANGE 권한 필요)
 ## Request
 - Request syntax
 ```json
@@ -29,7 +29,7 @@
 | :--- | :--- | :--- | :--- |
 | node_id | Integer | 필수 | 역할을 생성할 노드 id |
 | role_name | String | 필수 | 새로 생성할 역할 이름 (중복 불가, ADMIN 생성 불가) |
-| authority | String | 필수 | 24비트 2진수 권한 비트마스크 문자열 (길이 24 고정) |
+| authority | String | 필수 | 32비트 2진수 권한 비트마스크 문자열 |
 
 ---
 
@@ -77,5 +77,5 @@
 | is_top_role | Boolean | 필수 | 최상위 역할(ADMIN) 여부 |
 | node_id | Integer | 필수 | 소속 노드의 id |
 | role | String | 필수 | 생성된 역할 이름 |
-| authority | String | 필수 | 24비트 권한 문자열 |
+| authority | String | 필수 | 32비트 권한 문자열 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

@@ -1,93 +1,552 @@
 {
-  "name": "grad-vscode",
-  "displayName": "grad_vscode",
-  "description": "Grad Project Management Tool",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.110.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [],
-  "main": "./dist/extension.js",
-  "contributes": {
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "grad-explorer",
-          "title": "Workflow",
-          "icon": "$(organization)"
-        }
-      ]
+    "name": "axis-share",
+    "displayName": "Axis Share",
+    "description": "Axis Flow 워크스페이스의 원격 저장소를 VSCode 에서 실시간으로 함께 편집한다.",
+    "version": "0.0.1",
+    "publisher": "junjunshim",
+    "engines": {
+        "vscode": "^1.110.0"
     },
-    "views": {
-      "grad-explorer": [
-        {
-          "type": "webview",
-          "id": "grad-login-view",
-          "name": "Workflow",
-          "when": "!grad:isLoggedIn" 
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onUri"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "axis-share-explorer",
+                    "title": "Repository",
+                    "icon": "$(repo)"
+                }
+            ]
         },
-        {
-          "id": "grad-nodes-view",
-          "name": "Workflow",
-          "when": "grad:isLoggedIn",
-          "icon": "$(organization)"
+        "views": {
+            "axis-share-explorer": [
+                {
+                    "id": "axis-share-files",
+                    "name": "Repository"
+                },
+                {
+                    "id": "axis-share-changes",
+                    "name": "Changes"
+                },
+                {
+                    "id": "axis-share-graph",
+                    "name": "Graph"
+                },
+                {
+                    "id": "axis-share-people",
+                    "name": "Editing"
+                },
+                {
+                    "id": "axis-share-reviews",
+                    "name": "Reviews"
+                }
+            ]
         },
-        {
-          "type": "webview",
-          "id": "grad-member-view",
-          "name": "Members",
-          "when": "grad:isLoggedIn"
-        }
-      ]
-    },
-    "menus": {
-        "view/title": [
+        "commands": [
             {
-                "command": "grad-vscode.logout",
-                "when": "view == grad-nodes-view",
-                "group": "navigation@1" 
+                "command": "axis-share.switchBranch",
+                "title": "Axis Share: 브랜치 전환",
+                "icon": "$(git-branch)"
             },
             {
-                "command": "grad-nodes-view.refreshEntry",
-                "when": "view == grad-nodes-view",
-                "group": "navigation@2"
+                "command": "axis-share.newFile",
+                "title": "Axis Share: 새 파일",
+                "icon": "$(new-file)"
+            },
+            {
+                "command": "axis-share.newFolder",
+                "title": "Axis Share: 새 폴더",
+                "icon": "$(new-folder)"
+            },
+            {
+                "command": "axis-share.renameEntry",
+                "title": "Axis Share: 이름 바꾸기"
+            },
+            {
+                "command": "axis-share.deleteEntry",
+                "title": "Axis Share: 삭제"
+            },
+            {
+                "command": "axis-share.copyPath",
+                "title": "Axis Share: 경로 복사"
+            },
+            {
+                "command": "axis-share.refresh",
+                "title": "Axis Share: 새로 고침",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "axis-share.openFile",
+                "title": "Axis Share: 파일 열기"
+            },
+            {
+                "command": "axis-share.addDecoration",
+                "title": "Axis Share: 리뷰 데코레이션 추가",
+                "icon": "$(comment-add)"
+            },
+            {
+                "command": "axis-share.jumpToDecoration",
+                "title": "Axis Share: 리뷰 위치로 이동"
+            },
+            {
+                "command": "axis-share.deleteDecoration",
+                "title": "Axis Share: 리뷰 삭제",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "axis-share.toggleDecorations",
+                "title": "Axis Share: 리뷰 데코레이션 표시",
+                "icon": "$(eye)"
+            },
+            {
+                "command": "axis-share.hideDecorations",
+                "title": "Axis Share: 리뷰 데코레이션 숨기기",
+                "icon": "$(eye-closed)"
+            },
+            {
+                "command": "axis-share.identitySettings",
+                "title": "Axis Share: 커밋 사용자 설정 (user.name / user.email)",
+                "icon": "$(gear)"
+            },
+            {
+                "command": "axis-share.fetch",
+                "title": "Axis Share: 원격에서 가져오기 (fetch)",
+                "icon": "$(sync)"
+            },
+            {
+                "command": "axis-share.stage",
+                "title": "Axis Share: 스테이징",
+                "icon": "$(add)"
+            },
+            {
+                "command": "axis-share.unstage",
+                "title": "Axis Share: 스테이징 해제",
+                "icon": "$(remove)"
+            },
+            {
+                "command": "axis-share.stageAll",
+                "title": "Axis Share: 모두 스테이징",
+                "icon": "$(add)"
+            },
+            {
+                "command": "axis-share.unstageAll",
+                "title": "Axis Share: 모두 스테이징 해제",
+                "icon": "$(remove)"
+            },
+            {
+                "command": "axis-share.commit",
+                "title": "Axis Share: 커밋",
+                "icon": "$(check)"
+            },
+            {
+                "command": "axis-share.push",
+                "title": "Axis Share: 원격으로 push",
+                "icon": "$(cloud-upload)"
+            },
+            {
+                "command": "axis-share.discard",
+                "title": "Axis Share: 변경 되돌리기",
+                "icon": "$(discard)"
+            },
+            {
+                "command": "axis-share.openDiff",
+                "title": "Axis Share: 변경 내용 보기",
+                "icon": "$(diff)"
+            },
+            {
+                "command": "axis-share.diffIndex",
+                "title": "Axis Share: 스테이징 이후 변경 보기"
+            },
+            {
+                "command": "axis-share.openRangeDiff",
+                "title": "Axis Share: 커밋 변경 내용 보기"
+            },
+            {
+                "command": "axis-share.openRepoGraph",
+                "title": "Axis Share: 저장소 전체 그래프 보기",
+                "icon": "$(git-merge)"
+            }
+        ],
+        "menus": {
+            "view/title": [
+                {
+                    "command": "axis-share.switchBranch",
+                    "when": "view == axis-share-files",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.newFile",
+                    "when": "view == axis-share-files",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "axis-share.newFolder",
+                    "when": "view == axis-share-files",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-files",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "axis-share.commit",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.push",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "axis-share.stageAll",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "axis-share.unstageAll",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@4"
+                },
+                {
+                    "command": "axis-share.identitySettings",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@5"
+                },
+                {
+                    "command": "axis-share.fetch",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@6"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@7"
+                },
+                {
+                    "command": "axis-share.openRepoGraph",
+                    "when": "view == axis-share-graph",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-graph",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "axis-share.toggleDecorations",
+                    "when": "view == axis-share-reviews && axis-share:decorationsVisible",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.hideDecorations",
+                    "when": "view == axis-share-reviews && !axis-share:decorationsVisible",
+                    "group": "navigation@1"
+                }
+            ],
+            "view/item/context": [
+                {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-files && viewItem == axisFile",
+                    "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.newFile",
+                    "when": "view == axis-share-files && viewItem == axisFile",
+                    "group": "2_new@1"
+                },
+                {
+                    "command": "axis-share.newFolder",
+                    "when": "view == axis-share-files && viewItem == axisFile",
+                    "group": "2_new@2"
+                },
+                {
+                    "command": "axis-share.renameEntry",
+                    "when": "view == axis-share-files && viewItem == axisFile",
+                    "group": "3_edit@1"
+                },
+                {
+                    "command": "axis-share.deleteEntry",
+                    "when": "view == axis-share-files && viewItem == axisFile",
+                    "group": "3_edit@2"
+                },
+                {
+                    "command": "axis-share.copyPath",
+                    "when": "view == axis-share-files && viewItem == axisFile",
+                    "group": "4_copy@1"
+                },
+                {
+                    "command": "axis-share.newFile",
+                    "when": "view == axis-share-files && viewItem == axisDir",
+                    "group": "1_new@1"
+                },
+                {
+                    "command": "axis-share.newFolder",
+                    "when": "view == axis-share-files && viewItem == axisDir",
+                    "group": "1_new@2"
+                },
+                {
+                    "command": "axis-share.renameEntry",
+                    "when": "view == axis-share-files && viewItem == axisDir",
+                    "group": "2_edit@1"
+                },
+                {
+                    "command": "axis-share.deleteEntry",
+                    "when": "view == axis-share-files && viewItem == axisDir",
+                    "group": "2_edit@2"
+                },
+                {
+                    "command": "axis-share.copyPath",
+                    "when": "view == axis-share-files && viewItem == axisDir",
+                    "group": "3_copy@1"
+                },
+                {
+                    "command": "axis-share.openDiff",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.diffIndex",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "1_open@2"
+                },
+                {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "1_open@3"
+                },
+                {
+                    "command": "axis-share.stage",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "axis-share.discard",
+                    "when": "view == axis-share-changes && viewItem == axisUnstagedFile",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "axis-share.openDiff",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.diffIndex",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "1_open@2"
+                },
+                {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "1_open@3"
+                },
+                {
+                    "command": "axis-share.unstage",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "axis-share.discard",
+                    "when": "view == axis-share-changes && viewItem == axisStagedFile",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "axis-share.jumpToDecoration",
+                    "when": "view == axis-share-reviews && viewItem == axisDeco",
+                    "group": "1_open@1"
+                },
+                {
+                    "command": "axis-share.deleteDecoration",
+                    "when": "view == axis-share-reviews && viewItem == axisDeco",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "axis-share.openFile",
+                    "when": "view == axis-share-people && viewItem == axisFilePresence",
+                    "group": "1_open@1"
+                }
+            ],
+            "commandPalette": [
+                {
+                    "command": "axis-share.stage",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.unstage",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.stageAll",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.unstageAll",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.discard",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.openDiff",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.diffIndex",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.openRangeDiff",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.jumpToDecoration",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.deleteDecoration",
+                    "when": "false"
+                },
+                {
+                    "command": "axis-share.hideDecorations",
+                    "when": "false"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "axis-share.addDecoration",
+                    "when": "editorTextFocus && !editorReadonly",
+                    "group": "axis-share@1"
+                }
+            ]
+        },
+        "configuration": {
+            "title": "Axis Share",
+            "properties": {
+                "axis-share.serverUrl": {
+                    "type": "string",
+                    "default": "https://axisflow.team/api",
+                    "description": "Axis Flow 서버 API 주소. 끝의 '/' 는 자동으로 제거한다."
+                },
+                "axis-share.showDecorations": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "에디터에 리뷰 데코레이션(오타·문법·논리·기타·강조)을 표시한다. 사이드바 목록은 그대로 유지된다."
+                },
+                "axis-share.user.name": {
+                    "type": "string",
+                    "default": "",
+                    "description": "커밋에 기록할 작성자 이름. 비어 있으면 커밋 입력창이 숨겨진다."
+                },
+                "axis-share.user.email": {
+                    "type": "string",
+                    "default": "",
+                    "description": "커밋에 기록할 작성자 이메일. 비어 있으면 커밋 입력창이 숨겨진다."
+                }
+            }
+        },
+        "colors": [
+            {
+                "id": "axis-share.user.0",
+                "description": "협업 사용자 색 0 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#e06c75", "light": "#c62828", "highContrast": "#ff8b94" }
+            },
+            {
+                "id": "axis-share.user.1",
+                "description": "협업 사용자 색 1 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#e5c07b", "light": "#9a6700", "highContrast": "#f0d38a" }
+            },
+            {
+                "id": "axis-share.user.2",
+                "description": "협업 사용자 색 2 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#98c379", "light": "#2e7d32", "highContrast": "#a9d99a" }
+            },
+            {
+                "id": "axis-share.user.3",
+                "description": "협업 사용자 색 3 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#56b6c2", "light": "#00695c", "highContrast": "#6fd0dc" }
+            },
+            {
+                "id": "axis-share.user.4",
+                "description": "협업 사용자 색 4 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#61afef", "light": "#1565c0", "highContrast": "#7cc0ff" }
+            },
+            {
+                "id": "axis-share.user.5",
+                "description": "협업 사용자 색 5 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#c678dd", "light": "#6a1b9a", "highContrast": "#d495ea" }
+            },
+            {
+                "id": "axis-share.user.6",
+                "description": "협업 사용자 색 6 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#ff8a65", "light": "#d84315", "highContrast": "#ffa585" }
+            },
+            {
+                "id": "axis-share.user.7",
+                "description": "협업 사용자 색 7 (사이드바 점 · 원격 커서)",
+                "defaults": { "dark": "#9aa4b2", "light": "#455a64", "highContrast": "#b6c0cc" }
+            },
+            {
+                "id": "axis-share.deco.typo",
+                "description": "리뷰 데코레이션 — 오타",
+                "defaults": { "dark": "#f28b82", "light": "#d9534f", "highContrast": "#ff9e94" }
+            },
+            {
+                "id": "axis-share.deco.grammar",
+                "description": "리뷰 데코레이션 — 문법 오류",
+                "defaults": { "dark": "#fdd663", "light": "#f0ad4e", "highContrast": "#ffe07a" }
+            },
+            {
+                "id": "axis-share.deco.logical",
+                "description": "리뷰 데코레이션 — 논리 오류",
+                "defaults": { "dark": "#ff8a80", "light": "#d84315", "highContrast": "#ffa094" }
+            },
+            {
+                "id": "axis-share.deco.other",
+                "description": "리뷰 데코레이션 — 기타",
+                "defaults": { "dark": "#9e9e9e", "light": "#757575", "highContrast": "#c0c0c0" }
+            },
+            {
+                "id": "axis-share.deco.highlight",
+                "description": "리뷰 데코레이션 — 강조",
+                "defaults": { "dark": "#aed581", "light": "#7cb342", "highContrast": "#c4e6a1" }
             }
         ]
     },
-    "commands": [
-      { "command": "grad-vscode.login", "title": "Grad: Login" },
-      { "command": "grad-vscode.logout", "title": "Grad: Logout", "icon": "$(sign-out)" },
-      { "command": "grad-nodes-view.refreshEntry", "title": "Refresh", "icon": "$(refresh)" },
-      { "command": "grad-vscode.showMembers", "title": "Show Members" }
-    ]
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
-    "watch": "npm-run-all -p watch:*",
-    "watch:esbuild": "node esbuild.js --watch",
-    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "check-types": "tsc --noEmit",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.110.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
-    "eslint": "^9.39.3",
-    "esbuild": "^0.27.3",
-    "npm-run-all": "^4.1.5",
-    "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
-  }
+    "scripts": {
+        "vscode:prepublish": "npm run package",
+        "compile": "npm run check-types && npm run lint && node esbuild.js",
+        "watch": "npm-run-all -p watch:*",
+        "watch:esbuild": "node esbuild.js --watch",
+        "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+        "package": "npm run check-types && npm run lint && node esbuild.js --production",
+        "compile-tests": "tsc -p . --outDir out",
+        "watch-tests": "tsc -p . -w --outDir out",
+        "pretest": "npm run compile-tests && npm run compile && npm run lint",
+        "check-types": "tsc --noEmit",
+        "lint": "eslint src",
+        "test": "vscode-test"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.110.0",
+        "@types/mocha": "^10.0.10",
+        "@types/node": "22.x",
+        "typescript-eslint": "^8.56.1",
+        "eslint": "^9.39.3",
+        "esbuild": "^0.27.3",
+        "npm-run-all": "^4.1.5",
+        "typescript": "^5.9.3",
+        "@vscode/test-cli": "^0.0.12",
+        "@vscode/test-electron": "^2.5.2"
+    },
+    "dependencies": {
+        "yjs": "^13.6.20"
+    }
 }

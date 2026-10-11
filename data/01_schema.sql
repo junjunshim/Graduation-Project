@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS role_authorities (
     authority_id SERIAL PRIMARY KEY,
     node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
     role VARCHAR(50) NOT NULL,
-    authority BIT(24) NOT NULL, -- Bitmask 권한 (8 -> 24)
+    authority authority_mask NOT NULL, -- Bitmask 권한 (정의: data/00_domain_authority.sql)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     is_top_role BOOLEAN NOT NULL DEFAULT FALSE,
@@ -72,14 +72,14 @@ CREATE INDEX idx_assignments_role_id ON role_assignments(role_id);
 CREATE TABLE IF NOT EXISTS authority_constants (
     constant_id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
-    bit_position INTEGER NOT NULL CHECK (bit_position BETWEEN 0 AND 23),
+    bit_position INTEGER NOT NULL CHECK (bit_position >= 0 AND bit_position < authority_bit_length()),
     description TEXT
 );
 
 -- 4.2 역할별 기본 권한 테이블
 CREATE TABLE IF NOT EXISTS role_defaults (
     role VARCHAR(50) PRIMARY KEY,
-    default_authority BIT(24) NOT NULL,
+    default_authority authority_mask NOT NULL,
     is_top_role BOOLEAN NOT NULL DEFAULT FALSE
 );
 
@@ -180,7 +180,7 @@ CREATE TABLE role_authority_histories (
     authority_id INTEGER NOT NULL,
     node_id INTEGER NOT NULL,
     role VARCHAR(50) NOT NULL,
-    authority BIT(24) NOT NULL,
+    authority authority_mask NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     change_status history_status NOT NULL,
@@ -342,4 +342,126 @@ CREATE TABLE IF NOT EXISTS recurring_rule_files (
 );
 CREATE INDEX idx_recurring_files_rule_id ON recurring_rule_files(rule_id);
 CREATE INDEX idx_recurring_files_is_deleted ON recurring_rule_files(is_deleted);
+
+-- 14. GitHub 저장소 연결 테이블 (워크스페이스 ↔ 원격 저장소)
+CREATE TABLE IF NOT EXISTS github_repositories (
+    repo_id SERIAL PRIMARY KEY,
+    node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
+    owner_login VARCHAR(100) NOT NULL,
+    repo_name VARCHAR(200) NOT NULL,
+    clone_url TEXT NOT NULL,
+    default_branch VARCHAR(200) NOT NULL DEFAULT 'main',
+    local_path TEXT NOT NULL,
+    webhook_secret TEXT, -- 2차 webhook 용 (1차는 미사용)
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+-- 같은 노드에 같은 저장소를 두 번 연결하지 않는다 (소프트 삭제된 행은 제외)
+CREATE UNIQUE INDEX unique_repo_per_node ON github_repositories(node_id, owner_login, repo_name) WHERE NOT is_deleted;
+CREATE INDEX idx_github_repos_node_id ON github_repositories(node_id);
+CREATE INDEX idx_github_repos_is_deleted ON github_repositories(is_deleted);
+
+-- 15. GitHub 브랜치 테이블 (브랜치별 worktree)
+CREATE TABLE IF NOT EXISTS github_branches (
+    branch_id SERIAL PRIMARY KEY,
+    repo_id INTEGER NOT NULL REFERENCES github_repositories(repo_id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    base_branch VARCHAR(255), -- 생성 시 기준 브랜치
+    worktree_path TEXT,       -- 서버 worktree 경로
+    last_used_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- 마지막 사용 시각 — worktree 회수 판정(§13.8)
+    work_item_id VARCHAR(50) REFERENCES work_items(work_item_id) ON DELETE SET NULL, -- 브랜치명 파싱 결과 (WI-101)
+    created_by_email VARCHAR(100) REFERENCES users(email) ON DELETE SET NULL,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX unique_branch_per_repo ON github_branches(repo_id, name) WHERE NOT is_deleted;
+CREATE INDEX idx_github_branches_repo_id ON github_branches(repo_id);
+CREATE INDEX idx_github_branches_work_item_id ON github_branches(work_item_id);
+CREATE INDEX idx_github_branches_is_deleted ON github_branches(is_deleted);
+CREATE INDEX idx_github_branches_last_used_at ON github_branches(last_used_at);
+
+-- 16. GitHub 브랜치 접속자 테이블 (휘발성 캐시 — 진실 원천은 WebSocket 연결 상태)
+CREATE TABLE IF NOT EXISTS github_branch_presence (
+    presence_id SERIAL PRIMARY KEY,
+    branch_id INTEGER NOT NULL REFERENCES github_branches(branch_id) ON DELETE CASCADE,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    connection_id VARCHAR(100) NOT NULL, -- 확장 세션 식별자
+    connected_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_github_presence_branch_id ON github_branch_presence(branch_id);
+CREATE INDEX idx_github_presence_connection_id ON github_branch_presence(connection_id);
+CREATE INDEX idx_github_presence_user_email ON github_branch_presence(user_email);
+CREATE INDEX idx_github_presence_last_seen_at ON github_branch_presence(last_seen_at);
+
+-- 17. GitHub 커밋 기록 테이블
+CREATE TABLE IF NOT EXISTS github_commit_logs (
+    commit_log_id SERIAL PRIMARY KEY,
+    repo_id INTEGER NOT NULL REFERENCES github_repositories(repo_id) ON DELETE CASCADE,
+    branch_id INTEGER REFERENCES github_branches(branch_id) ON DELETE SET NULL,
+    sha VARCHAR(40) NOT NULL,
+    author_email VARCHAR(100), -- 우리 users.email 기준 (매칭 실패 시 NULL)
+    pushed_by_email VARCHAR(100) REFERENCES users(email) ON DELETE SET NULL, -- 실제 push 한 사용자
+    message TEXT,
+    matched_work_item_id VARCHAR(50) REFERENCES work_items(work_item_id) ON DELETE SET NULL, -- 커밋 메시지 파싱 결과
+    pushed BOOLEAN NOT NULL DEFAULT FALSE, -- 원격 push 성공 여부
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_github_commits_repo_id ON github_commit_logs(repo_id);
+CREATE INDEX idx_github_commits_branch_id ON github_commit_logs(branch_id);
+CREATE INDEX idx_github_commits_author_email ON github_commit_logs(author_email);
+CREATE INDEX idx_github_commits_matched_work_item_id ON github_commit_logs(matched_work_item_id);
+
+-- 18. 사용자 GitHub 자격증명 테이블 (PAT, access_token 은 암호화 저장)
+CREATE TABLE IF NOT EXISTS github_user_credentials (
+    credential_id SERIAL PRIMARY KEY,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    github_login VARCHAR(100), -- 토큰이 속한 GitHub 계정 (표시·배지용)
+    access_token TEXT NOT NULL, -- 평문 금지: pgp_sym_encrypt 등으로 암호화
+    token_type VARCHAR(20) NOT NULL DEFAULT 'pat', -- 'pat' | 'oauth' | 'installation'
+    scopes VARCHAR(200),
+    expires_at TIMESTAMP WITH TIME ZONE, -- OAuth·installation 만료 (PAT 는 NULL)
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+-- 사용자당 활성 자격증명 1개
+CREATE UNIQUE INDEX unique_credential_per_user ON github_user_credentials(user_email) WHERE NOT is_deleted;
+CREATE INDEX idx_github_credentials_is_deleted ON github_user_credentials(is_deleted);
+
+-- 19. GitHub 확장 토큰 테이블 (VSCode 확장 전용 리프레시 토큰)
+-- 앱의 user_refresh_tokens 는 user_email 이 PK 라 사용자당 1개뿐이다.
+-- 확장이 같은 테이블을 쓰면 앱과 서로의 세션을 무효화하므로 확장 전용으로 분리한다.
+-- 여러 기기에서 동시에 로그인할 수 있도록 사용자당 여러 행을 허용하고, 갱신(rotate)은
+-- refresh_token 값으로 행을 찾아 원자적으로 회전시킨다.
+CREATE TABLE IF NOT EXISTS github_extension_tokens (
+    token_id SERIAL PRIMARY KEY,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    refresh_token TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX unique_github_extension_token ON github_extension_tokens(refresh_token);
+CREATE INDEX idx_github_extension_tokens_user_email ON github_extension_tokens(user_email);
+CREATE INDEX idx_github_extension_tokens_expires_at ON github_extension_tokens(expires_at);
+
+-- 20. GitHub 핸드오프 코드 테이블 (앱 → VSCode 확장 1회용 코드, TTL 60초)
+-- 토큰을 vscode:// URI 에 싣지 않기 위한 우회 경로다 (§3.4).
+-- 소비는 UPDATE ... WHERE consumed_at IS NULL 로 원자적이라 동시 요청 중 하나만 성공한다.
+CREATE TABLE IF NOT EXISTS github_handoff_codes (
+    code_id SERIAL PRIMARY KEY,
+    code VARCHAR(128) NOT NULL,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    node_id INTEGER NOT NULL REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
+    repo_id INTEGER NOT NULL REFERENCES github_repositories(repo_id) ON DELETE CASCADE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    consumed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX unique_github_handoff_code ON github_handoff_codes(code);
+CREATE INDEX idx_github_handoff_codes_expires_at ON github_handoff_codes(expires_at);
+CREATE INDEX idx_github_handoff_codes_user_email ON github_handoff_codes(user_email);
 

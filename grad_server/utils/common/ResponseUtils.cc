@@ -1,4 +1,5 @@
 #include "ResponseUtils.h"
+#include "AuthorityBits.h"
 #include "NotificationWebSocketController.h"
 
 // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
@@ -149,6 +150,23 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
     else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
     else if (errMsg.find("P0703") != std::string::npos) return DbErrorCode::LogActivityFailed;
+
+    // --- GitHub 저장소 연동 (P08xx) ---
+    else if (errMsg.find("P0801") != std::string::npos) return DbErrorCode::RepoNotConnected;
+    else if (errMsg.find("P0802") != std::string::npos) return DbErrorCode::GithubCredentialInvalid;
+    else if (errMsg.find("P0803") != std::string::npos) return DbErrorCode::GithubScopeInsufficient;
+    else if (errMsg.find("P0804") != std::string::npos) return DbErrorCode::GithubPushDenied;
+    else if (errMsg.find("P0805") != std::string::npos) return DbErrorCode::GitNonFastForward;
+    else if (errMsg.find("P0806") != std::string::npos) return DbErrorCode::GithubKeyNotConfigured;
+    else if (errMsg.find("P0807") != std::string::npos) return DbErrorCode::GithubOperationFailed;
+    else if (errMsg.find("P0808") != std::string::npos) return DbErrorCode::RepoCloneFailed;
+    else if (errMsg.find("P0809") != std::string::npos) return DbErrorCode::BranchHasPresence;
+    else if (errMsg.find("P0810") != std::string::npos) return DbErrorCode::BranchHasLocalChanges;
+    else if (errMsg.find("P0811") != std::string::npos) return DbErrorCode::HandoffCodeInvalid;
+    else if (errMsg.find("P0812") != std::string::npos) return DbErrorCode::ExtensionTokenInvalid;
+    else if (errMsg.find("P0813") != std::string::npos) return DbErrorCode::PathAlreadyExists;
+    else if (errMsg.find("P0814") != std::string::npos) return DbErrorCode::PathNotFound;
+    else if (errMsg.find("P0815") != std::string::npos) return DbErrorCode::NodeDeletedForRepo;
     else return DbErrorCode::Unknown;
 }
 
@@ -270,7 +288,7 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             break;
         }
         case DbErrorCode::InvalidAuthorityBit:{
-            ret["message"] = "유효하지 않은 24비트 권한 비트 문자열입니다.";
+            ret["message"] = "유효하지 않은 " + std::to_string(app_utils::kAuthorityBitLength) + "비트 권한 비트 문자열입니다.";
             ret["http_code"] = drogon::k400BadRequest;
             break;
         }
@@ -532,6 +550,83 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::LogActivityFailed:{
             ret["message"] = "활동 로그 기록에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+
+        // --- GitHub 저장소 연동 (P08xx) ---
+        case DbErrorCode::RepoNotConnected:{
+            ret["message"] = "연결된 저장소나 브랜치를 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::GithubCredentialInvalid:{
+            ret["message"] = "GitHub 자격증명이 없거나 무효합니다. 다시 등록해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::GithubScopeInsufficient:{
+            ret["message"] = "GitHub 토큰에 repo 스코프가 필요합니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::GithubPushDenied:{
+            ret["message"] = "이 저장소에 push 권한이 없습니다.";
+            ret["http_code"] = drogon::k403Forbidden;
+            break;
+        }
+        case DbErrorCode::GitNonFastForward:{
+            ret["message"] = "원격 저장소가 앞서 있어 push할 수 없습니다. fetch 후 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::GithubKeyNotConfigured:{
+            ret["message"] = "GitHub 자격증명 암호화 키가 설정되지 않았습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::GithubOperationFailed:{
+            ret["message"] = "GitHub 저장소 작업에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RepoCloneFailed:{
+            ret["message"] = "저장소를 clone하지 못했습니다. 저장소 존재 여부와 접근 권한을 확인해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::BranchHasPresence:{
+            ret["message"] = "이 브랜치에서 작업 중인 사용자가 있습니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::BranchHasLocalChanges:{
+            ret["message"] = "이 브랜치에 커밋되지 않은 변경이 있습니다. 확인해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::HandoffCodeInvalid:{
+            ret["message"] = "확장 연결 코드가 유효하지 않거나 만료되었습니다. 앱에서 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k401Unauthorized;
+            break;
+        }
+        case DbErrorCode::ExtensionTokenInvalid:{
+            ret["message"] = "확장 세션이 만료되었습니다. 앱에서 다시 연결해 주세요.";
+            ret["http_code"] = drogon::k401Unauthorized;
+            break;
+        }
+        case DbErrorCode::PathAlreadyExists:{
+            ret["message"] = "이미 있는 경로입니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::PathNotFound:{
+            ret["message"] = "경로를 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::NodeDeletedForRepo:{
+            ret["message"] = "워크스페이스가 삭제되어 연결할 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
             break;
         }
         default:{

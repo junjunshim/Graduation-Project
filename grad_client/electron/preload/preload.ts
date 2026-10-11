@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { WINDOW_CONTROL_CHANNELS } from '../../shared/ipc/windowControls'
 import { DOWNLOAD_CHANNELS, type DownloadCompletionPayload } from '../../shared/ipc/downloads'
+import { OPEN_EXTERNAL_CHANNELS } from '../../shared/ipc/openExternal'
 
 if (process.platform === 'win32') {
   contextBridge.exposeInMainWorld('windowControls', {
@@ -29,6 +30,15 @@ if (process.platform === 'win32') {
     },
   })
 }
+
+contextBridge.exposeInMainWorld('openExternal', {
+  open(url: string) {
+    return ipcRenderer.invoke(OPEN_EXTERNAL_CHANNELS.open, url)
+  },
+  detectVscode(extensionId: string) {
+    return ipcRenderer.invoke(OPEN_EXTERNAL_CHANNELS.detectVscode, extensionId)
+  },
+})
 
 contextBridge.exposeInMainWorld('downloads', {
   onComplete(listener: (payload: DownloadCompletionPayload) => void) {

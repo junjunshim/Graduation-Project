@@ -71,7 +71,7 @@
             "is_top_role" : false,
             "node_id" : 98,
             "role" : "ADMIN",
-            "authority" : "011111111111111111111111",
+            "authority" : "01111111111111111111111111111111",
             "updated_at" : "2026-09-02T08:54:49.604005+00:00"
         },
         {
@@ -161,10 +161,7 @@
 | email | String | role, user | 사용자 이메일 |
 | name | String | user | 사용자 이름 |
 | role | String | role, authority | 역할 이름 (ADMIN, MANAGER, MEMBER 등) |
-| role_id | Integer | role, authority | 역할 정의(AUTHORITY) 식별 id |
-| is_top_role | Boolean | role, authority | 최상위 역할(ADMIN) 여부 |
-| authority | String | authority | 24비트 권한 문자열 |
-| display_id | Integer | work_item | 노드 내 업무 표시 번호 |
+| authority | String | authority | 32비트 권한 문자열 |
 | owner_node_id | Integer | work_item | 업무 소속 노드 id |
 | owner_user_id | String | work_item | 업무 담당자 사용자 id |
 | owner_user_email | String or Null | work_item | 업무 담당자 이메일 |

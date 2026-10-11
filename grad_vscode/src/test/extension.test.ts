@@ -1,15 +1,16 @@
 import * as assert from 'assert';
-
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
 import * as vscode from 'vscode';
-// import * as myExtension from '../../extension';
 
-suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+suite('Axis Share 확장', () => {
+    test('확장이 활성화되고 선언한 커맨드가 등록된다', async () => {
+        const extension = vscode.extensions.getExtension('junjunshim.axis-share');
+        assert.ok(extension, 'junjunshim.axis-share 확장을 찾을 수 없습니다.');
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
-	});
+        await extension.activate();
+        assert.strictEqual(extension.isActive, true);
+
+        const registered = await vscode.commands.getCommands(true);
+        assert.ok(registered.includes('axis-share.refresh'), 'axis-share.refresh 커맨드가 없습니다.');
+        assert.ok(registered.includes('axis-share.switchBranch'), 'axis-share.switchBranch 커맨드가 없습니다.');
+    });
 });

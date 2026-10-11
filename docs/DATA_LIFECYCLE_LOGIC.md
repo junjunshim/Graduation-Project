@@ -73,17 +73,37 @@ graph TD
 
 ## 3. 15일 경과 시 자동 영구 삭제 (Hard Delete & Garbage Collection)
 
-- **정리 대상**: `is_deleted = true`이고 `updated_at < CURRENT_TIMESTAMP - INTERVAL '15 days'`인 노드, 업무, 파일
-- **DB 영구 삭제 (`DELETE`)**:
-  - `cleanup_expired_deleted_data()` DB 함수를 통해 15일 지난 레코드를 완전히 `DELETE` 처리
-  - `ON DELETE CASCADE` 외래키 제약조건에 따라 연관된 히스토리 및 댓글/멘션 데이터도 함께 영구 삭제
-- **디스크 물리 파일 삭제**:
-  - 영구 삭제 대상 파일 경로(`file_path`)를 C++ 백엔드 서버로 전달하여 `std::filesystem::remove()`로 서버 디스크(`uploads/`)의 실제 파일도 함께 제거
-- **실행 주기**: C++ Drogon 서버 기동 중 **24시간 주기(매일 자정) 1회 자동 백그라운드 실행**
+- **정리 대상**: `is_deleted = true`이고 `updated_at < CURRENT_TIMESTAMP - INTERVAL '15 days'`인 노드, 업무, 첨부 파일(`work_item_files`), 정기 일정 규칙(`recurring_rules`)과 그 첨부 파일(`recurring_rule_files`), 저장소 연결 해제 레코드
+- **지우는 순서 (물리 파일 → DB 행)**: 되돌릴 수 있는 쪽이 먼저다.
+  1. `list_expired_deleted_paths()` 로 만료 대상의 **물리 경로만** 모은다 — 아무것도 지우지 않는다
+  2. 서버가 디스크에서 지운다 — `uploads/`(업무·정기 일정 첨부)·`repository/` 접두사 밖은 건드리지 않는다(DB 값이 오염돼도 안전)
+  3. 지우지 못한 항목의 id 를 `purge_expired_deleted_data(failed_file_ids, failed_repo_ids, failed_recurring_file_ids)` 로 넘겨 **성공한 행만** `DELETE`
+- **재시도**: 순서를 뒤집으면(행을 먼저 지우면) 파일 삭제에 실패한 경로를 다시 알 수 없어 영구 잔여물이 된다. 지금 구조에서는 실패한 항목의 행이 남아 **다음 회차에 자동으로 다시 시도**된다.
+- **경계 일관성**: 행 삭제(3단계)의 기준 시각을 경로 수집(1단계)보다 1시간 뒤로 미룬다. 두 단계 사이에 15일 경계를 갓 넘긴 행이 경로를 모은 적 없이 지워지는 것을 막는다.
+- **CASCADE 보호**: 저장소를 지우면 브랜치·접속자·커밋 기록이, 업무를 지우면 댓글·파일 행이, 정기 일정 규칙을 지우면 첨부·체크리스트가, 노드를 지우면 그 아래 저장소 행과 정기 일정 규칙이 `ON DELETE CASCADE` 로 함께 사라진다. 그래서 지우지 못한 것에 걸린 상위 행은 purge 함수가 함께 남긴다.
+- **실행 주기**: C++ Drogon 서버 기동 **60초 뒤 1회 + 이후 24시간마다**. `runEvery` 만 두면 배포로 프로세스를 다시 띄울 때마다 타이머가 처음부터 다시 세어져 하루보다 자주 배포하는 환경에서는 영영 실행되지 않는다. 실제 작업은 워커 스레드 + `WorkerLimiter`(§13.4)에서 돌아 IO 스레드를 막지 않는다.
 
 ---
 
-## 4. 관련 엔드포인트 규격 매핑
+## 4. 브랜치 worktree 회수 (Server-side Garbage Collection)
+
+GitHub 연동(TASK_11 — `.antigravitycli/agent/tasks/TASK_11_SERVER_LOCAL_REPO_VSCODE.md` §13.8)에서는 **브랜치마다 `git worktree` 로 작업 디렉터리 사본**을 만든다. 이 사본은 사용자가 만든 데이터가 아니라 **서버가 만든 파생물**이다. 그래서 15일 만료 하드 딜리트와 달리 "오래 안 쓴 것부터 회수"한다.
+
+- **회수 대상**: `repository/<node_id>/<repo_name>.worktrees/<branch_slug>` — 브랜치 작업 디렉터리. **브랜치 행과 커밋은 남는다**(clone 의 ref·오브젝트에 있으므로). 브랜치를 다시 열면 `ensureWorktree` 가 같은 자리에 되살린다.
+- **회수 조건**(하나라도 걸리면 회수하지 않는다):
+  - 기본 브랜치(clone 디렉터리 자체가 작업 트리라 지울 것이 없다)
+  - 접속자가 있는 브랜치(하루 넘게 갱신되지 않은 접속 기록은 유령으로 보고 무시한다)
+  - 최근 10분 안에 사용한 브랜치
+  - 커밋하지 않은 변경(스테이징·수정·새 파일)이 남은 작업 트리 — 사용자 데이터라서 지우지 않는다
+- **회수 대상이 아닌 것**: 리뷰 데코레이션(`reviews.json`)과 Yjs 영속화(`.ydoc`)는 작업 디렉터리 **밖**(`<repo>.collab/`)에 있다. 브랜치 삭제와 달리 회수는 이 둘을 지우지 않는다.
+- **회수 규칙**: ① `last_used_at` 이 `WORKTREE_IDLE_DAYS`(기본 30일)보다 오래된 브랜치 ② 저장소당 작업 디렉터리가 `WORKTREE_MAX_PER_REPO`(기본 20개)를 넘으면 오래 안 쓴 것부터(LRU)
+- **사용 시각 기록**: `github_branches.last_used_at` — 조회·편집이 모두 지나는 `resolveWorkDir` 와 제어 소켓 접속(`upsert_github_branch_presence`)이 갱신한다. 10분 안에 기록된 값은 다시 쓰지 않는다.
+- **실행 주기**: **시작 60초 뒤 1회 + 이후 24시간마다**. 15일 만료 정리와 같은 스케줄러에서 돌지만 각 작업은 워커 스레드 + `WorkerLimiter`(§13.4)로 실행해 IO 스레드를 막지 않는다. (`runEvery` 만 두면 배포로 컨테이너를 다시 띄울 때마다 타이머가 처음부터 다시 세어져 영영 실행되지 않는다.)
+- **잔여 디렉터리 자동 치유**: 회수 뒤 그 자리에 git 이 모르는 디렉터리가 남으면 `git worktree add` 가 거부하므로, 서버가 add 전에 치우고 `git worktree prune` 을 돌린다(`clearStaleWorktreeDir`).
+
+---
+
+## 5. 관련 엔드포인트 규격 매핑
 
 | 기능 | Method | URL | 명세서 문서 |
 | :--- | :--- | :--- | :--- |

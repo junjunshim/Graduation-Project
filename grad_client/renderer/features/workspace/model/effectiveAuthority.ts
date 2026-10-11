@@ -1,4 +1,5 @@
 import {
+  AUTHORITY_DENY_BIT,
   parseAuthorityBitSet,
 } from './authorityDefinitions.js'
 import type {
@@ -59,8 +60,8 @@ export function getEffectiveAuthorityBitSet(
     bits.forEach((bit) => combinedBitSet.add(bit))
   })
 
-  // 4단계: DENY 비트(bit 23) 확인
-  if (combinedBitSet.has(23)) {
+  // 4단계: DENY 비트 확인
+  if (combinedBitSet.has(AUTHORITY_DENY_BIT)) {
     return new Set()
   }
 
@@ -103,8 +104,8 @@ export function getDirectAuthorityBitSet(
     parseAuthorityBitSet(mask).forEach((bit) => combinedBitSet.add(bit))
   })
 
-  // DENY 비트(bit 23)가 켜져 있으면 권한 없음으로 취급한다.
-  if (combinedBitSet.has(23)) {
+  // DENY 비트가 켜져 있으면 권한 없음으로 취급한다.
+  if (combinedBitSet.has(AUTHORITY_DENY_BIT)) {
     return new Set()
   }
 

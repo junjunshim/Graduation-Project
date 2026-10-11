@@ -1,5 +1,5 @@
 import type { ActivityRecord } from '../../workspace/model/types'
-import { AUTHORITY_BITS, parseAuthorityBitSet } from '../../workspace/model/authorityDefinitions.js'
+import { AUTHORITY_BITS, AUTHORITY_DENY_BIT, parseAuthorityBitSet } from '../../workspace/model/authorityDefinitions.js'
 import {
   getNodeTypeLabel,
   getRecurringCategoryLabel,
@@ -445,8 +445,8 @@ function defaultAuthorityDiff(oldValue: string | null, newValue: string | null):
   const label = (bit: number) => AUTHORITY_BITS.find((info) => info.bit === bit)?.label ?? `권한 ${bit}`
 
   return {
-    added: [...newSet].filter((bit) => bit !== 23 && !oldSet.has(bit)).sort((a, b) => a - b).map(label),
-    removed: [...oldSet].filter((bit) => bit !== 23 && !newSet.has(bit)).sort((a, b) => a - b).map(label),
+    added: [...newSet].filter((bit) => bit !== AUTHORITY_DENY_BIT && !oldSet.has(bit)).sort((a, b) => a - b).map(label),
+    removed: [...oldSet].filter((bit) => bit !== AUTHORITY_DENY_BIT && !newSet.has(bit)).sort((a, b) => a - b).map(label),
   }
 }
 

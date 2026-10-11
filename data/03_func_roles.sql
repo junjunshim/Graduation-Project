@@ -210,12 +210,12 @@ CREATE OR REPLACE FUNCTION create_role_definition(
     p_requester_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
     p_role_name role_authorities.role%TYPE,
-    p_authority VARCHAR(24)
+    p_authority authority_mask_text
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_authority_id role_authorities.authority_id%TYPE;
-    v_authority_bit BIT(24);
+    v_authority_bit authority_mask;
 BEGIN
     -- 0. 입력값 및 비트 변환 검증
     IF p_role_name IS NULL OR TRIM(p_role_name) = '' THEN
@@ -225,9 +225,9 @@ BEGIN
 
 
     BEGIN
-        v_authority_bit := p_authority::BIT(24);
+        v_authority_bit := p_authority::authority_mask;
     EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0410]Invalid 24-bit authority bit string: %', p_authority
+        RAISE EXCEPTION '[P0410]Invalid %-bit authority bit string: %', authority_bit_length(), p_authority
         USING ERRCODE = 'P0410';
     END;
 
@@ -287,14 +287,14 @@ CREATE OR REPLACE FUNCTION update_role_authority(
     p_requester_email users.email%TYPE,
     p_node_id organization_nodes.node_id%TYPE,
     p_role_id INTEGER,
-    p_authority VARCHAR(24)
+    p_authority authority_mask_text
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     p_role_name role_authorities.role%TYPE;
     v_requester_id users.user_id%TYPE;
     v_authority_id role_authorities.authority_id%TYPE;
-    v_authority_bit BIT(24);
-    v_old_authority BIT(24);
+    v_authority_bit authority_mask;
+    v_old_authority authority_mask;
 BEGIN
     SELECT role INTO p_role_name FROM role_authorities WHERE authority_id = p_role_id AND node_id = p_node_id;
     IF NOT FOUND THEN
@@ -313,9 +313,9 @@ BEGIN
     END IF;
 
     BEGIN
-        v_authority_bit := p_authority::BIT(24);
+        v_authority_bit := p_authority::authority_mask;
     EXCEPTION WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0410]Invalid 24-bit authority bit string: %', p_authority
+        RAISE EXCEPTION '[P0410]Invalid %-bit authority bit string: %', authority_bit_length(), p_authority
         USING ERRCODE = 'P0410';
     END;
 
@@ -385,7 +385,7 @@ DECLARE
     p_old_role_name role_authorities.role%TYPE;
     v_requester_id users.user_id%TYPE;
     v_authority_id role_authorities.authority_id%TYPE;
-    v_authority_bit BIT(24);
+    v_authority_bit authority_mask;
 BEGIN
     SELECT role INTO p_old_role_name FROM role_authorities WHERE authority_id = p_role_id AND node_id = p_node_id;
     IF NOT FOUND THEN
@@ -969,7 +969,7 @@ CREATE OR REPLACE FUNCTION delete_role_definition(
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_role_name role_authorities.role%TYPE;
-    v_authority_bit BIT(24);
+    v_authority_bit authority_mask;
     v_is_top_role BOOLEAN;
     v_assignee_count INTEGER;
     v_assignee_names TEXT;

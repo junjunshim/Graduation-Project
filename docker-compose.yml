@@ -45,6 +45,16 @@ services:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       # collab 사이드카 주소 (backend -> collab, 되돌리기 통보 §12.11.1). compose 내부망 서비스 이름을 쓴다.
       COLLAB_BASE: ${COLLAB_BASE:-http://collab:3000}
+      # 무거운 작업(git 실행 + 동기 DB)의 동시 실행 상한 (TASK_11 §13.4).
+      # GIT_MAX_CONCURRENT: 전체 동시 실행 수. GIT_MAX_NETWORK: 그중 clone/fetch/push 의 수(합산된다).
+      # GIT_MAX_QUEUED: 차선별 대기 줄 상한 — 넘으면 기다리지 않고 503 으로 거부한다.
+      GIT_MAX_CONCURRENT: ${GIT_MAX_CONCURRENT:-6}
+      GIT_MAX_NETWORK: ${GIT_MAX_NETWORK:-2}
+      GIT_MAX_QUEUED: ${GIT_MAX_QUEUED:-32}
+      # 스스로 끊는 대기 시간(ms). nginx proxy_read_timeout(120초)보다 먼저 503 으로 거절한다.
+      GIT_MAX_WAIT_MS: ${GIT_MAX_WAIT_MS:-20000}
+      # DB 커넥션 수(사설 풀). 전체 한도보다 넉넉해야 워커가 커넥션을 기다리며 놀지 않는다.
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-8}
     volumes:
       - .:/app                  # 로컬 소스 수정을 컨테이너에 즉시 반영 (개발용)
       # 저장소 clone/worktree 전용 마운트.

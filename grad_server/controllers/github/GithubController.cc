@@ -5,6 +5,7 @@
 #include "GithubWebSocketController.h"
 #include "AuthController.h"
 #include "CollabClient.h"
+#include "WorkerLimiter.h"
 
 #include <drogon/HttpClient.h>
 #include <json/json.h>
@@ -328,22 +329,50 @@ std::string requesterEmail(const HttpRequestPtr &req) {
 
 // clone/fetch 같은 git 실행과 동기 DB 호출은 오래 걸린다.
 // 이벤트 루프를 막지 않도록 워커 스레드에서 실행하고, 응답만 원래 루프로 되돌린다.
+//
+// **동시 실행 수는 WorkerLimiter 가 막는다**(§13.4). 상한이 없으면 요청 수만큼 스레드와
+// git 프로세스가 생겨 메모리가 예측 불가능해지고, DB 커넥션(사설 풀)이 마르면 무관한
+// 요청까지 줄을 선다. 원격 작업(clone/fetch/push)은 Lane::Network 로 넘겨 더 좁은 한도를 쓴다.
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
-                std::function<HttpResponsePtr()> &&work) {
+                std::function<HttpResponsePtr()> &&work,
+                WorkerLimiter::Lane lane = WorkerLimiter::Lane::Normal) {
     auto cb = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
-    std::thread worker([cb, work = std::move(work)]() {
+    std::thread worker([cb, work = std::move(work), lane]() {
+        auto &limiter = WorkerLimiter::instance();
         HttpResponsePtr resp;
-        try {
-            resp = work();
-        } catch (const orm::DrogonDbException &e) {
-            resp = dbErrorResponse(e);
-        } catch (const std::exception &e) {
-            LOG_ERROR << "GitHub 핸들러 실패: " << e.what();
-            resp = errorResponse("500", "서버 처리 중 오류가 발생했습니다.", k500InternalServerError);
+
+        if (!limiter.acquire(lane)) {
+            // 동시 실행 상한과 대기 줄 상한을 모두 넘었다(§13.4). 더 기다리게 하면 그 대기가
+            // 곧 스레드 쌓기라, 즉시 거부하고 클라이언트가 다시 시도하게 한다.
+            LOG_WARN << "동시 작업 한도 초과 — 요청을 거부합니다 (running=" << limiter.running()
+                     << ", network=" << limiter.networkRunning()
+                     << ", waiting=" << limiter.waiting() << ")";
+            resp = errorResponse("503",
+                                 "서버가 동시에 처리할 수 있는 작업 수를 넘었습니다. 잠시 뒤 다시 시도해 주세요.",
+                                 k503ServiceUnavailable);
+            resp->addHeader("Retry-After", "5");
+        } else {
+            try {
+                resp = work();
+            } catch (const orm::DrogonDbException &e) {
+                resp = dbErrorResponse(e);
+            } catch (const std::exception &e) {
+                LOG_ERROR << "GitHub 핸들러 실패: " << e.what();
+                resp = errorResponse("500", "서버 처리 중 오류가 발생했습니다.", k500InternalServerError);
+            }
+            // 위 catch 가 모든 예외를 삼키므로 여기까지 반드시 온다 — 슬롯이 새지 않는다.
+            limiter.release(lane);
         }
+
         app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
     });
     worker.detach();
+}
+
+// 원격 작업(clone / fetch / push) 전용 입구. 타임아웃이 분 단위라 더 좁은 차선을 쓴다(§13.4).
+void runNetworkOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
+                       std::function<HttpResponsePtr()> &&work) {
+    runOffLoop(std::move(callback), std::move(work), WorkerLimiter::Lane::Network);
 }
 
 // ---------------------------------------------------------------------------
@@ -1126,7 +1155,7 @@ void GithubController::connectRepository(const HttpRequestPtr &req, std::functio
     const std::string requestedBranch = (*jsonPtr)["default_branch"].isNull() ? "" : (*jsonPtr)["default_branch"].asString();
     const std::string givenUrl = (*jsonPtr)["clone_url"].isNull() ? "" : (*jsonPtr)["clone_url"].asString();
 
-    runOffLoop(std::move(callback), [requester, nodeId, owner, repo, requestedBranch, givenUrl]() -> HttpResponsePtr {
+    runNetworkOffLoop(std::move(callback), [requester, nodeId, owner, repo, requestedBranch, givenUrl]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         const std::string url = givenUrl.empty()
                                     ? ("https://github.com/" + owner + "/" + repo + ".git")
@@ -2685,7 +2714,7 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
     const std::string branch = body["branch"].isString() ? trim(body["branch"].asString()) : trim(req->getParameter("branch"));
     const std::string requester = requesterEmail(req);
 
-    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+    runNetworkOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         Json::Value repoRow;
@@ -2965,7 +2994,7 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+    runNetworkOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         std::string workDir;

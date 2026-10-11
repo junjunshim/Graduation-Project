@@ -2,6 +2,7 @@
 #include "GithubWebSocketController.h"
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
+#include "WorkerLimiter.h"
 
 #include <drogon/drogon.h>
 #include <drogon/utils/Utilities.h>
@@ -98,19 +99,34 @@ std::string requesterEmail(const HttpRequestPtr &req) {
 }
 
 // DB 동기 호출은 이벤트 루프를 막으므로 워커 스레드에서 실행하고 응답만 되돌린다.
+//
+// 동시 실행 수는 WorkerLimiter 의 Internal 차선이 막는다(§13.4). 이 API 는 편집을 시작하는
+// 경로(티켓 소비·작업 경로 해석)라, GitHub 의 git 작업(clone/fetch/push)과 자리를 겨루지 않게
+// 별도 차선으로 센다 — git 이 도는 동안 파일을 못 열면 안 된다.
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
                 std::function<HttpResponsePtr()> &&work) {
     auto cb = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
     std::thread worker([cb, work = std::move(work)]() {
+        auto &limiter = WorkerLimiter::instance();
         HttpResponsePtr resp;
-        try {
-            resp = work();
-        } catch (const orm::DrogonDbException &e) {
-            resp = dbErrorResponse(e);
-        } catch (const std::exception &e) {
-            LOG_ERROR << "collab 핸들러 실패: " << e.what();
-            resp = errorResponse("500", "서버 처리 중 오류가 발생했습니다.", k500InternalServerError);
+
+        if (!limiter.acquire(WorkerLimiter::Lane::Internal)) {
+            LOG_WARN << "collab 내부 API 동시 한도 초과 — 요청을 거부합니다 (internal="
+                     << limiter.internalRunning() << ", waiting=" << limiter.waiting() << ")";
+            resp = errorResponse("503", "서버가 붐빕니다. 잠시 뒤 다시 시도해 주세요.", k503ServiceUnavailable);
+            resp->addHeader("Retry-After", "2");
+        } else {
+            try {
+                resp = work();
+            } catch (const orm::DrogonDbException &e) {
+                resp = dbErrorResponse(e);
+            } catch (const std::exception &e) {
+                LOG_ERROR << "collab 핸들러 실패: " << e.what();
+                resp = errorResponse("500", "서버 처리 중 오류가 발생했습니다.", k500InternalServerError);
+            }
+            limiter.release(WorkerLimiter::Lane::Internal);
         }
+
         app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
     });
     worker.detach();

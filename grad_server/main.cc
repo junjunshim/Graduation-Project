@@ -42,6 +42,13 @@ int main() {
             db["dbname"] = getEnv("DB_NAME", db["dbname"].asString());
             db["user"] = getEnv("DB_USER", db["user"].asString());
             db["passwd"] = getEnv("DB_PASSWORD", db["passwd"].asString());
+
+            // DB 커넥션 수(사설 풀). 동시 실행 상한(§13.4)보다 넉넉해야 워커가 커넥션을 기다리며 놀지
+            // 않는다. config.json 은 git 에 없는 서버 전용 파일이라, 배포에서는 이 env 로 올린다.
+            const int currentPool = (db.isMember("number_of_connections") && db["number_of_connections"].isNumeric())
+                                        ? db["number_of_connections"].asInt()
+                                        : 5;
+            db["number_of_connections"] = std::stoi(getEnv("DB_POOL_SIZE", std::to_string(currentPool)));
         }
 
         // libpq용 연결 문자열(conninfo) 생성

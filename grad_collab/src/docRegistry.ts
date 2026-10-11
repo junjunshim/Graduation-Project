@@ -97,6 +97,16 @@ export class DocRegistry {
     return this.docs.size;
   }
 
+  /**
+   * 열려 있는 doc 들의 총 문자 수(UTF-16 코드 유닛). doc 메모리가 파일 크기에 비례하므로
+   * 이 값이 곧 방의 메모리 사용량 지표다(§9.10). `Y.Text.length` 는 O(1) 이라 열린 doc 수에만 비례한다.
+   */
+  get openChars(): number {
+    let total = 0;
+    for (const entry of this.docs.values()) total += entry.doc.getText(TEXT_TYPE).length;
+    return total;
+  }
+
   get dirtyCount(): number {
     let total = 0;
     for (const entry of this.docs.values()) if (entry.dirty) total += 1;

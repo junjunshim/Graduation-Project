@@ -217,6 +217,26 @@ async function onOpen(client: RoomClient, filePath: string): Promise<void> {
     return;
   }
 
+  // 열린 doc 총량 상한(§9.10). 파일 수 상한과 **다른 축**이다 — 메모리는 개수가 아니라 바이트에 비례해서,
+  // 큰 파일 몇 개면 개수 상한(200)에는 한참 못 미치고도 인스턴스 메모리를 다 먹을 수 있다.
+  // 여기서도 이미 열려 있는 파일은 늘리는 것이 없으므로 통과시킨다.
+  if (!room.docs.has(filePath) && room.docs.openChars >= config.maxOpenDocCharsPerBranch) {
+    log('warn', '열린 doc 총량 상한 초과 — 열기를 거절합니다', {
+      repo: room.repo.repoId,
+      branch: room.repo.branch,
+      open_chars: room.docs.openChars,
+      limit: config.maxOpenDocCharsPerBranch,
+    });
+    client.send(
+      errFrame(
+        'P0910',
+        '이 브랜치에서 동시에 열어 둘 수 있는 문서 총량을 넘었습니다. 큰 파일이나 쓰지 않는 파일을 닫고 다시 시도해 주세요.',
+        { path: filePath },
+      ),
+    );
+    return;
+  }
+
   let opened: AcquireResult;
   try {
     opened = await room.docs.acquire(filePath, {
@@ -1147,9 +1167,23 @@ wss.on('connection', (ws: WsSocket) => {
     session,
     room: null,
     send(frame: unknown): void {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(frame));
+      if (ws.readyState !== WebSocket.OPEN) return;
+
+      // 느린 수신자 보호(§9.10). `ws` 는 상대가 못 따라오면 그 소켓 버퍼에 프레임을 계속 쌓는다 —
+      // 팬아웃이 있는 방(같은 파일을 여러 명이 보는 경우)에서는 이것이 조용히 수십 MB 로 자란다.
+      // 버퍼가 상한을 넘었으면 회선이 아니라 상대가 멈춘 것이므로 끊는다. 확장은 재접속해
+      // 서버 상태로 다시 맞추므로(§12.10), 쌓아 두는 것보다 끊는 편이 안전하다.
+      if (ws.bufferedAmount > config.maxSocketBufferBytes) {
+        log('warn', '수신이 밀린 소켓을 끊습니다', {
+          user: session.userEmail,
+          buffered_bytes: ws.bufferedAmount,
+          limit: config.maxSocketBufferBytes,
+        });
+        ws.terminate();
+        return;
       }
+
+      ws.send(JSON.stringify(frame));
     },
     close(code: number, reason: string): void {
       try {

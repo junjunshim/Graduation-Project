@@ -1454,61 +1454,130 @@ END;
 $$ LANGUAGE plpgsql;
 
 
--- Cron/Scheduler::cleanup_expired_deleted_data (15일 지난 삭제 데이터 하드 딜리트 및 파일 경로 반환)
-CREATE OR REPLACE FUNCTION cleanup_expired_deleted_data()
-RETURNS TABLE (deleted_file_path VARCHAR(500)) AS $$
+-- Cron/Scheduler::list_expired_deleted_paths
+-- 15일 지난 삭제 데이터의 **물리 경로만** 모은다(DB 행은 건드리지 않는다).
+--
+-- 왜 둘로 나눴나: 예전에는 한 함수가 "경로 반환 + 행 삭제"를 한 호출에 했다. 그러면 디스크에서 파일을
+-- 지우다 실패했을 때 그 경로가 이미 DB 에서 사라져 다시 알 수 없다 — 실패가 영구 잔여물이 된다.
+-- 그래서 (1) 여기서 경로만 모으고 → (2) 서버가 디스크에서 지우고 → (3) purge_expired_deleted_data 로
+-- 행을 지운다. 지우지 못한 항목은 (3) 이 넘겨받아 행을 남기므로 다음 회차에 자동으로 다시 시도된다.
+--
+-- ref_type: 'FILE' = 업무 첨부 파일(ref_id = file_id), 'REPO' = 저장소 clone/worktree(ref_id = repo_id)
+-- 노드·업무 자체는 물리 파일이 없어 여기서 나오지 않는다 — 그 행 삭제만 purge_expired_deleted_data 가 한다.
+CREATE OR REPLACE FUNCTION list_expired_deleted_paths()
+RETURNS TABLE (ref_type VARCHAR(8), ref_id INTEGER, path TEXT) AS $$
 BEGIN
-    -- 1. 15일 이상 지난 삭제 대상 파일들의 실제 물리 경로 수집하여 반환 테이블에 적재
+    -- 1. 15일 지난 휴지통 첨부 파일의 실제 물리 경로
     RETURN QUERY
-    SELECT f.file_path
+    SELECT 'FILE'::VARCHAR(8), f.file_id, f.file_path
     FROM work_item_files f
-    WHERE f.is_deleted = TRUE 
+    WHERE f.is_deleted = TRUE
       AND f.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
       AND f.file_path IS NOT NULL AND f.file_path <> '';
 
-    -- 1-2. 15일 지난 저장소 연결 해제 + 이번 실행에서 하드 삭제될 노드의 저장소 → clone/worktree 경로 수집
-    --      (github_repositories.node_id 는 ON DELETE CASCADE 라, 노드 행이 지워지면 경로를 되찾을 수 없다.
-    --       그래서 삭제보다 반드시 먼저 모은다. worktree 는 clone 옆 형제 디렉터리다: <local_path>.worktrees)
+    -- 2. 15일 지난 저장소 연결 해제 레코드의 clone/worktree 경로
+    --    노드가 만료되면 그 아래 저장소 행은 ON DELETE CASCADE 로 함께 사라진다. 그러면 경로를 되찾을 수
+    --    없으므로 "직접 만료된 저장소"와 "만료된 노드에 딸린 저장소"를 여기서 함께 모은다.
+    --    worktree 는 clone 옆 형제 디렉터리다: <local_path>.worktrees
     RETURN QUERY
     WITH doomed_repo AS (
-        SELECT r.local_path
+        SELECT r.repo_id, r.local_path
         FROM github_repositories r
         WHERE r.is_deleted = TRUE
           AND r.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
         UNION
-        SELECT r.local_path
+        SELECT r.repo_id, r.local_path
         FROM github_repositories r
         JOIN organization_nodes n ON n.node_id = r.node_id
         WHERE n.is_deleted = TRUE
           AND n.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
     )
-    SELECT p.path::VARCHAR(500)
+    SELECT 'REPO'::VARCHAR(8), p.repo_id, p.path
     FROM (
-        SELECT local_path AS path FROM doomed_repo
+        SELECT repo_id, local_path AS path FROM doomed_repo
         UNION
-        SELECT local_path || '.worktrees' AS path FROM doomed_repo
+        SELECT repo_id, local_path || '.worktrees' FROM doomed_repo
     ) p
     WHERE p.path IS NOT NULL AND p.path <> '';
+END;
+$$ LANGUAGE plpgsql;
 
-    -- 2. 15일 지난 파일 DB 레코드 영구 삭제
-    DELETE FROM work_item_files
-    WHERE is_deleted = TRUE 
-      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
 
-    -- 3. 15일 지난 업무 DB 레코드 영구 삭제 (연관 댓글, 멘션, 파일은 ON DELETE CASCADE로 함께 영구 삭제)
-    DELETE FROM work_items
-    WHERE is_deleted = TRUE 
-      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
+-- Cron/Scheduler::purge_expired_deleted_data
+-- 15일 지난 삭제 데이터의 **DB 행**을 영구 삭제한다. list_expired_deleted_paths 가 준 경로를 서버가
+-- 디스크에서 지운 **뒤에** 부른다.
+--
+-- p_failed_file_ids / p_failed_repo_ids: 서버가 디스크에서 지우지 못한 경로의 id 목록("1,2,3", 없으면 '').
+-- 그 id 가 걸린 행은 지우지 않고 남긴다 — 남겨야 다음 회차에도 그 경로를 알 수 있다.
+--
+-- CASCADE 주의: 노드를 지우면 그 아래 저장소 행이, 저장소를 지우면 브랜치·접속자·커밋 기록이,
+-- 업무를 지우면 댓글·파일 행이 함께 사라진다. 그래서 "지우지 못한 것에 걸린 상위 행"도 아래 NOT IN
+-- 조건으로 함께 남긴다. 안 그러면 CASCADE 가 남겨두려던 행을 데려가 버린다.
+CREATE OR REPLACE FUNCTION purge_expired_deleted_data(
+    p_failed_file_ids TEXT DEFAULT '',
+    p_failed_repo_ids TEXT DEFAULT ''
+) RETURNS TABLE (purged_files INTEGER, purged_work_items INTEGER, purged_repos INTEGER, purged_nodes INTEGER) AS $$
+DECLARE
+    -- 빈 문자열은 "실패 없음"이다. string_to_array 는 빈 입력을 빈 배열로 주지 않으므로 NULLIF 로 갈라낸다.
+    v_failed_files INTEGER[] := COALESCE(string_to_array(NULLIF(p_failed_file_ids, ''), ',')::INTEGER[], '{}'::INTEGER[]);
+    v_failed_repos INTEGER[] := COALESCE(string_to_array(NULLIF(p_failed_repo_ids, ''), ',')::INTEGER[], '{}'::INTEGER[]);
+    -- 1번(list)과 3번(purge) 사이에 15일 경계를 갓 넘긴 행이 생기면, 그 행은 경로를 모은 적이 없는데 지워질 수
+    -- 있다(디스크에 파일이 남는다). 그래서 행 삭제 기준을 1시간 더 뒤로 미뤄, purge 가 지우는 행이 항상
+    -- list_expired_deleted_paths 가 이미 경로를 모아둔 행의 부분집합이 되게 한다.
+    v_boundary TIMESTAMPTZ := CURRENT_TIMESTAMP - INTERVAL '15 days' - INTERVAL '1 hour';
+    v_files INTEGER := 0;
+    v_items INTEGER := 0;
+    v_repos INTEGER := 0;
+    v_nodes INTEGER := 0;
+BEGIN
+    -- 1. 15일 지난 파일 행 영구 삭제 (지우지 못한 파일 행은 남긴다 — 남겨야 경로를 다시 알 수 있다)
+    WITH doomed AS (
+        DELETE FROM work_item_files
+        WHERE is_deleted = TRUE
+          AND updated_at < v_boundary
+          AND NOT (file_id = ANY(v_failed_files))
+        RETURNING 1
+    )
+    SELECT count(*)::INTEGER INTO v_files FROM doomed;
 
-    -- 4. 15일 지난 저장소 연결 해제 레코드 영구 삭제 (브랜치·접속자·커밋 기록은 CASCADE 로 함께 삭제)
-    DELETE FROM github_repositories
-    WHERE is_deleted = TRUE
-      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
+    -- 2. 15일 지난 업무 행 영구 삭제 (댓글·멘션·파일 행은 ON DELETE CASCADE 로 함께 삭제)
+    --    파일을 지우지 못한 업무는 남긴다 — 지우면 그 파일 행이 CASCADE 로 딸려 사라져 경로를 잃는다.
+    WITH doomed AS (
+        DELETE FROM work_items
+        WHERE is_deleted = TRUE
+          AND updated_at < v_boundary
+          AND work_item_id NOT IN (
+              SELECT f.work_item_id FROM work_item_files f WHERE f.file_id = ANY(v_failed_files)
+          )
+        RETURNING 1
+    )
+    SELECT count(*)::INTEGER INTO v_items FROM doomed;
 
-    -- 5. 15일 지난 노드 DB 레코드 영구 삭제 (연관 역할, 권한, 업무는 ON DELETE CASCADE로 함께 영구 삭제)
-    DELETE FROM organization_nodes
-    WHERE is_deleted = TRUE 
-      AND updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days');
+    -- 3. 15일 지난 저장소 연결 해제 행 영구 삭제 (브랜치·접속자·커밋 기록은 ON DELETE CASCADE)
+    --    clone/worktree 를 지우지 못한 저장소는 남긴다.
+    WITH doomed AS (
+        DELETE FROM github_repositories
+        WHERE is_deleted = TRUE
+          AND updated_at < v_boundary
+          AND NOT (repo_id = ANY(v_failed_repos))
+        RETURNING 1
+    )
+    SELECT count(*)::INTEGER INTO v_repos FROM doomed;
 
+    -- 4. 15일 지난 노드 행 영구 삭제 (역할·권한·정기규칙·저장소는 ON DELETE CASCADE)
+    --    지우지 못한 저장소가 걸린 노드는 남긴다 — 노드를 지우면 그 저장소 행도 CASCADE 로 사라진다.
+    --    (업무는 노드 삭제 시 owner_node_id 가 NULL 로 남을 뿐 사라지지 않으므로 2번에서 따로 지운다.)
+    WITH doomed AS (
+        DELETE FROM organization_nodes
+        WHERE is_deleted = TRUE
+          AND updated_at < v_boundary
+          AND node_id NOT IN (
+              SELECT r.node_id FROM github_repositories r WHERE r.repo_id = ANY(v_failed_repos)
+          )
+        RETURNING 1
+    )
+    SELECT count(*)::INTEGER INTO v_nodes FROM doomed;
+
+    RETURN QUERY SELECT v_files, v_items, v_repos, v_nodes;
 END;
 $$ LANGUAGE plpgsql;

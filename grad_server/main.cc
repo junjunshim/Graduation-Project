@@ -2,6 +2,7 @@
 #include <json/json.h>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <thread>
@@ -126,6 +127,103 @@ void reclaimIdleWorktrees(int idleDays, int maxPerRepo) {
 
     LOG_INFO << "[Scheduler] worktree 회수 완료 — 삭제 " << removed << "개, 건너뜀 " << skipped
              << "개 (남아 있는 작업 디렉터리 " << present << "개, 후보 " << candidates.size() << "개)";
+}
+
+// purge_expired_deleted_data 의 TEXT 인자로 넘길 "1,2,3" 형태. 빈 목록은 ""(SQL 쪽에서 "실패 없음"으로 본다).
+std::string joinIds(const std::vector<int> &ids) {
+    std::string joined;
+    for (const int id : ids) {
+        if (!joined.empty()) {
+            joined += ',';
+        }
+        joined += std::to_string(id);
+    }
+    return joined;
+}
+
+// 휴지통 15일 만료 데이터 정리(Hard Delete).
+//
+// 지우는 순서가 핵심이다: **물리 파일 → DB 행**. 지우지 못한 항목의 id 를 모아 purge 함수에 넘기면 그 행만
+// 남아 다음 회차에 자동으로 다시 시도된다. 반대로 행을 먼저 지우면 파일 삭제에 실패한 경로를 다시 알 수
+// 없어 영구 잔여물이 된다.
+//
+// 무엇이 만료됐는지, CASCADE 로 무엇이 함께 사라지는지는 DB 함수가 판단하고, 서버는 "디스크에서 실제로
+// 지웠는가"만 본다 — DB 는 파일 시스템을 모른다.
+//
+// **워커 스레드에서만 부른다.** 동기 DB 호출과 파일 삭제가 들어 있다.
+void purgeExpiredDeletedData() {
+    auto db = drogon::app().getDbClient();
+
+    // 서버가 관리하는 경로만 지운다. DB 값이 오염돼도 이 접두사 밖은 건드리지 않는다.
+    // 업무 첨부는 업로드 당시 상대 경로를 그대로 저장해 './uploads/...' 로 들어오고,
+    // 저장소 회수 경로는 'repository/...' 다. 앞의 './' 만 떼고 접두사를 본다.
+    const auto isManagedPath = [](std::string path) {
+        if (path.rfind("./", 0) == 0) {
+            path.erase(0, 2);
+        }
+        return path.rfind("uploads/", 0) == 0 || path.rfind("repository/", 0) == 0;
+    };
+
+    std::vector<int> failedFileIds;  // 디스크에서 못 지운 첨부 파일 — 이 행은 남겨 다음 회차에 다시 시도한다
+    std::vector<int> failedRepoIds;  // 디스크에서 못 지운 clone/worktree — 이 저장소 행은 남긴다
+    int removed = 0;                 // 실제로 지운 경로 수(로그용)
+
+    for (const auto &row : db->execSqlSync("SELECT * FROM list_expired_deleted_paths()")) {
+        const std::string refType = row["ref_type"].as<std::string>();
+        const int refId = row["ref_id"].as<int>();
+        const std::string entryPath = row["path"].as<std::string>();
+        if (entryPath.empty()) {
+            continue;
+        }
+
+        // 관리 경로 밖이면 지우지 않는다. 그리고 그 행도 지우지 않도록 실패로 표시한다 —
+        // 행을 지워버리면 경로를 다시 알 수 없어 영구 잔여물이 된다.
+        if (!isManagedPath(entryPath)) {
+            LOG_WARN << "[Scheduler] Skipped unexpected cleanup path: " << entryPath;
+            (refType == "FILE" ? failedFileIds : failedRepoIds).push_back(refId);
+            continue;
+        }
+
+        std::error_code ec;
+        if (!std::filesystem::exists(entryPath, ec) || ec) {
+            continue;  // 이미 없다 — 지울 것도, 남길 것도 없다
+        }
+
+        std::filesystem::remove_all(entryPath, ec);
+        if (ec) {
+            LOG_WARN << "[Scheduler] Failed to remove path: " << entryPath << " (" << ec.message() << ")";
+            (refType == "FILE" ? failedFileIds : failedRepoIds).push_back(refId);
+            continue;
+        }
+        removed += 1;
+    }
+
+    // 같은 저장소가 clone·worktree 두 줄로 나오므로 중복을 지운다(SQL 인자와 로그 숫자를 짧게 유지).
+    const auto dedupe = [](std::vector<int> &ids) {
+        std::sort(ids.begin(), ids.end());
+        ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    };
+    dedupe(failedFileIds);
+    dedupe(failedRepoIds);
+
+    auto purged = db->execSqlSync(
+        "SELECT * FROM purge_expired_deleted_data($1, $2)", joinIds(failedFileIds), joinIds(failedRepoIds));
+
+    int purgedFiles = 0;
+    int purgedItems = 0;
+    int purgedRepos = 0;
+    int purgedNodes = 0;
+    for (const auto &row : purged) {  // 집계 한 줄이라 반복은 한 번뿐이다
+        purgedFiles = row["purged_files"].as<int>();
+        purgedItems = row["purged_work_items"].as<int>();
+        purgedRepos = row["purged_repos"].as<int>();
+        purgedNodes = row["purged_nodes"].as<int>();
+    }
+
+    LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed paths: " << removed
+             << ", purged rows: files=" << purgedFiles << " work_items=" << purgedItems
+             << " repos=" << purgedRepos << " nodes=" << purgedNodes << ", 보류(다음 회차 재시도): files="
+             << failedFileIds.size() << " repos=" << failedRepoIds.size();
 }
 
 }  // namespace
@@ -267,57 +365,33 @@ int main() {
     });
 
     // 4. 휴지통 15일 만료 데이터 자동 영구 삭제(Hard Delete & 물리 파일 삭제) 백그라운드 스케줄러 등록
-    // 24시간(86400초)마다 1회 실행
-    drogon::app().getLoop()->runEvery(86400.0, []() {
-        LOG_INFO << "[Scheduler] Starting 15-day expired deleted data cleanup...";
-        auto dbClient = drogon::app().getDbClient();
-        dbClient->execSqlAsync(
-            "SELECT * FROM cleanup_expired_deleted_data()",
-            [](const drogon::orm::Result &result) {
-                size_t deletedCount = 0;
-
-                // 서버가 관리하는 경로만 지운다. DB 값이 오염돼도 이 접두사 밖은 건드리지 않는다.
-                // 업무 첨부는 업로드 당시 상대 경로를 그대로 저장해 './uploads/...' 로 들어오고,
-                // 저장소 회수 경로는 'repository/...' 다. 앞의 './' 만 떼고 접두사를 본다.
-                const auto isManagedPath = [](std::string path) {
-                    if (path.rfind("./", 0) == 0) {
-                        path.erase(0, 2);
-                    }
-                    return path.rfind("uploads/", 0) == 0 || path.rfind("repository/", 0) == 0;
-                };
-
-                for (const auto &row : result) {
-                    // 회수 대상에는 업무 첨부 파일과 저장소 clone/worktree 디렉터리가 섞여 있다.
-                    // remove_all 은 파일이면 그대로, 디렉터리면 하위까지 지운다.
-                    const std::string entryPath = row["deleted_file_path"].as<std::string>();
-                    if (entryPath.empty()) {
-                        continue;
-                    }
-
-                    if (!isManagedPath(entryPath)) {
-                        LOG_WARN << "[Scheduler] Skipped unexpected cleanup path: " << entryPath;
-                        continue;
-                    }
-
-                    std::error_code ec;
-                    if (!std::filesystem::exists(entryPath, ec) || ec) {
-                        continue;
-                    }
-
-                    std::filesystem::remove_all(entryPath, ec);
-                    if (ec) {
-                        LOG_WARN << "[Scheduler] Failed to remove path: " << entryPath << " (" << ec.message() << ")";
-                        continue;
-                    }
-                    deletedCount++;
-                }
-                LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed paths: " << deletedCount;
-            },
-            [](const drogon::orm::DrogonDbException &e) {
-                LOG_ERROR << "[Scheduler] Expired data cleanup DB error: " << e.base().what();
+    //
+    // 시작 60초 뒤 한 번, 그 뒤 24시간마다 돈다. `runEvery` 만 두면 배포로 프로세스를 다시 띄울 때마다
+    // 타이머가 처음부터 다시 세어져 **하루보다 자주 배포하는 환경에서는 영영 실행되지 않는다**(§13.8 과 같은 이유).
+    //
+    // 실제 작업은 워커 스레드에서 돈다 — 동기 DB 호출과 파일 삭제가 들어 있어 IO 스레드에서 돌리면 그 동안
+    // 요청이 멈춘다. 동시 실행 수는 worktree 회수와 같은 WorkerLimiter(Normal 차선)로 막는다(§13.4).
+    auto runExpiredCleanup = []() {
+        std::thread worker([]() {
+            auto &limiter = app_utils::WorkerLimiter::instance();
+            if (!limiter.acquire(app_utils::WorkerLimiter::Lane::Normal)) {
+                LOG_WARN << "[Scheduler] 15일 만료 정리 건너뜀 — 동시 작업 한도 초과 (running=" << limiter.running()
+                         << ", waiting=" << limiter.waiting() << ")";
+                return;
             }
-        );
-    });
+            LOG_INFO << "[Scheduler] Starting 15-day expired deleted data cleanup...";
+            try {
+                purgeExpiredDeletedData();
+            } catch (const std::exception &e) {
+                LOG_ERROR << "[Scheduler] 15-day expired cleanup failed: " << e.what();
+            }
+            limiter.release(app_utils::WorkerLimiter::Lane::Normal);
+        });
+        worker.detach();
+    };
+
+    drogon::app().getLoop()->runAfter(60.0, runExpiredCleanup);
+    drogon::app().getLoop()->runEvery(86400.0, runExpiredCleanup);
 
     // 5. PostgreSQL 활동 알림(LISTEN/NOTIFY) 백그라운드 리스너 기동
     api::NotificationWebSocketController::startNotificationListener(dbConnInfo);

@@ -8,42 +8,35 @@
 #include <thread>
 #include <vector>
 #include "NotificationWebSocketController.h"
-#include "GitRunner.h"          // 브랜치 worktree 회수(§13.8)
-#include "WorkerLimiter.h"      // 무거운 작업 동시 실행 상한(§13.4)
+#include "GitRunner.h"
+#include "WorkerLimiter.h"
 
 namespace {
 
-// worktree 회수 기본값 (§13.8). config.json 의 custom_config·env(WORKTREE_IDLE_DAYS / WORKTREE_MAX_PER_REPO)
-// 로 바꿀 수 있다. 30일은 "이번 달에 안 쓴 브랜치" 정도를 뜻하고, 20개는 저장소 하나가 동시에 들고 있을
-// 작업 사본 수 상한이다(사본 하나가 저장소 크기만큼 디스크를 쓴다).
+// worktree 회수 기본값. config.json 의 custom_config 나 env(WORKTREE_IDLE_DAYS / WORKTREE_MAX_PER_REPO)로
+// 바꿀 수 있다. 30일은 "이번 달에 안 쓴 브랜치", 20개는 저장소 하나가 동시에 들고 있을 작업 사본 수
+// 상한이다(사본 하나가 저장소 크기만큼 디스크를 쓴다).
 constexpr int kDefaultWorktreeIdleDays = 30;
 constexpr int kDefaultWorktreeMaxPerRepo = 20;
 
-// 로그 한 줄에 담기게 stderr 의 첫 줄만 남긴다(줄바꿈이 그대로 들어가면 로그가 여러 줄로 깨진다).
+// stderr 의 첫 줄만 남긴다(줄바꿈이 그대로 들어가면 로그가 여러 줄로 깨진다).
 std::string firstLine(const std::string &text) {
     const auto pos = text.find('\n');
     return (pos == std::string::npos) ? text : text.substr(0, pos);
 }
 
-// 브랜치 worktree 회수 (§13.8).
+// 브랜치 worktree 회수. 브랜치마다 작업 파일 사본이 통째로 생겨 디스크가 브랜치 수만큼 늘어나므로,
+// 오래 안 쓴 브랜치의 작업 디렉터리를 캐시처럼 비운다. 회수는 삭제가 아니다 — 브랜치 행과 커밋한
+// 내용은 clone 의 ref·오브젝트에 그대로 남고, 다시 열면 ensureWorktree 가 같은 자리에 되살린다.
 //
-// 왜 하는가: 브랜치마다 작업 파일 사본이 통째로 생겨 디스크가 브랜치 수만큼 늘어난다(§2.3).
-// 회수는 삭제가 아니다 — 브랜치 행도, 커밋한 내용도 clone 의 ref·오브젝트에 그대로 남고, 다시 열면
-// ensureWorktree 가 같은 자리에 되살린다. 그래서 "오래 안 쓴 브랜치의 작업 디렉터리"만 캐시처럼 비운다.
+// 두 규칙을 함께 본다: 유휴 회수(idleDays 초과)와 저장소별 상한(maxPerRepo 초과, 오래 안 쓴 것부터).
+// 후보 자격(접속자 없음·기본 브랜치 아님·최근에 안 씀)은 DB 함수가 판정하고, 디렉터리가 실제로 남아
+// 있는지는 여기서 본다 — DB 는 파일 시스템을 모른다. 커밋하지 않은 변경이 남은 작업 트리는 지우지
+// 않는다(지우면 되돌릴 수 없다). 지우지 못한 브랜치는 후보를 매번 새로 계산하므로 다음 실행에서 다시
+// 시도된다.
 //
-// 두 규칙을 함께 본다:
-//   1) 유휴 회수 — idleDays 보다 오래 안 쓴 브랜치.
-//   2) 저장소별 상한 — 작업 디렉터리가 실제로 남아 있는 브랜치가 maxPerRepo 를 넘으면 오래 안 쓴 것부터.
-// 후보가 될 수 있는지(접속자 없음·기본 브랜치 아님·최근에 안 씀)는 DB 함수가 판정하고, 디렉터리가 실제로
-// 남아 있는지는 여기서 본다 — DB 는 파일 시스템을 모른다.
-//
-// 안전장치:
-//   - 접속자(presence)가 있거나 최근 10분 안에 쓴 브랜치는 후보에 오지 않는다(DB 함수).
-//   - 커밋하지 않은 변경(스테이징·수정·새 파일)이 남은 작업 트리는 지우지 않는다 — 지우면 되돌릴 수 없다.
-//   - 후보는 매번 새로 계산하므로, 지우지 못한 브랜치는 다음 실행에서 다시 시도된다.
-//
-// **워커 스레드에서만 부른다.** git 실행과 동기 DB 호출이 들어 있어 IO 스레드에서 돌리면 그 동안
-// 모든 요청이 멈춘다.
+// git 실행과 동기 DB 호출이 들어 있어 워커 스레드에서만 부른다 — IO 스레드에서 돌리면 그 동안 모든
+// 요청이 멈춘다.
 void reclaimIdleWorktrees(int idleDays, int maxPerRepo) {
     auto db = drogon::app().getDbClient();
 
@@ -68,9 +61,9 @@ void reclaimIdleWorktrees(int idleDays, int maxPerRepo) {
     }
 
     // 지울 대상 고르기. 이미 회수된 브랜치는 후보에 계속 남지만 지울 것이 없으므로, 상한 계산에서도
-    // 빼야 "지금 디스크에 남아 있는 개수"를 정확히 세어 상한을 넘지 않게 된다.
+    // 빼야 "지금 디스크에 남아 있는 개수"를 정확히 센다.
     std::vector<size_t> targets;
-    int present = 0;   // 지금 실제로 남아 있는 작업 디렉터리 수 — 상한 계산과 로그에 쓴다
+    int present = 0;   // 지금 남아 있는 작업 디렉터리 수(상한 계산·로그에 쓴다)
     int rank = 0;
     int lastRepo = 0;
     for (size_t i = 0; i < candidates.size(); ++i) {
@@ -129,7 +122,7 @@ void reclaimIdleWorktrees(int idleDays, int maxPerRepo) {
              << "개 (남아 있는 작업 디렉터리 " << present << "개, 후보 " << candidates.size() << "개)";
 }
 
-// purge_expired_deleted_data 의 TEXT 인자로 넘길 "1,2,3" 형태. 빈 목록은 ""(SQL 쪽에서 "실패 없음"으로 본다).
+// purge_expired_deleted_data 에 넘길 "1,2,3" 형태. 빈 목록은 ""(SQL 쪽에서 "실패 없음"으로 본다).
 std::string joinIds(const std::vector<int> &ids) {
     std::string joined;
     for (const int id : ids) {
@@ -143,20 +136,17 @@ std::string joinIds(const std::vector<int> &ids) {
 
 // 휴지통 15일 만료 데이터 정리(Hard Delete).
 //
-// 지우는 순서가 핵심이다: **물리 파일 → DB 행**. 지우지 못한 항목의 id 를 모아 purge 함수에 넘기면 그 행만
-// 남아 다음 회차에 자동으로 다시 시도된다. 반대로 행을 먼저 지우면 파일 삭제에 실패한 경로를 다시 알 수
-// 없어 영구 잔여물이 된다.
+// 지우는 순서가 핵심이다: 물리 파일을 먼저 지우고, 지우지 못한 항목의 id 를 모아 purge 함수에 넘기면
+// 그 행만 남아 다음 회차에 자동으로 다시 시도된다. 반대로 행을 먼저 지우면 실패한 경로를 다시 알 수
+// 없어 영구 잔여물이 된다. 무엇이 만료됐는지, CASCADE 로 무엇이 함께 사라지는지는 DB 함수가 판단하고,
+// 서버는 "디스크에서 실제로 지웠는가"만 본다 — DB 는 파일 시스템을 모른다.
 //
-// 무엇이 만료됐는지, CASCADE 로 무엇이 함께 사라지는지는 DB 함수가 판단하고, 서버는 "디스크에서 실제로
-// 지웠는가"만 본다 — DB 는 파일 시스템을 모른다.
-//
-// **워커 스레드에서만 부른다.** 동기 DB 호출과 파일 삭제가 들어 있다.
+// 동기 DB 호출과 파일 삭제가 들어 있어 워커 스레드에서만 부른다.
 void purgeExpiredDeletedData() {
     auto db = drogon::app().getDbClient();
 
-    // 서버가 관리하는 경로만 지운다. DB 값이 오염돼도 이 접두사 밖은 건드리지 않는다.
-    // 업무·정기 일정 첨부는 업로드 당시 상대 경로를 그대로 저장해 './uploads/...' 로 들어오고,
-    // 저장소 회수 경로는 'repository/...' 다. 앞의 './' 만 떼고 접두사를 본다.
+    // 서버가 관리하는 경로만 지운다. DB 값이 오염돼도 이 접두사 밖은 건드리지 않는다(업무·정기 일정
+    // 첨부는 './uploads/...', 저장소는 'repository/...'). 앞의 './' 만 떼고 접두사를 본다.
     const auto isManagedPath = [](std::string path) {
         if (path.rfind("./", 0) == 0) {
             path.erase(0, 2);
@@ -164,9 +154,9 @@ void purgeExpiredDeletedData() {
         return path.rfind("uploads/", 0) == 0 || path.rfind("repository/", 0) == 0;
     };
 
-    std::vector<int> failedFileIds;           // 업무 첨부를 못 지웠다 — 이 행은 남겨 다음 회차에 다시 시도한다
+    std::vector<int> failedFileIds;           // 업무 첨부를 못 지웠다 — 이 행은 남긴다
     std::vector<int> failedRecurringFileIds;  // 정기 일정 첨부를 못 지웠다 — 이 행도 남긴다
-    std::vector<int> failedRepoIds;           // clone/worktree 를 못 지웠다 — 이 저장소 행은 남긴다
+    std::vector<int> failedRepoIds;           // clone/worktree 를 못 지웠다 — 이 행은 남긴다
     int removed = 0;                          // 실제로 지운 경로 수(로그용)
 
     // 지우지 못한 id 는 ref_type 별로 따로 모은다 — purge 함수가 각각 다른 표를 보기 때문이다.
@@ -188,8 +178,7 @@ void purgeExpiredDeletedData() {
             continue;
         }
 
-        // 관리 경로 밖이면 지우지 않는다. 그리고 그 행도 지우지 않도록 실패로 표시한다 —
-        // 행을 지워버리면 경로를 다시 알 수 없어 영구 잔여물이 된다.
+        // 관리 경로 밖이면 지우지 않는다. 그 행도 실패로 표시해 남긴다 — 지워버리면 경로를 다시 알 수 없다.
         if (!isManagedPath(entryPath)) {
             LOG_WARN << "[Scheduler] Skipped unexpected cleanup path: " << entryPath;
             markFailed(refType, refId);
@@ -252,8 +241,8 @@ int main() {
     try {
         std::filesystem::create_directories("./uploads/work_items");
         std::filesystem::create_directories("./uploads/recurring_rules");
-        // 서버 로컬 저장소 루트 (저장소 clone + 브랜치 worktree).
-        // docker-compose 의 repository_data 볼륨이 이 위치에 붙는다 (uploads 와 같은 CWD 기준 규칙).
+        // 서버 로컬 저장소 루트(저장소 clone + 브랜치 worktree).
+        // docker-compose 의 repository_data 볼륨이 이 위치에 붙는다(uploads 와 같은 CWD 기준 규칙).
         std::filesystem::create_directories("./repository");
     } catch (const std::exception& e) {
         LOG_ERROR << "Failed to initialize uploads directory: " << e.what();
@@ -284,8 +273,8 @@ int main() {
             db["user"] = getEnv("DB_USER", db["user"].asString());
             db["passwd"] = getEnv("DB_PASSWORD", db["passwd"].asString());
 
-            // DB 커넥션 수(사설 풀). 동시 실행 상한(§13.4)보다 넉넉해야 워커가 커넥션을 기다리며 놀지
-            // 않는다. config.json 은 git 에 없는 서버 전용 파일이라, 배포에서는 이 env 로 올린다.
+            // DB 커넥션 수(사설 풀). 동시 실행 상한보다 넉넉해야 워커가 커넥션을 기다리며 놀지 않는다.
+            // config.json 은 git 에 없는 서버 전용 파일이라, 배포에서는 이 env 로 올린다.
             const int currentPool = (db.isMember("number_of_connections") && db["number_of_connections"].isNumeric())
                                         ? db["number_of_connections"].asInt()
                                         : 5;
@@ -309,7 +298,7 @@ int main() {
             custom["access_token_expiry"]  = std::stoi(getEnv("ACCESS_TOKEN_EXPIRY", std::to_string(custom["access_token_expiry"].asInt())));
             custom["refresh_token_expiry"] = std::stoi(getEnv("REFRESH_TOKEN_EXPIRY", std::to_string(custom["refresh_token_expiry"].asInt())));
 
-            // 브랜치 worktree 회수 설정 (§13.8). config.json 에 없으면 기본값을 쓰고 env 가 있으면 덮어쓴다.
+            // 브랜치 worktree 회수 설정. config.json 에 없으면 기본값을 쓰고 env 가 있으면 덮어쓴다.
             //  - worktree_idle_days   : 이 일수보다 오래 안 쓴 브랜치의 작업 디렉터리를 회수한다(0 이면 유휴 회수 없음).
             //  - worktree_max_per_repo: 저장소 하나가 들고 있을 작업 디렉터리 수 상한(기본 브랜치는 세지 않는다, 0 이면 무제한).
             const int worktreeIdleDays = custom.isMember("worktree_idle_days")
@@ -330,15 +319,15 @@ int main() {
         return 1;
     }
 
-    // 2. 서버 접속 테스트용 핸들러 등록
+    // 4. 서버 접속 테스트용 핸들러 등록
     drogon::app().registerHandler("/server-test", [](const drogon::HttpRequestPtr&, std::function<void (const drogon::HttpResponsePtr &)> &&callback) {
         auto resp = drogon::HttpResponse::newHttpResponse();
         resp->setBody("TEST => Server is running ");
         callback(resp);
     });
     LOG_INFO << "Server testing handler";
-    
-    // 3. DB 접속 테스트용 핸들러 등록
+
+    // 5. DB 접속 테스트용 핸들러 등록
     drogon::app().registerHandler("/db-test", [](const drogon::HttpRequestPtr& req, std::function<void (const drogon::HttpResponsePtr &)> &&callback) {
         auto dbClient = drogon::app().getDbClient(); // 'default' 클라이언트 호출
 
@@ -362,14 +351,14 @@ int main() {
     LOG_INFO << "Database teseting handler";
 
 
-    // CORS 허용 설정 (모든 도메인 및 포트 허용)
+    // 6. CORS 허용 설정 (모든 도메인 및 포트 허용)
     drogon::app().registerPostHandlingAdvice([](const drogon::HttpRequestPtr &req, const drogon::HttpResponsePtr &resp) {
         resp->addHeader("Access-Control-Allow-Origin", "*"); // 모든 도메인 허용
         resp->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
         resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
     });
 
-    // OPTIONS 요청(Preflight) 처리를 위한 간단한 처리
+    // 7. OPTIONS 요청(Preflight) 처리를 위한 간단한 처리
     drogon::app().registerPreRoutingAdvice([](const drogon::HttpRequestPtr &req, drogon::AdviceCallback &&acb, drogon::AdviceChainCallback &&accb) {
         if (req->method() == drogon::Options) {
             auto resp = drogon::HttpResponse::newHttpResponse();
@@ -383,13 +372,13 @@ int main() {
         accb();
     });
 
-    // 4. 휴지통 15일 만료 데이터 자동 영구 삭제(Hard Delete & 물리 파일 삭제) 백그라운드 스케줄러 등록
+    // 8. 휴지통 15일 만료 데이터 자동 영구 삭제(Hard Delete & 물리 파일 삭제) 백그라운드 스케줄러 등록
     //
     // 시작 60초 뒤 한 번, 그 뒤 24시간마다 돈다. `runEvery` 만 두면 배포로 프로세스를 다시 띄울 때마다
-    // 타이머가 처음부터 다시 세어져 **하루보다 자주 배포하는 환경에서는 영영 실행되지 않는다**(§13.8 과 같은 이유).
+    // 타이머가 처음부터 다시 세어져 하루보다 자주 배포하는 환경에서는 영영 실행되지 않는다.
     //
     // 실제 작업은 워커 스레드에서 돈다 — 동기 DB 호출과 파일 삭제가 들어 있어 IO 스레드에서 돌리면 그 동안
-    // 요청이 멈춘다. 동시 실행 수는 worktree 회수와 같은 WorkerLimiter(Normal 차선)로 막는다(§13.4).
+    // 요청이 멈춘다. 동시 실행 수는 worktree 회수와 같이 WorkerLimiter(Normal 차선)로 막는다.
     auto runExpiredCleanup = []() {
         std::thread worker([]() {
             auto &limiter = app_utils::WorkerLimiter::instance();
@@ -412,17 +401,15 @@ int main() {
     drogon::app().getLoop()->runAfter(60.0, runExpiredCleanup);
     drogon::app().getLoop()->runEvery(86400.0, runExpiredCleanup);
 
-    // 5. PostgreSQL 활동 알림(LISTEN/NOTIFY) 백그라운드 리스너 기동
+    // 9. PostgreSQL 활동 알림(LISTEN/NOTIFY) 백그라운드 리스너 기동
     api::NotificationWebSocketController::startNotificationListener(dbConnInfo);
 
-    // 6. 브랜치 worktree 회수 (§13.8). 브랜치마다 작업 파일 사본이 통째로 생겨 디스크가 브랜치 수만큼
-    //      늘어나므로, 오래 안 쓴 브랜치의 작업 디렉터리를 회수한다. 회수된 브랜치는 다시 열 때
-    //      ensureWorktree 가 같은 자리에 되살리므로 사용자에게는 "처음 여는 데 조금 더 걸린다" 정도로만
-    //      보인다. git 실행 + 동기 DB 라 워커 스레드에서 돌리고, 동시 실행 수는 다른 무거운 작업과 같은
-    //      WorkerLimiter(Normal 차선)로 막는다(§13.4).
+    // 10. 브랜치 worktree 회수. 브랜치마다 작업 파일 사본이 통째로 생겨 디스크가 브랜치 수만큼 늘어나므로,
+    // 오래 안 쓴 브랜치의 작업 디렉터리를 회수한다. 회수된 브랜치는 다시 열 때 ensureWorktree 가 같은
+    // 자리에 되살리므로 사용자에게는 "처음 여는 데 조금 더 걸린다" 정도로만 보인다. git 실행 + 동기 DB 라
+    // 워커 스레드에서 돌리고, 동시 실행 수는 다른 무거운 작업과 같이 WorkerLimiter(Normal 차선)로 막는다.
     //
-    //      시작 60초 뒤 한 번, 그 뒤 24시간마다 돈다. `runEvery` 만 두면 배포로 컨테이너를 다시 띄울 때마다
-    //      타이머가 처음부터 다시 세어져 **하루보다 자주 배포하는 환경에서는 영영 실행되지 않는다.**
+    // 시작 60초 뒤 한 번, 그 뒤 24시간마다 돈다(만료 정리와 같은 이유).
     auto reclaimWorktrees = []() {
         // 설정은 실행 시점의 값을 읽는다(config.json 또는 env 로 바꾼 값이 그대로 쓰인다).
         const auto &custom = drogon::app().getCustomConfig();

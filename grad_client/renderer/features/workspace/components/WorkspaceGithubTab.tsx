@@ -793,10 +793,10 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
                       왼쪽에서 파일을 선택하면 내용을 보여줍니다. 실제 편집은 VSCode 로 실시간 편집에서 합니다.
                     </p>
                   ) : null}
-                  {previewFile && !previewFile.read_only && previewFile.content !== undefined ? (
+                  {previewFile && previewFile.content_omitted !== true && previewFile.content !== undefined ? (
                     <pre className={styles.previewCode}>{previewFile.content}</pre>
                   ) : null}
-                  {previewFile && previewFile.read_only ? (
+                  {previewFile && previewFile.content_omitted === true ? (
                     <p className={styles.previewNotice}>
                       {previewFile.reason === 'binary'
                         ? '바이너리 파일이라 미리보기를 지원하지 않습니다.'

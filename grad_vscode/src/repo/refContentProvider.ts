@@ -42,8 +42,12 @@ export type RefKind = 'head' | 'index' | 'none';
  */
 export type DiffSide = string;
 
-/** 파일 내용 1건(§3.2 `GET /api/github/repos/file`). diff 왼쪽이 쓰는 필드만 본다. */
-type FileRow = { content?: unknown; read_only?: unknown; reason?: unknown };
+/**
+ * 파일 내용 1건(§3.2 `GET /api/github/repos/file`). diff 왼쪽이 쓰는 필드만 본다.
+ * `read_only` 는 "고칠 수 없다" 는 뜻일 뿐 "볼 수 없다" 가 아니다 — 내용을 안 실어 보낸 경우에만
+ * `content_omitted` 가 붙는다(바이너리·열람 상한 초과, §12.6).
+ */
+type FileRow = { content?: unknown; read_only?: unknown; reason?: unknown; content_omitted?: unknown };
 
 /**
  * diff 문서의 가상 URI. 저장소 트리(`repoResourceUri`)와 같은 모양에 버전 자리를 하나 끼운다.
@@ -130,8 +134,9 @@ class RefContentProvider implements vscode.TextDocumentContentProvider, vscode.D
         try {
             const rows = await apiRequest<FileRow[]>(query);
             const row = Array.isArray(rows) ? rows[0] : undefined;
-            if (row?.read_only === true) {
-                // 상한 초과·바이너리는 diff 로 그릴 수 없다(§12.6). 빈 문서로 두고 로그만 남긴다.
+            if (row?.read_only === true && row.content_omitted === true) {
+                // 내용을 싣지 않은 파일(바이너리·열람 상한 초과)은 diff 로 그릴 수 없다(§12.6).
+                // 빈 문서로 두고 로그만 남긴다 — "그 버전에 파일이 없다"(404)와 같은 모양이 된다.
                 log(`diff 왼쪽을 그릴 수 없습니다(${target.path}): ${String(row.reason ?? 'read_only')}`);
                 return '';
             }

@@ -30,6 +30,8 @@ export type GithubFileContent = {
   read_only: boolean
   /** read_only 이유: 'too_large' | 'binary' */
   reason?: string
+  /** false 가 아닐 때만 내용이 실려 온다. true 면 서버가 내용을 생략했다(바이너리·열람 상한 초과). */
+  content_omitted?: boolean
   content?: string
   eol?: string
   /** 이 파일이 마지막으로 바뀐 시각(ISO 8601). 다음 조회의 캐시 검증 토큰으로 그대로 되돌려 보낸다. */

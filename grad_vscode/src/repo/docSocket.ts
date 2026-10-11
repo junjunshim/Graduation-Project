@@ -460,10 +460,9 @@ async function openReadOnly(
         return;
     }
 
-    let file: ReadOnlyFile;
+    let copy: ReadOnlyCopy;
     try {
-        await ensureJoined(repoId, branch);
-        file = await requestRead(path);
+        copy = await fetchReadOnlyCopy(repoId, branch, path);
     } catch (error) {
         const message = describe(error);
         log(`읽기 전용으로 열지 못했습니다(${path}): ${message}`);
@@ -471,30 +470,23 @@ async function openReadOnly(
         return;
     }
 
-    if (file.encoding === 'none') {
+    if (!copy.uri) {
         void vscode.window.showInformationMessage(
-            `Axis Share: ${path} 는 ${formatBytes(file.size)} 라 열 수 없습니다. ` +
+            `Axis Share: ${path} 는 ${formatBytes(copy.file.size)} 라 열 수 없습니다. ` +
                 '읽기 전용 미리보기도 이 크기는 지원하지 않습니다.'
         );
         return;
     }
 
-    const uri = localCopyUri(repoId, branch, path);
-    const body =
-        file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : Buffer.from(file.content, 'utf8');
-
     try {
-        await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
-        await vscode.workspace.fs.writeFile(uri, body);
-
-        if (file.encoding === 'base64') {
+        if (copy.file.encoding === 'base64') {
             // 바이너리 — VS Code 가 이미지 미리보기 등으로 처리한다.
-            await vscode.commands.executeCommand('vscode.open', uri, { preview: false });
+            await vscode.commands.executeCommand('vscode.open', copy.uri, { preview: false });
         } else {
-            const document = await vscode.workspace.openTextDocument(uri);
+            const document = await vscode.workspace.openTextDocument(copy.uri);
             await vscode.window.showTextDocument(document, { preview: false });
             // 이 세션에서만 편집을 잠근다 — 디스크에 쓴 것은 사본이므로 저장해도 서버에 가지 않는다.
-            await setEditorLocked(uri, true);
+            await setEditorLocked(copy.uri, true);
         }
     } catch (error) {
         log(`읽기 전용 사본을 열지 못했습니다(${path}): ${describe(error)}`);
@@ -513,6 +505,31 @@ async function openReadOnly(
     }
 }
 
+/** 읽기 전용 열람 결과 — 받은 내용과, 그것을 내려쓴 로컬 사본(§12.6). `uri` 가 없으면 그릴 것이 없다. */
+type ReadOnlyCopy = { file: ReadOnlyFile; uri?: vscode.Uri };
+
+/**
+ * 편집할 수 없는 파일의 내용을 collab 에서 받아 **편집 세션과 같은 로컬 사본 경로**에 내려쓴다(§12.6).
+ *
+ * 이 함수가 두 곳을 먹여 살린다 — 읽기 전용으로 여는 길(`openReadOnly`)과 diff(§15.15)의 오른쪽.
+ * 후자는 에디터 탭을 열지 않고 **로컬 사본 URI 만** 필요하므로, 화면에 여는 일은 부르는 쪽 몫으로 남긴다.
+ * `uri` 가 없는 경우는 하나뿐이다 — 읽기 전용 열람 상한을 넘어 크기만 온 때(`encoding: 'none'`).
+ */
+async function fetchReadOnlyCopy(repoId: number, branch: string, path: string): Promise<ReadOnlyCopy> {
+    await ensureJoined(repoId, branch);
+    const file = await requestRead(path);
+    if (file.encoding === 'none') {
+        return { file };
+    }
+
+    const uri = localCopyUri(repoId, branch, path);
+    const body =
+        file.encoding === 'base64' ? Buffer.from(file.content, 'base64') : Buffer.from(file.content, 'utf8');
+    await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
+    await vscode.workspace.fs.writeFile(uri, body);
+    return { file, uri };
+}
+
 /** 바이트 수를 사람이 읽기 좋게 바꾼다(안내 문구용). */
 function formatBytes(size: number): string {
     if (size < 1024) {
@@ -526,8 +543,12 @@ function formatBytes(size: number): string {
 }
 
 /**
- * 파일의 편집 세션만 물린다 — 에디터 탭은 열지 않는다(§15.15 diff). 이미 물려 있으면 그대로 둔다.
+ * diff 의 오른쪽에 쓸 로컬 사본을 준비한다 — 에디터 탭은 열지 않는다(§15.15). 이미 물려 있으면 그대로 둔다.
  * diff 의 오른쪽이 이 로컬 사본이고, 세션이 붙어 있어야 다른 사용자의 편집이 그대로 반영된다.
+ *
+ * **편집할 수 없는 파일(§12.6)도 여기서 맡는다** — collab 이 열기를 거절하면(`NotEditableError`)
+ * 읽기 전용 사본을 내려쓰고 그 URI 를 준다. 그래야 바이너리·대용량 파일도 diff 의 오른쪽이
+ * "없는 파일" 이 아니라 실제 내용으로 보인다. 내용조차 없을 때(열람 상한 초과)만 `undefined` 다.
  */
 export async function ensureDocSession(path: string): Promise<vscode.Uri | undefined> {
     const session = getSession();
@@ -542,25 +563,35 @@ export async function ensureDocSession(path: string): Promise<vscode.Uri | undef
         return existing.uri;
     }
 
-    if (existing) {
-        // 끊긴 사본이다 — 탭을 열지 않고 서버 내용으로 다시 채운다(§12.10 재동기화).
-        try {
+    try {
+        if (existing) {
+            // 끊긴 사본이다 — 탭을 열지 않고 서버 내용으로 다시 채운다(§12.10 재동기화).
             await ensureJoined(session.repoId, branch);
             await applyServerFrame(existing, await requestOpen(path));
             return existing.uri;
-        } catch (error) {
-            log(`파일 세션을 다시 물리지 못했습니다(${path}): ${describe(error)}`);
-            return undefined;
         }
-    }
 
-    try {
         await ensureJoined(session.repoId, branch);
         const opened = await requestOpen(path);
         return await materialize(session.repoId, branch, opened, { reveal: false });
     } catch (error) {
-        const message = describe(error);
-        log(`파일 세션을 물리지 못했습니다(${path}): ${message}`);
+        // 편집할 수 없는 파일이다 — 읽기 전용 사본을 만들어 그대로 비교하게 한다(§12.6, §15.15).
+        if (error instanceof NotEditableError) {
+            try {
+                const copy = await fetchReadOnlyCopy(session.repoId, branch, path);
+                if (copy.uri) {
+                    return copy.uri;
+                }
+
+                log(`diff 오른쪽을 그릴 수 없습니다(${path}): 읽기 전용 상한 초과`);
+                return undefined;
+            } catch (readError) {
+                log(`읽기 전용 사본을 만들지 못했습니다(${path}): ${describe(readError)}`);
+                return undefined;
+            }
+        }
+
+        log(`파일 세션을 물리지 못했습니다(${path}): ${describe(error)}`);
         return undefined;
     }
 }

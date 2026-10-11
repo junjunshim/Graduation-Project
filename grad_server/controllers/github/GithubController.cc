@@ -33,6 +33,10 @@ namespace {
 // 파일 크기 상한 (§6-10 / §12.6). 넘으면 읽기 전용으로만 다룬다.
 constexpr long long kMaxTextFileBytes = 512 * 1024;
 
+// 읽기 전용 **열람** 상한 (§12.6). 동시 편집은 못 해도 내용은 볼 수 있게 하는 한계다.
+// collab 의 MAX_READONLY_BYTES 와 같은 값이어야 두 경로(편집·diff)가 같은 파일에서 같은 판단을 한다.
+constexpr long long kMaxReadOnlyFileBytes = 4 * 1024 * 1024;
+
 // GitHub 연동 권한 비트 (§3.2). 조회는 GITHUB_VIEW(bit 22), 저장소 추가/해제는 GITHUB_REPO_MANAGE(bit 24) 로 SQL 함수가 판정하고,
 // worktree 편집(브랜치 생성·삭제, 커밋, push, 파일 조작)은 GITHUB_CHANGE(bit 23) 로 여기서 한 번 더 막는다.
 constexpr char kGithubChangeAuthority[] = "GITHUB_CHANGE";
@@ -1459,10 +1463,32 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         data["changed"] = true;
         data["modified_at"] = version;
 
-        // 4) 상한 초과는 읽기 전용 (§12.6)
+        // 4) 동시 편집 상한(512KB) 초과는 읽기 전용 (§12.6). 읽기 전용 열람 상한(4MB) 안이면 **내용을
+        //    그대로 실어 보낸다** — 그래야 큰 텍스트 파일도 diff(§15.15)와 앱의 "저장소 자세히 보기" 가
+        //    내용을 보여 줄 수 있다. 널 바이트가 있으면(바이너리) JSON 문자열로 실을 수 없고, 상한을
+        //    넘으면 실어 봐야 쓸모가 없으므로 그때만 내용을 빼고 크기만 알린다(content_omitted).
         if (size > kMaxTextFileBytes) {
             data["read_only"] = true;
             data["reason"] = "too_large";
+
+            if (size <= kMaxReadOnlyFileBytes) {
+                auto large = GitRunner::run(readDir, {"show", spec});
+                if (large.ok()) {
+                    if (large.out.find('\0') == std::string::npos) {
+                        data["content"] = large.out;
+                        data["eol"] = (large.out.find("\r\n") != std::string::npos) ? "crlf" : "lf";
+                        return successResponse(singleItemArray(data), "파일이 커서 동시 편집은 지원하지 않습니다. 내용은 읽기 전용으로 볼 수 있습니다.");
+                    }
+
+                    // 널 바이트가 있으면(바이너리) JSON 문자열로 실을 수 없다 — 크기만 알린다.
+                    data["reason"] = "binary";
+                    data["encoding"] = "binary";
+                    data["content_omitted"] = true;
+                    return successResponse(singleItemArray(data), "바이너리 파일이라 읽기 전용으로 표시했습니다.");
+                }
+            }
+
+            data["content_omitted"] = true;
             return successResponse(singleItemArray(data), "파일이 너무 커서 읽기 전용으로 표시했습니다.");
         }
 
@@ -1476,6 +1502,8 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
             data["read_only"] = true;
             data["reason"] = "binary";
             data["encoding"] = "binary";
+            // 내용을 싣지 않았다 — diff(§15.15)의 왼쪽과 앱 미리보기가 이 표시로 판단한다.
+            data["content_omitted"] = true;
             return successResponse(singleItemArray(data), "바이너리 파일이라 읽기 전용으로 표시했습니다.");
         }
 

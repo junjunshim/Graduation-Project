@@ -38,6 +38,12 @@ export interface CollabConfig {
    * 이 값은 그 상한이고, 넘으면 그 소켓만 끊는다(확장은 재접속 후 서버 상태로 다시 맞춘다, §12.10).
    */
   maxSocketBufferBytes: number;
+  /**
+   * 세션 권한 재확인 주기(ms, §12.9). 권한 변경 통보가 유실된 경우(제어 소켓이 끊긴 우회
+   * 클라이언트, 일시 오류)의 안전망이다 — collab 이 자기 세션 목록을 들고 backend 에 물어본다.
+   * `0` 이면 재확인을 끈다.
+   */
+  permissionRecheckMs: number;
 }
 
 function readPort(raw: string | undefined, fallback: number): number {
@@ -48,6 +54,12 @@ function readPort(raw: string | undefined, fallback: number): number {
 function readPositiveInt(raw: string | undefined, fallback: number): number {
   const value = Number(raw);
   return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+/** 0 을 허용한다(끄기). 음수·비정수는 기본값으로 되돌린다. */
+function readNonNegativeInt(raw: string | undefined, fallback: number): number {
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : fallback;
 }
 
 export const config: CollabConfig = {
@@ -64,4 +76,5 @@ export const config: CollabConfig = {
   maxOpenDocsPerBranch: readPositiveInt(process.env.MAX_OPEN_DOCS_PER_BRANCH, 200),
   maxOpenDocCharsPerBranch: readPositiveInt(process.env.MAX_OPEN_DOC_CHARS_PER_BRANCH, 10_000_000),
   maxSocketBufferBytes: readPositiveInt(process.env.MAX_SOCKET_BUFFER_BYTES, 16 * 1024 * 1024),
+  permissionRecheckMs: readNonNegativeInt(process.env.PERMISSION_RECHECK_MS, 5 * 60 * 1000),
 };

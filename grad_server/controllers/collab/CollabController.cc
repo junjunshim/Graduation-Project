@@ -39,6 +39,10 @@ constexpr char kInternalTokenHeader[] = "X-Internal-Token";
 // VIEWER 는 read-only 티켓을, MEMBER 이상은 can_write=true 티켓을 받는다.
 constexpr char kWriteAuthority[] = "GITHUB_CHANGE";
 
+// 세션 권한 재확인(§12.9) 한 요청에 담을 수 있는 최대 세션 수. collab 은 "방 수 × 사용자 수"를
+// 한 번에 보내므로 정상 사용에서는 닿지 않는다 — 비정상 입력 방어용 상한이다.
+constexpr std::size_t kMaxRecheckSessions = 1000;
+
 // ---------------------------------------------------------------------------
 // 응답 헬퍼 (GithubController 와 같은 규격: {status, data[], message})
 // ---------------------------------------------------------------------------
@@ -555,4 +559,98 @@ void CollabController::notifyWorktreeChanged(const HttpRequestPtr &req,
     item["branch"] = branch;
     item["notified"] = static_cast<Json::Int>(paths.size());
     callback(successResponse(singleItemArray(item), "worktree 변경을 알렸습니다."));
+}
+
+// ===========================================================================
+// collab → C++ : 세션 권한 재확인 (내부 전용, §12.9)
+// ===========================================================================
+
+// collab 이 자기 세션 목록(사용자 × 저장소)을 들고 주기적으로 물어본다. 권한 변경 통보가 유실된
+// 경우(제어 소켓이 끊긴 우회 클라이언트, 통보 HTTP 의 일시 실패, 노드 삭제를 놓친 경우)의
+// 안전망이다 — 판정은 DB 함수 하나가 한다(`get_collab_session_permissions`), C++ 은 결과를 나른다.
+//
+// 없는 세션(저장소 연결 해제·노드 삭제·사용자 삭제)은 can_view=false 로 돌아온다. collab 은 그
+// 세션을 끝내므로(강제 이탈), 지워진 저장소를 계속 편집하는 상태가 한 주기 안에 정리된다.
+void CollabController::recheckPermissions(const HttpRequestPtr &req,
+                                          std::function<void(const HttpResponsePtr &)> &&callback) {
+    // 1) 내부 인증 — 다른 /internal/collab/* 와 같은 규칙(fail-closed).
+    const std::string configured = internalToken();
+    const std::string presented = req->getHeader(kInternalTokenHeader);
+    if (configured.empty() || presented.empty() || !constantTimeEquals(configured, presented)) {
+        LOG_WARN << "세션 권한 재확인 거부: 내부 토큰이 설정되지 않았거나 일치하지 않습니다.";
+        callback(errorResponse("401", "내부 인증에 실패했습니다.", k401Unauthorized));
+        return;
+    }
+
+    // 2) 세션 목록 검증. 여기서는 모양만 보고, 권한 판정은 DB 함수가 한다.
+    const Json::Value emptyBody;
+    auto jsonPtr = req->getJsonObject();
+    const Json::Value &rawSessions = jsonPtr ? (*jsonPtr)["sessions"] : emptyBody;
+    if (!rawSessions.isArray() || rawSessions.size() == 0) {
+        callback(errorResponse("400", "필수 파라미터(sessions)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+    if (rawSessions.size() > kMaxRecheckSessions) {
+        LOG_WARN << "세션 권한 재확인 거부: 세션 수가 상한을 넘었습니다. sessions=" << rawSessions.size()
+                 << " limit=" << kMaxRecheckSessions;
+        callback(errorResponse("400", "세션 목록이 너무 많습니다.", k400BadRequest));
+        return;
+    }
+
+    // 3) (repo_id, user_email) 만 골라 다시 조립한다 — 타입이 어긋난 항목은 조용히 버린다.
+    Json::Value sessions(Json::arrayValue);
+    for (const auto &raw : rawSessions) {
+        if (!raw.isObject() || !raw["repo_id"].isInt() || !raw["user_email"].isString()) {
+            continue;
+        }
+        const std::string email = raw["user_email"].asString();
+        if (email.empty()) {
+            continue;
+        }
+        Json::Value session;
+        session["repo_id"] = raw["repo_id"].asInt();
+        session["user_email"] = email;
+        sessions.append(session);
+    }
+    if (sessions.size() == 0) {
+        callback(errorResponse("400", "유효한 세션이 없습니다.", k400BadRequest));
+        return;
+    }
+
+    // jsonb 파라미터는 문자열로 직렬화해 넘긴다(다른 JSONB API 와 같은 방식).
+    Json::StreamWriterBuilder writer;
+    writer["indentation"] = "";
+    const std::string sessionsJson = Json::writeString(writer, sessions);
+
+    runOffLoop(std::move(callback), [sessionsJson]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+        auto rows = db->execSqlSync("SELECT * FROM get_collab_session_permissions($1::JSONB)", sessionsJson);
+
+        // 응답 모양은 통보(`/internal/collab/permission`)와 같다 — collab 이 같은 코드로 반영한다.
+        Json::Value items(Json::arrayValue);
+        int viewLost = 0;
+        int readOnly = 0;
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            const bool canView = rows[i]["can_view"].as<bool>();
+            const bool canWrite = rows[i]["can_write"].as<bool>();
+
+            Json::Value item;
+            item["repo_id"] = rows[i]["repo_id"].as<int>();
+            item["user_email"] = rows[i]["user_email"].as<std::string>();
+            item["can_view"] = canView;
+            item["can_write"] = canWrite;
+            items.append(item);
+
+            if (!canView) {
+                ++viewLost;
+            } else if (!canWrite) {
+                ++readOnly;
+            }
+        }
+
+        // 바뀐 세션이 없어도 한 줄 남긴다 — 재확인이 살아 있는지 확인할 유일한 신호다(§12.13).
+        LOG_INFO << "세션 권한 재확인: sessions=" << rows.size() << " 보기상실=" << viewLost
+                 << " 읽기전용=" << readOnly;
+        return successResponse(items, "세션 권한을 확인했습니다.");
+    });
 }

@@ -13,6 +13,7 @@ import { config } from './config';
 import { AcquireResult } from './docRegistry';
 import { log } from './logger';
 import { isSafeRelPath } from './paths';
+import { SessionRef, verifySessionPermissions } from './permissionCheck';
 import { ClientFrame, parseClientFrame } from './protocol';
 import { CollabResolveError, resolveRepo } from './repoResolver';
 import { ReviewRecord } from './reviewIndex';
@@ -904,7 +905,46 @@ async function evictUsers(repoId: number, userEmails: Set<string>, reason: strin
 }
 
 /**
- * 권한 변경 통보(TASK_11 §12.9). C++ 이 "이 사용자의 권한이 이렇게 바뀌었다"를 확정해 넘기면,
+ * 세션 권한을 그 저장소의 방들에 반영한다(§12.9). 쓰기만 바뀌면 `perm`, 보기까지 잃으면 강제 이탈이다.
+ *
+ * 부르는 곳이 둘이다 — 권한 변경 통보(C++ → collab, 밀어 넣기)와 주기적 재확인(§12.9, collab → C++).
+ * 두 경로의 결론이 갈라지지 않도록 반영 규칙은 여기 하나만 둔다.
+ *
+ * `can_view=false` 인 사람은 `evictUsers` 로 내보낸다 — 읽기만 막고 남겨 두면 못 보게 된 저장소의
+ * 편집을 계속 받는다.
+ */
+async function applySessionPermissions(
+  repoId: number,
+  targets: Map<string, { canView: boolean; canWrite: boolean }>,
+): Promise<{ updated: number; revoked: number; evicted: number }> {
+  const lostView = new Set<string>();
+  let updated = 0;
+  let revoked = 0;
+  for (const room of rooms.ofRepo(repoId)) {
+    // 방에서 떼는 일은 순회가 끝난 뒤에 한다 — 순회 중에 방 구성이 바뀌지 않게.
+    for (const client of [...room.clients]) {
+      const target = targets.get(client.session.userEmail);
+      if (!target) continue;
+      if (!target.canView) {
+        lostView.add(client.session.userEmail);
+        continue;
+      }
+      if (client.session.canWrite === target.canWrite) continue;
+      client.session.canWrite = target.canWrite;
+      client.send({ type: 'perm', can_write: target.canWrite });
+      updated += 1;
+      if (!target.canWrite) revoked += 1;
+    }
+  }
+
+  const evicted = lostView.size === 0
+    ? 0
+    : await evictUsers(repoId, lostView, 'authority_lost', '이 워크스페이스에 대한 권한이 없어 편집 세션을 종료했습니다.');
+
+  return { updated, revoked, evicted };
+}
+
+/** * 권한 변경 통보(TASK_11 §12.9). C++ 이 "이 사용자의 권한이 이렇게 바뀌었다"를 확정해 넘기면,
  * 그 저장소 방의 해당 세션에 반영한다.
  *
  * collab 은 권한을 판정하지 않는다 — 받은 값을 세션에 반영하고 클라이언트에 전달할 뿐이다. 값이
@@ -952,29 +992,8 @@ async function handlePermissionRequest(req: http.IncomingMessage, res: http.Serv
     return;
   }
 
-  const lostView = new Set<string>();
-  let updated = 0;
-  let revoked = 0;
-  for (const room of rooms.ofRepo(repoId)) {
-    // 방에서 떼는 일은 순회가 끝난 뒤에 한다 — 순회 중에 방 구성이 바뀌지 않게.
-    for (const client of [...room.clients]) {
-      const target = targets.get(client.session.userEmail);
-      if (!target) continue;
-      if (!target.canView) {
-        lostView.add(client.session.userEmail);
-        continue;
-      }
-      if (client.session.canWrite === target.canWrite) continue;
-      client.session.canWrite = target.canWrite;
-      client.send({ type: 'perm', can_write: target.canWrite });
-      updated += 1;
-      if (!target.canWrite) revoked += 1;
-    }
-  }
-
-  const evicted = lostView.size === 0
-    ? 0
-    : await evictUsers(repoId, lostView, 'authority_lost', '이 워크스페이스에 대한 권한이 없어 편집 세션을 종료했습니다.');
+  // 반영 규칙은 재확인 경로와 공유한다(§12.9) — 두 경로의 결론이 갈라지지 않게.
+  const { updated, revoked, evicted } = await applySessionPermissions(repoId, targets);
 
   log('info', '권한 변경 통보', { repo: repoId, updated, revoked, evicted, users: targets.size });
   sendJson(res, 200, {
@@ -1241,6 +1260,88 @@ wss.on('connection', (ws: WsSocket) => {
   });
 });
 
+// --- 주기적 권한 재확인 (§12.9) --------------------------------------------------------------
+
+/**
+ * 지금 붙어 있는 세션을 (저장소, 사용자) 쌍으로 모은다. 판정은 사용자·저장소 단위라, 같은 사람이
+ * 이 창·저 창으로 여러 번 붙어 있어도 한 쌍이면 충분하다.
+ */
+function collectSessionRefs(): SessionRef[] {
+  const refs = new Map<string, SessionRef>();
+  for (const room of rooms.all()) {
+    for (const client of room.clients) {
+      const { userEmail } = client.session;
+      refs.set(`${room.repo.repoId}:${userEmail}`, { repoId: room.repo.repoId, userEmail });
+    }
+  }
+  return [...refs.values()];
+}
+
+/**
+ * 권한 재확인 한 주기(§12.9).
+ *
+ * 권한 변경은 C++ 이 밀어 준다(`/internal/collab/permission`). 그 통보가 유실되는 경우가 있다 —
+ * 제어 소켓이 끊긴 채 문서 소켓만 남은(우회) 클라이언트, 통보 HTTP 의 일시 실패, 노드 삭제를
+ * 놓친 경우다. 그래서 collab 이 자기 세션 목록을 들고 주기적으로 backend 에 물어보는 길을 하나 더 둔다.
+ *
+ * 실패하면 아무것도 바꾸지 않는다 — 안전망이 세션을 잘못 건드리면 안 된다(다음 주기에 다시 시도한다).
+ */
+async function recheckPermissions(): Promise<void> {
+  const sessions = collectSessionRefs();
+  if (sessions.length === 0) return;
+
+  const permissions = await verifySessionPermissions(sessions);
+  if (permissions.length === 0) return;
+
+  // 저장소 단위로 묶어 반영한다 — 통보 경로와 같은 함수를 쓴다(두 결론이 갈라지지 않게).
+  const byRepo = new Map<number, Map<string, { canView: boolean; canWrite: boolean }>>();
+  for (const permission of permissions) {
+    let targets = byRepo.get(permission.repoId);
+    if (!targets) {
+      targets = new Map();
+      byRepo.set(permission.repoId, targets);
+    }
+    targets.set(permission.userEmail, { canView: permission.canView, canWrite: permission.canWrite });
+  }
+
+  let updated = 0;
+  let revoked = 0;
+  let evicted = 0;
+  for (const [repoId, targets] of byRepo) {
+    const result = await applySessionPermissions(repoId, targets);
+    updated += result.updated;
+    revoked += result.revoked;
+    evicted += result.evicted;
+  }
+
+  // 주기 로그라 바뀐 게 있을 때만 남긴다(§9.8 스팸 금지). 조용한 주기는 아무 흔적도 남기지 않는다.
+  if (updated > 0 || evicted > 0) {
+    log('info', '권한 재확인으로 세션을 정리했습니다', {
+      sessions: sessions.length,
+      updated,
+      revoked,
+      evicted,
+    });
+  }
+}
+
+// 주기 실행. 한 주기가 끝나기 전에 다음이 겹치지 않게 막는다 — 느린 backend 에서 요청이 쌓이면
+// 그 자체가 부하가 된다. `PERMISSION_RECHECK_MS=0` 이면 재확인을 끈다(통보 경로만 남는다).
+let recheckRunning = false;
+let permissionRecheck: NodeJS.Timeout | null = null;
+if (config.permissionRecheckMs > 0) {
+  permissionRecheck = setInterval(() => {
+    if (recheckRunning) return;
+    recheckRunning = true;
+    void recheckPermissions()
+      .catch((error: unknown) => log('error', '권한 재확인 실패', { reason: (error as Error).message }))
+      .finally(() => {
+        recheckRunning = false;
+      });
+  }, config.permissionRecheckMs);
+  permissionRecheck.unref();
+}
+
 const heartbeat = setInterval(() => {
   for (const ws of wss.clients) {
     const socket = ws as CollabSocket;
@@ -1256,6 +1357,7 @@ const heartbeat = setInterval(() => {
 async function shutdown(signal: string): Promise<void> {
   log('info', `shutdown (${signal})`);
   clearInterval(heartbeat);
+  if (permissionRecheck) clearInterval(permissionRecheck);
   try {
     // 마지막 flush 를 남기고 내려간다(§9.9).
     await rooms.disposeAll();

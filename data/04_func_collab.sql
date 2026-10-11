@@ -85,3 +85,44 @@ BEGIN
     WHERE r.is_deleted = FALSE;
 END;
 $$ LANGUAGE plpgsql;
+
+-- 주기적 권한 재확인 (TASK_11 §12.9).
+--
+-- 권한 변경은 C++ 통보(`get_collab_permission_targets` + `POST /internal/collab/permission`)가 밀어 준다.
+-- 그 통보가 유실되는 경우가 있다 — 제어 소켓이 끊긴 채 문서 소켓만 남은(우회) 클라이언트, 통보 HTTP 의
+-- 일시 실패, 노드 삭제를 놓친 경우다. 그래서 collab 이 자기 세션 목록(사용자 × 저장소)을 들고
+-- 주기적으로 물어보는 길을 하나 더 둔다(안전망).
+--
+-- 흐름: collab(주기 타이머) → C++ `POST /internal/collab/permissions/recheck` → 이 함수.
+-- 판정 주체는 여전히 C++(DB 함수) 하나다(§12.9) — collab 은 받은 값을 전달만 한다.
+--
+-- 세션이 더 이상 성립하지 않으면(저장소 연결 해제·노드 삭제·사용자 삭제) can_view=false 로 돌려준다.
+-- collab 은 그런 세션을 끝낸다(강제 이탈) — 지워진 것을 계속 편집하게 두지 않는다.
+CREATE OR REPLACE FUNCTION get_collab_session_permissions(
+    p_sessions JSONB
+) RETURNS TABLE (
+    repo_id INTEGER,
+    user_email VARCHAR,
+    can_view BOOLEAN,
+    can_write BOOLEAN
+) AS $$
+BEGIN
+    RETURN QUERY
+    -- CASE 로 감싸는 이유: 판정 함수는 사용자·노드가 실제로 있을 때만 부를 수 있다.
+    -- (AND 는 평가 순서를 보장하지 않으므로 짧은 회로에 기대지 않는다.)
+    SELECT s.repo_id,
+           s.user_email,
+           CASE
+               WHEN r.repo_id IS NULL OR n.node_id IS NULL OR u.user_id IS NULL THEN FALSE
+               ELSE check_authority_with_override(u.user_id, r.node_id, 'GITHUB_VIEW')
+           END AS can_view,
+           CASE
+               WHEN r.repo_id IS NULL OR n.node_id IS NULL OR u.user_id IS NULL THEN FALSE
+               ELSE check_authority_with_override(u.user_id, r.node_id, 'GITHUB_CHANGE')
+           END AS can_write
+    FROM jsonb_to_recordset(p_sessions) AS s(repo_id INTEGER, user_email VARCHAR)
+    LEFT JOIN github_repositories r ON r.repo_id = s.repo_id AND r.is_deleted = FALSE
+    LEFT JOIN organization_nodes n ON n.node_id = r.node_id AND n.is_deleted = FALSE
+    LEFT JOIN users u ON u.email = s.user_email AND u.is_deleted = FALSE;
+END;
+$$ LANGUAGE plpgsql;

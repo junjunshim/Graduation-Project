@@ -32,11 +32,16 @@ class CollabController : public drogon::HttpController<CollabController>
     // collab → C++: worktree 파일 flush 알림 (내부 전용, §9.9).
     //   collab 이 파일을 내려쓴 직후 부른다. C++ 은 같은 브랜치 방에 worktree_changed 를 중계한다.
     ADD_METHOD_TO(CollabController::notifyWorktreeChanged, "/internal/collab/worktree-changed", Post);
+    // collab → C++: 세션 권한 재확인 (내부 전용, §12.9).
+    //   collab 이 자기 세션 목록(사용자 × 저장소)을 들고 주기적으로 물어본다. 권한 변경 통보가
+    //   유실된 경우(우회 클라이언트·일시 오류)의 안전망이다 — 판정은 여기서 한다(DB 함수).
+    ADD_METHOD_TO(CollabController::recheckPermissions, "/internal/collab/permissions/recheck", Post);
     METHOD_LIST_END
 
     void issueTicket(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void consumeTicket(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void resolvePath(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void notifyWorktreeChanged(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void recheckPermissions(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };
 }

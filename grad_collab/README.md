@@ -22,6 +22,7 @@ VSCode 확장과 backend(C++) 사이에서 **텍스트의 진실**을 갖는 Nod
 | `MAX_OPEN_DOCS_PER_BRANCH` | `200` | 한 브랜치(방)에서 **동시에 열어 둘 수 있는 파일 수** 상한(§9.10). 넘으면 `open` 이 `P0909` 로 거절한다 |
 | `MAX_OPEN_DOC_CHARS_PER_BRANCH` | `10000000` | 한 브랜치가 들고 있을 수 있는 **열린 doc 총량**(문자 수) 상한(§9.10). 넘으면 `open` 이 `P0910` 로 거절한다 — 메모리는 개수가 아니라 크기에 비례해서, 파일 수 상한만으로는 최악값(200 × 512KB)을 막지 못한다 |
 | `MAX_SOCKET_BUFFER_BYTES` | `16777216` | 소켓 하나의 **송신 버퍼** 상한(바이트, §9.10). 느린 수신자에게 팬아웃해 버퍼가 이 값을 넘으면 그 소켓만 끊는다(확장은 재접속 후 재동기화, §12.10) |
+| `PERMISSION_RECHECK_MS` | `300000` | 세션 권한 재확인 주기(ms, §12.9). 지금 붙어 있는 세션의 `can_view`/`can_write` 를 backend 에 다시 물어보는 주기다 — 권한 변경 통보가 유실된 경우의 안전망. `0` 이면 끈다 |
 
 ## 모듈
 
@@ -35,6 +36,7 @@ VSCode 확장과 backend(C++) 사이에서 **텍스트의 진실**을 갖는 Nod
 | `docRegistry.ts` | 경로 → `Y.Doc` 1개. 로드/refcount/flush/unload, 데코레이션 보관 |
 | `store.ts` | worktree 파일 읽기/flush(원자적 교체·EOL 보존), `.ydoc` 영속화 |
 | `presence.ts` | 파일별 커서 집계(휘발성 — 저장하지 않는다) |
+| `permissionCheck.ts` | 세션 권한 재확인(주기) — backend `/internal/collab/permissions/recheck` 호출. 실패는 빈 결과(세션을 건드리지 않는다) |
 | `protocol.ts` | 메시지 타입·필수 필드·크기 상한 검증 |
 | `paths.ts` | 경로 안전 검사(상위 탈출·절대 경로 차단) |
 | `logger.ts` | 구조화 로그(`{repo,branch,path,user}`) |
@@ -47,6 +49,7 @@ VSCode 확장과 backend(C++) 사이에서 **텍스트의 진실**을 갖는 Nod
 | WS | `/collab/?ticket=<t>` | 1회용 티켓 | 문서 소켓 |
 | POST | `/internal/collab/tickets/consume` | — | (backend 가 제공) collab 이 부르는 티켓 검증 API |
 | POST | `/internal/collab/resolve` | — | (backend 가 제공) collab 이 부르는 작업 디렉터리 해석 API |
+| POST | `/internal/collab/permissions/recheck` | — | (backend 가 제공) collab 이 부르는 **세션 권한 재확인** API. `sessions: [{repo_id, user_email}]` 를 넘기면 세션마다 `can_view`/`can_write` 를 다시 계산해 돌려준다(§12.9). 없는 세션은 `can_view=false` |
 | POST | `/internal/collab/permission` | `X-Internal-Token` | **collab 이 제공** — backend 가 부르는 권한 변경 통보. `can_write` 가 바뀐 세션은 `perm` 을 받고, `can_view=false` 인 세션은 **끝난다**(`repo_closed { reason: authority_lost }` → 소켓 닫기, §12.9) |
 | POST | `/internal/collab/repo/close` | `X-Internal-Token` | **collab 이 제공** — backend 가 부르는 저장소 닫기 통보(노드 삭제). 그 저장소의 모든 방을 **내려쓴 뒤**(편집 보존) 접속자에게 `repo_closed` 를 보내고 소켓을 닫는다(§12.9) |
 
@@ -143,4 +146,4 @@ npm run build              # dist/ 생성
 
 ## 남은 항목 (2차)
 
-- **제어 소켓이 없는(우회) 클라이언트의 편집**을 collab 이 스스로 막지 못한다 — 확장은 §12.10 의 편집 잠금으로 막지만, 우회 클라이언트의 `update` 는 통과한다. 주기적 권한 재확인(§12.9, 5분)이 후보다.
+- (없음) 주기적 권한 재확인(§12.9)까지 들어갔다 — 권한을 잃은 우회 클라이언트의 `update` 는 한 주기 안에 막힌다. 남은 후보: 그래프 레인(§15.14, webview 필요), 레퍼런스의 채팅(`ChatPanel`) 이식.

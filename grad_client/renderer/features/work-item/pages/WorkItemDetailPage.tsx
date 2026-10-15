@@ -340,7 +340,8 @@ export function WorkItemDetailPage() {
   // 훅 호출이 모두 끝난 지점이므로 여기서는 안전하게 조기 반환할 수 있다.
   if (!detail || !currentUser) return null
 
-  const { item, ownerUser, parentWorkItem, childWorkItems } = detail
+  const { item, ownerNode, ownerUser, parentWorkItem, childWorkItems } = detail
+  const backLinkTo = `/workspace?view=tasks&nodeId=${encodeURIComponent(ownerNode.id)}`
   const priority = getWorkItemPriorityMeta(item.priority)
   const progress = Math.min(100, Math.max(0, item.progress))
   // 자체 진행률 + 하위 업무 진행률(가중치 반영) — 하위 업무가 없으면 같은 값이다.
@@ -372,7 +373,7 @@ export function WorkItemDetailPage() {
     <section className={styles.page}>
       {/* 상단 액션 바: 업무 목록 이동 & 업무 수정 */}
       <div className={styles.header}>
-        <Link to="/work-items" className={styles.backLink} aria-label="업무 목록으로 이동">
+        <Link to={backLinkTo} className={styles.backLink} aria-label="업무 목록으로 이동">
           <Icon name="chevronLeft" size={14} />
           <span>업무 목록으로</span>
         </Link>

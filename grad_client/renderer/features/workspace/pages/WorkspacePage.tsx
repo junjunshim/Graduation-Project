@@ -67,6 +67,7 @@ export function WorkspacePage() {
     getActiveWorkspaceRootId(currentUser?.userId) ??
     getDefaultWorkspaceRootId(currentUser?.userId)
   const requestedView = searchParams.get('view')
+  const requestedTaskMode = searchParams.get('mode') === 'tree' ? 'tree' : 'list'
   const requestedStatus = searchParams.get('status')
   const requestedSchedule = searchParams.get('schedule')
   const activeView: WorkspaceView =
@@ -328,6 +329,57 @@ export function WorkspacePage() {
                   : `${tab.to}?nodeId=${encodeURIComponent(workspaceRootParam)}`
                 : tab.to
 
+            if (tab.view === 'tasks') {
+              const currentMode = requestedTaskMode ?? 'list'
+              const taskTabTargetTo = workspaceRootParam
+                ? `/workspace?view=tasks&mode=${currentMode}&nodeId=${encodeURIComponent(workspaceRootParam)}`
+                : `/workspace?view=tasks&mode=${currentMode}`
+              const listTo = workspaceRootParam
+                ? `/workspace?view=tasks&mode=list&nodeId=${encodeURIComponent(workspaceRootParam)}`
+                : '/workspace?view=tasks&mode=list'
+              const treeTo = workspaceRootParam
+                ? `/workspace?view=tasks&mode=tree&nodeId=${encodeURIComponent(workspaceRootParam)}`
+                : '/workspace?view=tasks&mode=tree'
+
+              return (
+                <div key={tab.label} className={styles.taskTabWrapper}>
+                  <Link
+                    to={taskTabTargetTo}
+                    className={[styles.tabLink, isActive ? styles.tabLinkActive : ''].filter(Boolean).join(' ')}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {tab.label}
+                  </Link>
+                  <div className={styles.taskSubmenu}>
+                    <Link
+                      to={listTo}
+                      className={[
+                        styles.taskSubmenuItem,
+                        isActive && requestedTaskMode === 'list' ? styles.taskSubmenuItemActive : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      <Icon name="fileText" size={13} />
+                      <span>업무 목록</span>
+                    </Link>
+                    <Link
+                      to={treeTo}
+                      className={[
+                        styles.taskSubmenuItem,
+                        isActive && requestedTaskMode === 'tree' ? styles.taskSubmenuItemActive : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                    >
+                      <Icon name="folder" size={13} />
+                      <span>업무 트리</span>
+                    </Link>
+                  </div>
+                </div>
+              )
+            }
+
             return (
               <Link
                 key={tab.label}
@@ -382,7 +434,7 @@ export function WorkspacePage() {
         />
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
-          key={[requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
+          key={[requestedTaskMode, requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
           createHref={overview.rootNode ? `/work-items/new?nodeId=${overview.rootNode.id}` : '/work-items/new'}
           workItems={overview.visibleWorkItems}
           deletedWorkItems={overview.deletedWorkItems}
@@ -390,8 +442,16 @@ export function WorkspacePage() {
           members={snapshot.users}
           filterMembers={overview.allRoleMembers ?? overview.rootRoleMembers}
           workspaces={overview.visibleNodes}
+          filterLayout="toolbar"
+          showHeading={false}
           initialStatus={requestedStatus ?? undefined}
           initialSchedule={requestedSchedule ?? undefined}
+          viewMode={requestedTaskMode}
+          onViewModeChange={(mode) => {
+            const nextParams = new URLSearchParams(searchParams)
+            nextParams.set('mode', mode)
+            navigate(`?${nextParams.toString()}`)
+          }}
         />
       ) : activeView === 'schedules' ? (
         <WorkspaceSchedulesTab

@@ -363,6 +363,74 @@
   background: var(--workspace-brand);
 }
 
+.taskTabWrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.taskTabWrapper .taskSubmenu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  min-width: 120px;
+  margin-top: 4px;
+  padding: 6px;
+  border-radius: var(--axis-radius-sm, 8px);
+  background: var(--axis-surface-panel, var(--surface-panel));
+  border: 1px solid var(--axis-line-default, var(--line-default));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 마우스 이동 시 끊김 방지용 투명 브릿지 영역 */
+.taskTabWrapper .taskSubmenu::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+}
+
+.taskTabWrapper:hover .taskSubmenu,
+.taskTabWrapper:focus-within .taskSubmenu {
+  display: flex;
+}
+
+.taskSubmenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--axis-radius-xs, 6px);
+  background: transparent;
+  color: var(--axis-text-secondary, var(--text-secondary));
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 120ms ease;
+  white-space: nowrap;
+}
+
+.taskSubmenuItem:hover {
+  background: var(--axis-surface-muted, var(--surface-hover));
+  color: var(--axis-text-primary, var(--text-primary));
+}
+
+.taskSubmenuItemActive {
+  background: var(--axis-brand-primary-soft, rgba(99, 102, 241, 0.08));
+  color: var(--axis-brand-primary, #6366f1);
+  font-weight: 750;
+}
+
 .primaryAction:focus-visible,
 .secondaryAction:focus-visible,
 .iconAction:focus-visible,

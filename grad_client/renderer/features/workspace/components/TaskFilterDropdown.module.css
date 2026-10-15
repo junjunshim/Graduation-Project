@@ -5,9 +5,9 @@
 }
 
 .label {
-  color: var(--text-primary);
-  font-size: 0.82rem;
-  font-weight: 700;
+  color: var(--axis-text-primary, var(--text-primary));
+  font-size: 0.84rem;
+  font-weight: 600;
 }
 
 /* hideLabel 용 — 레이아웃에서 빠지되 접근성 이름은 유지한다. */
@@ -30,29 +30,33 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  min-height: 34px;
-  padding: 6px 10px;
   color: var(--axis-text-primary, var(--text-primary));
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.88rem;
   text-align: left;
   cursor: pointer;
+  transition: all 140ms ease;
 }
 
 .trigger {
+  min-height: 38px;
+  padding: 0.55rem 0.85rem;
   border: 1px solid var(--axis-line-default, var(--line-default));
-  border-radius: var(--radius-sm);
+  border-radius: var(--axis-radius-control, 8px);
   background: var(--axis-surface-panel, var(--surface-panel));
+  box-shadow: var(--axis-shadow-field);
 }
 
 .trigger:hover {
   border-color: var(--axis-line-strong, var(--line-strong));
+  background: var(--axis-surface-panel-hover, var(--axis-surface-panel));
 }
 
 .trigger:focus-visible,
 .trigger[aria-expanded='true'] {
   border-color: var(--axis-brand-primary);
-  outline: 2px solid var(--axis-brand-badge-surface);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--axis-brand-primary) 15%, transparent);
 }
 
 .text {
@@ -61,35 +65,76 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 550;
+}
+
+.chevron {
+  color: var(--axis-text-muted);
+  flex-shrink: 0;
+  transition: transform 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+  color: var(--axis-brand-primary);
 }
 
 .menu {
   position: fixed;
-  z-index: 1000;
+  z-index: 20000;
   box-sizing: border-box;
   overflow-y: auto;
   padding: 6px;
   border: 1px solid var(--axis-line-default, var(--line-default));
-  border-radius: var(--axis-radius-surface, 8px);
+  border-radius: var(--axis-radius-surface, 10px);
   background: var(--axis-surface-panel, var(--surface-panel));
-  box-shadow: 0 8px 24px rgba(16, 23, 45, 0.12), 0 2px 6px rgba(16, 23, 45, 0.04);
+  box-shadow: 0 10px 30px rgba(16, 23, 45, 0.16), 0 3px 8px rgba(16, 23, 45, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: dropdownFadeIn 120ms ease-out;
+}
+
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .option {
   height: 36px;
+  padding: 0 10px;
   border: 0;
-  border-radius: var(--axis-radius-xs, 4px);
+  border-radius: var(--axis-radius-xs, 6px);
   background: transparent;
-  font-weight: 600;
+  font-size: 0.84rem;
+  font-weight: 550;
+  color: var(--axis-text-primary);
 }
 
 .option:hover,
 .option:focus-visible {
-  background: var(--axis-surface-muted, var(--surface-muted));
+  background: var(--axis-surface-muted, #f1f5f9);
   outline: none;
+  color: var(--axis-text-primary);
 }
 
-.option[aria-selected='true'] {
+.optionSelected {
+  color: var(--axis-brand-primary) !important;
+  background: var(--axis-brand-badge-surface, #f7f6ff) !important;
+  font-weight: 700;
+}
+
+.optionSelected:hover {
+  background: color-mix(in srgb, var(--axis-brand-primary) 10%, var(--axis-surface-panel)) !important;
+}
+
+.checkIcon {
   color: var(--axis-brand-primary);
-  background: var(--axis-brand-badge-surface);
+  flex-shrink: 0;
 }

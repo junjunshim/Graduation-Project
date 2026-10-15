@@ -139,6 +139,53 @@
   box-shadow: 0 0 0 3px var(--axis-brand-primary-soft);
 }
 
+.timeInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.timeInputIcon {
+  position: absolute;
+  left: 0.85rem;
+  color: var(--axis-brand-primary);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.timeInput {
+  width: 100%;
+  min-height: 40px;
+  padding: 0.6rem 0.85rem 0.6rem 2.4rem;
+  border: 1px solid var(--axis-line-default, #cbd5e1);
+  border-radius: var(--axis-radius-control, 8px);
+  background: var(--axis-surface-panel, #ffffff);
+  color: var(--axis-text-primary, #0f172a);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.timeInput::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: opacity(0.6);
+  transition: filter 0.15s ease;
+}
+
+.timeInput::-webkit-calendar-picker-indicator:hover {
+  filter: opacity(1);
+}
+
+.timeInput:focus {
+  outline: none;
+  border-color: var(--axis-brand-primary, #6366f1);
+  box-shadow: 0 0 0 3px var(--axis-brand-primary-soft);
+}
+
 .textarea {
   min-height: 72px;
   resize: vertical;
@@ -154,6 +201,14 @@
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+.modalDropdownTrigger {
+  min-height: 40px !important;
+  padding: 0.55rem 0.85rem !important;
+  border-radius: var(--axis-radius-control, 8px) !important;
+  font-size: 0.88rem !important;
+  background: var(--axis-surface-panel, #ffffff) !important;
 }
 
 .segmentedButtons {
@@ -277,7 +332,16 @@
 
 .checklistInputRow {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.checklistAddBtn {
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  padding: 0 1rem !important;
+  min-width: 60px !important;
+  height: 40px !important;
 }
 
 .checklistItemList {
@@ -418,11 +482,8 @@
   gap: 0.4rem;
 }
 
-.submitBtn:hover {
-  opacity: 0.92;
-}
-
 .submitBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+

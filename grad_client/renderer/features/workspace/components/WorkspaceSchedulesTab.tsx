@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import { getCategoryBadgeStyle, getRecurringCategoryLabel } from '../model/labels'
+import { getCategoryBadgeStyle, getRecurringCategoryLabel, RECURRING_CATEGORY_OPTIONS } from '../model/labels'
 import { canCreateRecurringRule, canManageRecurringRule } from '../model/recurringRulePermission'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
 import { useKoreanHolidays } from '../model/koreanHolidays'
-import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
+import type { RecurringCategory, RecurringRuleRecord } from '../model/recurringRuleTypes'
 import { fetchRecurringRules, fetchRecurringRuleDetail, restoreRecurringRule } from '../data/recurringRuleService'
-import { formatCycleText, getNextOccurrenceInfo } from '../model/recurringSchedule'
+import { formatRepeatSummary, getNextOccurrenceInfo } from '../model/recurringSchedule'
 import { RecurringRuleModal } from './RecurringRuleModal'
 import { RecurringRuleDetailModal } from './RecurringRuleDetailModal'
 import { ConfirmRestoreModal } from './ConfirmRestoreModal'
@@ -16,7 +16,6 @@ import { showToast } from '../../notification/data/toastEvents'
 import { subscribeToRecurringCache } from '../data/workspaceCacheEvents'
 import type { OrganizationNodeRecord, UserRecord } from '../model/types'
 import styles from './WorkspaceSchedulesTab.module.css'
-import { ScheduleCardRow } from './ScheduleCardRow'
 
 type WorkspaceSchedulesTabProps = {
   activeNodeId?: number
@@ -26,12 +25,45 @@ type WorkspaceSchedulesTabProps = {
 
 type FrequencySectionKey = 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY'
 
-const SECTION_CONFIG: Array<{ key: FrequencySectionKey; title: string; icon: string }> = [
-  { key: 'DAILY', title: '일간 정기 일정', icon: 'clock' },
-  { key: 'WEEKLY', title: '주간 정기 일정', icon: 'calendar' },
-  { key: 'MONTHLY', title: '월간 정기 일정', icon: 'fileText' },
-  { key: 'YEARLY', title: '연간 정기 일정', icon: 'flag' },
+const SECTION_CONFIG: Array<{ key: FrequencySectionKey; title: string; countLabel: string; icon: string }> = [
+  { key: 'DAILY', title: '일간', countLabel: '일간', icon: 'rotateCcw' },
+  { key: 'WEEKLY', title: '주간', countLabel: '주간', icon: 'calendar' },
+  { key: 'MONTHLY', title: '월간', countLabel: '월간', icon: 'fileText' },
+  { key: 'YEARLY', title: '연간', countLabel: '연간', icon: 'flag' },
 ]
+
+const KOREAN_DAY_NAMES = ['일', '월', '화', '수', '목', '금', '토']
+
+function formatNextDateDisplay(date: Date | null, fallback: string): string {
+  if (!date) return fallback
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const dayName = KOREAN_DAY_NAMES[date.getDay()]
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  return `${m}.${d} (${dayName}) ${hh}:${mm}`
+}
+
+function formatCycleWithTime(rule: RecurringRuleRecord): string {
+  const summary = formatRepeatSummary(rule)
+  const time = rule.startTime ? rule.startTime.slice(0, 5) : ''
+  return time ? `${summary} ${time}` : summary
+}
+
+function formatHolidayPolicyLabel(rule: RecurringRuleRecord): string {
+  if (!rule.excludeHolidays) {
+    return '휴일 포함'
+  }
+  switch (rule.holidayAction) {
+    case 'NEXT_WORKDAY':
+      return '공휴일 제외 (다음 영업일)'
+    case 'PREV_WORKDAY':
+      return '공휴일 제외 (직전 영업일)'
+    case 'SKIP':
+    default:
+      return '공휴일 제외 (건너뜀)'
+  }
+}
 
 export function WorkspaceSchedulesTab({
   activeNodeId = 1,
@@ -49,6 +81,23 @@ export function WorkspaceSchedulesTab({
   const [restoreConfirmTarget, setRestoreConfirmTarget] = useState<RecurringRuleRecord | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const requestedRuleId = searchParams.get('ruleId')
+
+  // 검색 및 카테고리 필터 상태
+  const [searchQuery, setSearchQuery] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<'all' | RecurringCategory>('all')
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false)
+  const categoryDropdownRef = useRef<HTMLDivElement>(null)
+
+  // 외부 클릭 시 카테고리 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(e.target as Node)) {
+        setIsCategoryDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // 수정/삭제/복구는 서버가 최종 판정하므로, 화면에서도 같은 기준으로 버튼을 막는다.
   const canManageRule = useCallback((rule: RecurringRuleRecord) => {
@@ -119,7 +168,7 @@ export function WorkspaceSchedulesTab({
   useEffect(() => {
     reloadRules()
 
-    // 일정 캐시 갱신 이벤트(WorkspacePage의 알림 디스패치 및 로컬 변경 시) 수신 시에만 단일 리로드
+    // 일정 캐시 갱신 이벤트 수신 시 단일 리로드
     const unsubCache = subscribeToRecurringCache((evt) => {
       if (!evt.nodeId || evt.nodeId === activeNodeId) {
         reloadRules()
@@ -150,10 +199,26 @@ export function WorkspaceSchedulesTab({
 
   const displayedRules = showDeletedSchedules ? deletedRecurringRules : activeRecurringRules
 
-  // 각 일정에 nextOccurrence 정보 계산 및 남은 일수(dDay) 오름차순 정렬
+  // 검색어 및 카테고리 필터 적용
+  const filteredRules = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return displayedRules.filter((rule) => {
+      if (categoryFilter !== 'all' && rule.category !== categoryFilter) {
+        return false
+      }
+      if (q) {
+        const matchTitle = rule.title.toLowerCase().includes(q)
+        const matchDesc = rule.description ? rule.description.toLowerCase().includes(q) : false
+        if (!matchTitle && !matchDesc) return false
+      }
+      return true
+    })
+  }, [displayedRules, searchQuery, categoryFilter])
+
+  // 각 일정에 nextOccurrence 정보 계산 및 남은 일수(dDay) 오름차순 정렬 (오늘과 가장 가까운 순서)
   const enrichedAndSortedRules = useMemo(() => {
     void holidayRevision
-    return displayedRules
+    return filteredRules
       .map((rule) => {
         const occ = getNextOccurrenceInfo(rule)
         return {
@@ -162,12 +227,19 @@ export function WorkspaceSchedulesTab({
         }
       })
       .sort((a, b) => {
+        // dDay가 null(만료/종료)인 것은 뒤로
         if (a.nextOccurrence.dDay === null && b.nextOccurrence.dDay === null) return 0
         if (a.nextOccurrence.dDay === null) return 1
         if (b.nextOccurrence.dDay === null) return -1
-        return a.nextOccurrence.dDay - b.nextOccurrence.dDay
+        if (a.nextOccurrence.dDay !== b.nextOccurrence.dDay) {
+          return a.nextOccurrence.dDay - b.nextOccurrence.dDay
+        }
+        // dDay가 같다면 nextDate 시간 오름차순
+        const aTime = a.nextOccurrence.nextDate?.getTime() ?? 0
+        const bTime = b.nextOccurrence.nextDate?.getTime() ?? 0
+        return aTime - bTime
       })
-  }, [displayedRules, holidayRevision])
+  }, [filteredRules, holidayRevision])
 
   // 일/주/월/년 단위로 섹션 그룹핑
   const rulesByFrequency = useMemo(() => {
@@ -193,7 +265,6 @@ export function WorkspaceSchedulesTab({
     if (!restoreConfirmTarget) return
     const target = restoreConfirmTarget
 
-    // 모달이 열린 뒤 권한이 바뀌었을 수 있으므로 제출 직전에 한 번 더 확인한다.
     if (!canManageRule(target)) {
       setRestoreConfirmTarget(null)
       showToast({
@@ -236,10 +307,9 @@ export function WorkspaceSchedulesTab({
   const renderCard = (rule: (typeof enrichedAndSortedRules)[0]) => {
     const canManage = canManageRule(rule)
     const categoryStyle = getCategoryBadgeStyle(rule.category)
-    const { dDay, dateString } = rule.nextOccurrence
+    const { dDay, nextDate, dateString } = rule.nextOccurrence
 
     const isToday = dDay === 0
-    const isSoon = dDay !== null && dDay > 0 && dDay <= 3
 
     return (
       <div
@@ -249,125 +319,104 @@ export function WorkspaceSchedulesTab({
           rule.isDeleted ? styles.recurringCardDeleted : '',
         ].join(' ')}
       >
-        {/* 상단: D-Day 또는 삭제 상태와 반복 주기 */}
-        <div className={styles.cardLeftCol}>
+        {/* 상단: 카테고리 뱃지 & D-Day 뱃지 */}
+        <div className={styles.cardHeaderRow}>
+          <span
+            className={styles.categoryBadge}
+            style={categoryStyle}
+          >
+            {getRecurringCategoryLabel(rule.category)}
+          </span>
+
           {rule.isDeleted ? (
             <span className={styles.deletedBadge}>
-              <Icon name="trash" size={12} />
+              <Icon name="trash" size={11} />
               <span>삭제됨</span>
             </span>
+          ) : dDay !== null ? (
+            <span
+              className={[
+                styles.dDayBadge,
+                isToday ? styles.dDayToday : styles.dDayNormal,
+              ].join(' ')}
+            >
+              {isToday ? '오늘' : `D-${dDay}`}
+            </span>
           ) : (
-            <>
-              {dDay !== null ? (
-                <span
-                  className={[
-                    styles.dDayBadge,
-                    isToday
-                      ? styles.dDayToday
-                      : dDay === 1
-                        ? styles.dDayTomorrow
-                        : isSoon
-                          ? styles.dDaySoon
-                          : styles.dDayNormal,
-                  ].join(' ')}
-                >
-                  {isToday ? '🔥 오늘 예정' : dDay === 1 ? '⏳ 내일 예정' : `D-${dDay}`}
-                </span>
-              ) : (
-                <span className={[styles.dDayBadge, styles.dDayPast].join(' ')}>만료됨</span>
-              )}
+            <span className={[styles.dDayBadge, styles.dDayPast].join(' ')}>만료됨</span>
+          )}
+        </div>
 
-              <span className={styles.cycleDisplay} title="반복 설정">
-                {formatCycleText(rule)}
+        {/* 본문: 제목 및 설명 */}
+        <div className={styles.cardBody}>
+          <h3 className={styles.cardTitle} title={rule.title}>
+            {rule.title}
+          </h3>
+
+          <p className={styles.cardDescription} title={rule.description || ''}>
+            {rule.description || '일정에 대한 설명이 등록되지 않았습니다.'}
+          </p>
+        </div>
+
+        {/* 주기 표시 문구 */}
+        <div className={styles.cycleTextRow}>
+          <Icon name="rotateCcw" size={13} className={styles.cycleIcon} />
+          <span>{formatCycleWithTime(rule)}</span>
+        </div>
+
+        {/* 다음 실행일 정보 */}
+        {!rule.isDeleted && (
+          <div className={styles.nextOccurrenceBox}>
+            <span className={styles.nextOccurrenceLabel}>다음 실행일</span>
+            <strong className={styles.nextOccurrenceValue}>
+              {formatNextDateDisplay(nextDate, dateString)}
+            </strong>
+          </div>
+        )}
+
+        {/* 하단 메타 정보 (체크리스트, 첨부파일, 공휴일) */}
+        <div className={styles.cardFooter}>
+          <div className={styles.metaChipsCol}>
+            <div className={styles.metaChipsRow}>
+              <span className={styles.metaChip} title="체크리스트">
+                <Icon name="checkSquare" size={12} />
+                <span>체크리스트 {rule.checklists?.length || 0}개</span>
               </span>
-            </>
-          )}
-          {rule.isDeleted && (
-            <span className={styles.cycleDisplay} title="반복 설정">
-              {formatCycleText(rule)}
-            </span>
-          )}
-        </div>
 
-        {/* 본문: 카테고리, 일정명, 설명 */}
-        <div className={styles.cardCenterCol}>
-          <div className={styles.titleRow}>
-            <span
-              style={{
-                fontSize: '0.68rem',
-                fontWeight: 700,
-                padding: '1px 6px',
-                borderRadius: '4px',
-                ...categoryStyle,
-              }}
-            >
-              {getRecurringCategoryLabel(rule.category)}
-            </span>
-
-            <span className={styles.recurringCardTitle} title={rule.title}>
-              {rule.title}
-            </span>
-
-          </div>
-
-          {rule.description ? (
-            <p className={styles.recurringCardDescription} title={rule.description}>
-              {rule.description}
-            </p>
-          ) : (
-            <span style={{ fontSize: '0.74rem', color: 'var(--axis-text-muted)' }}>설명 없음</span>
-          )}
-        </div>
-
-        {/* 하단: 다음 실행일, 관련 정보와 상세보기/복구 */}
-        <div className={styles.cardRightCol}>
-          {!rule.isDeleted && (
-            <div className={styles.nextRunBlock}>
-              <span className={styles.nextRunLabel}>다음 실행일</span>
-              <span className={styles.nextRunValue}>{dateString}</span>
+              <span className={styles.metaChip} title="첨부 서식 파일">
+                <Icon name="fileText" size={12} />
+                <span>첨부파일 {rule.files?.length || 0}개</span>
+              </span>
             </div>
-          )}
 
-          <div className={styles.recurringCardDetails}>
-            <span className={styles.metaItem} title="체크리스트 개수">
-              <Icon name="checkSquare" size={13} />
-              <span>{rule.checklists?.length || 0}</span>
-            </span>
-            <span className={styles.metaItem} title="첨부 서식 파일 개수">
-              <Icon name="page" size={13} />
-              <span>{rule.files?.length || 0}</span>
-            </span>
-            <span
-              style={{
-                fontSize: '0.7rem',
-                color: rule.excludeHolidays ? 'var(--axis-brand-primary)' : 'var(--axis-text-muted)',
-                fontWeight: 600,
-              }}
-              title="공휴일 처리 여부"
-            >
-              {rule.excludeHolidays ? '공휴일 제외' : '휴일 무시'}
-            </span>
+            <div className={styles.metaChipsRow}>
+              <span className={styles.metaChip} title="공휴일 처리 정책">
+                <Icon name="calendar" size={11} />
+                <span>{formatHolidayPolicyLabel(rule)}</span>
+              </span>
+            </div>
           </div>
 
-          <div className={styles.cardActions}>
+          <div className={styles.cardActionArea}>
             {rule.isDeleted ? (
               <button
                 type="button"
-                className={styles.restoreButton}
+                className={styles.restoreBtn}
                 disabled={!canManage}
                 title={canManage ? '휴지통에서 복구' : '복구 권한이 없습니다.'}
                 onClick={() => setRestoreConfirmTarget(rule)}
               >
-                <Icon name="restore" size={13} />
+                <Icon name="restore" size={12} />
                 <span>복구</span>
               </button>
             ) : (
               <button
                 type="button"
-                className={styles.secondaryButton}
+                className={styles.detailLinkBtn}
                 onClick={() => setSelectedRecurringRule(rule)}
               >
-                상세 보기
+                <span>상세 보기</span>
+                <span className={styles.arrowIcon}>→</span>
               </button>
             )}
           </div>
@@ -376,8 +425,13 @@ export function WorkspaceSchedulesTab({
     )
   }
 
+  const selectedCategoryLabel = categoryFilter === 'all'
+    ? '카테고리 전체'
+    : RECURRING_CATEGORY_OPTIONS.find((c) => c.value === categoryFilter)?.label ?? categoryFilter
+
   return (
     <section className={styles.panel} aria-label="정기 일정 목록">
+      {/* 상단 헤더 */}
       <header className={styles.pageHeader}>
         <div className={styles.pageHeaderTitleGroup}>
           <h2>
@@ -393,6 +447,86 @@ export function WorkspaceSchedulesTab({
         </div>
 
         <div className={styles.headerActions}>
+          {/* 검색창 */}
+          <div className={styles.searchBox}>
+            <Icon name="search" size={14} className={styles.searchIcon} />
+            <input
+              type="text"
+              className={styles.searchInput}
+              placeholder="일정 검색"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className={styles.searchClearBtn}
+                onClick={() => setSearchQuery('')}
+                title="검색어 지우기"
+              >
+                <Icon name="close" size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* 카테고리 필터 드롭다운 */}
+          <div className={styles.filterDropdownWrapper} ref={categoryDropdownRef}>
+            <button
+              type="button"
+              className={[
+                styles.filterDropdownBtn,
+                isCategoryDropdownOpen ? styles.filterDropdownBtnActive : '',
+                categoryFilter !== 'all' ? styles.filterDropdownBtnFiltered : '',
+              ].join(' ')}
+              onClick={() => setIsCategoryDropdownOpen((prev) => !prev)}
+            >
+              <span>{selectedCategoryLabel}</span>
+              <Icon
+                name="chevronDown"
+                size={12}
+                className={[
+                  styles.dropdownChevron,
+                  isCategoryDropdownOpen ? styles.dropdownChevronOpen : '',
+                ].join(' ')}
+              />
+            </button>
+
+            {isCategoryDropdownOpen && (
+              <div className={styles.filterDropdownMenu}>
+                <button
+                  type="button"
+                  className={[
+                    styles.dropdownMenuItem,
+                    categoryFilter === 'all' ? styles.dropdownMenuItemActive : '',
+                  ].join(' ')}
+                  onClick={() => {
+                    setCategoryFilter('all')
+                    setIsCategoryDropdownOpen(false)
+                  }}
+                >
+                  <span>전체</span>
+                </button>
+                {RECURRING_CATEGORY_OPTIONS.map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    className={[
+                      styles.dropdownMenuItem,
+                      categoryFilter === cat.value ? styles.dropdownMenuItemActive : '',
+                    ].join(' ')}
+                    onClick={() => {
+                      setCategoryFilter(cat.value)
+                      setIsCategoryDropdownOpen(false)
+                    }}
+                  >
+                    <span>{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 휴지통 버튼 */}
           <button
             type="button"
             className={[
@@ -413,7 +547,7 @@ export function WorkspaceSchedulesTab({
             }
           >
             <Icon name="trash" size={14} />
-            <span>휴지통{deletedRecurringRules.length > 0 ? ` (${deletedRecurringRules.length})` : ''}</span>
+            <span>휴지통 ({deletedRecurringRules.length})</span>
           </button>
 
           {!showDeletedSchedules && (
@@ -449,25 +583,34 @@ export function WorkspaceSchedulesTab({
           </span>
         </div>
       ) : (
-        <div className={styles.sectionsContainer} role="region" aria-label="정기 일정 카드 목록" tabIndex={0}>
-          {SECTION_CONFIG.map(({ key, title, icon }) => {
+        /* 4열 세로 스택 컬럼 그리드 */
+        <div className={styles.columnsGrid} role="region" aria-label="정기 일정 컬럼 목록">
+          {SECTION_CONFIG.map(({ key, countLabel, icon }) => {
             const sectionRules = rulesByFrequency[key]
-            if (sectionRules.length === 0) return null
 
             return (
-              <div key={key} className={styles.frequencySection} data-frequency={key}>
-                <div className={styles.sectionHeader}>
-                  <div className={styles.sectionTitleBadge}>
-                    <Icon name={icon as any} size={15} />
-                    <span>{title}</span>
-                    <span className={styles.sectionCount}>({sectionRules.length})</span>
+              <div key={key} className={styles.columnCard} data-frequency={key}>
+                {/* 컬럼 헤더 */}
+                <div className={styles.columnHeader}>
+                  <div className={styles.columnHeaderTitleGroup}>
+                    <Icon name={icon as any} size={15} className={styles.columnIcon} />
+                    <span className={styles.columnTitleText}>{countLabel}</span>
+                    <span className={styles.columnCountBadge}>{sectionRules.length}</span>
                   </div>
-                  <div className={styles.sectionDivider} />
                 </div>
 
-                <ScheduleCardRow title={title}>
-                  {sectionRules.map(renderCard)}
-                </ScheduleCardRow>
+                {/* 컬럼 바디 (개별 내부 세로 스크롤) */}
+                <div className={styles.columnBody}>
+                  {sectionRules.length === 0 ? (
+                    <div className={styles.columnEmpty}>
+                      <span>
+                        {showDeletedSchedules ? '삭제된' : '등록된'} {countLabel} 일정이 없습니다.
+                      </span>
+                    </div>
+                  ) : (
+                    sectionRules.map(renderCard)
+                  )}
+                </div>
               </div>
             )
           })}
@@ -486,7 +629,6 @@ export function WorkspaceSchedulesTab({
             setEditingRecurringRule(null)
           }}
           onSuccess={(saved) => {
-            // 서버에서 최신 첨부파일/체크리스트 정보 포함하여 재조회
             if (activeNodeId) {
               fetchRecurringRules(activeNodeId).then((rules) => {
                 setLoadedRecurringRules(rules)

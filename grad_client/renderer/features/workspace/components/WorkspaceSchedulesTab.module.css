@@ -7,7 +7,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.15rem;
   background: var(--axis-surface-panel);
   border: 1px solid var(--axis-line-default);
   border-radius: var(--axis-radius-surface, 12px);
@@ -15,13 +15,16 @@
   box-shadow: var(--axis-shadow-field);
 }
 
+/* ==========================================================================
+   페이지 헤더
+   ========================================================================== */
 .pageHeader {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding-bottom: 1.25rem;
+  padding-bottom: 1.15rem;
   border-bottom: 1px solid var(--axis-line-default);
   flex-wrap: wrap;
 }
@@ -57,7 +60,7 @@
   align-items: center;
   gap: 6px;
   height: 34px;
-  padding: 0 11px;
+  padding: 0 12px;
   border: 1px solid var(--axis-line-default);
   border-radius: var(--axis-radius-sm, 6px);
   background: var(--axis-surface-panel);
@@ -92,67 +95,21 @@
   color: var(--axis-status-danger);
 }
 
-.restoreButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.85rem;
-  border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-status-info-soft);
-  border: 1px solid var(--axis-status-info-border);
-  color: var(--axis-status-info);
-  font-size: 0.82rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.restoreButton:hover:not(:disabled) {
-  background: var(--axis-status-info-soft);
-  border-color: var(--axis-status-info);
-  color: var(--axis-status-info);
-}
-
-/* 권한이 없어 비활성화된 복구 버튼 */
-.restoreButton:disabled {
-  border-color: var(--axis-line-default, #cbd5e1);
-  background: var(--axis-surface-muted, #f8fafc);
-  color: var(--axis-text-muted, #94a3b8);
-  cursor: not-allowed;
-}
-
-.recurringCard.recurringCardDeleted {
-  border-color: var(--axis-status-danger-border);
-}
-
-.deletedBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: var(--axis-status-danger-soft);
-  border: 1px solid var(--axis-status-danger-border);
-  color: var(--axis-status-danger);
-  font-size: 0.72rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-
 .primaryButton {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  gap: 0.45rem;
+  height: 34px;
+  padding: 0 14px;
   border-radius: var(--axis-radius-sm, 6px);
   background: var(--axis-brand-primary);
   color: var(--axis-text-on-brand);
   border: none;
-  font-size: 0.85rem;
-  font-weight: 650;
+  font-size: 0.82rem;
+  font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
+  white-space: nowrap;
 }
 
 .primaryButton:hover:not(:disabled) {
@@ -163,202 +120,326 @@
   transform: scale(0.98);
 }
 
-/* 권한이 없어 비활성화된 버튼 */
 .primaryButton:disabled {
   background: var(--axis-surface-muted);
   color: var(--axis-text-muted);
   cursor: not-allowed;
 }
 
-.secondaryButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.85rem;
-  border-radius: var(--axis-radius-sm, 6px);
-  background: var(--axis-surface-muted);
-  border: 1px solid var(--axis-line-default);
-  color: var(--axis-text-secondary);
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.secondaryButton:hover {
-  background: var(--axis-surface-muted);
-  border-color: var(--axis-line-strong);
-  color: var(--axis-text-primary);
-}
-
-.sectionsContainer {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: auto;
-  padding: 2px;
-  scrollbar-width: none !important;
-}
-
-.sectionsContainer::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-}
-
-.frequencySection {
-  --schedule-tone: 2%;
-  min-width: 0;
+/* ==========================================================================
+   툴바: 검색창 & 카테고리 필터
+   ========================================================================== */
+.toolbar {
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-}
-
-.frequencySection[data-frequency='WEEKLY'] {
-  --schedule-tone: 4%;
-}
-
-.frequencySection[data-frequency='MONTHLY'] {
-  --schedule-tone: 6%;
-}
-
-.frequencySection[data-frequency='YEARLY'] {
-  --schedule-tone: 8%;
-}
-
-.sectionHeader {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.sectionTitleBadge {
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 220px;
+  height: 34px;
+  min-height: 34px;
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-sm, 6px);
+  background: var(--axis-surface-panel);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.searchBox:focus-within {
+  border-color: var(--axis-brand-primary);
+  box-shadow: 0 0 0 2px var(--axis-brand-badge-surface, rgba(98, 92, 242, 0.15));
+}
+
+.searchIcon {
+  margin-left: 10px;
+  color: var(--axis-text-muted);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 0 8px;
+  font-size: 0.82rem;
+  color: var(--axis-text-primary);
+}
+
+.searchInput::placeholder {
+  color: var(--axis-text-muted);
+}
+
+.searchClearBtn {
+  border: none;
+  background: transparent;
+  color: var(--axis-text-muted);
+  cursor: pointer;
+  padding: 0 8px;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.75rem;
-  border-radius: 6px;
-  background: var(--axis-surface-muted);
+  justify-content: center;
+}
+
+.searchClearBtn:hover {
   color: var(--axis-text-primary);
-  font-size: 0.85rem;
-  font-weight: 750;
+}
+
+.filterDropdownWrapper {
+  position: relative;
+}
+
+.filterDropdownBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-sm, 6px);
+  background: var(--axis-surface-panel);
+  color: var(--axis-text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
   white-space: nowrap;
 }
 
-.sectionCount {
-  font-size: 0.76rem;
-  color: var(--axis-text-secondary);
+.filterDropdownBtn:hover {
+  border-color: var(--axis-line-strong);
+  color: var(--axis-text-primary);
+}
+
+.filterDropdownBtnActive,
+.filterDropdownBtn:focus-visible {
+  border-color: var(--axis-brand-primary);
+  box-shadow: 0 0 0 2px var(--axis-brand-badge-surface, rgba(98, 92, 242, 0.15));
+  outline: none;
+}
+
+.filterDropdownBtnFiltered {
+  background: var(--axis-brand-badge-surface);
+  border-color: var(--axis-brand-primary);
+  color: var(--axis-brand-primary);
+  font-weight: 700;
+}
+
+.dropdownChevron {
+  color: var(--axis-text-muted);
+  transition: transform 140ms ease;
+}
+
+.dropdownChevronOpen {
+  transform: rotate(180deg);
+}
+
+.filterDropdownMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 140px;
+  width: max-content;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-sm, 6px);
+  background: var(--axis-surface-panel);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdownMenuItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--axis-text-primary);
+  font-size: 0.8rem;
   font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+  white-space: nowrap;
 }
 
-.sectionDivider {
-  flex: 1;
-  height: 1px;
-  background: var(--axis-line-default);
+.dropdownMenuItem:hover {
+  background: var(--axis-surface-muted);
 }
 
-.recurringCardGrid {
+.dropdownMenuItemActive {
+  background: var(--axis-brand-badge-surface);
+  color: var(--axis-brand-primary);
+  font-weight: 750;
+}
+
+/* ==========================================================================
+   4열 컬럼 그리드 레이아웃
+   ========================================================================== */
+.columnsGrid {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: min(100%, 21rem);
-  grid-template-rows: auto;
-  justify-content: start;
+  grid-template-columns: repeat(4, minmax(250px, 1fr));
   gap: 1rem;
-  min-width: 0;
-  max-width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  overscroll-behavior-y: auto;
-  cursor: grab;
-  padding: 2px;
-  scrollbar-width: none !important;
+  padding-bottom: 2px;
 }
 
-.recurringCardGrid::-webkit-scrollbar {
-  display: none !important;
-  width: 0 !important;
-  height: 0 !important;
-}
-
-.cardRowDragging {
-  cursor: grabbing;
-  user-select: none;
-}
-
-.recurringCardGrid:focus-visible {
-  outline: 2px solid var(--axis-brand-primary);
-  outline-offset: -2px;
-}
-
-.recurringCard {
-  scroll-snap-align: start;
-  background: color-mix(in srgb, var(--axis-text-primary) var(--schedule-tone, 2%), var(--axis-surface-panel));
+.columnCard {
+  background: var(--axis-surface-muted, #f8fafc);
   border: 1px solid var(--axis-line-default);
-  border-radius: 8px;
-  padding: 1rem;
+  border-radius: var(--axis-radius-surface, 10px);
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 0.9rem;
-  transition: all 0.15s ease;
+  height: 100%;
+  overflow: hidden;
+}
+
+.columnHeader {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  background: var(--axis-surface-panel);
+  border-bottom: 1px solid var(--axis-line-default);
+}
+
+.columnHeaderTitleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.columnIcon {
+  color: var(--axis-text-secondary);
+}
+
+.columnTitleText {
+  font-size: 0.9rem;
+  font-weight: 750;
+  color: var(--axis-text-primary);
+}
+
+.columnCountBadge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--axis-text-muted);
+  margin-left: 2px;
+}
+
+.columnBody {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--axis-line-strong) transparent;
+}
+
+.columnBody::-webkit-scrollbar {
+  width: 6px;
+}
+
+.columnBody::-webkit-scrollbar-thumb {
+  background: var(--axis-line-strong);
+  border-radius: 999px;
+}
+
+.columnEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  padding: 1.5rem 1rem;
+  color: var(--axis-text-muted);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* ==========================================================================
+   반복 일정 카드 (UI.png 완벽 일치 디자인)
+   ========================================================================== */
+.recurringCard {
+  background: var(--axis-surface-panel);
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-surface, 10px);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
   position: relative;
+  flex-shrink: 0;
 }
 
 .recurringCard:hover {
   border-color: var(--axis-line-strong);
-  box-shadow: var(--axis-shadow-row-hover);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
-/* 좌측: D-Day 뱃지 & 반복 주기 */
-.cardLeftCol {
+.recurringCardDeleted {
+  border-color: var(--axis-status-danger-border);
+}
+
+/* 상단: 카테고리 뱃지 & D-Day 뱃지 */
+.cardHeaderRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 0.5rem;
-  min-width: 0;
-  flex-shrink: 0;
+}
+
+.categoryBadge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
 .dDayBadge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 750;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: 12px;
   white-space: nowrap;
 }
 
 .dDayToday {
-  background: var(--axis-status-danger);
-  color: var(--axis-text-on-brand);
-  animation: pulseToday 2s infinite ease-in-out;
-}
-
-.dDayTomorrow {
-  background: var(--axis-status-warning);
-  color: var(--axis-text-on-brand);
-}
-
-.dDaySoon {
-  background: var(--axis-status-warning-soft);
-  color: var(--axis-status-warning);
-  border: 1px solid var(--axis-status-warning-border);
+  background: var(--axis-status-danger-soft, #fbece9);
+  color: var(--axis-status-danger, #a83b2e);
+  border: 1px solid var(--axis-status-danger-border, #f1cec9);
 }
 
 .dDayNormal {
-  background: var(--axis-surface-muted);
-  color: var(--axis-text-secondary);
-  border: 1px solid var(--axis-line-default);
+  background: var(--axis-surface-muted, #f1f3f9);
+  color: var(--axis-text-secondary, #64748b);
+  border: 1px solid var(--axis-line-default, #e2e8f0);
 }
 
 .dDayPast {
@@ -366,123 +447,181 @@
   color: var(--axis-text-muted);
 }
 
-@keyframes pulseToday {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.04); }
-  100% { transform: scale(1); }
-}
-
-.cycleDisplay {
-  font-size: 0.76rem;
-  font-weight: 650;
-  color: var(--axis-brand-primary);
-  background: var(--axis-brand-badge-surface);
-  padding: 2px 6px;
+.deletedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 2px 8px;
   border-radius: 4px;
-  overflow-wrap: anywhere;
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+  border: 1px solid var(--axis-status-danger-border);
 }
 
-/* 중앙: 제목, 설명, 유형 태그 */
-.cardCenterCol {
+/* 본문: 제목 및 설명 */
+.cardBody {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  flex: 1;
-  min-width: 0;
+  gap: 0.35rem;
 }
 
-.titleRow {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.recurringCardTitle {
-  font-size: 1.25rem;
-  font-weight: 800;
+.cardTitle {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 750;
   color: var(--axis-text-primary);
-  letter-spacing: -0.01em;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+  line-height: 1.35;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.recurringCardDescription {
+.cardDescription {
   margin: 0;
   font-size: 0.78rem;
   color: var(--axis-text-secondary);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow-wrap: anywhere;
+  line-height: 1.45;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* 우측: 다음 일정, 메타 정보(체크리스트, 파일), 액션 버튼 */
-.cardRightCol {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+/* 주기 텍스트 행 */
+.cycleTextRow {
+  display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-top: auto;
-  padding-top: 0.85rem;
-  border-top: 1px solid var(--axis-line-default);
+  gap: 5px;
+  font-size: 0.76rem;
+  color: var(--axis-text-secondary);
+  font-weight: 600;
+}
+
+.cycleIcon {
+  color: var(--axis-text-muted);
   flex-shrink: 0;
 }
 
-.nextRunBlock {
-  grid-column: 1 / -1;
+/* 다음 실행일 정보 박스 */
+.nextOccurrenceBox {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 2px;
-  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  background: var(--axis-surface-muted, #f8fafc);
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-sm, 6px);
 }
 
-.nextRunLabel {
-  font-size: 0.7rem;
+.nextOccurrenceLabel {
+  font-size: 0.68rem;
   color: var(--axis-text-muted);
   font-weight: 600;
 }
 
-.nextRunValue {
-  font-size: 0.82rem;
+.nextOccurrenceValue {
+  font-size: 0.88rem;
+  font-weight: 750;
   color: var(--axis-text-primary);
-  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.recurringCardDetails {
+/* 하단 메타 & 액션 */
+.cardFooter {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.74rem;
-  color: var(--axis-text-secondary);
-  min-width: 0;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
 }
 
-.metaItem {
+.metaChipsCol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.metaChipsRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.metaChip {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  font-size: 0.7rem;
+  color: var(--axis-text-secondary);
+  background: var(--axis-surface-muted, #f1f3f9);
+  padding: 2px 6px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
-.cardActions {
+.cardActionArea {
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 
+.detailLinkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  color: var(--axis-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 140ms ease;
+}
+
+.detailLinkBtn:hover {
+  color: var(--axis-brand-primary);
+}
+
+.arrowIcon {
+  font-size: 0.85rem;
+  transition: transform 140ms ease;
+}
+
+.detailLinkBtn:hover .arrowIcon {
+  transform: translateX(2px);
+}
+
+.restoreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--axis-status-info-soft);
+  border: 1px solid var(--axis-status-info-border);
+  color: var(--axis-status-info);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.restoreBtn:hover:not(:disabled) {
+  background: var(--axis-status-info-soft);
+  border-color: var(--axis-status-info);
+}
+
+.restoreBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   빈 상태 (Empty State)
+   ========================================================================== */
 .emptyState {
   display: flex;
   flex-direction: column;

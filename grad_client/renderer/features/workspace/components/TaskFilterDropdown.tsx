@@ -5,13 +5,14 @@ import styles from './TaskFilterDropdown.module.css'
 
 type Option = { value: string; label: string; icon?: ReactNode }
 
-export function TaskFilterDropdown({ label, value, options, onChange, hideLabel = false }: {
+export function TaskFilterDropdown({ label, value, options, onChange, hideLabel = false, className }: {
   label: string
   value: string
   options: Option[]
   onChange: (value: string) => void
   /** 라벨을 화면에서는 감추고 스크린리더에만 남긴다 (툴바처럼 좁은 곳) */
   hideLabel?: boolean
+  className?: string
 }) {
   const id = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -65,7 +66,7 @@ export function TaskFilterDropdown({ label, value, options, onChange, hideLabel 
       <button
         ref={triggerRef}
         type="button"
-        className={styles.trigger}
+        className={[styles.trigger, className].filter(Boolean).join(' ')}
         aria-labelledby={`${id}-label ${id}-value`}
         aria-haspopup="listbox"
         aria-expanded={Boolean(position)}
@@ -80,7 +81,11 @@ export function TaskFilterDropdown({ label, value, options, onChange, hideLabel 
       >
         {selected?.icon}
         <span id={`${id}-value`} className={styles.text}>{selected?.label ?? '전체'}</span>
-        <Icon name="chevronDown" size={13} />
+        <Icon
+          name="chevronDown"
+          size={13}
+          className={[styles.chevron, Boolean(position) ? styles.chevronOpen : ''].filter(Boolean).join(' ')}
+        />
       </button>
       {position && createPortal(
         <div
@@ -110,23 +115,29 @@ export function TaskFilterDropdown({ label, value, options, onChange, hideLabel 
             }
           }}
         >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={option.value === value}
-              className={styles.option}
-              onClick={() => {
-                onChange(option.value)
-                close()
-                triggerRef.current?.focus()
-              }}
-            >
-              {option.icon}
-              <span className={styles.text}>{option.label}</span>
-            </button>
-          ))}
+          {options.map((option) => {
+            const isSelected = option.value === value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                className={[styles.option, isSelected ? styles.optionSelected : ''].filter(Boolean).join(' ')}
+                onClick={() => {
+                  onChange(option.value)
+                  close()
+                  triggerRef.current?.focus()
+                }}
+              >
+                {option.icon}
+                <span className={styles.text}>{option.label}</span>
+                {isSelected && (
+                  <Icon name="checkCircle" size={13} className={styles.checkIcon} />
+                )}
+              </button>
+            )
+          })}
         </div>, document.body,
       )}
     </div>

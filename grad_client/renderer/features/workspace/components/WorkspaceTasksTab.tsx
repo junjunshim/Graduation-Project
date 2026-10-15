@@ -353,8 +353,8 @@ function TaskTreeView({
   if (trees.length === 0) {
     return (
       <div className={styles.treeEmptyState}>
-        <Icon name="folder" size={32} />
-        <p>조건에 일치하는 업무가 없습니다.</p>
+        <Icon name="fileText" size={32} />
+        <p>표시할 업무가 없습니다.</p>
       </div>
     )
   }
@@ -1228,6 +1228,7 @@ export function WorkspaceTasksTab({
                   })
                 ) : (
                   <div className={styles.emptyState}>
+                    <Icon name="fileText" size={32} />
                     <p>표시할 업무가 없습니다.</p>
                   </div>
                 )}

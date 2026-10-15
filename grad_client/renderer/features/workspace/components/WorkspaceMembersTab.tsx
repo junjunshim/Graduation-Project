@@ -486,27 +486,25 @@ export function WorkspaceMembersTab({
 
       {/* 사용자 목록 테이블 카드 */}
       <div className={styles.tableCard}>
-        <div className={styles.tableResponsive}>
-          <table className={styles.memberTable}>
-            <thead>
-              <tr>
-                <th className={styles.thUser}>사용자</th>
-                <th className={styles.thRole}>역할 (Role)</th>
-                <th className={styles.thType}>소속 형태</th>
-                <th className={styles.thOverride}>상속 / 오버라이드 내역</th>
-                <th className={styles.thAction}>관리</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedItems.length === 0 ? (
+        {paginatedItems.length === 0 ? (
+          <div className={styles.emptyContainer}>
+            <Icon name="users" size={32} />
+            <p>해당 조건에 일치하는 사용자가 없습니다.</p>
+          </div>
+        ) : (
+          <div className={styles.tableResponsive}>
+            <table className={styles.memberTable}>
+              <thead>
                 <tr>
-                  <td colSpan={5} className={styles.emptyCell}>
-                    <Icon name="users" size={28} />
-                    <p>해당 조건에 일치하는 사용자가 없습니다.</p>
-                  </td>
+                  <th className={styles.thUser}>사용자</th>
+                  <th className={styles.thRole}>역할 (Role)</th>
+                  <th className={styles.thType}>소속 형태</th>
+                  <th className={styles.thOverride}>상속 / 오버라이드 내역</th>
+                  <th className={styles.thAction}>관리</th>
                 </tr>
-              ) : (
-                paginatedItems.map((member) => (
+              </thead>
+              <tbody>
+                {paginatedItems.map((member) => (
                   <tr key={member.userId} className={styles.memberRow}>
                     {/* 사용자 프로필 */}
                     <td className={styles.tdUser}>
@@ -584,11 +582,11 @@ export function WorkspaceMembersTab({
                       )}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         {/* 테이블 하단: 페이징 네비게이션 */}
         {totalItems > 0 ? (

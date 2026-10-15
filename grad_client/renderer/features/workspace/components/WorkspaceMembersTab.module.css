@@ -507,15 +507,26 @@
   font-size: 0.7rem;
 }
 
-.emptyCell {
-  padding: 8rem 2rem;
+.emptyContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 280px;
+  padding: 48px 16px;
   text-align: center;
-  color: var(--text-muted);
+  color: var(--axis-text-muted, var(--text-muted));
 }
 
-.emptyCell p {
-  margin: 8px 0 0 0;
-  font-size: 0.8rem;
+.emptyContainer p {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--axis-text-secondary, var(--text-secondary));
 }
 
 /* 페이징 푸터 */

@@ -284,9 +284,8 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
       return
     }
 
-    const repository = repositories.find((item) => item.repo_id === selectedRepoId)
-    void reloadBranches(selectedRepoId, currentBranchRef.current || repository?.default_branch)
-  }, [selectedRepoId, repositories, reloadBranches])
+    void reloadBranches(selectedRepoId, currentBranchRef.current)
+  }, [selectedRepoId, reloadBranches])
 
   // 현재 경로 한 단계를 lazy 로 읽는다(§12.3).
   useEffect(() => {

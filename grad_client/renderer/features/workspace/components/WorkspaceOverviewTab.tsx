@@ -10,7 +10,7 @@ import { analyzeWorkspaceMembers } from '../model/memberInheritance'
 import { getRoleBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
 import type { WorkspaceOverview, WorkspaceSnapshot } from '../model/types'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
-import { fetchRecurringRules, getLocalRecurringRules } from '../data/recurringRuleService'
+import { fetchRecurringRules, getLocalRecurringRules, hasLoadedRecurringRulesForNode } from '../data/recurringRuleService'
 import { subscribeToRecurringCache } from '../data/workspaceCacheEvents'
 import { getSchedulesForCalendarDate } from '../model/recurringCalendar'
 import { useKoreanHolidays } from '../model/koreanHolidays'
@@ -43,8 +43,9 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
     return node ? getLocalRecurringRules(node.id, true) : []
   })
   const [loading, setLoading] = useState(() => {
-    const cached = node ? getLocalRecurringRules(node.id, true) : []
-    return Boolean(node && cached.length === 0)
+    if (!node) return false
+    const cached = getLocalRecurringRules(node.id, true)
+    return cached.length === 0 && !hasLoadedRecurringRulesForNode(node.id)
   })
   const [error, setError] = useState(false)
   const [selectedScheduleDate, setSelectedScheduleDate] = useState<string | null>(null)
@@ -54,7 +55,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
     if (node) {
       const cached = getLocalRecurringRules(node.id, true)
       setRules(cached)
-      if (cached.length === 0) {
+      if (cached.length === 0 && !hasLoadedRecurringRulesForNode(node.id)) {
         setLoading(true)
       }
     }
@@ -62,7 +63,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
     const reload = async () => {
       const request = ++requestId
       const cached = node ? getLocalRecurringRules(node.id, true) : []
-      if (cached.length === 0) {
+      if (cached.length === 0 && node && !hasLoadedRecurringRulesForNode(node.id)) {
         setLoading(true)
       }
       setError(false)

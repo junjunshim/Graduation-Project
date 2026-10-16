@@ -10,12 +10,43 @@ import { waitForDownloadCompletion } from './downloadCompletion'
 import { notifyRecurringCacheUpdated } from './workspaceCacheEvents'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
+const LOCAL_STORAGE_LOADED_NODES_KEY = 'grad_recurring_rules_loaded_nodes'
 
 type ServerResponse<T> = {
   status: 'success' | 'error'
   data?: T
   message?: string
   code?: string
+}
+
+/**
+ * 특정 노드의 정기 일정이 최소 1회 서버로부터 동기화되었는지 확인합니다.
+ * (일정이 0개인 노드에서도 불필요한 로딩 상태 깜빡임을 방지)
+ */
+export function hasLoadedRecurringRulesForNode(nodeId: number): boolean {
+  if (typeof window === 'undefined' || !window.sessionStorage) return false
+  try {
+    const raw = window.sessionStorage.getItem(LOCAL_STORAGE_LOADED_NODES_KEY)
+    if (!raw) return false
+    const set = JSON.parse(raw) as number[]
+    return Array.isArray(set) && set.includes(nodeId)
+  } catch {
+    return false
+  }
+}
+
+export function markRecurringRulesLoadedForNode(nodeId: number) {
+  if (typeof window === 'undefined' || !window.sessionStorage) return
+  try {
+    const raw = window.sessionStorage.getItem(LOCAL_STORAGE_LOADED_NODES_KEY)
+    const set = raw ? (JSON.parse(raw) as number[]) : []
+    if (!set.includes(nodeId)) {
+      set.push(nodeId)
+      window.sessionStorage.setItem(LOCAL_STORAGE_LOADED_NODES_KEY, JSON.stringify(set))
+    }
+  } catch {
+    // ignore
+  }
 }
 
 /**
@@ -111,6 +142,7 @@ export async function fetchRecurringRules(nodeId: number, includeDeleted: boolea
   try {
     const res = await apiRequest<ServerResponse<any[]>>(`/recurringRules?nodeId=${nodeId}${includeDeleted ? '&include_deleted=true' : ''}`)
     if (res.status === 'success' && Array.isArray(res.data)) {
+      markRecurringRulesLoadedForNode(nodeId)
       const parsed = res.data.map(snakeToCamelRule)
       // 로컬 캐시 동기화
       const currentAll = getLocalRecurringRules(undefined, true).filter((r) => r.ownerNodeId !== nodeId)

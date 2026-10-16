@@ -179,28 +179,28 @@
 .memberStack > strong::after {
   content: attr(data-member-name);
   position: absolute;
-  bottom: calc(100% + 0.48rem);
-  left: 50%;
-  z-index: 20;
+  top: calc(100% + 0.48rem);
+  right: 0;
+  z-index: 50;
   width: max-content;
-  max-width: 12rem;
+  max-width: 14rem;
   padding: 0.34rem 0.52rem;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
+  box-shadow: var(--axis-shadow-popover, 0 4px 12px rgba(0, 0, 0, 0.1));
   color: var(--text-primary);
   font-size: 0.74rem;
   font-weight: 700;
   line-height: 1.2;
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%);
   white-space: nowrap;
 }
 
 .memberStack > span:hover,
 .memberStack > strong:hover {
-  z-index: 21;
+  z-index: 51;
   border-color: var(--line-strong);
   background: var(--surface-hover);
   color: var(--workspace-ink);

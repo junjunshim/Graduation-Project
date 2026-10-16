@@ -5,12 +5,18 @@ import { createPortal } from 'react-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import {
+  AI_PERFORMANCE_LEVELS,
   AI_PROVIDERS,
   getStoredAiApiKeys,
+  getStoredAiPerformanceLevel,
+  getStoredAiProviderOrder,
   maskApiKey,
   removeStoredAiApiKey,
   saveStoredAiApiKey,
+  saveStoredAiPerformanceLevel,
+  saveStoredAiProviderOrder,
   type AiApiKeyRecord,
+  type AiPerformanceLevel,
   type AiProvider,
 } from '../data/aiApiKeyService'
 import styles from './AiCredentialDialog.module.css'
@@ -22,6 +28,8 @@ type AiCredentialDialogProps = {
 
 export function AiCredentialDialog({ isOpen, onClose }: AiCredentialDialogProps) {
   const [keys, setKeys] = useState<Record<AiProvider, AiApiKeyRecord | undefined>>(() => getStoredAiApiKeys())
+  const [providerOrder, setProviderOrder] = useState<AiProvider[]>(() => getStoredAiProviderOrder())
+  const [perfLevel, setPerfLevel] = useState<AiPerformanceLevel>(() => getStoredAiPerformanceLevel())
   const [editingProvider, setEditingProvider] = useState<AiProvider | null>(null)
   const [inputKey, setInputKey] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -31,6 +39,8 @@ export function AiCredentialDialog({ isOpen, onClose }: AiCredentialDialogProps)
   useEffect(() => {
     if (isOpen) {
       setKeys(getStoredAiApiKeys())
+      setProviderOrder(getStoredAiProviderOrder())
+      setPerfLevel(getStoredAiPerformanceLevel())
       setEditingProvider(null)
       setInputKey('')
       setShowPassword(false)
@@ -96,6 +106,19 @@ export function AiCredentialDialog({ isOpen, onClose }: AiCredentialDialogProps)
     }
   }
 
+  const handleMoveOrder = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= providerOrder.length) return
+
+    const nextOrder = [...providerOrder]
+    const temp = nextOrder[index]
+    nextOrder[index] = nextOrder[targetIndex]
+    nextOrder[targetIndex] = temp
+
+    setProviderOrder(nextOrder)
+    saveStoredAiProviderOrder(nextOrder)
+  }
+
   return createPortal(
     <div className={styles.overlay} onClick={onClose} role="presentation">
       <div
@@ -121,11 +144,54 @@ export function AiCredentialDialog({ isOpen, onClose }: AiCredentialDialogProps)
         <div className={styles.body}>
           <p className={styles.hint}>
             등록된 API 키는 서버로 전송되지 않고 <strong>현재 사용자의 브라우저(로컬)에만 안전하게 보관</strong>됩니다.
-            필요한 AI 제공자의 키를 등록해 두면 향후 AI 업무 요약/자동화 기능에서 바로 활용됩니다.
+            목록의 <strong>위쪽 순서(1순위)부터 우선적으로 자동 사용</strong>되며, 우측 화살표로 우선순위를 변경할 수 있습니다.
           </p>
 
+          {/* 5단계 AI 모델 성능/성향 설정 바 */}
+          <div className={styles.levelSection}>
+            <div className={styles.levelHeader}>
+              <span className={styles.levelTitle}>
+                <Icon name="gear" size={14} />
+                <span>AI 모델 성능 등급 (5단계)</span>
+              </span>
+              <span className={styles.levelCurrentLabel}>
+                {AI_PERFORMANCE_LEVELS.find((l) => l.level === perfLevel)?.title} ({perfLevel}단계)
+              </span>
+            </div>
+
+            <div className={styles.levelCards} role="radiogroup" aria-label="AI 모델 성능 등급">
+              {AI_PERFORMANCE_LEVELS.map((item) => {
+                const isActive = perfLevel === item.level
+                return (
+                  <button
+                    key={item.level}
+                    type="button"
+                    role="radio"
+                    aria-checked={isActive}
+                    className={[styles.levelCard, isActive ? styles.levelCardActive : ''].join(' ')}
+                    onClick={() => {
+                      setPerfLevel(item.level)
+                      saveStoredAiPerformanceLevel(item.level)
+                    }}
+                    title={`${item.title}: ${item.subtitle}`}
+                  >
+                    <span className={styles.levelNum}>{item.level}단계</span>
+                    <span className={styles.levelCardTitle}>{item.title}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <p className={styles.levelDesc}>
+              {AI_PERFORMANCE_LEVELS.find((l) => l.level === perfLevel)?.subtitle}
+            </p>
+          </div>
+
           <div className={styles.providerList}>
-            {AI_PROVIDERS.map((provider) => {
+            {providerOrder.map((providerId, index) => {
+              const provider = AI_PROVIDERS.find((p) => p.id === providerId)
+              if (!provider) return null
+
               const record = keys[provider.id]
               const isRegistered = Boolean(record?.apiKey)
               const isEditing = editingProvider === provider.id
@@ -137,6 +203,9 @@ export function AiCredentialDialog({ isOpen, onClose }: AiCredentialDialogProps)
                 >
                   <div className={styles.cardHeader}>
                     <div className={styles.providerInfo}>
+                      <span className={[styles.orderBadge, isRegistered ? styles.orderBadgeActive : ''].join(' ')} title={`우선순위 ${index + 1}순위`}>
+                        {index + 1}
+                      </span>
                       <span className={styles.providerName}>{provider.label}</span>
                       <span
                         className={[styles.statusBadge, isRegistered ? styles.statusRegistered : styles.statusNotSet].join(' ')}
@@ -147,6 +216,28 @@ export function AiCredentialDialog({ isOpen, onClose }: AiCredentialDialogProps)
 
                     {!isEditing && (
                       <div className={styles.cardActions}>
+                        <div className={styles.orderControls}>
+                          <button
+                            type="button"
+                            className={styles.orderBtn}
+                            disabled={index === 0}
+                            title="우선순위 올리기"
+                            onClick={() => handleMoveOrder(index, 'up')}
+                            aria-label={`${provider.label} 우선순위 올리기`}
+                          >
+                            <Icon name="chevronUp" size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.orderBtn}
+                            disabled={index === providerOrder.length - 1}
+                            title="우선순위 내리기"
+                            onClick={() => handleMoveOrder(index, 'down')}
+                            aria-label={`${provider.label} 우선순위 내리기`}
+                          >
+                            <Icon name="chevronDown" size={14} />
+                          </button>
+                        </div>
                         <Button
                           variant="secondary"
                           onClick={() => handleStartEdit(provider.id)}

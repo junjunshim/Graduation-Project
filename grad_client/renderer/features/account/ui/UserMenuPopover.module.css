@@ -48,10 +48,11 @@
   text-overflow: ellipsis;
 }
 
-.profileUserId {
+.profileEmail {
   overflow: hidden;
-  color: var(--text-muted);
-  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 500;
   white-space: nowrap;
   text-overflow: ellipsis;
 }

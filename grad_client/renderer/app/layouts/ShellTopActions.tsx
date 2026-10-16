@@ -52,6 +52,7 @@ type ShellTopActionsProps = {
   currentUser: {
     name: string
     userId: string
+    email?: string
   }
   heading: ShellTopActionsHeading
   inset?: 'standard' | 'wide'
@@ -162,6 +163,7 @@ export function ShellTopActions({
             <UserMenuPopover
               userId={currentUser.userId}
               name={currentUser.name}
+              email={currentUser.email}
               buttonClassName={styles.shellProfileButton}
             />
           </div>

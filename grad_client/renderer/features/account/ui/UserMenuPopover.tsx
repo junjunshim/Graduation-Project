@@ -5,17 +5,20 @@ import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { GitHubCredentialDialog } from './GitHubCredentialDialog'
+import { AiCredentialDialog } from './AiCredentialDialog'
 import styles from './UserMenuPopover.module.css'
 
 type UserMenuPopoverProps = {
   userId: string
   name: string
+  email?: string
   buttonClassName?: string
 }
 
-export function UserMenuPopover({ userId, name, buttonClassName }: UserMenuPopoverProps) {
+export function UserMenuPopover({ userId, name, email, buttonClassName }: UserMenuPopoverProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isCredentialOpen, setIsCredentialOpen] = useState(false)
+  const [isAiCredentialOpen, setIsAiCredentialOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
 
   // 바깥 클릭으로 닫는다(알림 팝오버와 같은 방식).
@@ -34,6 +37,8 @@ export function UserMenuPopover({ userId, name, buttonClassName }: UserMenuPopov
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
+  const displayEmail = email || (userId.includes('@') ? userId : '')
+
   return (
     <div className={styles.wrapper} ref={wrapperRef}>
       <Button
@@ -42,7 +47,7 @@ export function UserMenuPopover({ userId, name, buttonClassName }: UserMenuPopov
         aria-label="사용자 메뉴"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        title={`${name} (${userId})`}
+        title={`${name} (${displayEmail || userId})`}
         onClick={() => setIsOpen((previous) => !previous)}
       >
         <Icon name="user" size={20} />
@@ -54,9 +59,24 @@ export function UserMenuPopover({ userId, name, buttonClassName }: UserMenuPopov
             <UserAvatar name={name} userId={userId} size="medium" />
             <div className={styles.profileText}>
               <span className={styles.profileName}>{name || '사용자'}</span>
-              <span className={styles.profileUserId}>{userId}</span>
+              {displayEmail ? (
+                <span className={styles.profileEmail}>{displayEmail}</span>
+              ) : null}
             </div>
           </div>
+
+          <button
+            type="button"
+            className={styles.menuItem}
+            onClick={() => {
+              setIsOpen(false)
+              setIsAiCredentialOpen(true)
+            }}
+          >
+            <Icon name="sparkles" size={16} className={styles.menuIcon} />
+            <span className={styles.menuLabel}>AI API 키 설정</span>
+            <Icon name="chevronRight" size={15} className={styles.menuChevron} />
+          </button>
 
           <button
             type="button"
@@ -74,6 +94,7 @@ export function UserMenuPopover({ userId, name, buttonClassName }: UserMenuPopov
       ) : null}
 
       <GitHubCredentialDialog isOpen={isCredentialOpen} onClose={() => setIsCredentialOpen(false)} />
+      <AiCredentialDialog isOpen={isAiCredentialOpen} onClose={() => setIsAiCredentialOpen(false)} />
     </div>
   )
 }

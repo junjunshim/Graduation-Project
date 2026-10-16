@@ -16,7 +16,10 @@ import { getSchedulesForCalendarDate } from '../model/recurringCalendar'
 import { useKoreanHolidays } from '../model/koreanHolidays'
 import {
   canViewHistory,
+  canViewMembers,
+  canViewParentNode,
   canViewSchedule,
+  canViewSubNodes,
   canViewWorkItems,
 } from '../model/effectiveAuthority'
 import styles from './WorkspaceOverviewTab.module.css'
@@ -121,6 +124,9 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   const canViewTasks = node ? canViewWorkItems(currentUserId, node.id, snapshot) : false
   const canViewSched = node ? canViewSchedule(currentUserId, node.id, snapshot) : false
   const canViewHist = node ? canViewHistory(currentUserId, node.id, snapshot) : false
+  const canViewMemb = node ? canViewMembers(currentUserId, node.id, snapshot) : false
+  const canViewParent = node ? canViewParentNode(currentUserId, node.id, snapshot) : false
+  const canViewSub = node ? canViewSubNodes(currentUserId, node.id, snapshot) : false
 
   return <div className={styles.grid}>
     <section className={styles.panel} aria-label="워크스페이스 현황">
@@ -145,27 +151,61 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         <div className={styles.hierarchyContent}>
         <section className={styles.hierarchyColumn} aria-label="상위 워크스페이스">
         <span className={styles.muted}>상위</span>
-        {parent ? <Link className={styles.parentCard} to={`/workspace?nodeId=${parent.id}`}><Icon name={getNodeVisualMetadata(parent.nodeType).iconName} size={28} /><strong>{parent.name}</strong></Link> : <div className={styles.parentCard}><span className={styles.muted}>상위 워크스페이스 없음</span></div>}
+        {!canViewParent ? (
+          <div className={styles.hierarchyRestricted}>
+            <Icon name="lock" size={18} />
+            <span>상위 노드 조회 권한 없음</span>
+          </div>
+        ) : parent ? (
+          <Link className={styles.parentCard} to={`/workspace?nodeId=${parent.id}`}>
+            <Icon name={getNodeVisualMetadata(parent.nodeType).iconName} size={28} />
+            <strong>{parent.name}</strong>
+          </Link>
+        ) : (
+          <div className={styles.parentCard}><span className={styles.muted}>상위 워크스페이스 없음</span></div>
+        )}
         </section>
         <section className={styles.hierarchyColumn} aria-label="하위 워크스페이스">
-        <span className={styles.muted}>하위 · {children.length}개</span>
-        <div className={styles.children} role="region" aria-label="하위 워크스페이스 목록" tabIndex={0}>{children.length ? children.map((child) => <Link key={child.id} to={`/workspace?nodeId=${child.id}`}><Icon name={getNodeVisualMetadata(child.nodeType).iconName} size={18} />{child.name}</Link>) : <span className={styles.muted}>하위 워크스페이스 없음</span>}</div>
+        <span className={styles.muted}>하위 · {canViewSub ? `${children.length}개` : '권한 필요'}</span>
+        {!canViewSub ? (
+          <div className={styles.hierarchyRestricted}>
+            <Icon name="lock" size={18} />
+            <span>하위 노드 조회 권한 없음</span>
+          </div>
+        ) : (
+          <div className={styles.children} role="region" aria-label="하위 워크스페이스 목록" tabIndex={0}>
+            {children.length ? children.map((child) => <Link key={child.id} to={`/workspace?nodeId=${child.id}`}><Icon name={getNodeVisualMetadata(child.nodeType).iconName} size={18} />{child.name}</Link>) : <span className={styles.muted}>하위 워크스페이스 없음</span>}
+          </div>
+        )}
         </section>
         </div>
       </div>
       <dl className={styles.facts} tabIndex={0} aria-label="워크스페이스 참여 정보">
-        <dt>관리자</dt><dd>{managers.length ? managers.map((manager) => <span className={styles.person} key={manager.userId}><UserAvatar name={manager.name} userId={manager.userId} size="medium" />{manager.name}</span>) : '등록된 관리자 없음'}</dd>
-        <dt>참여 인원</dt><dd><span className={styles.factIcon}><Icon name="users" size={18} /></span>{members.length}명</dd>
+        <dt>관리자</dt>
+        <dd>
+          {!canViewMemb ? (
+            <span className={styles.muted}>조회 권한 없음</span>
+          ) : managers.length ? (
+            managers.map((manager) => <span className={styles.person} key={manager.userId}><UserAvatar name={manager.name} userId={manager.userId} size="medium" />{manager.name}</span>)
+          ) : (
+            '등록된 관리자 없음'
+          )}
+        </dd>
+        <dt>참여 인원</dt>
+        <dd>
+          <span className={styles.factIcon}><Icon name="users" size={18} /></span>
+          {!canViewMemb ? <span className={styles.muted}>조회 권한 없음</span> : `${members.length}명`}
+        </dd>
         <dt>내 역할</dt><dd><span className={styles.factIcon}><Icon name="star" size={18} /></span>{myRole ? <span className={styles.roleBadge} style={getRoleBadgeStyle(myRole, myMembership?.isTopRole)}>{myRole}</span> : '지정된 역할 없음'}</dd>
       </dl>
       </div>
     </section>
-    <Panel title="일정" icon="calendar" href={canViewSched ? href('schedules') : undefined} bodyClassName={styles.scheduleBody}>
+    <Panel title="일정" icon="calendar" href={canViewSched ? href('schedules') : undefined} bodyClassName={!canViewSched ? styles.fullHeightBody : styles.scheduleBody}>
       {!canViewSched ? (
         <div className={styles.permissionRestricted}>
           <Icon name="lock" size={24} />
           <strong>일정 조회 권한이 없습니다</strong>
-          <span>이 워크스페이스의 정기 일정을 보려면 SCHEDULE_VIEW 권한이 필요합니다.</span>
+          <span>이 워크스페이스의 정기 일정을 보려면 일정 조회 권한이 필요합니다.</span>
         </div>
       ) : (
         <>
@@ -190,12 +230,12 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         </>
       )}
     </Panel>
-    <Panel title="업무" icon="checkSquare" href={canViewTasks ? href('tasks') : undefined} bodyClassName={styles.taskBody}>
+    <Panel title="업무" icon="checkSquare" href={canViewTasks ? href('tasks') : undefined} bodyClassName={!canViewTasks ? styles.fullHeightBody : styles.taskBody}>
       {!canViewTasks ? (
         <div className={styles.permissionRestricted}>
           <Icon name="lock" size={24} />
           <strong>업무 조회 권한이 없습니다</strong>
-          <span>이 워크스페이스의 업무 목록을 보려면 WI_PUBLIC_VIEW 권한이 필요합니다.</span>
+          <span>이 워크스페이스의 업무 목록을 보려면 업무 조회 권한이 필요합니다.</span>
         </div>
       ) : (
         <>
@@ -220,12 +260,12 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         </>
       )}
     </Panel>
-    <Panel title="최근 활동" icon="lineChart">
+    <Panel title="최근 활동" icon="lineChart" bodyClassName={!canViewHist ? styles.fullHeightBody : ''}>
       {!canViewHist ? (
         <div className={styles.permissionRestricted}>
           <Icon name="lock" size={24} />
           <strong>활동 이력 조회 권한이 없습니다</strong>
-          <span>이 워크스페이스의 활동 로그를 보려면 HISTORY 조회 권한이 필요합니다.</span>
+          <span>이 워크스페이스의 활동 로그를 보려면 활동 이력 조회 권한이 필요합니다.</span>
         </div>
       ) : activities.length ? activities.map((activity) => {
         const actorName = activity.actorName || userName(activity.actorUserId)

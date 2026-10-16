@@ -363,6 +363,54 @@
   background: var(--workspace-brand);
 }
 
+.tabLinkDisabled {
+  color: var(--axis-text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.tabLinkDisabled:hover {
+  background: transparent;
+  color: var(--axis-text-muted);
+  border-color: transparent;
+}
+
+.tabLockIcon {
+  margin-left: 0.25rem;
+  opacity: 0.7;
+}
+
+.tabAccessDeniedContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 380px;
+  height: 100%;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--axis-text-muted);
+  background: var(--axis-surface-panel);
+  border: 1px dashed var(--axis-line-default);
+  border-radius: var(--axis-radius-surface);
+  gap: 14px;
+}
+
+.tabAccessDeniedContainer h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--axis-text-primary);
+}
+
+.tabAccessDeniedContainer p {
+  margin: 0;
+  max-width: 28rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--axis-text-secondary);
+}
+
 .taskTabWrapper {
   position: relative;
   display: inline-flex;

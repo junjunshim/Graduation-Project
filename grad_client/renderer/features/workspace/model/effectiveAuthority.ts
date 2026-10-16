@@ -244,6 +244,24 @@ export function canViewMembers(
   return hasEffectiveAuthorityBit(userId, nodeId, 1, snapshot)
 }
 
+/** 상위 조상 노드 트리 조회 권한 (NODE_PARENT_VIEW, Bit 3) */
+export function canViewParentNode(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 3, snapshot)
+}
+
+/** 하위 자식 노드 탐색/조회 권한 (NODE_SUB_VIEW, Bit 2) */
+export function canViewSubNodes(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 2, snapshot)
+}
+
 /** GitHub 저장소 조회 권한 (GITHUB_VIEW, Bit 22) */
 export function canViewGithub(
   userId: string,

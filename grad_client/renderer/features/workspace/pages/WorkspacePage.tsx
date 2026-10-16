@@ -26,6 +26,15 @@ import { showToast as showLiveToast } from '../../notification/data/toastEvents'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
 import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
+import {
+  canChangeRoleDefinitions,
+  canManageNodeRoles,
+  canViewFiles,
+  canViewGithub,
+  canViewMembers,
+  canViewSchedule,
+  canViewWorkItems,
+} from '../model/effectiveAuthority'
 import styles from './WorkspacePage.module.css'
 
 type WorkspaceView =
@@ -300,6 +309,45 @@ export function WorkspacePage() {
   const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : overview.rootRoleMembers.length
   const extraMemberCount = Math.max(0, totalMemberCount - visibleMembers.length)
 
+  const currentNodeId = overview.rootNode ? overview.rootNode.id : (activeWorkspaceRootId ? Number(activeWorkspaceRootId) : 1)
+
+  const tabPermissions = useMemo(() => {
+    if (!currentUserId || !currentNodeId) {
+      return {
+        overview: true,
+        tasks: false,
+        timeline: false,
+        schedules: false,
+        files: false,
+        github: false,
+        members: false,
+        roles: false,
+      }
+    }
+
+    const canViewWI = canViewWorkItems(currentUserId, currentNodeId, snapshot)
+    const canViewSched = canViewSchedule(currentUserId, currentNodeId, snapshot)
+    const canViewFil = canViewFiles(currentUserId, currentNodeId, snapshot)
+    const canViewGit = canViewGithub(currentUserId, currentNodeId, snapshot)
+    const canViewMem = canViewMembers(currentUserId, currentNodeId, snapshot)
+    const canManageRoles =
+      canManageNodeRoles(currentUserId, currentNodeId, snapshot) ||
+      canChangeRoleDefinitions(currentUserId, currentNodeId, snapshot)
+
+    return {
+      overview: true,
+      tasks: canViewWI,
+      timeline: canViewWI,
+      schedules: canViewSched,
+      files: canViewFil,
+      github: canViewGit,
+      members: canViewMem,
+      roles: canManageRoles,
+    }
+  }, [currentUserId, currentNodeId, snapshot])
+
+  const isCurrentViewAllowed = tabPermissions[activeView] ?? true
+
   return (
     <section
       className={[
@@ -321,6 +369,7 @@ export function WorkspacePage() {
       <div className={styles.workspaceNavBar}>
         <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
           {workspaceTabs.map((tab) => {
+            const isTabAllowed = tab.view ? (tabPermissions[tab.view] ?? true) : true
             const isActive = tab.view === activeView
             const targetTo =
               workspaceRootParam && tab.to.startsWith('/workspace')
@@ -328,6 +377,20 @@ export function WorkspacePage() {
                   ? `${tab.to}&nodeId=${encodeURIComponent(workspaceRootParam)}`
                   : `${tab.to}?nodeId=${encodeURIComponent(workspaceRootParam)}`
                 : tab.to
+
+            if (!isTabAllowed) {
+              return (
+                <span
+                  key={tab.label}
+                  className={[styles.tabLink, styles.tabLinkDisabled].join(' ')}
+                  title={`${tab.label} 조회 권한이 없습니다`}
+                  aria-disabled="true"
+                >
+                  {tab.label}
+                  <Icon name="lock" size={13} className={styles.tabLockIcon} />
+                </span>
+              )
+            }
 
             if (tab.view === 'tasks') {
               const currentMode = requestedTaskMode ?? 'list'
@@ -425,7 +488,27 @@ export function WorkspacePage() {
         </div>
       </div>
 
-      {activeView === 'timeline' ? (
+      {!isCurrentViewAllowed ? (
+        <div className={styles.tabAccessDeniedContainer} role="alert">
+          <Icon name="lock" size={44} />
+          <h2>접근 권한 제한</h2>
+          <p>
+            현재 워크스페이스에서 해당 탭을 조회할 수 있는 권한이 없습니다. 관리자에게 권한을 요청하거나 다른 탭을 이용해 주세요.
+          </p>
+          <button
+            type="button"
+            className={styles.secondaryAction}
+            onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('view')
+              navigate(`?${next.toString()}`)
+            }}
+          >
+            <Icon name="home" size={16} />
+            개요 탭으로 이동
+          </button>
+        </div>
+      ) : activeView === 'timeline' ? (
         <WorkspaceTimelineTab
           workItems={overview.visibleWorkItems}
           nodes={overview.visibleNodes}

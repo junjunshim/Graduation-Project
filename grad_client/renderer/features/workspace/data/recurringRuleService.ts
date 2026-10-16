@@ -7,6 +7,7 @@ import type {
 import { apiRequest } from './server/apiClient'
 import { optionalRecurringNumber } from '../model/recurringRuleValues'
 import { waitForDownloadCompletion } from './downloadCompletion'
+import { notifyRecurringCacheUpdated } from './workspaceCacheEvents'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
 
@@ -25,7 +26,7 @@ function toMutationErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback
 }
 
-function getLocalRecurringRules(nodeId?: number, includeDeleted: boolean = false): RecurringRuleRecord[] {
+export function getLocalRecurringRules(nodeId?: number, includeDeleted: boolean = false): RecurringRuleRecord[] {
   if (typeof window === 'undefined' || !window.localStorage) return []
   try {
     const raw = window.localStorage.getItem(LOCAL_STORAGE_RECURRING_KEY)
@@ -244,8 +245,9 @@ export async function updateRecurringRule(
         }
       }
 
-      const current = getLocalRecurringRules()
+      const current = getLocalRecurringRules(undefined, true)
       saveLocalRecurringRules(current.map((r) => (r.ruleId === req.ruleId ? updated : r)))
+      notifyRecurringCacheUpdated(updated.ownerNodeId)
       return { status: 'success', rule: updated }
     }
     return { status: 'error', message: res.message || '정기 일정을 수정하지 못했습니다.' }
@@ -264,9 +266,11 @@ export async function deleteRecurringRule(ruleId: number): Promise<{ status: 'su
     })
     if (res.status === 'success') {
       const current = getLocalRecurringRules(undefined, true)
+      const target = current.find((r) => r.ruleId === ruleId)
       saveLocalRecurringRules(
         current.map((r) => (r.ruleId === ruleId ? { ...r, isDeleted: true } : r)),
       )
+      notifyRecurringCacheUpdated(target?.ownerNodeId)
       return { status: 'success' }
     }
     return { status: 'error', message: res.message || '삭제에 실패했습니다.' }
@@ -369,6 +373,12 @@ export async function restoreRecurringRule(
       method: 'PATCH',
     })
     if (res.status === 'success') {
+      const current = getLocalRecurringRules(undefined, true)
+      const target = current.find((r) => r.ruleId === ruleId)
+      saveLocalRecurringRules(
+        current.map((r) => (r.ruleId === ruleId ? { ...r, isDeleted: false } : r)),
+      )
+      notifyRecurringCacheUpdated(target?.ownerNodeId)
       return { status: 'success' }
     }
     return { status: 'error', message: res.message || '정기 일정 복구에 실패했습니다.' }

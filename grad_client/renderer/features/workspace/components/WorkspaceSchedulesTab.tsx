@@ -7,7 +7,7 @@ import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
 import { useKoreanHolidays } from '../model/koreanHolidays'
 import type { RecurringCategory, RecurringRuleRecord } from '../model/recurringRuleTypes'
-import { fetchRecurringRules, fetchRecurringRuleDetail, restoreRecurringRule } from '../data/recurringRuleService'
+import { fetchRecurringRules, fetchRecurringRuleDetail, getLocalRecurringRules, restoreRecurringRule } from '../data/recurringRuleService'
 import { formatRepeatSummary, getNextOccurrenceInfo } from '../model/recurringSchedule'
 import { RecurringRuleModal } from './RecurringRuleModal'
 import { RecurringRuleDetailModal } from './RecurringRuleDetailModal'
@@ -72,8 +72,13 @@ export function WorkspaceSchedulesTab({
   // 공휴일 데이터가 늦게 도착하면 '다음 발생'을 다시 계산하도록 구독한다.
   const currentYear = new Date().getFullYear()
   const holidayRevision = useKoreanHolidays([currentYear - 1, currentYear, currentYear + 1])
-  const [loadedRecurringRules, setLoadedRecurringRules] = useState<RecurringRuleRecord[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [loadedRecurringRules, setLoadedRecurringRules] = useState<RecurringRuleRecord[]>(() => {
+    return activeNodeId ? getLocalRecurringRules(activeNodeId, true) : []
+  })
+  const [isLoading, setIsLoading] = useState(() => {
+    const cached = activeNodeId ? getLocalRecurringRules(activeNodeId, true) : []
+    return Boolean(activeNodeId && cached.length === 0)
+  })
   const [showDeletedSchedules, setShowDeletedSchedules] = useState(false)
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false)
   const [selectedRecurringRule, setSelectedRecurringRule] = useState<RecurringRuleRecord | null>(null)
@@ -152,33 +157,48 @@ export function WorkspaceSchedulesTab({
     return () => { cancelled = true }
   }, [requestedRuleId, activeNodeId, setSearchParams, canManageRule])
 
-  const reloadRules = () => {
-    if (activeNodeId) {
+  const reloadRules = useCallback((nodeId?: number) => {
+    const targetNodeId = nodeId ?? activeNodeId
+    if (!targetNodeId) return
+
+    const cached = getLocalRecurringRules(targetNodeId, true)
+    if (cached.length > 0) {
+      setLoadedRecurringRules(cached)
+    } else {
       setIsLoading(true)
-      fetchRecurringRules(activeNodeId, true)
-        .then((rules) => {
-          setLoadedRecurringRules(rules)
-        })
-        .finally(() => {
-          setIsLoading(false)
-        })
     }
-  }
+
+    fetchRecurringRules(targetNodeId, true)
+      .then((rules) => {
+        setLoadedRecurringRules(rules)
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
+  }, [activeNodeId])
 
   useEffect(() => {
-    reloadRules()
+    // 노드가 변경되었을 때 즉시 해당 노드의 캐시를 우선 반영
+    if (activeNodeId) {
+      const cached = getLocalRecurringRules(activeNodeId, true)
+      setLoadedRecurringRules(cached)
+      if (cached.length === 0) {
+        setIsLoading(true)
+      }
+    }
+    reloadRules(activeNodeId)
 
     // 일정 캐시 갱신 이벤트 수신 시 단일 리로드
     const unsubCache = subscribeToRecurringCache((evt) => {
       if (!evt.nodeId || evt.nodeId === activeNodeId) {
-        reloadRules()
+        reloadRules(activeNodeId)
       }
     })
 
     return () => {
       unsubCache()
     }
-  }, [activeNodeId])
+  }, [activeNodeId, reloadRules])
 
   const activeRecurringRules = useMemo(
     () => loadedRecurringRules.filter((r) => r.isActive && !r.isDeleted),

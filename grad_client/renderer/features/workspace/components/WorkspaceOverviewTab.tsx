@@ -10,7 +10,7 @@ import { analyzeWorkspaceMembers } from '../model/memberInheritance'
 import { getRoleBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
 import type { WorkspaceOverview, WorkspaceSnapshot } from '../model/types'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
-import { fetchRecurringRules } from '../data/recurringRuleService'
+import { fetchRecurringRules, getLocalRecurringRules } from '../data/recurringRuleService'
 import { subscribeToRecurringCache } from '../data/workspaceCacheEvents'
 import { getSchedulesForCalendarDate } from '../model/recurringCalendar'
 import { useKoreanHolidays } from '../model/koreanHolidays'
@@ -34,17 +34,32 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   overview: WorkspaceOverview; snapshot: WorkspaceSnapshot; currentUserId: string
 }) {
   const node = overview.rootNode
-  const [rules, setRules] = useState<RecurringRuleRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [rules, setRules] = useState<RecurringRuleRecord[]>(() => {
+    return node ? getLocalRecurringRules(node.id, true) : []
+  })
+  const [loading, setLoading] = useState(() => {
+    const cached = node ? getLocalRecurringRules(node.id, true) : []
+    return Boolean(node && cached.length === 0)
+  })
   const [error, setError] = useState(false)
   const [selectedScheduleDate, setSelectedScheduleDate] = useState<string | null>(null)
   useEffect(() => {
     let disposed = false
     setSelectedScheduleDate(null)
+    if (node) {
+      const cached = getLocalRecurringRules(node.id, true)
+      setRules(cached)
+      if (cached.length === 0) {
+        setLoading(true)
+      }
+    }
     let requestId = 0
     const reload = async () => {
       const request = ++requestId
-      setLoading(true)
+      const cached = node ? getLocalRecurringRules(node.id, true) : []
+      if (cached.length === 0) {
+        setLoading(true)
+      }
       setError(false)
       try {
         const next = node ? await fetchRecurringRules(node.id, true) : []

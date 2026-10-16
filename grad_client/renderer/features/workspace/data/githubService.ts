@@ -1,5 +1,6 @@
 import { ApiClientError, apiRequest } from './server/apiClient.js'
 import { isServerStatusResponse, parseServerContextItems, type ServerStatusResponse } from './server/apiTypes.js'
+import { notifyGithubCacheUpdated } from './workspaceCacheEvents.js'
 
 export type GithubRepository = {
   repo_id: number
@@ -136,12 +137,74 @@ function firstItem<T>(response: unknown, fallback: string): T | null {
   return items[0] ?? null
 }
 
+const LOCAL_STORAGE_GITHUB_REPOS_KEY = 'grad_github_repos_cache'
+const LOCAL_STORAGE_GITHUB_CACHED_NODES_KEY = 'grad_github_cached_nodes'
+
+function getCachedNodeSet(): Set<number> {
+  if (typeof window === 'undefined' || !window.localStorage) return new Set()
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_CACHED_NODES_KEY)
+    if (!raw) return new Set()
+    return new Set(JSON.parse(raw) as number[])
+  } catch {
+    return new Set()
+  }
+}
+
+function markNodeCached(nodeId: number) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    const set = getCachedNodeSet()
+    set.add(nodeId)
+    window.localStorage.setItem(LOCAL_STORAGE_GITHUB_CACHED_NODES_KEY, JSON.stringify(Array.from(set)))
+  } catch {
+    // ignore
+  }
+}
+
+export function hasCachedRepositories(nodeId: number): boolean {
+  return getCachedNodeSet().has(nodeId)
+}
+
+export function getLocalRepositories(nodeId?: number): GithubRepository[] {
+  if (typeof window === 'undefined' || !window.localStorage) return []
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_REPOS_KEY)
+    if (!raw) return []
+    const list = JSON.parse(raw) as GithubRepository[]
+    if (nodeId !== undefined) {
+      return list.filter((r) => r.node_id === nodeId && !r.is_deleted)
+    }
+    return list.filter((r) => !r.is_deleted)
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalRepositories(repos: GithubRepository[]) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    window.localStorage.setItem(LOCAL_STORAGE_GITHUB_REPOS_KEY, JSON.stringify(repos))
+  } catch {
+    // ignore
+  }
+}
+
 /** 노드에 연결된 저장소 목록 */
 export async function fetchRepositories(nodeId: number): Promise<GithubRepository[]> {
   try {
     const response = await apiRequest<unknown>(`/github/repos?node_id=${encodeURIComponent(String(nodeId))}`)
-    return allItems<GithubRepository>(response, '저장소 목록을 불러오지 못했습니다.')
+    const list = allItems<GithubRepository>(response, '저장소 목록을 불러오지 못했습니다.')
+    // 로컬 캐시 덮어쓰기 (현재 노드에 해당하는 저장소들을 새 목록으로 완전 교체)
+    const currentOtherNodes = getLocalRepositories().filter((r) => r.node_id !== nodeId)
+    saveLocalRepositories([...currentOtherNodes, ...list])
+    markNodeCached(nodeId)
+    return list
   } catch (error) {
+    const cached = getLocalRepositories(nodeId)
+    if (cached.length > 0 || hasCachedRepositories(nodeId)) {
+      return cached
+    }
     throw toServiceError(error, '저장소 목록을 불러오지 못했습니다.')
   }
 }
@@ -167,6 +230,10 @@ export async function connectRepository(input: {
       throw new GithubServiceError('저장소 연결 결과를 확인하지 못했습니다.')
     }
 
+    const current = getLocalRepositories().filter((r) => r.repo_id !== repository.repo_id)
+    saveLocalRepositories([...current, repository])
+    notifyGithubCacheUpdated(input.nodeId)
+
     return repository
   } catch (error) {
     throw toServiceError(error, '저장소를 연결하지 못했습니다.')
@@ -181,8 +248,39 @@ export async function disconnectRepository(repoId: number): Promise<void> {
       method: 'DELETE',
     })
     assertSuccess(response, '저장소 연결을 해제하지 못했습니다.')
+
+    const all = getLocalRepositories()
+    const target = all.find((r) => r.repo_id === repoId)
+    saveLocalRepositories(all.filter((r) => r.repo_id !== repoId))
+    notifyGithubCacheUpdated(target?.node_id)
   } catch (error) {
     throw toServiceError(error, '저장소 연결을 해제하지 못했습니다.')
+  }
+}
+
+const LOCAL_STORAGE_GITHUB_TREE_KEY = 'grad_github_tree_cache'
+
+export function getLocalTree(repoId: number, branch: string, path: string = ''): GithubTreeEntry[] {
+  if (typeof window === 'undefined' || !window.localStorage) return []
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_TREE_KEY)
+    if (!raw) return []
+    const map = JSON.parse(raw) as Record<string, GithubTreeEntry[]>
+    return map[`${repoId}:${branch}:${path}`] ?? []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalTree(repoId: number, branch: string, path: string = '', entries: GithubTreeEntry[]) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_TREE_KEY)
+    const map = raw ? (JSON.parse(raw) as Record<string, GithubTreeEntry[]>) : {}
+    map[`${repoId}:${branch}:${path}`] = entries
+    window.localStorage.setItem(LOCAL_STORAGE_GITHUB_TREE_KEY, JSON.stringify(map))
+  } catch {
+    // ignore
   }
 }
 
@@ -204,8 +302,18 @@ export async function fetchRepositoryTree(input: {
 
   try {
     const response = await apiRequest<unknown>(`/github/repos/tree?${query.toString()}`)
-    return allItems<GithubTreeEntry>(response, '저장소 구조를 불러오지 못했습니다.')
+    const list = allItems<GithubTreeEntry>(response, '저장소 구조를 불러오지 못했습니다.')
+    if (input.branch) {
+      saveLocalTree(input.repoId, input.branch, input.path ?? '', list)
+    }
+    return list
   } catch (error) {
+    if (input.branch) {
+      const cached = getLocalTree(input.repoId, input.branch, input.path ?? '')
+      if (cached.length > 0) {
+        return cached
+      }
+    }
     throw toServiceError(error, '저장소 구조를 불러오지 못했습니다.')
   }
 }
@@ -246,12 +354,69 @@ export async function fetchRepositoryFile(input: {
   }
 }
 
+const LOCAL_STORAGE_GITHUB_BRANCHES_KEY = 'grad_github_branches_cache'
+const LOCAL_STORAGE_GITHUB_COMMITS_KEY = 'grad_github_commits_cache'
+
+export function getLocalBranches(repoId: number): GithubBranch[] {
+  if (typeof window === 'undefined' || !window.localStorage) return []
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_BRANCHES_KEY)
+    if (!raw) return []
+    const map = JSON.parse(raw) as Record<string, GithubBranch[]>
+    return map[String(repoId)] ?? []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalBranches(repoId: number, branches: GithubBranch[]) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_BRANCHES_KEY)
+    const map = raw ? (JSON.parse(raw) as Record<string, GithubBranch[]>) : {}
+    map[String(repoId)] = branches
+    window.localStorage.setItem(LOCAL_STORAGE_GITHUB_BRANCHES_KEY, JSON.stringify(map))
+  } catch {
+    // ignore
+  }
+}
+
+export function getLocalCommits(repoId: number, branch: string): GithubCommit[] {
+  if (typeof window === 'undefined' || !window.localStorage) return []
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_COMMITS_KEY)
+    if (!raw) return []
+    const map = JSON.parse(raw) as Record<string, GithubCommit[]>
+    return map[`${repoId}:${branch}`] ?? []
+  } catch {
+    return []
+  }
+}
+
+export function saveLocalCommits(repoId: number, branch: string, commits: GithubCommit[]) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  try {
+    const raw = window.localStorage.getItem(LOCAL_STORAGE_GITHUB_COMMITS_KEY)
+    const map = raw ? (JSON.parse(raw) as Record<string, GithubCommit[]>) : {}
+    map[`${repoId}:${branch}`] = commits
+    window.localStorage.setItem(LOCAL_STORAGE_GITHUB_COMMITS_KEY, JSON.stringify(map))
+  } catch {
+    // ignore
+  }
+}
+
 /** 등록 브랜치 + 원격 브랜치 + 접속자 */
 export async function fetchBranches(repoId: number): Promise<GithubBranch[]> {
   try {
     const response = await apiRequest<unknown>(`/github/repos/branches?repo_id=${encodeURIComponent(String(repoId))}`)
-    return allItems<GithubBranch>(response, '브랜치 목록을 불러오지 못했습니다.')
+    const list = allItems<GithubBranch>(response, '브랜치 목록을 불러오지 못했습니다.')
+    saveLocalBranches(repoId, list)
+    return list
   } catch (error) {
+    const cached = getLocalBranches(repoId)
+    if (cached.length > 0) {
+      return cached
+    }
     throw toServiceError(error, '브랜치 목록을 불러오지 못했습니다.')
   }
 }
@@ -277,8 +442,18 @@ export async function fetchRepositoryCommits(input: {
 
   try {
     const response = await apiRequest<unknown>(`/github/repos/commits?${query.toString()}`)
-    return allItems<GithubCommit>(response, '커밋 기록을 불러오지 못했습니다.')
+    const list = allItems<GithubCommit>(response, '커밋 기록을 불러오지 못했습니다.')
+    if (input.branch) {
+      saveLocalCommits(input.repoId, input.branch, list)
+    }
+    return list
   } catch (error) {
+    if (input.branch) {
+      const cached = getLocalCommits(input.repoId, input.branch)
+      if (cached.length > 0) {
+        return cached
+      }
+    }
     throw toServiceError(error, '커밋 기록을 불러오지 못했습니다.')
   }
 }

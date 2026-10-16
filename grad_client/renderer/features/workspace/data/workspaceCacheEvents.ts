@@ -1,6 +1,32 @@
 export const WORKSPACE_CACHE_UPDATED_EVENT = 'grad-client-workspace-cache-updated'
 export const WORKSPACE_CACHE_REFRESH_FAILED_EVENT = 'grad-client-workspace-cache-refresh-failed'
 export const RECURRING_CACHE_UPDATED_EVENT = 'grad-client-recurring-cache-updated'
+export const GITHUB_CACHE_UPDATED_EVENT = 'grad-client-github-cache-updated'
+
+export function notifyGithubCacheUpdated(nodeId?: number) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(new CustomEvent(GITHUB_CACHE_UPDATED_EVENT, { detail: { nodeId } }))
+}
+
+export function subscribeToGithubCache(listener: (event: { nodeId?: number }) => void) {
+  if (typeof window === 'undefined') {
+    return () => undefined
+  }
+
+  const handle = (e: Event) => {
+    if (e instanceof CustomEvent) {
+      listener(e.detail || {})
+    } else {
+      listener({})
+    }
+  }
+
+  window.addEventListener(GITHUB_CACHE_UPDATED_EVENT, handle)
+  return () => window.removeEventListener(GITHUB_CACHE_UPDATED_EVENT, handle)
+}
 
 export function notifyWorkspaceCacheUpdated() {
   if (typeof window === 'undefined') {

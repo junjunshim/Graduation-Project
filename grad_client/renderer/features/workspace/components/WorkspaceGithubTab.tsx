@@ -10,12 +10,18 @@ import {
   fetchRepositoryCommits,
   fetchRepositoryFile,
   fetchRepositoryTree,
+  getLocalBranches,
+  getLocalCommits,
+  getLocalRepositories,
+  getLocalTree,
+  hasCachedRepositories,
   type GithubBranch,
   type GithubCommit,
   type GithubFileContent,
   type GithubRepository,
   type GithubTreeEntry,
 } from '../data/githubService'
+import { subscribeToGithubCache } from '../data/workspaceCacheEvents'
 import { detectVscodeEnvironment, openExternalUrl } from '../data/openExternal'
 import {
   AXIS_SHARE_EXTENSION_ID,
@@ -89,10 +95,17 @@ function pickBranch(branches: GithubBranch[], preferred?: string) {
  */
 export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   // 저장소 목록
-  const [repositories, setRepositories] = useState<GithubRepository[]>([])
-  const [isLoadingRepos, setIsLoadingRepos] = useState(false)
+  const [repositories, setRepositories] = useState<GithubRepository[]>(() => {
+    return getLocalRepositories(nodeId)
+  })
+  const [isLoadingRepos, setIsLoadingRepos] = useState(() => {
+    return !hasCachedRepositories(nodeId) && getLocalRepositories(nodeId).length === 0
+  })
   const [reposError, setReposError] = useState<string | null>(null)
-  const [selectedRepoId, setSelectedRepoId] = useState<number | null>(null)
+  const [selectedRepoId, setSelectedRepoId] = useState<number | null>(() => {
+    const cached = getLocalRepositories(nodeId)
+    return cached.length > 0 ? cached[0].repo_id : null
+  })
   const [pendingDisconnectRepoId, setPendingDisconnectRepoId] = useState<number | null>(null)
   const [isDisconnecting, setIsDisconnecting] = useState(false)
 
@@ -109,8 +122,21 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   const [commitsError, setCommitsError] = useState<string | null>(null)
 
   // 저장소 상세(브랜치·구조)
-  const [branches, setBranches] = useState<GithubBranch[]>([])
-  const [currentBranch, setCurrentBranch] = useState('')
+  const [branches, setBranches] = useState<GithubBranch[]>(() => {
+    const cachedRepos = getLocalRepositories(nodeId)
+    if (cachedRepos.length > 0) {
+      return getLocalBranches(cachedRepos[0].repo_id)
+    }
+    return []
+  })
+  const [currentBranch, setCurrentBranch] = useState(() => {
+    const cachedRepos = getLocalRepositories(nodeId)
+    if (cachedRepos.length > 0) {
+      const cachedBranches = getLocalBranches(cachedRepos[0].repo_id)
+      return pickBranch(cachedBranches, cachedRepos[0].default_branch)
+    }
+    return ''
+  })
   const [currentPath, setCurrentPath] = useState('')
   const [entries, setEntries] = useState<GithubTreeEntry[]>([])
   const [isLoadingEntries, setIsLoadingEntries] = useState(false)
@@ -152,7 +178,11 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   const sortedEntries = useMemo(() => sortEntries(entries), [entries])
 
   const reloadRepositories = useCallback(async () => {
-    setIsLoadingRepos(true)
+    const isCached = hasCachedRepositories(nodeId)
+    const cached = getLocalRepositories(nodeId)
+    if (!isCached && cached.length === 0) {
+      setIsLoadingRepos(true)
+    }
     setReposError(null)
 
     try {
@@ -166,8 +196,10 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
         return list.length > 0 ? list[0].repo_id : null
       })
     } catch (error) {
-      setRepositories([])
-      setSelectedRepoId(null)
+      if (!isCached && cached.length === 0) {
+        setRepositories([])
+        setSelectedRepoId(null)
+      }
       setReposError(errorMessage(error, '저장소 목록을 불러오지 못했습니다.'))
     } finally {
       setIsLoadingRepos(false)
@@ -175,11 +207,42 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   }, [nodeId])
 
   useEffect(() => {
+    // 노드 변경 시 캐시 즉각 반영
+    const isCached = hasCachedRepositories(nodeId)
+    const cached = getLocalRepositories(nodeId)
+    setRepositories(cached)
+    if (isCached || cached.length > 0) {
+      setIsLoadingRepos(false)
+      setSelectedRepoId((current) => {
+        if (current !== null && cached.some((r) => r.repo_id === current)) return current
+        return cached.length > 0 ? cached[0].repo_id : null
+      })
+    } else {
+      setIsLoadingRepos(true)
+      setSelectedRepoId(null)
+    }
+
     void reloadRepositories()
-  }, [reloadRepositories])
+
+    const unsub = subscribeToGithubCache((evt) => {
+      if (!evt.nodeId || evt.nodeId === nodeId) {
+        void reloadRepositories()
+      }
+    })
+    return () => unsub()
+  }, [nodeId, reloadRepositories])
 
   const reloadBranches = useCallback(async (repoId: number, preferred?: string) => {
     setDetailError(null)
+
+    const cached = getLocalBranches(repoId)
+    if (cached.length > 0) {
+      setBranches(cached)
+      const cachedNext = pickBranch(cached, preferred)
+      if (cachedNext) {
+        setCurrentBranch(cachedNext)
+      }
+    }
 
     try {
       const list = await fetchBranches(repoId)
@@ -197,11 +260,13 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
         setFileError(null)
       }
     } catch (error) {
-      setBranches([])
-      setCurrentBranch('')
-      setEntries([])
-      setPreviewPath(null)
-      setPreviewFile(null)
+      if (cached.length === 0) {
+        setBranches([])
+        setCurrentBranch('')
+        setEntries([])
+        setPreviewPath(null)
+        setPreviewFile(null)
+      }
       setDetailError(errorMessage(error, '브랜치 목록을 불러오지 못했습니다.'))
     }
   }, [])
@@ -232,7 +297,12 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
     let isSubscribed = true
 
-    setIsLoadingEntries(true)
+    const cached = getLocalTree(selectedRepoId, currentBranch, currentPath)
+    if (cached.length > 0) {
+      setEntries(cached)
+    } else {
+      setIsLoadingEntries(true)
+    }
     setDetailError(null)
 
     void fetchRepositoryTree({ repoId: selectedRepoId, branch: currentBranch, path: currentPath })
@@ -243,7 +313,9 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
       })
       .catch((error) => {
         if (isSubscribed) {
-          setEntries([])
+          if (cached.length === 0) {
+            setEntries([])
+          }
           setDetailError(errorMessage(error, '저장소 구조를 불러오지 못했습니다.'))
         }
       })
@@ -269,7 +341,12 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
     commitRequestId.current += 1
     const requestId = commitRequestId.current
 
-    setIsLoadingCommits(true)
+    const cached = getLocalCommits(selectedRepoId, currentBranch)
+    if (cached.length > 0) {
+      setCommits(cached)
+    } else {
+      setIsLoadingCommits(true)
+    }
     setCommitsError(null)
 
     try {
@@ -281,7 +358,9 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
       }
     } catch (error) {
       if (requestId === commitRequestId.current) {
-        setCommits([])
+        if (cached.length === 0) {
+          setCommits([])
+        }
         setCommitsError(errorMessage(error, '커밋 기록을 불러오지 못했습니다.'))
       }
     } finally {

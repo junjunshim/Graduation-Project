@@ -28,6 +28,7 @@ import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
 import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
 import {
   canChangeRoleDefinitions,
+  canCreateWorkItem,
   canManageNodeRoles,
   canViewFiles,
   canViewGithub,
@@ -518,7 +519,11 @@ export function WorkspacePage() {
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
           key={[requestedTaskMode, requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
-          createHref={overview.rootNode ? `/work-items/new?nodeId=${overview.rootNode.id}` : '/work-items/new'}
+          createHref={
+            overview.rootNode && currentUserId && canCreateWorkItem(currentUserId, overview.rootNode.id, snapshot)
+              ? `/work-items/new?nodeId=${overview.rootNode.id}`
+              : undefined
+          }
           workItems={overview.visibleWorkItems}
           deletedWorkItems={overview.deletedWorkItems}
           allWorkItems={overview.allWorkItems}

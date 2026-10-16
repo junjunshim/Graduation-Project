@@ -270,3 +270,17 @@ export function canViewGithub(
 ): boolean {
   return hasEffectiveAuthorityBit(userId, nodeId, 22, snapshot)
 }
+
+/**
+ * 업무 신규 생성 가능 여부 (본인 업무 생성 WI_PERSONAL_CHANGE Bit 8 또는 타인 배정 WI_ASSIGN Bit 10)
+ */
+export function canCreateWorkItem(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return (
+    hasEffectiveAuthorityBit(userId, nodeId, 8, snapshot) ||
+    hasEffectiveAuthorityBit(userId, nodeId, 10, snapshot)
+  )
+}

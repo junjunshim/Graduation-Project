@@ -258,7 +258,7 @@ export function WorkspaceTasksTab({
   members,
   filterMembers = members,
   workspaces: _workspaces = [],
-  createHref = '/work-items/new',
+  createHref,
   initialStatus,
   initialSchedule,
   viewMode: controlledViewMode,
@@ -854,15 +854,17 @@ export function WorkspaceTasksTab({
                       <span className={styles.groupBadgeCount}>{groupItems.length}</span>
                     </div>
 
-                    <div className={styles.groupHeaderRight} onClick={(e) => e.stopPropagation()}>
-                      <Link
-                        to={`${createHref}${createHref.includes('?') ? '&' : '?'}status=${status}`}
-                        className={styles.groupAddBtn}
-                        title="이 상태로 업무 추가"
-                      >
-                        <Icon name="plus" size={14} />
-                      </Link>
-                    </div>
+                    {createHref && (
+                      <div className={styles.groupHeaderRight} onClick={(e) => e.stopPropagation()}>
+                        <Link
+                          to={`${createHref}${createHref.includes('?') ? '&' : '?'}status=${status}`}
+                          className={styles.groupAddBtn}
+                          title="이 상태로 업무 추가"
+                        >
+                          <Icon name="plus" size={14} />
+                        </Link>
+                      </div>
+                    )}
                   </div>
 
                   {!isCollapsed &&
@@ -949,7 +951,7 @@ export function WorkspaceTasksTab({
       )}
 
       {/* 5층: 하단 + 업무 추가 와이드 버튼 */}
-      {!showDeletedTasks && (
+      {!showDeletedTasks && createHref && (
         <Link to={createHref} className={styles.wideAddTaskButton}>
           <Icon name="plus" size={16} />
           <span>업무 추가</span>

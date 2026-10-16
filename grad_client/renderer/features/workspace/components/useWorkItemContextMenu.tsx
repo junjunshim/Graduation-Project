@@ -5,6 +5,7 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
 import { getCascadeWorkItemSummary } from '../data/cascadeWorkItemHelper'
 import { getOrgSnapshot } from '../data/orgService'
+import { canCreateWorkItem } from '../model/effectiveAuthority'
 import { getWorkItemPermissions } from '../model/workItemPermission'
 import { WorkItemFavoriteButton } from './WorkItemFavoriteButton'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
@@ -41,7 +42,7 @@ export function useWorkItemContextMenu() {
   }, [menu])
   const menuPermissions = useMemo(() => {
     if (!menu) {
-      return { canEdit: false, canDelete: false, canRestore: false }
+      return { canEdit: false, canDelete: false, canRestore: false, canCreate: false }
     }
 
     const snapshot = getOrgSnapshot()
@@ -49,10 +50,18 @@ export function useWorkItemContextMenu() {
     const targetItem = snapshot.workItems.find((candidate) => candidate.workItemId === menu.id)
 
     if (!targetItem) {
-      return { canEdit: false, canDelete: false, canRestore: false }
+      return { canEdit: false, canDelete: false, canRestore: false, canCreate: false }
     }
 
-    return getWorkItemPermissions(targetItem, currentUserId, snapshot)
+    const basePermissions = getWorkItemPermissions(targetItem, currentUserId, snapshot)
+    const canCreate = currentUserId
+      ? canCreateWorkItem(currentUserId, targetItem.ownerNodeId, snapshot)
+      : false
+
+    return {
+      ...basePermissions,
+      canCreate,
+    }
   }, [menu])
 
   function onWorkItemContextMenu(event: MouseEvent, targetWorkItemId?: string) {
@@ -86,9 +95,11 @@ export function useWorkItemContextMenu() {
                   <Icon name="pencil" size={15} /><span>업무 수정</span>
                 </button>
               ) : null}
-              <button type="button" className={styles.item} role="menuitem" onClick={() => createChild(menu.id)}>
-                <Icon name="plus" size={15} /><span>하위 업무 생성하기</span>
-              </button>
+              {menuPermissions.canCreate ? (
+                <button type="button" className={styles.item} role="menuitem" onClick={() => createChild(menu.id)}>
+                  <Icon name="plus" size={15} /><span>하위 업무 생성하기</span>
+                </button>
+              ) : null}
               <WorkItemFavoriteButton workItemId={menu.id} menu onToggle={() => setMenu(null)} />
               {menuPermissions.canDelete ? (
                 <>

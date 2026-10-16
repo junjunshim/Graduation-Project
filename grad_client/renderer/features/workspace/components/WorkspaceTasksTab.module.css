@@ -1839,6 +1839,15 @@
   color: var(--axis-brand-primary, #625cf2);
 }
 
+.colTaskNameDisabled {
+  color: var(--axis-text-secondary, var(--text-secondary));
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
 .categoryTagSep {
   color: var(--axis-line-strong, #cbd5e1);
   font-weight: 400;

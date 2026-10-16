@@ -27,6 +27,7 @@ import {
 } from '../../workspace/model/labels'
 import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord, WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
+import { canViewWorkItemDetail } from '../../workspace/model/effectiveAuthority'
 import { getWorkItemPermissions } from '../../workspace/model/workItemPermission'
 import { applyProgressWeight, getChildProgressAverage } from '../../workspace/model/workItemProgress'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
@@ -339,6 +340,23 @@ export function WorkItemDetailPage() {
 
   // 훅 호출이 모두 끝난 지점이므로 여기서는 안전하게 조기 반환할 수 있다.
   if (!detail || !currentUser) return null
+
+  // 타인의 업무인데 WI_OTHERS_DETAIL_VIEW 권한이 없으면 접근 차단
+  const canViewDetail = canViewWorkItemDetail(currentUser.userId, detail.item, snapshot)
+  if (!canViewDetail) {
+    return (
+      <section className={styles.page}>
+        <div className={styles.emptyState}>
+          <Icon name="lock" size={36} />
+          <h2>업무 상세 조회 권한이 없습니다.</h2>
+          <p>다른 사용자의 업무 상세 내용이나 댓글을 열람할 수 있는 권한이 없습니다.</p>
+          <Link to={`/workspace?view=tasks&nodeId=${encodeURIComponent(detail.ownerNode.id)}`} className={styles.editButton}>
+            업무 목록으로 돌아가기
+          </Link>
+        </div>
+      </section>
+    )
+  }
 
   const { item, ownerNode, ownerUser, parentWorkItem, childWorkItems } = detail
   const backLinkTo = `/workspace?view=tasks&nodeId=${encodeURIComponent(ownerNode.id)}`

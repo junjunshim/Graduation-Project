@@ -1374,6 +1374,7 @@ export function WorkspaceEntryPage() {
     canRestore: boolean
     restoreBlockedByParent: boolean
     isItemDeleted: boolean
+    isUserNode: boolean
   } | null>(null)
 
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -1418,15 +1419,16 @@ export function WorkspaceEntryPage() {
         : false
     const canRestore = Boolean(targetNode) && !restoreBlockedByParent && canRestoreByAuthority
 
-    // 권한이 있는 경우 컨텍스트 메뉴 표시 (화면 벗어남 방지)
+    // 권한에 따라 비활성화 표시하되 메뉴 높이와 화면 벗어남 방지
     const menuWidth = 220
     const canEdit = Boolean(canDelete && targetNode?.nodeType !== 'USER')
     const canMove = Boolean(currentUser && !isItemDeleted && targetNode?.nodeType !== 'USER'
       && hasDirectAuthorityBit(currentUser.userId, parsedNodeId, 12, snapshot))
+    const isUserNode = targetNode?.nodeType === 'USER'
+    // 휴지통 모드가 아닐 때: 열기, 즐겨찾기, (트리접기/펼치기 2개), 하위생성, 수정(비User), 이전(비User), 삭제
     const rowCount = isItemDeleted ? 1 : 2 + (item.children?.length ? 2 : 0)
-      + Number(canCreateSub) + Number(canEdit) + Number(canMove) + Number(canDelete)
-    const separatorCount = isItemDeleted ? 0 : Number(Boolean(item.children?.length))
-      + Number(canCreateSub || canEdit || canMove) + Number(canDelete)
+      + 1 + (isUserNode ? 0 : 2) + 1
+    const separatorCount = isItemDeleted ? 0 : (item.children?.length ? 1 : 0) + 2
     const menuHeight = rowCount * 42 + separatorCount * 12 + 16
     const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 10))
     const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 10))
@@ -1442,6 +1444,7 @@ export function WorkspaceEntryPage() {
       canRestore,
       restoreBlockedByParent,
       isItemDeleted,
+      isUserNode,
     })
   }
 
@@ -1705,57 +1708,100 @@ export function WorkspaceEntryPage() {
               ) : null}
 
               {/* 워크스페이스 관리 작업 */}
-              {contextMenu.canCreateSub || contextMenu.canEdit || contextMenu.canMove ? (
-                <div className={styles.contextMenuDivider} role="separator" />
-              ) : null}
-              {contextMenu.canCreateSub ? (
-                <button
-                  type="button"
-                  className={styles.contextMenuItem}
-                  onClick={() => {
-                    const item = contextMenu.item
-                    setContextMenu(null)
-                    navigate(`/setup/sub-node?parentNodeId=${encodeURIComponent(item.id)}`)
-                  }}
-                >
-                  <Icon name="plus" size={15} />
-                  <span>하위 워크스페이스 생성</span>
-                </button>
+              <div className={styles.contextMenuDivider} role="separator" />
+              <button
+                type="button"
+                className={[
+                  styles.contextMenuItem,
+                  contextMenu.canCreateSub ? '' : styles.contextMenuItemDisabled,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                disabled={!contextMenu.canCreateSub}
+                title={contextMenu.canCreateSub ? '하위 워크스페이스 생성' : '하위 워크스페이스 생성 권한이 없습니다.'}
+                onClick={() => {
+                  if (!contextMenu.canCreateSub) return
+                  const item = contextMenu.item
+                  setContextMenu(null)
+                  navigate(`/setup/sub-node?parentNodeId=${encodeURIComponent(item.id)}`)
+                }}
+              >
+                <Icon name="plus" size={15} />
+                <span>하위 워크스페이스 생성</span>
+              </button>
+
+              {!contextMenu.isUserNode ? (
+                <>
+                  <button
+                    type="button"
+                    className={[
+                      styles.contextMenuItem,
+                      contextMenu.canEdit ? '' : styles.contextMenuItemDisabled,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    disabled={!contextMenu.canEdit}
+                    title={contextMenu.canEdit ? '워크스페이스 수정' : '워크스페이스 정보 변경 권한이 없습니다.'}
+                    onClick={() => {
+                      if (!contextMenu.canEdit) return
+                      navigate(`/setup/top-node?editNodeId=${encodeURIComponent(contextMenu.item.id)}`)
+                      setContextMenu(null)
+                    }}
+                  >
+                    <Icon name="pencil" size={15} />
+                    <span>워크스페이스 수정</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={[
+                      styles.contextMenuItem,
+                      contextMenu.canMove ? '' : styles.contextMenuItemDisabled,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    disabled={!contextMenu.canMove}
+                    title={contextMenu.canMove ? '워크스페이스 이전' : '워크스페이스 이전 권한이 없습니다.'}
+                    onClick={() => {
+                      if (!contextMenu.canMove) return
+                      navigate(`/workspace/move?nodeId=${encodeURIComponent(contextMenu.item.id)}`)
+                      setContextMenu(null)
+                    }}
+                  >
+                    <Icon name="orgChart" size={15} />
+                    <span>워크스페이스 이전</span>
+                  </button>
+                </>
               ) : null}
 
-              {contextMenu.canEdit ? (
-                <button type="button" className={styles.contextMenuItem} onClick={() => {
-                  navigate(`/setup/top-node?editNodeId=${encodeURIComponent(contextMenu.item.id)}`)
-                  setContextMenu(null)
-                }}><Icon name="pencil" size={15} /><span>워크스페이스 수정</span></button>
-              ) : null}
-              {contextMenu.canMove ? (
-                <button type="button" className={styles.contextMenuItem} onClick={() => {
-                  navigate(`/workspace/move?nodeId=${encodeURIComponent(contextMenu.item.id)}`)
-                  setContextMenu(null)
-                }}><Icon name="orgChart" size={15} /><span>워크스페이스 이전</span></button>
-              ) : null}
+              <div className={styles.contextMenuDivider} role="separator" />
 
+              <button
+                type="button"
+                className={[
+                  styles.contextMenuItem,
+                  contextMenu.canDelete ? '' : styles.contextMenuItemDisabled,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                disabled={!contextMenu.canDelete}
+                title={
+                  contextMenu.canDelete
+                    ? '이 워크스페이스와 하위 워크스페이스를 휴지통으로 이동합니다.'
+                    : '워크스페이스 삭제 권한이 없습니다.'
+                }
+                onClick={() => {
+                  if (!contextMenu.canDelete) return
+                  const item = contextMenu.item
+                  setContextMenu(null)
+                  openDeleteModal(item)
+                }}
+              >
+                <Icon name="trash" size={15} />
+                <span>워크스페이스 삭제</span>
+              </button>
             </>
           )}
-
-          {contextMenu.canDelete ? <div className={styles.contextMenuDivider} role="separator" /> : null}
-
-          {contextMenu.canDelete ? (
-            <button
-              type="button"
-              className={styles.contextMenuItem}
-              title="이 워크스페이스와 하위 워크스페이스를 휴지통으로 이동합니다."
-              onClick={() => {
-                const item = contextMenu.item
-                setContextMenu(null)
-                openDeleteModal(item)
-              }}
-            >
-              <Icon name="trash" size={15} />
-              <span>워크스페이스 삭제</span>
-            </button>
-          ) : null}
         </div>
       ) : null}
 

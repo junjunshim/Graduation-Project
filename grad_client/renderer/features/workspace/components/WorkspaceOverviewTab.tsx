@@ -21,6 +21,7 @@ import {
   canViewSchedule,
   canViewSubNodes,
   canViewWorkItems,
+  canViewWorkItemDetail,
 } from '../model/effectiveAuthority'
 import styles from './WorkspaceOverviewTab.module.css'
 
@@ -249,12 +250,23 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
           <div className={styles.taskList} role="region" aria-label="먼저 확인할 업무 목록" tabIndex={0}>
           {priorityTasks.length ? <div className={styles.priorityTasks}>{priorityTasks.map((item) => {
             const days = item.dueDate ? dayDifference(item.dueDate) : null
-            return <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={[styles.priorityTask, days !== null && days < 0 ? styles.priorityOverdue : ''].join(' ')}>
+            const canDetail = canViewWorkItemDetail(currentUserId, item, snapshot)
+            const cardClasses = [styles.priorityTask, days !== null && days < 0 ? styles.priorityOverdue : '', !canDetail ? styles.priorityTaskDisabled : ''].filter(Boolean).join(' ')
+            const content = <>
               <span className={styles.taskIcon}><Icon name={days !== null && days < 0 ? 'alertTriangle' : 'checkCircle'} size={18} /></span>
               <span className={styles.itemContent}><strong>{item.title}</strong><span className={styles.meta}><span className={styles.statusBadge}>{getWorkItemStatusLabel(item.status)}</span><span className={styles.person}><Icon name="user" size={15} /><span>{userName(item.ownerUserId)}</span></span></span></span>
               <span className={[styles.badge, days !== null && days < 0 ? styles.overdue : styles.due].join(' ')}>{days === null ? '마감일 없음' : days < 0 ? `${-days}일 초과` : days === 0 ? 'D-Day' : `D-${days}`}</span>
-              <Icon name="chevronRight" size={16} className={styles.rowArrow} />
-            </Link>
+              {canDetail && <Icon name="chevronRight" size={16} className={styles.rowArrow} />}
+            </>
+            return canDetail ? (
+              <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={cardClasses}>
+                {content}
+              </Link>
+            ) : (
+              <div key={item.workItemId} className={cardClasses} title="다른 사용자의 업무 상세 내용을 조회할 권한이 없습니다.">
+                {content}
+              </div>
+            )
           })}</div> : <div className={styles.compactEmpty}><Icon name="checkCircle" size={22} /><span>{!tasks.length ? '등록된 업무가 없습니다.' : !pending.length ? '모든 업무가 완료되었습니다.' : '기한이 지났거나 7일 미만 남은 업무가 없습니다.'}</span></div>}
           </div>
         </>
@@ -274,7 +286,16 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         const actorEnd = message.startsWith(actorName) ? actorName.length : 0
         const actionStart = action?.index ?? message.length
         const content = <><span className={styles.activityAvatar}><UserAvatar name={actorName} userId={activity.actorUserId} size="medium" /></span><span className={styles.itemContent}><span className={styles.activityMessage}><strong>{message.slice(0, actorEnd)}</strong>{message.slice(actorEnd, actionStart)}{action && <strong className={styles.activityAction}>{action[1]}</strong>}{action ? '.' : ''}</span><small className={styles.muted}>{new Date(activity.createdAt).toLocaleString('ko-KR')}</small></span></>
-        const activityLink = getActivityLink(activity)
+        const rawLink = getActivityLink(activity)
+        // 활동 링크가 업무 상세인 경우 권한 검사
+        let activityLink = rawLink
+        if (rawLink && rawLink.startsWith('/work-items/')) {
+          const targetItemId = decodeURIComponent(rawLink.replace('/work-items/', ''))
+          const targetItem = snapshot.workItems.find((w) => w.workItemId === targetItemId)
+          if (targetItem && !canViewWorkItemDetail(currentUserId, targetItem, snapshot)) {
+            activityLink = null
+          }
+        }
         return activityLink ? <Link className={styles.item} key={activity.id} to={activityLink}>{content}</Link> : <div className={styles.item} key={activity.id}>{content}</div>
       }) : <p className={styles.muted}>최근 활동이 없습니다.</p>}
     </Panel>

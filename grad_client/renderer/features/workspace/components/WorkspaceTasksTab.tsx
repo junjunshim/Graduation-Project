@@ -14,6 +14,7 @@ import { calculateOverallProgress } from '../model/workItemProgress'
 import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItemDue'
 import type { DueScheduleType } from '../model/workItemDue'
 import { canRestoreWorkItem } from '../model/workItemPermission'
+import { canViewWorkItemDetail } from '../model/effectiveAuthority'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
 import { restoreWorkItem } from '../data/workItemService'
@@ -123,6 +124,7 @@ function ModernTreeNodeRow({
   isTrashMode = false,
   onRestore,
   canRestoreItem,
+  canViewDetailItem,
   onContextMenu,
 }: {
   node: TaskTreeNode
@@ -133,6 +135,7 @@ function ModernTreeNodeRow({
   isTrashMode?: boolean
   onRestore?: (item: WorkItemRecord) => void
   canRestoreItem?: (item: WorkItemRecord) => boolean
+  canViewDetailItem?: (item: WorkItemRecord) => boolean
   onContextMenu?: (e: React.MouseEvent, id: string) => void
 }) {
   const { item, children } = node
@@ -141,6 +144,7 @@ function ModernTreeNodeRow({
   const ownerName = getMemberName(item.ownerUserId, members)
   const statusTone = getWorkItemStatusTone(item.status)
   const restorable = canRestoreItem ? canRestoreItem(item) : true
+  const viewable = canViewDetailItem ? canViewDetailItem(item) : true
 
   return (
     <div className={styles.treeNodeContainer}>
@@ -165,9 +169,15 @@ function ModernTreeNodeRow({
             <span className={styles.treeLeafDotSmall} />
           )}
 
-          <Link to={`/work-items/${item.workItemId}`} className={styles.colTaskNameLink} title={item.title}>
-            {item.title}
-          </Link>
+          {viewable ? (
+            <Link to={`/work-items/${item.workItemId}`} className={styles.colTaskNameLink} title={item.title}>
+              {item.title}
+            </Link>
+          ) : (
+            <span className={styles.colTaskNameDisabled} title="다른 사용자의 업무 상세 내용을 조회할 권한이 없습니다.">
+              {item.title}
+            </span>
+          )}
 
           {item.category ? (
             <>
@@ -242,6 +252,7 @@ function ModernTreeNodeRow({
               isTrashMode={isTrashMode}
               onRestore={onRestore}
               canRestoreItem={canRestoreItem}
+              canViewDetailItem={canViewDetailItem}
               onContextMenu={onContextMenu}
             />
           ))}
@@ -269,6 +280,12 @@ export function WorkspaceTasksTab({
   const canRestoreItem = useCallback((item: WorkItemRecord) => {
     const snapshot = getOrgSnapshot()
     return canRestoreWorkItem(item, getCurrentUser(snapshot)?.userId ?? null, snapshot)
+  }, [])
+
+  const canViewDetailItem = useCallback((item: WorkItemRecord) => {
+    const snapshot = getOrgSnapshot()
+    const currentUser = getCurrentUser(snapshot)
+    return canViewWorkItemDetail(currentUser?.userId, item, snapshot)
   }, [])
 
   const viewMode = controlledViewMode ?? 'list'
@@ -807,6 +824,7 @@ export function WorkspaceTasksTab({
                 isTrashMode={showDeletedTasks}
                 onRestore={handleRestoreClick}
                 canRestoreItem={canRestoreItem}
+                canViewDetailItem={canViewDetailItem}
                 onContextMenu={onWorkItemContextMenu}
               />
             ))}
@@ -872,6 +890,7 @@ export function WorkspaceTasksTab({
                       const isSelected = selectedIds.has(item.workItemId)
                       const ownerName = getMemberName(item.ownerUserId, members)
                       const restorable = canRestoreItem ? canRestoreItem(item) : true
+                      const viewable = canViewDetailItem(item)
 
                       return (
                         <div
@@ -890,9 +909,15 @@ export function WorkspaceTasksTab({
                           </div>
 
                           <div className={styles.colTreeTitle}>
-                            <Link to={`/work-items/${item.workItemId}`} className={styles.colTaskNameLink} title={item.title}>
-                              {item.title}
-                            </Link>
+                            {viewable ? (
+                              <Link to={`/work-items/${item.workItemId}`} className={styles.colTaskNameLink} title={item.title}>
+                                {item.title}
+                              </Link>
+                            ) : (
+                              <span className={styles.colTaskNameDisabled} title="다른 사용자의 업무 상세 내용을 조회할 권한이 없습니다.">
+                                {item.title}
+                              </span>
+                            )}
                             {item.category ? (
                               <>
                                 <span className={styles.categoryTagSep}>|</span>

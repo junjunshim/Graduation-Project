@@ -157,6 +157,8 @@ a.item:hover { color: var(--axis-brand-primary); }
 .priorityHeading { margin: 18px 0 10px; }
 .priorityTasks { display: grid; gap: 8px; }
 .priorityTask { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--axis-line-default); border-radius: 10px; color: var(--axis-text-primary); text-decoration: none; }
+.priorityTaskDisabled { cursor: default; opacity: 0.85; }
+.priorityTaskDisabled:hover { border-color: var(--axis-line-default); background: transparent; }
 .priorityTask .taskIcon { flex-basis: 32px; height: 32px; }
 .priorityOverdue { border-color: var(--axis-status-danger-border); background: var(--axis-status-danger-soft); }
 .compactEmpty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1 1 auto; gap: 10px; padding: 22px 12px; text-align: center; color: var(--axis-text-muted); font-size: .76rem; }

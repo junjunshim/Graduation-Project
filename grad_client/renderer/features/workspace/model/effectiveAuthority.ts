@@ -5,6 +5,7 @@ import {
 import type {
   RoleAssignmentRecord,
   WorkspaceSnapshot,
+  WorkItemRecord,
 } from './types'
 
 export function getEffectiveAuthorityBitSet(
@@ -283,4 +284,28 @@ export function canCreateWorkItem(
     hasEffectiveAuthorityBit(userId, nodeId, 8, snapshot) ||
     hasEffectiveAuthorityBit(userId, nodeId, 10, snapshot)
   )
+}
+
+/**
+ * 업무 상세 내용 및 댓글 조회 가능 여부.
+ * - 본인 업무인 경우: 기본 접근 가능 (WI_PUBLIC_VIEW Bit 4 또는 숨김 업무면 WI_HIDDEN_VIEW Bit 6)
+ * - 다른 사용자의 업무인 경우: WI_OTHERS_DETAIL_VIEW(Bit 5) 권한 필요
+ */
+export function canViewWorkItemDetail(
+  userId: string | null | undefined,
+  item: Pick<WorkItemRecord, 'ownerNodeId' | 'ownerUserId'> & { hidden?: boolean },
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  if (!userId) return false
+  const isOwner = item.ownerUserId === userId
+
+  // 본인 업무이면 기본 공개(4)/숨김(6) 권한만으로 상세 조회 가능
+  if (isOwner) {
+    return item.hidden
+      ? hasEffectiveAuthorityBit(userId, item.ownerNodeId, 6, snapshot)
+      : hasEffectiveAuthorityBit(userId, item.ownerNodeId, 4, snapshot)
+  }
+
+  // 타인의 업무인 경우: WI_OTHERS_DETAIL_VIEW (Bit 5) 필수
+  return hasEffectiveAuthorityBit(userId, item.ownerNodeId, 5, snapshot)
 }

@@ -135,6 +135,7 @@ a.item:hover { color: var(--axis-brand-primary); }
 .scheduleCard { display: flex; align-items: center; gap: 12px; padding: 13px 12px; border: 1px solid var(--axis-line-default); border-left: 3px solid var(--axis-brand-primary); border-radius: 10px; color: var(--axis-text-primary); text-decoration: none; background: var(--axis-surface-muted); }
 .scheduleCard:hover, .priorityTask:hover { border-color: var(--axis-brand-primary); background: var(--axis-brand-primary-soft); }
 .scheduleTime { display: flex; align-items: center; gap: 5px; flex-shrink: 0; color: var(--axis-brand-primary); font-size: .74rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.scheduleCard .itemContent > strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scheduleCard .itemContent > .muted { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .taskProgressHeading { color: var(--axis-text-secondary); }
 .taskBody { display: flex; flex-direction: column; overflow: hidden; }

@@ -14,6 +14,11 @@ import { fetchRecurringRules, getLocalRecurringRules } from '../data/recurringRu
 import { subscribeToRecurringCache } from '../data/workspaceCacheEvents'
 import { getSchedulesForCalendarDate } from '../model/recurringCalendar'
 import { useKoreanHolidays } from '../model/koreanHolidays'
+import {
+  canViewHistory,
+  canViewSchedule,
+  canViewWorkItems,
+} from '../model/effectiveAuthority'
 import styles from './WorkspaceOverviewTab.module.css'
 
 const FREQUENCY_LABELS: Record<RecurringRuleRecord['frequency'], string> = {
@@ -112,15 +117,28 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   const activities = (overview.activities ?? []).map((activity) => resolveActivityEntity(activity, rules, snapshot.workItems))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id)
 
+  const canViewTasks = node ? canViewWorkItems(currentUserId, node.id, snapshot) : false
+  const canViewSched = node ? canViewSchedule(currentUserId, node.id, snapshot) : false
+  const canViewHist = node ? canViewHistory(currentUserId, node.id, snapshot) : false
+
   return <div className={styles.grid}>
     <section className={styles.panel} aria-label="워크스페이스 현황">
       <header className={styles.header}><h3><Icon name="building" size={22} />워크스페이스 현황</h3></header>
       <div className={styles.introduction}>
         <div className={styles.summary} tabIndex={0} role="region" aria-label="업무 현황">
-          <span className={styles.statTotal}><span className={styles.statLabel}><Icon name="list" size={16} />전체</span><b>{tasks.length}</b></span>
-          <span className={styles.statProgress}><span className={styles.statLabel}><Icon name="clock" size={16} />진행 중</span><b>{tasks.filter((item) => item.status === 'in-progress').length}</b></span>
-          <span className={styles.statDone}><span className={styles.statLabel}><Icon name="checkCircle" size={16} />완료</span><b>{tasks.filter((item) => item.status === 'done').length}</b></span>
-          <span className={styles.statOverdue}><span className={styles.statLabel}><Icon name="alertTriangle" size={16} />기한 초과</span><b>{overdue}</b></span>
+          {canViewTasks ? (
+            <>
+              <span className={styles.statTotal}><span className={styles.statLabel}><Icon name="list" size={16} />전체</span><b>{tasks.length}</b></span>
+              <span className={styles.statProgress}><span className={styles.statLabel}><Icon name="clock" size={16} />진행 중</span><b>{tasks.filter((item) => item.status === 'in-progress').length}</b></span>
+              <span className={styles.statDone}><span className={styles.statLabel}><Icon name="checkCircle" size={16} />완료</span><b>{tasks.filter((item) => item.status === 'done').length}</b></span>
+              <span className={styles.statOverdue}><span className={styles.statLabel}><Icon name="alertTriangle" size={16} />기한 초과</span><b>{overdue}</b></span>
+            </>
+          ) : (
+            <div className={styles.statRestricted}>
+              <Icon name="lock" size={16} />
+              <span>업무 조회 권한이 없어 통계가 표시되지 않습니다.</span>
+            </div>
+          )}
         </div>
       <div className={styles.hierarchy} tabIndex={0} role="region" aria-label="상하위 워크스페이스">
         <div className={styles.hierarchyContent}>
@@ -141,48 +159,74 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
       </dl>
       </div>
     </section>
-    <Panel title="일정" icon="calendar" href={href('schedules')} bodyClassName={styles.scheduleBody}>
-      <div className={styles.weekHeading}><strong>이번 주 <span>{Number(weekDays[0].key.slice(5, 7))}.{weekDays[0].day} – {Number(weekDays[6].key.slice(5, 7))}.{weekDays[6].day}</span></strong><span className={styles.muted}>반복 주기 기준</span></div>
-      <div className={styles.weekStrip} role="group" aria-label="이번 주 일정 날짜 선택">
-        {weekDays.map((day) => {
-          const count = day.schedules.length
-          return <button key={day.key} type="button" className={styles.weekDay} aria-pressed={selectedDate === day.key} aria-current={day.key === today ? 'date' : undefined} aria-label={`${day.key} ${day.label}요일${loading || error ? '' : `, 예정 일정 ${count}개`}`} onClick={() => setSelectedScheduleDate(day.key)}>
-            <span>{day.label}</span><b>{day.day}</b>
-            {!loading && !error && <span className={styles.dayCount} aria-hidden="true">{count}</span>}
-          </button>
-        })}
-      </div>
-      <div className={styles.selectedDayHeading}><strong>{Number(selectedDate.slice(5, 7))}월 {Number(selectedDate.slice(8))}일 {selectedDate === today && <span className={styles.badge}>오늘</span>}</strong>{!loading && !error && <span className={styles.muted}>{selectedSchedules.length}개 일정</span>}</div>
-      <div className={styles.scheduleCards} role="region" aria-label="선택한 날짜의 일정 목록" tabIndex={0} aria-live="polite">
-        {loading ? <p className={styles.muted}>일정을 불러오는 중입니다.</p> : error ? <p className={styles.muted}>일정을 불러오지 못했습니다. 일정 탭에서 다시 확인해 주세요.</p> : selectedSchedules.length ? selectedSchedules.map((rule) => <Link className={styles.scheduleCard} to={`${href('schedules')}&ruleId=${rule.ruleId}`} key={rule.ruleId}>
-          <span className={styles.scheduleTime}><Icon name="clock" size={14} />{rule.startTime?.slice(0, 5) || '09:00'}</span>
-          <span className={styles.itemContent}><strong>{rule.title}</strong><span className={styles.muted}>{FREQUENCY_LABELS[rule.frequency]} 일정</span></span>
-          <Icon name="chevronRight" size={16} className={styles.rowArrow} />
-        </Link>) : <div className={styles.compactEmpty}><Icon name="calendar" size={22} /><span>이 날짜에 예정된 일정이 없습니다.</span></div>}
-      </div>
+    <Panel title="일정" icon="calendar" href={canViewSched ? href('schedules') : undefined} bodyClassName={styles.scheduleBody}>
+      {!canViewSched ? (
+        <div className={styles.permissionRestricted}>
+          <Icon name="lock" size={24} />
+          <strong>일정 조회 권한이 없습니다</strong>
+          <span>이 워크스페이스의 정기 일정을 보려면 SCHEDULE_VIEW 권한이 필요합니다.</span>
+        </div>
+      ) : (
+        <>
+          <div className={styles.weekHeading}><strong>이번 주 <span>{Number(weekDays[0].key.slice(5, 7))}.{weekDays[0].day} – {Number(weekDays[6].key.slice(5, 7))}.{weekDays[6].day}</span></strong><span className={styles.muted}>반복 주기 기준</span></div>
+          <div className={styles.weekStrip} role="group" aria-label="이번 주 일정 날짜 선택">
+            {weekDays.map((day) => {
+              const count = day.schedules.length
+              return <button key={day.key} type="button" className={styles.weekDay} aria-pressed={selectedDate === day.key} aria-current={day.key === today ? 'date' : undefined} aria-label={`${day.key} ${day.label}요일${loading || error ? '' : `, 예정 일정 ${count}개`}`} onClick={() => setSelectedScheduleDate(day.key)}>
+                <span>{day.label}</span><b>{day.day}</b>
+                {!loading && !error && <span className={styles.dayCount} aria-hidden="true">{count}</span>}
+              </button>
+            })}
+          </div>
+          <div className={styles.selectedDayHeading}><strong>{Number(selectedDate.slice(5, 7))}월 {Number(selectedDate.slice(8))}일 {selectedDate === today && <span className={styles.badge}>오늘</span>}</strong>{!loading && !error && <span className={styles.muted}>{selectedSchedules.length}개 일정</span>}</div>
+          <div className={styles.scheduleCards} role="region" aria-label="선택한 날짜의 일정 목록" tabIndex={0} aria-live="polite">
+            {loading ? <p className={styles.muted}>일정을 불러오는 중입니다.</p> : error ? <p className={styles.muted}>일정을 불러오지 못했습니다. 일정 탭에서 다시 확인해 주세요.</p> : selectedSchedules.length ? selectedSchedules.map((rule) => <Link className={styles.scheduleCard} to={`${href('schedules')}&ruleId=${rule.ruleId}`} key={rule.ruleId}>
+              <span className={styles.scheduleTime}><Icon name="clock" size={14} />{rule.startTime?.slice(0, 5) || '09:00'}</span>
+              <span className={styles.itemContent}><strong>{rule.title}</strong><span className={styles.muted}>{FREQUENCY_LABELS[rule.frequency]} 일정</span></span>
+              <Icon name="chevronRight" size={16} className={styles.rowArrow} />
+            </Link>) : <div className={styles.compactEmpty}><Icon name="calendar" size={22} /><span>이 날짜에 예정된 일정이 없습니다.</span></div>}
+          </div>
+        </>
+      )}
     </Panel>
-    <Panel title="업무" icon="checkSquare" href={href('tasks')} bodyClassName={styles.taskBody}>
-      <div className={styles.taskProgressHeading}><span>전체 업무 완료율</span><strong>{completionRate}<small>%</small></strong></div>
-      <div className={styles.taskProgressBar} role="progressbar" aria-label="업무 완료율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completionRate}>
-        <span className={styles.progressDone} style={{ width: `${tasks.length ? completedCount / tasks.length * 100 : 0}%` }} />
-        <span className={styles.progressActive} style={{ width: `${tasks.length ? inProgressCount / tasks.length * 100 : 0}%` }} />
-      </div>
-      <div className={styles.progressLegend}><span><i className={styles.progressDone} />완료 <b>{completedCount}</b></span><span><i className={styles.progressActive} />진행 중 <b>{inProgressCount}</b></span><span><i />예정 <b>{todoCount}</b></span></div>
-      <div className={styles.priorityHeading}><strong>먼저 확인할 업무</strong><span className={styles.muted}>기한 초과 · 오늘부터 6일 이내 마감</span></div>
-      <div className={styles.taskList} role="region" aria-label="먼저 확인할 업무 목록" tabIndex={0}>
-      {priorityTasks.length ? <div className={styles.priorityTasks}>{priorityTasks.map((item) => {
-        const days = item.dueDate ? dayDifference(item.dueDate) : null
-        return <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={[styles.priorityTask, days !== null && days < 0 ? styles.priorityOverdue : ''].join(' ')}>
-          <span className={styles.taskIcon}><Icon name={days !== null && days < 0 ? 'alertTriangle' : 'checkCircle'} size={18} /></span>
-          <span className={styles.itemContent}><strong>{item.title}</strong><span className={styles.meta}><span className={styles.statusBadge}>{getWorkItemStatusLabel(item.status)}</span><span className={styles.person}><Icon name="user" size={15} /><span>{userName(item.ownerUserId)}</span></span></span></span>
-          <span className={[styles.badge, days !== null && days < 0 ? styles.overdue : styles.due].join(' ')}>{days === null ? '마감일 없음' : days < 0 ? `${-days}일 초과` : days === 0 ? 'D-Day' : `D-${days}`}</span>
-          <Icon name="chevronRight" size={16} className={styles.rowArrow} />
-        </Link>
-      })}</div> : <div className={styles.compactEmpty}><Icon name="checkCircle" size={22} /><span>{!tasks.length ? '등록된 업무가 없습니다.' : !pending.length ? '모든 업무가 완료되었습니다.' : '기한이 지났거나 7일 미만 남은 업무가 없습니다.'}</span></div>}
-      </div>
+    <Panel title="업무" icon="checkSquare" href={canViewTasks ? href('tasks') : undefined} bodyClassName={styles.taskBody}>
+      {!canViewTasks ? (
+        <div className={styles.permissionRestricted}>
+          <Icon name="lock" size={24} />
+          <strong>업무 조회 권한이 없습니다</strong>
+          <span>이 워크스페이스의 업무 목록을 보려면 WI_PUBLIC_VIEW 권한이 필요합니다.</span>
+        </div>
+      ) : (
+        <>
+          <div className={styles.taskProgressHeading}><span>전체 업무 완료율</span><strong>{completionRate}<small>%</small></strong></div>
+          <div className={styles.taskProgressBar} role="progressbar" aria-label="업무 완료율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completionRate}>
+            <span className={styles.progressDone} style={{ width: `${tasks.length ? completedCount / tasks.length * 100 : 0}%` }} />
+            <span className={styles.progressActive} style={{ width: `${tasks.length ? inProgressCount / tasks.length * 100 : 0}%` }} />
+          </div>
+          <div className={styles.progressLegend}><span><i className={styles.progressDone} />완료 <b>{completedCount}</b></span><span><i className={styles.progressActive} />진행 중 <b>{inProgressCount}</b></span><span><i />예정 <b>{todoCount}</b></span></div>
+          <div className={styles.priorityHeading}><strong>먼저 확인할 업무</strong><span className={styles.muted}>기한 초과 · 오늘부터 6일 이내 마감</span></div>
+          <div className={styles.taskList} role="region" aria-label="먼저 확인할 업무 목록" tabIndex={0}>
+          {priorityTasks.length ? <div className={styles.priorityTasks}>{priorityTasks.map((item) => {
+            const days = item.dueDate ? dayDifference(item.dueDate) : null
+            return <Link key={item.workItemId} to={`/work-items/${item.workItemId}`} className={[styles.priorityTask, days !== null && days < 0 ? styles.priorityOverdue : ''].join(' ')}>
+              <span className={styles.taskIcon}><Icon name={days !== null && days < 0 ? 'alertTriangle' : 'checkCircle'} size={18} /></span>
+              <span className={styles.itemContent}><strong>{item.title}</strong><span className={styles.meta}><span className={styles.statusBadge}>{getWorkItemStatusLabel(item.status)}</span><span className={styles.person}><Icon name="user" size={15} /><span>{userName(item.ownerUserId)}</span></span></span></span>
+              <span className={[styles.badge, days !== null && days < 0 ? styles.overdue : styles.due].join(' ')}>{days === null ? '마감일 없음' : days < 0 ? `${-days}일 초과` : days === 0 ? 'D-Day' : `D-${days}`}</span>
+              <Icon name="chevronRight" size={16} className={styles.rowArrow} />
+            </Link>
+          })}</div> : <div className={styles.compactEmpty}><Icon name="checkCircle" size={22} /><span>{!tasks.length ? '등록된 업무가 없습니다.' : !pending.length ? '모든 업무가 완료되었습니다.' : '기한이 지났거나 7일 미만 남은 업무가 없습니다.'}</span></div>}
+          </div>
+        </>
+      )}
     </Panel>
     <Panel title="최근 활동" icon="lineChart">
-      {activities.length ? activities.map((activity) => {
+      {!canViewHist ? (
+        <div className={styles.permissionRestricted}>
+          <Icon name="lock" size={24} />
+          <strong>활동 이력 조회 권한이 없습니다</strong>
+          <span>이 워크스페이스의 활동 로그를 보려면 HISTORY 조회 권한이 필요합니다.</span>
+        </div>
+      ) : activities.length ? activities.map((activity) => {
         const actorName = activity.actorName || userName(activity.actorUserId)
         const message = formatActivityMessage(activity, { actorName, resolveUserName, resolveWorkItemTitle: (id) => snapshot.workItems.find((item) => item.workItemId === id)?.title })
         const action = message.match(/([^\s.]+했습니다)\.$/)

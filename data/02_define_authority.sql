@@ -21,7 +21,9 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 -- Integration Bits (16-17)
 ('FILE_VIEW', 16, '파일 조회 및 다운로드 가능'),
 ('FILE_CHANGE', 17, '파일 등록 및 삭제 가능'),
--- (bit 18, 19 reserved)  향후 외부 연동(통합) 확장용 예약
+-- Schedule Bits (18-19)
+('SCHEDULE_VIEW', 18, '정기 일정 조회 가능'),
+('SCHEDULE_CHANGE', 19, '정기 일정 생성 및 변경 가능'),
 -- History Bits (20-21)
 ('HISTORY_PERSONAL_VIEW', 20, '개인 히스토리 식별 가능'),
 ('HISTORY_ALL_VIEW', 21, '노드의 모든 히스토리 식별 가능'),
@@ -34,14 +36,14 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 
 -- Role Default Permissions
 -- admin => DENY 비트(31) 제외 모두 1 (예약 비트도 ON — 신규 권한을 추가해도 ADMIN 마스크는 고칠 필요가 없다)
--- manager => bit 0~6, 8~11, 13~17, 20~23 ON (bit 12 NODE_INFO_CHANGE, bit 24 GITHUB_REPO_MANAGE 제외) -> B'00000000111100111110111101111111'
--- member  => bit 0~2, 4~6, 8, 9, 16, 17, 20~23 ON                                              -> B'00000000111100110000001101110111'
--- viewer  => bit 0, 1, 4, 5, 16, 20, 21, 22 ON                                                 -> B'00000000011100010000000000110011'
+-- manager => bit 0~6, 8~11, 13~23 ON (bit 12 NODE_INFO_CHANGE, bit 24 GITHUB_REPO_MANAGE 제외) -> B'00000000111111111110111101111111'
+-- member  => bit 0~2, 4~6, 8, 9, 16~23 ON                                                     -> B'00000000111111110000001101110111'
+-- viewer  => bit 0, 1, 4, 5, 16, 18, 20, 21, 22 ON                                            -> B'00000000011101010000000000110011'
 
 INSERT INTO role_defaults (role, default_authority) VALUES
 ('ADMIN',   B'01111111111111111111111111111111'),
-('MANAGER', B'00000000111100111110111101111111'),
-('MEMBER',  B'00000000111100110000001101110111'),
-('VIEWER',  B'00000000011100010000000000110011');
+('MANAGER', B'00000000111111111110111101111111'),
+('MEMBER',  B'00000000111111110000001101110111'),
+('VIEWER',  B'00000000011101010000000000110011');
 
 UPDATE role_defaults SET is_top_role = TRUE WHERE role = 'ADMIN';

@@ -186,3 +186,69 @@ export function isEligibleAsSubNodeOwner(
 ): boolean {
   return hasEffectiveAuthorityBit(userId, parentNodeId, 8, snapshot)
 }
+
+/** 정기 일정 조회 권한 (SCHEDULE_VIEW, Bit 18) */
+export function canViewSchedule(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 18, snapshot)
+}
+
+/** 정기 일정 생성/편집 권한 (SCHEDULE_CHANGE, Bit 19) */
+export function canChangeSchedule(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 19, snapshot)
+}
+
+/** 공개 업무 조회 권한 (WI_PUBLIC_VIEW, Bit 4) */
+export function canViewWorkItems(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 4, snapshot)
+}
+
+/** 파일 조회 권한 (FILE_VIEW, Bit 16) */
+export function canViewFiles(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 16, snapshot)
+}
+
+/** 활동 이력 조회 권한 (HISTORY_PERSONAL_VIEW 20 또는 HISTORY_ALL_VIEW 21) */
+export function canViewHistory(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return (
+    hasEffectiveAuthorityBit(userId, nodeId, 20, snapshot) ||
+    hasEffectiveAuthorityBit(userId, nodeId, 21, snapshot)
+  )
+}
+
+/** 멤버/역할 목록 조회 권한 (NODE_MEMBERS_VIEW, Bit 1) */
+export function canViewMembers(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 1, snapshot)
+}
+
+/** GitHub 저장소 조회 권한 (GITHUB_VIEW, Bit 22) */
+export function canViewGithub(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): boolean {
+  return hasEffectiveAuthorityBit(userId, nodeId, 22, snapshot)
+}

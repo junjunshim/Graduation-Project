@@ -139,7 +139,27 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     prerequisites: [16, 4, 0],
   },
 
-  // 3-1. GitHub 통합 (Bit 22 ~ 24)
+  // 3-1. 정기 일정/루틴 (Bit 18 ~ 19)
+  {
+    bit: 18,
+    key: 'SCHEDULE_VIEW',
+    label: '정기 일정 조회',
+    category: 'work',
+    categoryLabel: '정기 일정 및 루틴',
+    description: '워크스페이스의 정기 반복 일정과 루틴 캘린더를 조회합니다.',
+    prerequisites: [0],
+  },
+  {
+    bit: 19,
+    key: 'SCHEDULE_CHANGE',
+    label: '정기 일정 생성/편집',
+    category: 'work',
+    categoryLabel: '정기 일정 및 루틴',
+    description: '정기 일정 규칙을 새로 생성하거나 주기 및 체크리스트를 편집/삭제합니다.',
+    prerequisites: [18, 0],
+  },
+
+  // 3-2. GitHub 통합 (Bit 22 ~ 24)
   {
     bit: 22,
     key: 'GITHUB_VIEW',
@@ -242,9 +262,9 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
 
 export const DEFAULT_ROLE_AUTHORITIES: Record<StandardRoleName, string> = {
   ADMIN: '01111111111111111111111111111111',
-  MANAGER: '00000000111100111110111101111111',
-  MEMBER: '00000000111100110000001101110111',
-  VIEWER: '00000000011100010000000000110011',
+  MANAGER: '00000000111111111110111101111111',
+  MEMBER: '00000000111111110000001101110111',
+  VIEWER: '00000000011101010000000000110011',
 }
 
 export type AuthorityPreset = {

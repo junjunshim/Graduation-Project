@@ -38,14 +38,14 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 노드 생존 및 권한 확인 (WI_PERSONAL_CHANGE 권한 필요)
+    -- 2. 노드 생존 및 권한 확인 (SCHEDULE_CHANGE 권한 필요)
     IF NOT EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = p_owner_node_id AND is_deleted = FALSE) THEN
         RAISE EXCEPTION '[P0002]Owner node does not exist or is deleted: %', p_owner_node_id
         USING ERRCODE = 'P0002';
     END IF;
 
-    IF NOT check_authority_with_override(v_requester_id, p_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have WI_PERSONAL_CHANGE permission on node: %', p_owner_node_id
+    IF NOT check_authority_with_override(v_requester_id, p_owner_node_id, 'SCHEDULE_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have SCHEDULE_CHANGE permission on node: %', p_owner_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -203,14 +203,14 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 노드 생존 및 권한 확인 (NODE_INFO_VIEW 및 WI_PUBLIC_VIEW)
+    -- 2. 노드 생존 및 권한 확인 (SCHEDULE_VIEW 권한 필요)
     IF NOT EXISTS (SELECT 1 FROM organization_nodes WHERE node_id = p_node_id AND (is_deleted = FALSE OR p_include_deleted = TRUE)) THEN
         RAISE EXCEPTION '[P0002]Owner node does not exist or is deleted: %', p_node_id
         USING ERRCODE = 'P0002';
     END IF;
 
-    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'NODE_INFO_VIEW') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have NODE_INFO_VIEW permission on node: %', p_node_id
+    IF NOT check_authority_with_override(v_requester_id, p_node_id, 'SCHEDULE_VIEW') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have SCHEDULE_VIEW permission on node: %', p_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -321,8 +321,8 @@ BEGIN
         USING ERRCODE = 'P0002';
     END IF;
 
-    IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'NODE_INFO_VIEW') THEN
-        RAISE EXCEPTION '[P0103]Requester does not have NODE_INFO_VIEW permission on node: %', v_owner_node_id
+    IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'SCHEDULE_VIEW') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have SCHEDULE_VIEW permission on node: %', v_owner_node_id
         USING ERRCODE = 'P0103';
     END IF;
 
@@ -486,17 +486,10 @@ BEGIN
     FROM recurring_rule_checklists
     WHERE rule_id = p_rule_id;
 
-    -- 3. 권한 체크 (작성자/담당자이거나 노드의 WI_PERSONAL_CHANGE / WI_OTHERS_CHANGE 권한 보유)
-    IF v_creator_user_id <> v_requester_id AND (v_current_assignee_id IS NULL OR v_current_assignee_id <> v_requester_id) THEN
-        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_OTHERS_CHANGE') THEN
-            RAISE EXCEPTION '[P0103]Insufficient permissions to modify recurring rule: %', p_rule_id
-            USING ERRCODE = 'P0103';
-        END IF;
-    ELSE
-        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
-            RAISE EXCEPTION '[P0103]Insufficient permissions to modify recurring rule: %', p_rule_id
-            USING ERRCODE = 'P0103';
-        END IF;
+    -- 3. 권한 체크 (노드의 SCHEDULE_CHANGE 권한 보유)
+    IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'SCHEDULE_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions to modify recurring rule: %', p_rule_id
+        USING ERRCODE = 'P0103';
     END IF;
 
     -- 4. 담당자 이메일 처리
@@ -676,16 +669,10 @@ BEGIN
         USING ERRCODE = 'P0603';
     END IF;
 
-    IF v_creator_user_id <> v_requester_id AND (v_assignee_user_id IS NULL OR v_assignee_user_id <> v_requester_id) THEN
-        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_OTHERS_CHANGE') THEN
-            RAISE EXCEPTION '[P0103]Insufficient permissions to delete recurring rule: %', p_rule_id
-            USING ERRCODE = 'P0103';
-        END IF;
-    ELSE
-        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
-            RAISE EXCEPTION '[P0103]Insufficient permissions to delete recurring rule: %', p_rule_id
-            USING ERRCODE = 'P0103';
-        END IF;
+    -- 권한 체크 (노드의 SCHEDULE_CHANGE 권한 보유)
+    IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'SCHEDULE_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions to delete recurring rule: %', p_rule_id
+        USING ERRCODE = 'P0103';
     END IF;
 
     -- 소프트 딜리트
@@ -753,16 +740,9 @@ BEGIN
         USING ERRCODE = 'P0614';
     END IF;
 
-    IF v_creator_user_id <> v_requester_id AND (v_assignee_user_id IS NULL OR v_assignee_user_id <> v_requester_id) THEN
-        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_OTHERS_CHANGE') THEN
-            RAISE EXCEPTION '[P0103]Insufficient permissions to restore recurring rule: %', p_rule_id
-            USING ERRCODE = 'P0103';
-        END IF;
-    ELSE
-        IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'WI_PERSONAL_CHANGE') THEN
-            RAISE EXCEPTION '[P0103]Insufficient permissions to restore recurring rule: %', p_rule_id
-            USING ERRCODE = 'P0103';
-        END IF;
+    IF NOT check_authority_with_override(v_requester_id, v_owner_node_id, 'SCHEDULE_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Insufficient permissions to restore recurring rule: %', p_rule_id
+        USING ERRCODE = 'P0103';
     END IF;
 
     UPDATE recurring_rules

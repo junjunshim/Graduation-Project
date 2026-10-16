@@ -159,8 +159,45 @@ a.item:hover { color: var(--axis-brand-primary); }
 .priorityTask { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--axis-line-default); border-radius: 10px; color: var(--axis-text-primary); text-decoration: none; }
 .priorityTask .taskIcon { flex-basis: 32px; height: 32px; }
 .priorityOverdue { border-color: var(--axis-status-danger-border); background: var(--axis-status-danger-soft); }
-.priorityOverdue .taskIcon { background: var(--axis-surface-panel); color: var(--axis-status-danger); }
 .compactEmpty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1 1 auto; gap: 10px; padding: 22px 12px; text-align: center; color: var(--axis-text-muted); font-size: .76rem; }
+.permissionRestricted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 140px;
+  gap: 10px;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--axis-text-muted);
+  font-size: .82rem;
+  background: var(--axis-surface-subtle);
+  border: 1px dashed var(--axis-line-default);
+  border-radius: var(--axis-radius-surface);
+}
+.permissionRestricted svg {
+  color: var(--axis-text-muted);
+  opacity: 0.8;
+}
+.permissionRestricted strong {
+  color: var(--axis-text-secondary);
+  font-size: 0.88rem;
+}
+.statRestricted {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--axis-surface-muted);
+  border: 1px dashed var(--axis-line-default);
+  color: var(--axis-text-muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
 @container (max-width: 1100px) {
   .summary { gap: 8px; }
   .summary > span { padding-left: 48px; }

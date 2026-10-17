@@ -123,7 +123,7 @@ export function WorkspaceSchedulesTab({
     [canManageRule, selectedRecurringRule],
   )
 
-  // 일정 생성은 DB create_recurring_rule 과 동일하게 노드의 WI_PERSONAL_CHANGE 가 필요하다.
+  // 일정 생성은 DB create_recurring_rule 과 동일하게 노드의 SCHEDULE_CHANGE 가 필요하다.
   const canCreateRule = useMemo(() => {
     const snapshot = getOrgSnapshot()
 

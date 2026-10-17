@@ -233,6 +233,14 @@ export function repoResourceUri(repoId: number, branch: string, path: string): v
     return vscode.Uri.parse(`${REPO_TREE_SCHEME}://${repoId}/${branchSlug(branch)}/${encodedPath}`);
 }
 
+/** 현재 Repository 뷰의 provider. Changes 뷰의 되돌리기처럼 파일 존재 자체를 바꾸는 작업이 쓴다. */
+let activeProvider: RepoTreeProvider | undefined;
+
+/** 경로의 부모 목록을 다시 조회한다. Changes 뷰에서 되돌리기(untracked 삭제·추적 파일 복구) 뒤에 부른다. */
+export function invalidateRepoTreePaths(paths: readonly string[]): void {
+    activeProvider?.invalidatePaths(paths);
+}
+
 /**
  * Repository 뷰를 만들고 등록한다(§15.2, §15.3).
  * 세션·브랜치 변경은 repoSession 이벤트로 받아 provider 가 스스로 다시 그린다.
@@ -242,6 +250,7 @@ export function createRepoTreeView(context: vscode.ExtensionContext): {
     provider: RepoTreeProvider;
 } {
     const provider = new RepoTreeProvider();
+    activeProvider = provider;
     const view = vscode.window.createTreeView(VIEW_FILES, {
         treeDataProvider: provider,
         showCollapseAll: true

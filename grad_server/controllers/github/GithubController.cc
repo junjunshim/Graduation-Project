@@ -2424,6 +2424,15 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
             std::filesystem::remove(workDir + "/" + path, ec);
         }
 
+        // 되돌리기는 파일 존재 자체를 바꾼다 — 추적 파일은 되살아나고, 새로 만든 파일은 지워진다.
+        // 같은 브랜치의 다른 사용자도 트리를 즉시 다시 그리도록 경로별로 알린다.
+        for (const auto &path : tracked) {
+            broadcastTreeChanged(repoId, branch, "file_restored", path);
+        }
+        for (const auto &path : fresh) {
+            broadcastTreeChanged(repoId, branch, "file_deleted", path);
+        }
+
         // 인덱스·작업 트리가 바뀌었다 — 같은 브랜치의 다른 사용자에게도 알린다.
         broadcastStatusChanged(repoId, branch);
 

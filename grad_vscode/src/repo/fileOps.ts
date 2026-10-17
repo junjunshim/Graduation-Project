@@ -328,6 +328,7 @@ export function startFileOps(context: vscode.ExtensionContext, provider: RepoTre
         switch (event.type) {
             case 'file_created':
             case 'dir_created':
+            case 'file_restored':
             case 'file_deleted':
                 schedule(path === '' ? [] : [path]);
                 return;

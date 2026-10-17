@@ -4,7 +4,7 @@ import { apiRequest } from '../api';
 import { onDidReceiveControlEvent, type ControlEvent } from './controlSocket';
 import { getDocConnection, localCopyUri } from './docSocket';
 import { getCurrentBranch, getSession, onDidChangeSession } from './repoSession';
-import { repoResourceUri } from './repoTreeProvider';
+import { invalidateRepoTreePaths, repoResourceUri } from './repoTreeProvider';
 
 /**
  * [TASK_11 §15.7] 작업 트리 상태 + 커밋 — 서버 REST 제어.
@@ -493,6 +493,8 @@ export async function discardPaths(args: unknown[]): Promise<void> {
         }
 
         setStatus(Array.isArray(rows) ? rows.filter(isStatusEntry) : []);
+        // 되돌리기는 untracked 파일을 지우거나 추적 파일을 되살린다 — 파일 존재가 바뀌므로 Repository 트리도 갱신한다.
+        invalidateRepoTreePaths(paths);
         void refreshSync(key);
         void vscode.window.showInformationMessage(`Axis Share: ${paths.length}개 파일의 변경을 되돌렸습니다.`);
     } catch (error) {

@@ -1310,9 +1310,22 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
             return errorResponse("P0801", "브랜치를 찾을 수 없습니다: " + requested, k404NotFound);
         }
 
+        // 작업 트리 기준 경로. ls-tree 는 커밋된 트리만 알므로, 아직 커밋되지 않은 추가·삭제는
+        // 이 브랜치의 worktree 에서 판단한다(기본 브랜치는 localPath, 나머지는 브랜치 worktree).
+        // worktree 를 준비하지 못하면 커밋된 트리만 보여준다 — 조회 자체를 실패시키지 않는다.
+        std::string workDir;
+        HttpResponsePtr workDirFailure;
+        const bool hasWorkDir = resolveWorkDir(requester, repoId, requested, workDir, workDirFailure);
+        if (!hasWorkDir) {
+            LOG_WARN << "worktree 확인 실패 (" << requested << "): 커밋된 트리만 조회합니다";
+        }
+
         // 디렉터리 단위 lazy 조회: 요청한 경로의 한 단계만 받는다.
         auto tree = GitRunner::lsTree(localPath, ref, path, true);
-        if (!tree.ok()) {
+
+        // 아직 커밋에 없는 디렉터리(새 폴더 안에 파일만 만든 경우)는 ls-tree 가 실패한다.
+        // 작업 트리에 그 디렉터리가 있으면 커밋된 항목이 없는 것으로 보고 worktree 항목만 모은다.
+        if (!tree.ok() && (!hasWorkDir || path.empty() || !worktreePathExists(workDir, path))) {
             LOG_WARN << "ls-tree 실패 (" << ref << ":" << path << "): " << trim(tree.err);
             return errorResponse("P0801", "브랜치 또는 경로를 찾을 수 없습니다: " + ref, k404NotFound);
         }
@@ -1334,9 +1347,16 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
             meta >> mode >> type >> object >> size;
 
             const std::string name = entry.substr(tab + 1);
+            const std::string relPath = path.empty() ? name : (path + "/" + name);
+
+            // 작업 트리에서 지운 항목은 아직 커밋에 남아 있어도 트리에서 감춘다.
+            if (hasWorkDir && !worktreePathExists(workDir, relPath)) {
+                continue;
+            }
+
             Json::Value node;
             node["name"] = name;
-            node["path"] = path.empty() ? name : (path + "/" + name);
+            node["path"] = relPath;
 
             if (type == "tree") {
                 node["type"] = "dir";
@@ -1354,17 +1374,19 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
         // 커밋된 트리(ls-tree)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목을 덧붙인다.
         // 새로 만든 파일·디렉터리는 그것을 만든 브랜치의 worktree 에만 있으므로 다른 브랜치에는 나타나지 않는다.
         // (빈 디렉터리는 git 이 추적하지 않아 여기에도 나오지 않는다 — git 사용자에게는 익숙한 동작이다.)
-        for (const auto &item : worktreeOnlyNames(localPath, path)) {
-            if (present.find(item.first) != present.end()) {
-                continue;
-            }
+        if (hasWorkDir) {
+            for (const auto &item : worktreeOnlyNames(workDir, path)) {
+                if (present.find(item.first) != present.end()) {
+                    continue;
+                }
 
-            Json::Value node;
-            node["name"] = item.first;
-            node["path"] = path.empty() ? item.first : (path + "/" + item.first);
-            node["type"] = item.second ? "dir" : "file";
-            node["worktree_only"] = true;   // 아직 커밋되지 않은 항목
-            items.append(node);
+                Json::Value node;
+                node["name"] = item.first;
+                node["path"] = path.empty() ? item.first : (path + "/" + item.first);
+                node["type"] = item.second ? "dir" : "file";
+                node["worktree_only"] = true;   // 아직 커밋되지 않은 항목
+                items.append(node);
+            }
         }
 
         return successResponse(items, "저장소 구조를 조회했습니다.");

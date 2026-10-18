@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceFilesTab } from '../components/WorkspaceFilesTab'
 import { WorkspaceGithubTab } from '../components/WorkspaceGithubTab'
@@ -19,6 +18,7 @@ import {
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
+  setLastVisitedWorkspaceNodeId,
 } from '../data/workspaceDirectorySelection'
 import { readWorkspaceDb } from '../data/localStore'
 import { findDeletedAncestorNode } from '../model/nodeDeletion'
@@ -27,44 +27,13 @@ import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
 import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
 import {
-  canChangeRoleDefinitions,
   canCreateWorkItem,
-  canManageNodeRoles,
-  canViewFiles,
-  canViewGithub,
-  canViewMembers,
-  canViewSchedule,
-  canViewWorkItems,
 } from '../model/effectiveAuthority'
+import {
+  type WorkspaceView,
+  getWorkspaceTabPermissions,
+} from '../model/workspaceTabModel'
 import styles from './WorkspacePage.module.css'
-
-type WorkspaceView =
-  | 'overview'
-  | 'tasks'
-  | 'timeline'
-  | 'schedules'
-  | 'files'
-  | 'github'
-  | 'members'
-  | 'roles'
-
-type WorkspaceTab = {
-  label: string
-  to: string
-  view?: WorkspaceView
-}
-
-const workspaceTabs: WorkspaceTab[] = [
-  { label: '개요', to: '/workspace', view: 'overview' },
-  { label: '업무', to: '/workspace?view=tasks', view: 'tasks' },
-  { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
-  { label: '일정', to: '/workspace?view=schedules', view: 'schedules' },
-  { label: '파일', to: '/workspace?view=files', view: 'files' },
-  { label: 'GitHub', to: '/workspace?view=github', view: 'github' },
-  { label: '사용자', to: '/workspace?view=members', view: 'members' },
-  { label: '역할/권한', to: '/workspace?view=roles', view: 'roles' },
-  { label: '설정', to: '/settings' },
-]
 
 export function WorkspacePage() {
   const navigate = useNavigate()
@@ -99,6 +68,9 @@ export function WorkspacePage() {
     let isSubscribed = true
 
     if (activeWorkspaceRootId) {
+      if (currentUser?.userId) {
+        setLastVisitedWorkspaceNodeId(String(activeWorkspaceRootId), currentUser.userId)
+      }
       // 1. 초기 렌더링된 snapshot 기준으로 해당 노드가 캐시에 있는지 확인 (추가적인 getOrgSnapshot() 호출 생략)
       const hasNodeInSnapshot = snapshot.nodes.some(
         (node) => String(node.id) === String(activeWorkspaceRootId),
@@ -301,50 +273,10 @@ export function WorkspacePage() {
     }
   }
 
-  const displayRoleMembers = overview.rootRoleMembers.length > 0
-    ? overview.rootRoleMembers
-    : overview.allRoleMembers && overview.allRoleMembers.length > 0
-      ? overview.allRoleMembers
-      : []
-  const visibleMembers = displayRoleMembers.slice(0, 4)
-  const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : overview.rootRoleMembers.length
-  const extraMemberCount = Math.max(0, totalMemberCount - visibleMembers.length)
-
   const currentNodeId = overview.rootNode ? overview.rootNode.id : (activeWorkspaceRootId ? Number(activeWorkspaceRootId) : 1)
 
   const tabPermissions = useMemo(() => {
-    if (!currentUserId || !currentNodeId) {
-      return {
-        overview: true,
-        tasks: false,
-        timeline: false,
-        schedules: false,
-        files: false,
-        github: false,
-        members: false,
-        roles: false,
-      }
-    }
-
-    const canViewWI = canViewWorkItems(currentUserId, currentNodeId, snapshot)
-    const canViewSched = canViewSchedule(currentUserId, currentNodeId, snapshot)
-    const canViewFil = canViewFiles(currentUserId, currentNodeId, snapshot)
-    const canViewGit = canViewGithub(currentUserId, currentNodeId, snapshot)
-    const canViewMem = canViewMembers(currentUserId, currentNodeId, snapshot)
-    const canManageRoles =
-      canManageNodeRoles(currentUserId, currentNodeId, snapshot) ||
-      canChangeRoleDefinitions(currentUserId, currentNodeId, snapshot)
-
-    return {
-      overview: true,
-      tasks: canViewWI,
-      timeline: canViewWI,
-      schedules: canViewSched,
-      files: canViewFil,
-      github: canViewGit,
-      members: canViewMem,
-      roles: canManageRoles,
-    }
+    return getWorkspaceTabPermissions(currentUserId, currentNodeId, snapshot)
   }, [currentUserId, currentNodeId, snapshot])
 
   const isCurrentViewAllowed = tabPermissions[activeView] ?? true
@@ -367,127 +299,6 @@ export function WorkspacePage() {
         .join(' ')}
     >
       {workItemContextMenu}
-      <div className={styles.workspaceNavBar}>
-        <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
-          {workspaceTabs.map((tab) => {
-            const isTabAllowed = tab.view ? (tabPermissions[tab.view] ?? true) : true
-            const isActive = tab.view === activeView
-            const targetTo =
-              workspaceRootParam && tab.to.startsWith('/workspace')
-                ? tab.to.includes('?')
-                  ? `${tab.to}&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                  : `${tab.to}?nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : tab.to
-
-            if (!isTabAllowed) {
-              return (
-                <span
-                  key={tab.label}
-                  className={[styles.tabLink, styles.tabLinkDisabled].join(' ')}
-                  title={`${tab.label} 조회 권한이 없습니다`}
-                  aria-disabled="true"
-                >
-                  {tab.label}
-                  <Icon name="lock" size={13} className={styles.tabLockIcon} />
-                </span>
-              )
-            }
-
-            if (tab.view === 'tasks') {
-              const currentMode = requestedTaskMode ?? 'list'
-              const taskTabTargetTo = workspaceRootParam
-                ? `/workspace?view=tasks&mode=${currentMode}&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : `/workspace?view=tasks&mode=${currentMode}`
-              const listTo = workspaceRootParam
-                ? `/workspace?view=tasks&mode=list&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : '/workspace?view=tasks&mode=list'
-              const treeTo = workspaceRootParam
-                ? `/workspace?view=tasks&mode=tree&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : '/workspace?view=tasks&mode=tree'
-
-              return (
-                <div key={tab.label} className={styles.taskTabWrapper}>
-                  <Link
-                    to={taskTabTargetTo}
-                    className={[styles.tabLink, isActive ? styles.tabLinkActive : ''].filter(Boolean).join(' ')}
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    {tab.label}
-                  </Link>
-                  <div className={styles.taskSubmenu}>
-                    <Link
-                      to={listTo}
-                      className={[
-                        styles.taskSubmenuItem,
-                        isActive && requestedTaskMode === 'list' ? styles.taskSubmenuItemActive : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    >
-                      <Icon name="fileText" size={13} />
-                      <span>업무 목록</span>
-                    </Link>
-                    <Link
-                      to={treeTo}
-                      className={[
-                        styles.taskSubmenuItem,
-                        isActive && requestedTaskMode === 'tree' ? styles.taskSubmenuItemActive : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    >
-                      <Icon name="folder" size={13} />
-                      <span>업무 트리</span>
-                    </Link>
-                  </div>
-                </div>
-              )
-            }
-
-            return (
-              <Link
-                key={tab.label}
-                to={targetTo}
-                className={[styles.tabLink, isActive ? styles.tabLinkActive : ''].filter(Boolean).join(' ')}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                {tab.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className={styles.headerActions}>
-          <div
-            className={styles.memberStack}
-            aria-label="워크스페이스 멤버"
-            title={
-              overview.allRoleMembers && overview.allRoleMembers.length !== overview.rootRoleMembers.length
-                ? `직속 팀원 ${overview.rootRoleMembers.length}명 / 하위 포함 전체 ${totalMemberCount}명`
-                : `팀원 ${totalMemberCount}명`
-            }
-          >
-            {visibleMembers.map((member) => (
-              <span
-                key={`${member.assignmentId}-${member.userId}`}
-                data-member-name={member.name}
-              >
-                <UserAvatar name={member.name} userId={member.userId} size="medium" />
-                <span className={styles.memberName}>{member.name}</span>
-              </span>
-            ))}
-            {extraMemberCount > 0 ? <strong data-member-name={`외 ${extraMemberCount}명 (전체 ${totalMemberCount}명)`}>+{extraMemberCount}</strong> : null}
-          </div>
-
-          <button type="button" className={styles.secondaryAction}>
-            <Icon name="users" size={15} />
-            공유
-          </button>
-          <button type="button" className={styles.iconAction} aria-label="더보기">
-            <span className={styles.moreDots} aria-hidden="true" />
-          </button>
-        </div>
-      </div>
 
       {!isCurrentViewAllowed ? (
         <div className={styles.tabAccessDeniedContainer} role="alert">

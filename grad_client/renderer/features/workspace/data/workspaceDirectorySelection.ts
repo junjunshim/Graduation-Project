@@ -19,6 +19,10 @@ export function setLastVisitedWorkspaceNodeId(nodeId: string, userId?: string) {
   if (typeof window === 'undefined' || !storageKey) {
     return
   }
+  const current = window.sessionStorage.getItem(storageKey)
+  if (current === nodeId) {
+    return
+  }
   window.sessionStorage.setItem(storageKey, nodeId)
   window.dispatchEvent(new CustomEvent('grad-client-workspace-visited', { detail: { nodeId } }))
 }

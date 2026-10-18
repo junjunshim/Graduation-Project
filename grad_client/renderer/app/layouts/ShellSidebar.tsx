@@ -54,14 +54,13 @@ export function ShellSidebar({ userId, isCollapsed, onToggleCollapsed, onSignOut
     location.pathname.startsWith('/setup/sub-node') ||
     location.pathname.startsWith('/setup/top-node')
 
-  // 기본적으로 워크스페이스 내부에 있을 때는 펼쳐지고, 다른 탭(대시보드 등)으로 이동하면 접힘
-  const [manualSubNavOpen, setManualSubNavOpen] = useState<boolean | null>(null)
-  const isSubNavExpanded = manualSubNavOpen !== null ? manualSubNavOpen : isInsideWorkspace
+  // 사용자가 수동으로 접거나 펼친 토글 상태 관리
+  const [manualSubNavMap, setManualSubNavMap] = useState<Record<string, boolean>>({})
 
-  // 라우트가 변경되어 워크스페이스 내부로 돌아오면 수동 조작 상태 리셋하여 자동 펼침
-  useEffect(() => {
-    setManualSubNavOpen(null)
-  }, [location.pathname])
+  // 현재 라우트에 따른 펼침 여부 (수동 조작 기록이 없으면 워크스페이스 내부 진입 시 항상 자연스럽게 열림)
+  const isSubNavExpanded = manualSubNavMap[location.pathname] !== undefined
+    ? manualSubNavMap[location.pathname]
+    : isInsideWorkspace
 
   // 현재 URL에 nodeId가 있으면 우선 반영
   const urlNodeId = location.pathname.startsWith('/workspace')
@@ -177,7 +176,12 @@ export function ShellSidebar({ userId, isCollapsed, onToggleCollapsed, onSignOut
                         className={styles.workspaceActiveNodeHeader}
                         title={`워크스페이스 하위 탭 ${isSubNavExpanded ? '접기' : '펼치기'}: ${activeNode.name}`}
                         aria-expanded={isSubNavExpanded}
-                        onClick={() => setManualSubNavOpen((prev) => (prev !== null ? !prev : !isInsideWorkspace))}
+                        onClick={() =>
+                          setManualSubNavMap((prev) => ({
+                            ...prev,
+                            [location.pathname]: !isSubNavExpanded,
+                          }))
+                        }
                       >
                         <span className={styles.workspaceActiveNodeHeaderLeft}>
                           <Icon name="building" size={14} className={styles.workspaceActiveNodeIcon} />

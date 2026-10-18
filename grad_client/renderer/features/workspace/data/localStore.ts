@@ -363,7 +363,13 @@ export function writeServerWorkspaceDb(db: WorkspaceDatabase) {
     return
   }
 
-  window.localStorage.setItem(SERVER_DB_STORAGE_KEY, JSON.stringify(db))
+  const nextRaw = JSON.stringify(db)
+  const prevRaw = window.localStorage.getItem(SERVER_DB_STORAGE_KEY)
+  if (prevRaw === nextRaw) {
+    return
+  }
+
+  window.localStorage.setItem(SERVER_DB_STORAGE_KEY, nextRaw)
   notifyWorkspaceCacheUpdated()
 }
 

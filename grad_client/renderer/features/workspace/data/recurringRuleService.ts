@@ -366,6 +366,14 @@ export async function uploadRecurringRuleFile(
         mimeType: res.data.mime_type ?? res.data.mimeType ?? file.type,
         createdAt: res.data.created_at ?? res.data.createdAt ?? new Date().toISOString(),
       }
+
+      // 새로 등록된 파일 캐시 무효화
+      try {
+        localStorage.removeItem(`grad-recurring-file-cache-${uploadedFile.fileId}`)
+      } catch {
+        // ignore
+      }
+
       return { status: 'success', file: uploadedFile }
     }
     return { status: 'error', message: res.message || '파일 업로드에 실패했습니다.' }

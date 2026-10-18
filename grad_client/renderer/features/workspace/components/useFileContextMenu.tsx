@@ -287,7 +287,10 @@ export function useFileContextMenu() {
           sourceLabel = `일정: ${rule.title}`
         }
       } else {
-        const res = await fetchWorkItemFileContent(file.id)
+        const res = await fetchWorkItemFileContent(file.id, {
+          expectedFileName: file.originalFileName,
+          expectedUpdatedAt: (file as any).updatedAt ?? file.createdAt,
+        })
         content = res.content
         const snapshot = getOrgSnapshot()
         const item = snapshot.workItems.find((candidate) => candidate.workItemId === file.workItemId)

@@ -328,7 +328,10 @@ export function WorkspaceFilesTab({
         const res = await fetchRecurringRuleFileContent(fileId)
         setFileContentData(res)
       } else {
-        const res = await fetchWorkItemFileContent(file.id)
+        const res = await fetchWorkItemFileContent(file.id, {
+          expectedFileName: file.originalFileName,
+          expectedUpdatedAt: (file as any).updatedAt ?? file.createdAt,
+        })
         setFileContentData(res)
       }
     } catch (err) {

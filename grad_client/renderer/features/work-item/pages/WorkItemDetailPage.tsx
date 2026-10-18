@@ -212,7 +212,10 @@ export function WorkItemDetailPage() {
     })
 
     try {
-      const res = await fetchWorkItemFileContent(file.id)
+      const res = await fetchWorkItemFileContent(file.id, {
+        expectedFileName: file.originalFileName,
+        expectedUpdatedAt: (file as any).updatedAt ?? file.createdAt,
+      })
       setViewerModal((prev) => ({
         ...prev,
         content: res.content,

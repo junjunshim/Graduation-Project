@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { MarkdownViewer } from './MarkdownViewer'
@@ -156,11 +156,17 @@ export function AiFileSummaryModal({
     }
   }
 
-  // 모달이 열릴 때 자동으로 1회 요약 요청
+  // 모달이 열릴 때 자동으로 1회 요약 요청 (중복 실행 방지)
+  const hasRequestedRef = useRef(false)
+
   useEffect(() => {
     if (isOpen && content) {
-      void handleSummarize()
+      if (!hasRequestedRef.current) {
+        hasRequestedRef.current = true
+        void handleSummarize()
+      }
     } else if (!isOpen) {
+      hasRequestedRef.current = false
       setResult(null)
       setLoading(false)
       setProgress(0)

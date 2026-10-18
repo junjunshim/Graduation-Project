@@ -355,7 +355,6 @@ export function WorkspaceFilesTab({
 
   return (
     <div className={styles.container}>
-      {fileContextMenu}
       {/* 상단 툴바 */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>

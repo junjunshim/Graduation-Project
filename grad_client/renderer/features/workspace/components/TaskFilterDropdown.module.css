@@ -47,9 +47,16 @@
   box-shadow: var(--axis-shadow-field);
 }
 
-.trigger:hover {
-  border-color: var(--axis-line-strong, var(--line-strong));
-  background: var(--axis-surface-panel-hover, var(--axis-surface-panel));
+.trigger:hover:not(:disabled) {
+  border-color: var(--axis-line-strong);
+  background: var(--axis-surface-panel-hover);
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--axis-surface-muted);
+  box-shadow: none;
 }
 
 .trigger:focus-visible,
@@ -85,10 +92,10 @@
   box-sizing: border-box;
   overflow-y: auto;
   padding: 6px;
-  border: 1px solid var(--axis-line-default, var(--line-default));
-  border-radius: var(--axis-radius-surface, 10px);
-  background: var(--axis-surface-panel, var(--surface-panel));
-  box-shadow: 0 10px 30px rgba(16, 23, 45, 0.16), 0 3px 8px rgba(16, 23, 45, 0.06);
+  border: 1px solid var(--axis-line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--axis-surface-panel);
+  box-shadow: var(--axis-shadow-popover);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -110,7 +117,7 @@
   height: 36px;
   padding: 0 10px;
   border: 0;
-  border-radius: var(--axis-radius-xs, 6px);
+  border-radius: var(--radius-xs);
   background: transparent;
   font-size: 0.84rem;
   font-weight: 550;
@@ -119,19 +126,19 @@
 
 .option:hover,
 .option:focus-visible {
-  background: var(--axis-surface-muted, #f1f5f9);
+  background: var(--axis-surface-muted);
   outline: none;
   color: var(--axis-text-primary);
 }
 
 .optionSelected {
-  color: var(--axis-brand-primary) !important;
-  background: var(--axis-brand-badge-surface, #f7f6ff) !important;
+  color: var(--axis-brand-primary);
+  background: var(--axis-brand-badge-surface);
   font-weight: 700;
 }
 
 .optionSelected:hover {
-  background: color-mix(in srgb, var(--axis-brand-primary) 10%, var(--axis-surface-panel)) !important;
+  background: color-mix(in srgb, var(--axis-brand-primary) 10%, var(--axis-surface-panel));
 }
 
 .checkIcon {

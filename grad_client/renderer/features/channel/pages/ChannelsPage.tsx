@@ -8,6 +8,14 @@ import {
 } from '../../workspace/data/workspaceCacheEvents'
 import { parseAuthorityBitSet } from '../../workspace/model/authorityDefinitions'
 import {
+  pruneCachedChannelMessages,
+  readCachedChannelMessages,
+  readCachedChatSidebar,
+  removeCachedChannelMessages,
+  writeCachedChannelMessages,
+  writeCachedChatSidebar,
+} from '../data/channelCache'
+import {
   createWorkspaceChannel,
   deleteChatMessage,
   deleteWorkspaceChannel,
@@ -43,15 +51,32 @@ export function ChannelsPage() {
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const currentUser = getCurrentUser(snapshot)
 
-  const [workspaceChannels, setWorkspaceChannels] = useState<WorkspaceChannelItem[]>([])
-  const [dmChannels, setDmChannels] = useState<DmChannelItem[]>([])
+  const [initialSidebarCache] = useState(() => readCachedChatSidebar())
+  const [workspaceChannels, setWorkspaceChannels] = useState<WorkspaceChannelItem[]>(
+    () => initialSidebarCache?.workspaceChannels ?? [],
+  )
+  const [dmChannels, setDmChannels] = useState<DmChannelItem[]>(
+    () => initialSidebarCache?.dmChannels ?? [],
+  )
   const [selectedChannelId, setSelectedChannelId] = useState<number | null>(() => {
     const param = Number(searchParams.get('channelId'))
-    return Number.isFinite(param) && param > 0 ? param : null
+    if (Number.isFinite(param) && param > 0) {
+      return param
+    }
+    return (
+      initialSidebarCache?.workspaceChannels[0]?.channelId ??
+      initialSidebarCache?.dmChannels[0]?.channelId ??
+      null
+    )
   })
 
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+  const [initialMessageCache] = useState(() =>
+    selectedChannelId ? readCachedChannelMessages(selectedChannelId) : null,
+  )
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessageCache ?? [])
+  const [isLoadingMessages, setIsLoadingMessages] = useState(
+    () => Boolean(selectedChannelId) && initialMessageCache === null,
+  )
 
   const [activeThreadParent, setActiveThreadParent] = useState<ChatMessage | null>(null)
   const [threadReplies, setThreadReplies] = useState<ChatMessage[]>([])
@@ -65,6 +90,12 @@ export function ChannelsPage() {
   const selectedChannelIdRef = useRef<number | null>(selectedChannelId)
   selectedChannelIdRef.current = selectedChannelId
 
+  const messagesChannelIdRef = useRef<number | null>(selectedChannelId)
+  const messagesReadyChannelIdRef = useRef<number | null>(
+    selectedChannelId && initialMessageCache ? selectedChannelId : null,
+  )
+  const messageRequestIdRef = useRef(0)
+
   const activeThreadParentIdRef = useRef<number | null>(activeThreadParent?.messageId ?? null)
   activeThreadParentIdRef.current = activeThreadParent?.messageId ?? null
 
@@ -74,18 +105,30 @@ export function ChannelsPage() {
     })
   }, [])
 
+  useEffect(() => {
+    writeCachedChatSidebar({ workspaceChannels, dmChannels })
+  }, [workspaceChannels, dmChannels])
+
+  useEffect(() => {
+    const channelId = messagesChannelIdRef.current
+    if (!channelId || messagesReadyChannelIdRef.current !== channelId) return
+    writeCachedChannelMessages(channelId, messages)
+  }, [messages])
+
   const loadSidebar = useCallback(async () => {
     try {
       const data = await fetchChatSidebar()
       setWorkspaceChannels(data.workspaceChannels)
       setDmChannels(data.dmChannels)
 
+      const knownChannelIds = new Set([
+        ...data.workspaceChannels.map((c) => c.channelId),
+        ...data.dmChannels.map((d) => d.channelId),
+      ])
+      pruneCachedChannelMessages(knownChannelIds)
+
       setSelectedChannelId((currentId) => {
-        const allIds = new Set([
-          ...data.workspaceChannels.map((c) => c.channelId),
-          ...data.dmChannels.map((d) => d.channelId),
-        ])
-        if (currentId && allIds.has(currentId)) {
+        if (currentId && knownChannelIds.has(currentId)) {
           return currentId
         }
         const firstId =
@@ -106,9 +149,27 @@ export function ChannelsPage() {
   }, [loadSidebar])
 
   const loadChannelMessages = useCallback(async (channelId: number) => {
-    setIsLoadingMessages(true)
+    const requestId = messageRequestIdRef.current + 1
+    messageRequestIdRef.current = requestId
+
+    const cached = readCachedChannelMessages(channelId)
+    messagesChannelIdRef.current = channelId
+    messagesReadyChannelIdRef.current = cached ? channelId : null
+    setMessages(cached ?? [])
+    setIsLoadingMessages(cached === null)
+
     try {
       const list = await fetchChannelMessages(channelId)
+      writeCachedChannelMessages(channelId, list)
+
+      if (
+        selectedChannelIdRef.current !== channelId ||
+        messageRequestIdRef.current !== requestId
+      ) {
+        return
+      }
+
+      messagesReadyChannelIdRef.current = channelId
       setMessages(list)
       setWorkspaceChannels((prev) =>
         prev.map((ch) => (ch.channelId === channelId ? { ...ch, unreadCount: 0 } : ch)),
@@ -118,18 +179,33 @@ export function ChannelsPage() {
       )
       void markChannelAsRead(channelId)
     } catch (error) {
+      if (
+        selectedChannelIdRef.current !== channelId ||
+        messageRequestIdRef.current !== requestId
+      ) {
+        return
+      }
+
       setBannerError(
         error instanceof Error && error.message
           ? error.message
           : '메시지를 불러오지 못했습니다.',
       )
     } finally {
-      setIsLoadingMessages(false)
+      if (
+        selectedChannelIdRef.current === channelId &&
+        messageRequestIdRef.current === requestId
+      ) {
+        setIsLoadingMessages(false)
+      }
     }
   }, [])
 
   useEffect(() => {
     if (!selectedChannelId) {
+      messageRequestIdRef.current += 1
+      messagesChannelIdRef.current = null
+      messagesReadyChannelIdRef.current = null
       setMessages([])
       setActiveThreadParent(null)
       setThreadReplies([])
@@ -323,7 +399,18 @@ export function ChannelsPage() {
   }, [selectedChannelId, workspaceChannels, dmChannels])
 
   function handleSelectChannel(channelId: number) {
+    if (selectedChannelIdRef.current === channelId) {
+      return
+    }
+
     setSelectedChannelId(channelId)
+
+    const cached = readCachedChannelMessages(channelId)
+    messagesChannelIdRef.current = channelId
+    messagesReadyChannelIdRef.current = cached ? channelId : null
+    setMessages(cached ?? [])
+    setIsLoadingMessages(cached === null)
+
     setSearchParams({ channelId: String(channelId) }, { replace: true })
   }
 
@@ -485,6 +572,7 @@ export function ChannelsPage() {
 
     try {
       await deleteWorkspaceChannel(selectedChannel.channelId)
+      removeCachedChannelMessages(selectedChannel.channelId)
       setSelectedChannelId(null)
       await loadSidebar()
     } catch (error) {

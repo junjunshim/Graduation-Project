@@ -208,7 +208,7 @@ export function ChannelMainChat({
 
       {/* 중앙 메시지 타임라인 피드 */}
       <div className={styles.feed}>
-        {isLoadingMessages ? (
+        {isLoadingMessages && visibleMessages.length === 0 ? (
           <div className={styles.feedState}>메시지를 불러오는 중입니다...</div>
         ) : visibleMessages.length === 0 ? (
           <div className={styles.feedWelcome}>

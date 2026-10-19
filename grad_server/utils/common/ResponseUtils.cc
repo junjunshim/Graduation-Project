@@ -74,6 +74,37 @@ Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &resu
     return ret;
 }
 
+// DB 결과에서 HTTP 응답 데이터와 실시간 WebSocket 알림(target_email 포함)을 분리하여 발송 및 반환하는 함수
+Json::Value app_utils::parseAndDispatchChatResult(const drogon::orm::Result &result) {
+    Json::Value ret;
+    Json::Value items(Json::arrayValue);
+    Json::Reader reader;
+    Json::StreamWriterBuilder writer;
+    writer["indentation"] = "";
+
+    for (auto const &row : result) {
+        std::string jsonStr = row["out_data"].as<std::string>();
+        Json::Value item;
+        if (!reader.parse(jsonStr, item)) {
+            LOG_ERROR << "Failed to parse chat JSON data: " << jsonStr;
+            continue;
+        }
+
+        if (item.isObject() && item.isMember("target_email") && item["target_email"].isString()) {
+            std::string targetEmail = item["target_email"].asString();
+            item.removeMember("target_email");
+            std::string payloadStr = Json::writeString(writer, item);
+            api::NotificationWebSocketController::sendNotificationToUser(targetEmail, payloadStr);
+        } else {
+            items.append(item);
+        }
+    }
+
+    ret["status"] = "success";
+    ret["data"] = items;
+    return ret;
+}
+
 // 문자열 에러 메시지에서 Enum으로 변환하는 헬퍼 함수
 DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     // 에러 메시지에서 PostgreSQL의 사용자 정의 예외 코드(P0001, P0002 등)를 찾아서 DbErrorCode로 변환
@@ -167,6 +198,14 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0813") != std::string::npos) return DbErrorCode::PathAlreadyExists;
     else if (errMsg.find("P0814") != std::string::npos) return DbErrorCode::PathNotFound;
     else if (errMsg.find("P0815") != std::string::npos) return DbErrorCode::NodeDeletedForRepo;
+
+    // --- 채널 및 DM 채팅 (P09xx) ---
+    else if (errMsg.find("P0901") != std::string::npos) return DbErrorCode::ChannelNotFound;
+    else if (errMsg.find("P0902") != std::string::npos) return DbErrorCode::ChannelNameDuplicate;
+    else if (errMsg.find("P0903") != std::string::npos) return DbErrorCode::CannotDeleteDefaultChannel;
+    else if (errMsg.find("P0904") != std::string::npos) return DbErrorCode::CannotDmSelf;
+    else if (errMsg.find("P0905") != std::string::npos) return DbErrorCode::ChatMessageNotFound;
+    else if (errMsg.find("P0906") != std::string::npos) return DbErrorCode::ChatOperationFailed;
     else return DbErrorCode::Unknown;
 }
 
@@ -627,6 +666,42 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::NodeDeletedForRepo:{
             ret["message"] = "워크스페이스가 삭제되어 연결할 수 없습니다.";
             ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::ChannelNotFound:{
+            ret["code"] = "P0901";
+            ret["message"] = "존재하지 않거나 삭제된 채널입니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::ChannelNameDuplicate:{
+            ret["code"] = "P0902";
+            ret["message"] = "해당 워크스페이스에 이미 같은 이름의 채널이 존재합니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::CannotDeleteDefaultChannel:{
+            ret["code"] = "P0903";
+            ret["message"] = "기본(#일반) 채널은 삭제할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::CannotDmSelf:{
+            ret["code"] = "P0904";
+            ret["message"] = "본인 이메일로는 1:1 대화를 시작할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::ChatMessageNotFound:{
+            ret["code"] = "P0905";
+            ret["message"] = "메시지 또는 첨부파일을 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::ChatOperationFailed:{
+            ret["code"] = "P0906";
+            ret["message"] = "채널 또는 메시지 처리 중 오류가 발생했습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
             break;
         }
         default:{

@@ -147,3 +147,37 @@ export function subscribeToLiveNotifications(listener: (notification: LiveNotifi
   return () => window.removeEventListener(LIVE_NOTIFICATION_EVENT, handleNotification)
 }
 
+export const CHAT_REALTIME_EVENT = 'grad-client-chat-realtime-event'
+
+export type ChatRealtimeEventPayload = {
+  subType: string
+  data: Record<string, unknown>
+}
+
+export function notifyChatRealtimeEvent(payload: ChatRealtimeEventPayload) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<ChatRealtimeEventPayload>(CHAT_REALTIME_EVENT, { detail: payload }),
+  )
+}
+
+export function subscribeToChatRealtimeEvents(
+  listener: (payload: ChatRealtimeEventPayload) => void,
+) {
+  if (typeof window === 'undefined') {
+    return () => undefined
+  }
+
+  const handleChatEvent = (event: Event) => {
+    if (event instanceof CustomEvent && event.detail) {
+      listener(event.detail as ChatRealtimeEventPayload)
+    }
+  }
+
+  window.addEventListener(CHAT_REALTIME_EVENT, handleChatEvent)
+  return () => window.removeEventListener(CHAT_REALTIME_EVENT, handleChatEvent)
+}
+

@@ -31,19 +31,23 @@ INSERT INTO authority_constants (name, bit_position, description) VALUES
 ('GITHUB_VIEW', 22, '연결된 저장소(저장소/브랜치/커밋/파일) 조회 가능'),
 ('GITHUB_CHANGE', 23, '저장소 편집 — 브랜치 생성/삭제, 커밋, push, 파일 조작 가능'),
 ('GITHUB_REPO_MANAGE', 24, '원격 저장소 추가(연결)/해제 가능'),
--- (bit 25 ~ 30 reserved)
+-- Channel Chat Bits (25-27)
+('CHANNEL_VIEW', 25, '워크스페이스 채널 목록 및 메시지 조회 가능'),
+('CHANNEL_CHAT', 26, '워크스페이스 채널 메시지/스레드 작성 및 파일 첨부 가능'),
+('CHANNEL_MANAGE', 27, '워크스페이스 채널 생성/수정/삭제 및 메시지 관리 가능'),
+-- (bit 28 ~ 30 reserved)
 ('DENY', 31, '하위 비트 상관없이 모든 권한 X');
 
 -- Role Default Permissions
 -- admin => DENY 비트(31) 제외 모두 1 (예약 비트도 ON — 신규 권한을 추가해도 ADMIN 마스크는 고칠 필요가 없다)
--- manager => bit 0~6, 8~11, 13~23 ON (bit 12 NODE_INFO_CHANGE, bit 24 GITHUB_REPO_MANAGE 제외) -> B'00000000111111111110111101111111'
--- member  => bit 0~2, 4~6, 8, 9, 16~23 ON                                                     -> B'00000000111111110000001101110111'
--- viewer  => bit 0, 1, 4, 5, 16, 18, 20, 21, 22 ON                                            -> B'00000000011101010000000000110011'
+-- manager => bit 0~6, 8~11, 13~23, 25~27 ON (bit 12 NODE_INFO_CHANGE, bit 24 GITHUB_REPO_MANAGE 제외) -> B'00001110111111111110111101111111'
+-- member  => bit 0~2, 4~6, 8, 9, 16~23, 25~26 ON                                                 -> B'00000110111111110000001101110111'
+-- viewer  => bit 0, 1, 4, 5, 16, 18, 20, 21, 22, 25 ON                                           -> B'00000010011101010000000000110011'
 
 INSERT INTO role_defaults (role, default_authority) VALUES
 ('ADMIN',   B'01111111111111111111111111111111'),
-('MANAGER', B'00000000111111111110111101111111'),
-('MEMBER',  B'00000000111111110000001101110111'),
-('VIEWER',  B'00000000011101010000000000110011');
+('MANAGER', B'00001110111111111110111101111111'),
+('MEMBER',  B'00000110111111110000001101110111'),
+('VIEWER',  B'00000010011101010000000000110011');
 
 UPDATE role_defaults SET is_top_role = TRUE WHERE role = 'ADMIN';

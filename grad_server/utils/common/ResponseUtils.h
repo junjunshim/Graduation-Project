@@ -95,6 +95,12 @@ enum class DbErrorCode {
     PathAlreadyExists,          // P0813 파일·디렉터리가 이미 있음
     PathNotFound,               // P0814 파일·디렉터리를 찾을 수 없음
     NodeDeletedForRepo,         // P0815 연결된 노드(워크스페이스)가 삭제되어 저장소를 쓸 수 없음
+    ChannelNotFound,            // P0901 존재하지 않거나 삭제된 채널
+    ChannelNameDuplicate,       // P0902 워크스페이스 내 동일한 채널명 중복
+    CannotDeleteDefaultChannel, // P0903 기본(#일반) 채널 삭제 불가
+    CannotDmSelf,               // P0904 본인 이메일로 DM 생성 불가
+    ChatMessageNotFound,        // P0905 채팅 메시지 또는 첨부파일을 찾을 수 없음
+    ChatOperationFailed,        // P0906 채널/메시지 처리 실패
     Unknown                     // 알 수 없는 에러
 };
 
@@ -102,6 +108,8 @@ enum class DbErrorCode {
 namespace app_utils {
     // DB 결과를 프론트엔드 응답용 JSON으로 변환하는 공통 함수
     Json::Value parseIntegratedDataResult(const drogon::orm::Result &result);
+    // DB 결과에서 HTTP 응답 데이터와 실시간 WebSocket 알림(target_email 포함)을 분리하여 발송 및 반환하는 함수
+    Json::Value parseAndDispatchChatResult(const drogon::orm::Result &result);
     // 문자열 에러 메시지에서 Enum으로 변환하는 헬퍼 함수
     DbErrorCode parseDbErrorCode(const std::string &errMsg);
     // DB 에러 발생 시 Json::Value 반환하는 함수

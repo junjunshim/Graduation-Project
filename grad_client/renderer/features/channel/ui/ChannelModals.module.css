@@ -1,0 +1,292 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: var(--axis-surface-overlay);
+}
+
+.modalCard {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 28.5rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-panel);
+  background: var(--surface-panel);
+  box-shadow: var(--axis-shadow-popover);
+  overflow: hidden;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1.2rem 1.35rem 0.9rem;
+  border-bottom: 1px solid var(--line-default);
+}
+
+.headerTitleGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.modalTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1.06rem;
+  font-weight: 700;
+}
+
+.modalSubtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.closeBtn {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 1px solid transparent;
+  border-radius: var(--axis-radius-action);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.closeBtn:hover,
+.closeBtn:focus-visible {
+  border-color: var(--line-default);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+  padding: 1.15rem 1.35rem 1.25rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+}
+
+.fieldLabel {
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.fieldHelp {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.input,
+.select,
+.textarea,
+.readonlyBox {
+  width: 100%;
+  padding: 0.52rem 0.7rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-action);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color var(--axis-motion-fast) ease;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  border-color: var(--axis-brand-primary);
+}
+
+.readonlyBox {
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.prefixInputWrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-action);
+  background: var(--surface-panel);
+  transition: border-color var(--axis-motion-fast) ease;
+}
+
+.prefixInputWrap:focus-within {
+  border-color: var(--axis-brand-primary);
+}
+
+.prefixSymbol {
+  padding-left: 0.75rem;
+  color: var(--axis-brand-primary);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.prefixInput {
+  flex: 1 1 auto;
+  width: 100%;
+  padding: 0.52rem 0.7rem 0.52rem 0.4rem;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.suggestionSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.suggestionHeading {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.suggestionList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 11.5rem;
+  margin: 0;
+  padding: 0.35rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel-subtle);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.suggestionItem {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: var(--axis-radius-action);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.suggestionItem:hover,
+.suggestionItem:focus-visible {
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-primary-soft);
+}
+
+.suggestionText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.06rem;
+  min-width: 0;
+}
+
+.suggestionName {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestionEmail {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestionAction {
+  flex: 0 0 auto;
+  color: var(--axis-brand-primary);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.errorText {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--axis-status-danger-border);
+  border-radius: var(--axis-radius-action);
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.35rem;
+}
+
+.cancelBtn,
+.submitBtn {
+  height: 2.15rem;
+  padding: 0 0.95rem;
+  border-radius: var(--axis-radius-action);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancelBtn {
+  border: 1px solid var(--line-default);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.submitBtn {
+  border: 1px solid var(--axis-brand-primary);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
+}
+
+.submitBtn:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.submitBtn:disabled {
+  border-color: var(--line-default);
+  background: var(--axis-surface-muted);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}

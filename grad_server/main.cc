@@ -156,6 +156,7 @@ void purgeExpiredDeletedData() {
 
     std::vector<int> failedFileIds;           // 업무 첨부를 못 지웠다 — 이 행은 남긴다
     std::vector<int> failedRecurringFileIds;  // 정기 일정 첨부를 못 지웠다 — 이 행도 남긴다
+    std::vector<int> failedChatFileIds;       // 채팅 첨부를 못 지웠다 — 이 행은 남긴다
     std::vector<int> failedRepoIds;           // clone/worktree 를 못 지웠다 — 이 행은 남긴다
     int removed = 0;                          // 실제로 지운 경로 수(로그용)
 
@@ -165,6 +166,8 @@ void purgeExpiredDeletedData() {
             failedFileIds.push_back(refId);
         } else if (refType == "RECURRING_FILE") {
             failedRecurringFileIds.push_back(refId);
+        } else if (refType == "CHAT_FILE") {
+            failedChatFileIds.push_back(refId);
         } else {
             failedRepoIds.push_back(refId);
         }
@@ -206,10 +209,12 @@ void purgeExpiredDeletedData() {
     };
     dedupe(failedFileIds);
     dedupe(failedRecurringFileIds);
+    dedupe(failedChatFileIds);
     dedupe(failedRepoIds);
 
-    auto purged = db->execSqlSync("SELECT * FROM purge_expired_deleted_data($1, $2, $3)", joinIds(failedFileIds),
-                                  joinIds(failedRepoIds), joinIds(failedRecurringFileIds));
+    auto purged = db->execSqlSync("SELECT * FROM purge_expired_deleted_data($1, $2, $3, $4)",
+                                  joinIds(failedFileIds), joinIds(failedRepoIds),
+                                  joinIds(failedRecurringFileIds), joinIds(failedChatFileIds));
 
     int purgedFiles = 0;
     int purgedRecurringFiles = 0;
@@ -217,6 +222,9 @@ void purgeExpiredDeletedData() {
     int purgedItems = 0;
     int purgedRepos = 0;
     int purgedNodes = 0;
+    int purgedChatFiles = 0;
+    int purgedChatMessages = 0;
+    int purgedChannels = 0;
     for (const auto &row : purged) {  // 집계 한 줄이라 반복은 한 번뿐이다
         purgedFiles = row["purged_files"].as<int>();
         purgedRecurringFiles = row["purged_recurring_files"].as<int>();
@@ -224,14 +232,19 @@ void purgeExpiredDeletedData() {
         purgedItems = row["purged_work_items"].as<int>();
         purgedRepos = row["purged_repos"].as<int>();
         purgedNodes = row["purged_nodes"].as<int>();
+        purgedChatFiles = row["purged_chat_files"].as<int>();
+        purgedChatMessages = row["purged_chat_messages"].as<int>();
+        purgedChannels = row["purged_channels"].as<int>();
     }
 
     LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed paths: " << removed
              << ", purged rows: files=" << purgedFiles << " recurring_files=" << purgedRecurringFiles
              << " rules=" << purgedRules << " work_items=" << purgedItems << " repos=" << purgedRepos
-             << " nodes=" << purgedNodes
+             << " nodes=" << purgedNodes << " chat_files=" << purgedChatFiles
+             << " chat_messages=" << purgedChatMessages << " channels=" << purgedChannels
              << ", 보류(다음 회차 재시도): files=" << failedFileIds.size()
-             << " recurring_files=" << failedRecurringFileIds.size() << " repos=" << failedRepoIds.size();
+             << " recurring_files=" << failedRecurringFileIds.size()
+             << " chat_files=" << failedChatFileIds.size() << " repos=" << failedRepoIds.size();
 }
 
 }  // namespace
@@ -241,6 +254,7 @@ int main() {
     try {
         std::filesystem::create_directories("./uploads/work_items");
         std::filesystem::create_directories("./uploads/recurring_rules");
+        std::filesystem::create_directories("./uploads/channels");
         // 서버 로컬 저장소 루트(저장소 clone + 브랜치 worktree).
         // docker-compose 의 repository_data 볼륨이 이 위치에 붙는다(uploads 와 같은 CWD 기준 규칙).
         std::filesystem::create_directories("./repository");

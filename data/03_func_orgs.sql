@@ -664,17 +664,51 @@ BEGIN
     END IF;
 
     -- 5. 복구 수행
-    -- 5-1. 대상 노드 복구
+    -- 5-1. 대상 노드 및 소속 채팅 채널 복구
     UPDATE organization_nodes
     SET is_deleted = FALSE
     WHERE node_id = p_node_id;
 
-    -- 5-2. 일괄 복구(cascade = TRUE)인 경우: 모든 후손 노드, 소속 업무, 첨부파일 함께 복구
+    UPDATE chat_channels
+    SET is_deleted = FALSE
+    WHERE owner_node_id = p_node_id AND is_deleted = TRUE;
+
+    UPDATE chat_messages
+    SET is_deleted = FALSE
+    WHERE channel_id IN (SELECT channel_id FROM chat_channels WHERE owner_node_id = p_node_id)
+      AND is_deleted = TRUE;
+
+    UPDATE chat_message_files
+    SET is_deleted = FALSE
+    WHERE channel_id IN (SELECT channel_id FROM chat_channels WHERE owner_node_id = p_node_id)
+      AND is_deleted = TRUE;
+
+    -- 5-2. 일괄 복구(cascade = TRUE)인 경우: 모든 후손 노드, 소속 업무, 첨부파일, 채팅 채널 함께 복구
     IF p_cascade = TRUE THEN
         -- 하위 모든 자식 노드 복구
         UPDATE organization_nodes
         SET is_deleted = FALSE
         WHERE path @> ARRAY[p_node_id] AND is_deleted = TRUE;
+
+        -- 하위 모든 노드의 채팅 채널, 메시지, 첨부파일 복구
+        UPDATE chat_channels
+        SET is_deleted = FALSE
+        WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+          AND is_deleted = TRUE;
+
+        UPDATE chat_messages
+        SET is_deleted = FALSE
+        WHERE channel_id IN (
+            SELECT channel_id FROM chat_channels
+            WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+        ) AND is_deleted = TRUE;
+
+        UPDATE chat_message_files
+        SET is_deleted = FALSE
+        WHERE channel_id IN (
+            SELECT channel_id FROM chat_channels
+            WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+        ) AND is_deleted = TRUE;
 
         -- 해당 노드 및 하위 모든 노드에 소속된 업무 복구
         UPDATE work_items

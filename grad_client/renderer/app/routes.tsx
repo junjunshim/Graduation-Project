@@ -154,6 +154,13 @@ const router = createHashRouter([
             },
           },
           {
+            path: '/channels',
+            lazy: async () => {
+              const { ChannelsPage } = await import('../features/channel/pages/ChannelsPage')
+              return { Component: ChannelsPage }
+            },
+          },
+          {
             path: '/calendar',
             lazy: async () => {
               const { CalendarPage } = await import('../features/calendar/pages/CalendarPage')

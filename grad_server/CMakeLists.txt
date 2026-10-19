@@ -52,7 +52,8 @@ aux_source_directory(controllers/notification CTL_NOTIFICATION_SRC)
 aux_source_directory(controllers/recurring CTL_RECURRING_SRC)
 aux_source_directory(controllers/github CTL_GITHUB_SRC)
 aux_source_directory(controllers/collab CTL_COLLAB_SRC)
-set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC} ${CTL_RECURRING_SRC} ${CTL_GITHUB_SRC} ${CTL_COLLAB_SRC})
+aux_source_directory(controllers/channel CTL_CHANNEL_SRC)
+set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC} ${CTL_RECURRING_SRC} ${CTL_GITHUB_SRC} ${CTL_COLLAB_SRC} ${CTL_CHANNEL_SRC})
 
 aux_source_directory(filters/auth FILTER_SRC)
 aux_source_directory(plugins PLUGIN_SRC)
@@ -88,6 +89,7 @@ target_include_directories(${PROJECT_NAME}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/recurring
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/github
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/collab
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/channel
                                    ${CMAKE_CURRENT_SOURCE_DIR}/filters/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/node

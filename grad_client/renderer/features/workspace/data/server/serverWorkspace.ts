@@ -45,7 +45,11 @@ import { normalizeServerContext } from './contextAdapter.js'
 import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
 import { setCurrentSessionUserId } from '../session.js'
-import { notifyLiveNotificationReceived, notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents.js'
+import {
+  notifyChatRealtimeEvent,
+  notifyLiveNotificationReceived,
+  notifyWorkspaceCacheRefreshFailed,
+} from '../workspaceCacheEvents.js'
 import { pruneFavoriteWorkspaceIds } from '../workspaceDirectorySelection.js'
 
 type ServerOperationError = {
@@ -1610,6 +1614,17 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
 
           if (payload && payload.type === 'AUTH_OK') {
             finishHandshake()
+            return
+          }
+
+          if (payload && payload.type === 'CHAT') {
+            notifyChatRealtimeEvent({
+              subType: typeof payload.sub_type === 'string' ? payload.sub_type : '',
+              data:
+                payload.data && typeof payload.data === 'object'
+                  ? (payload.data as Record<string, unknown>)
+                  : (payload as Record<string, unknown>),
+            })
             return
           }
 

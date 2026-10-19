@@ -23,6 +23,7 @@ const SIDEBAR_COLLAPSED_STORAGE_KEY = 'grad-client-sidebar-collapsed'
 const WORK_ITEM_EDIT_PATH_PATTERN = /^\/work-items\/[^/]+\/edit\/?$/
 const SECTION_HEADING_ROUTES = new Set([
   '/work-items/new',
+  '/channels',
   '/calendar',
   '/documents',
   '/files',
@@ -172,6 +173,7 @@ export function AppShell() {
   const isWorkItemDetailRoute = /^\/work-items\/[^/]+$/.test(location.pathname)
   const isWorkItemFormRoute = isWorkItemCreateRoute || isWorkItemEditRoute
   const isDashboardRoute = location.pathname === '/dashboard'
+  const isChannelsRoute = location.pathname === '/channels'
   const isCalendarRoute = location.pathname === '/calendar'
   const hasInternalScroll =
     isWorkspaceMoveRoute ||
@@ -180,6 +182,7 @@ export function AppShell() {
     isWorkspaceSelectRoute ||
     isWorkItemFormRoute ||
     isDashboardRoute ||
+    isChannelsRoute ||
     isCalendarRoute ||
     isWorkItemDetailRoute
   const shellClassName = [

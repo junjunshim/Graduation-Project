@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { DashboardActivityChart } from '../components/DashboardActivityChart'
 import { DashboardSchedulePanel } from '../components/DashboardSchedulePanel'
 import { DashboardSummaryCards } from '../components/DashboardSummaryCards'
 import { DashboardWorkSchedulePanel } from '../components/DashboardWorkSchedulePanel'
@@ -8,16 +9,21 @@ import { RecurringRuleDetailModal } from '../../workspace/components/RecurringRu
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { useKoreanHolidays } from '../../workspace/model/koreanHolidays'
 import { useDashboardContext } from '../data/useDashboardContext'
-import type { DashboardRecurringRule, DashboardWorkItem } from '../model/dashboardTypes'
+import type {
+  DashboardChartPeriod,
+  DashboardRecurringRule,
+  DashboardTaskFilter,
+  DashboardWorkItem,
+} from '../model/dashboardTypes'
 import {
+  buildActivityChartSeries,
   buildMetrics,
   buildScheduleCards,
   buildSelectableDateRange,
-  buildWeekBoard,
+  buildWeekTaskTableRows,
   clampDateKeyToRange,
-  formatWeekRangeLabel,
+  formatWeekDotRangeLabel,
   getWeekWindow,
-  isDateKeySelectable,
   parseDateKey,
   resolveTodayDate,
   shiftWeekDateKey,
@@ -37,6 +43,8 @@ export function DashboardPage() {
   // 보고 있는 주의 기준 날짜. 따로 고른 날짜가 없으면 오늘이 속한 주를 보여준다.
   const [anchorDateKey, setAnchorDateKey] = useState<string | null>(null)
   const [openedScheduleRuleId, setOpenedScheduleRuleId] = useState<number | null>(null)
+  const [chartPeriod, setChartPeriod] = useState<DashboardChartPeriod>('1w')
+  const [taskFilter, setTaskFilter] = useState<DashboardTaskFilter>('all')
 
   const viewerToday = context?.viewer?.today ?? null
   const workItems = context?.workItems ?? EMPTY_WORK_ITEMS
@@ -67,35 +75,45 @@ export function DashboardPage() {
     [activeDateKey, selectableRange],
   )
 
+  const handleViewCalendar = useCallback(() => {
+    navigate('/calendar')
+  }, [navigate])
+
+  const handleSelectOverdueFilter = useCallback(() => {
+    setTaskFilter((prev) => (prev === 'overdue' ? 'all' : 'overdue'))
+  }, [])
+
   // 상단 카드 지표는 언제나 오늘이 속한 주를 기준으로 계산한다.
   const week = useMemo(() => getWeekWindow(today), [today])
   const metrics = useMemo(
     () => buildMetrics(workItems, today, week.start, week.end),
     [workItems, today, week],
   )
+
+  const chartSeries = useMemo(
+    () => buildActivityChartSeries(workItems, today, chartPeriod),
+    [workItems, today, chartPeriod],
+  )
+
   // 업무 일정 패널은 보고 있는 주(월~일)를 그린다.
   const boardWeek = useMemo(() => getWeekWindow(activeDate), [activeDate])
   const weekStartKey = useMemo(() => toDateKey(boardWeek.start), [boardWeek])
   const weekEndKey = useMemo(() => toDateKey(boardWeek.end), [boardWeek])
   const weekLabel = useMemo(
-    () => formatWeekRangeLabel(weekStartKey, weekEndKey),
+    () => formatWeekDotRangeLabel(weekStartKey, weekEndKey),
     [weekStartKey, weekEndKey],
   )
-  const board = useMemo(
-    () => buildWeekBoard(workItems, boardWeek.start, today),
-    [workItems, boardWeek, today],
-  )
-  // 오늘이 보고 있는 주에 있으면 오늘 요일 그룹에, 없으면 기준 날짜에 머문다.
-  const focusDateKey = useMemo(() => {
-    const todayInWeek = todayKey >= weekStartKey && todayKey <= weekEndKey
-    const key = todayInWeek ? todayKey : activeDateKey
 
-    return isDateKeySelectable(key, selectableRange) ? key : weekStartKey
-  }, [todayKey, weekStartKey, weekEndKey, activeDateKey, selectableRange])
+  const taskRows = useMemo(
+    () => buildWeekTaskTableRows(workItems, boardWeek.start, today, taskFilter),
+    [workItems, boardWeek.start, today, taskFilter],
+  )
+
   const schedules = useMemo(() => {
     void holidayRevision
     return buildScheduleCards(recurringRules, today)
   }, [recurringRules, today, holidayRevision])
+
   // '일정 보기'로 연 정기 일정 상세
   const orgMembers = useMemo(() => getOrgSnapshot().users, [])
   const openedScheduleRule = useMemo(
@@ -136,16 +154,29 @@ export function DashboardPage() {
 
   return (
     <section className={styles.page}>
-      <DashboardSummaryCards metrics={metrics} />
+      <div className={styles.topGrid}>
+        <DashboardSummaryCards
+          metrics={metrics}
+          onSelectOverdueFilter={handleSelectOverdueFilter}
+        />
+        <DashboardActivityChart series={chartSeries} onPeriodChange={setChartPeriod} />
+      </div>
 
-      <div className={styles.columns}>
-        <DashboardSchedulePanel schedules={schedules} onOpenSchedule={setOpenedScheduleRuleId} />
+      <div className={styles.bottomGrid}>
         <DashboardWorkSchedulePanel
-          board={board}
-          focusDateKey={focusDateKey}
+          rows={taskRows}
           weekLabel={weekLabel}
+          filter={taskFilter}
+          weekRemainingCount={metrics.weekRemainingCount}
+          onFilterChange={setTaskFilter}
           onShiftWeek={handleShiftWeek}
           onGoToday={handleGoToday}
+          onViewAll={handleViewCalendar}
+        />
+        <DashboardSchedulePanel
+          schedules={schedules}
+          onOpenSchedule={setOpenedScheduleRuleId}
+          onViewCalendar={handleViewCalendar}
         />
       </div>
 

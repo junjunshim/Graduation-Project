@@ -28,7 +28,7 @@ export type ShellTopActionsHeading =
       type: 'page'
       title: string
       titleDetail?: string
-      subtitle: string
+      subtitle?: string
     }
   | {
       type: 'workItem'
@@ -108,7 +108,7 @@ export function ShellTopActions({
               <span className={styles.shellPageTitleDetail}>{heading.titleDetail}</span>
             ) : null}
           </h1>
-          <p className={styles.shellSubtitle}>{heading.subtitle}</p>
+          {heading.subtitle ? <p className={styles.shellSubtitle}>{heading.subtitle}</p> : null}
         </div>
       ) : heading.type === 'workItem' ? (
         <div className={styles.workItemHeading}>

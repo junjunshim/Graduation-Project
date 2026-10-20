@@ -65,17 +65,26 @@ export function AppShell() {
   }
 
   const workspaceRootParam = searchParams.get('rootId') || searchParams.get('nodeId')
+  const headingRootId =
+    workspaceRootParam ??
+    getActiveWorkspaceRootId(currentUser.userId) ??
+    getDefaultWorkspaceRootId(currentUser.userId)
   const overview = getWorkspaceOverview(currentUser.userId, snapshot, {
-    rootNodeId:
-      workspaceRootParam ??
-      getActiveWorkspaceRootId(currentUser.userId) ??
-      getDefaultWorkspaceRootId(currentUser.userId),
+    rootNodeId: headingRootId,
     singleNodeOnly: true,
   })
   const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext, location.search)
-  const workspaceLabel = overview.rootNode?.name ?? '개인 워크스페이스'
+  const requestedWorkspaceNodeId =
+    headingRootId && /^\d+$/.test(headingRootId) ? Number(headingRootId) : null
+  // 요청한 워크스페이스에 접근할 수 없으면 overview.rootNode 가 다른 공간(개인 공간 등)으로
+  // 대체되므로, 그 이름을 상단 제목으로 사용하지 않는다.
+  const canEnterRequestedWorkspace =
+    requestedWorkspaceNodeId === null || overview.rootNode?.id === requestedWorkspaceNodeId
+  const workspaceLabel = canEnterRequestedWorkspace
+    ? overview.rootNode?.name ?? '개인 워크스페이스'
+    : '워크스페이스'
   const isWorkspaceSelectRoute = location.pathname === '/workspace/select'
   const workspaceSelectView = searchParams.get('view') === 'list' ? 'list' : 'hierarchy'
   const isWorkspaceSelectListView = workspaceSelectView === 'list'
@@ -142,12 +151,17 @@ export function AppShell() {
           subtitle: '트리에서 이전할 위치를 선택하고, 변경될 구조와 업무·일정 이관 내용을 확인하세요.',
         }
     : isWorkspaceRoute
-      ? {
-          type: 'breadcrumb',
-          label: '워크스페이스',
-          title: workspaceLabel,
-          subtitle: '공동작업을 위한 워크스페이스',
-        }
+      ? canEnterRequestedWorkspace
+        ? {
+            type: 'breadcrumb',
+            label: '워크스페이스',
+            title: workspaceLabel,
+            subtitle: '공동작업을 위한 워크스페이스',
+          }
+        : {
+            type: 'page',
+            title: '워크스페이스',
+          }
       : location.pathname === '/dashboard'
       ? { type: 'greeting' }
       : workItemDetail

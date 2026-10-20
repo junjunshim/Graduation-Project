@@ -211,6 +211,19 @@ export function WorkspacePage() {
   )
   const { workItemContextMenu } = useWorkItemContextMenu()
 
+  // 스냅샷이 바뀌어 overview 가 null 이 되어도 훅 개수는 달라지면 안 되므로,
+  // 탭 권한 계산도 조기 반환보다 먼저 수행한다.
+  const currentNodeId = overview?.rootNode
+    ? overview.rootNode.id
+    : activeWorkspaceRootId
+      ? Number(activeWorkspaceRootId)
+      : 1
+
+  const tabPermissions = useMemo(
+    () => getWorkspaceTabPermissions(currentUserId, currentNodeId, snapshot),
+    [currentUserId, currentNodeId, snapshot],
+  )
+
   // 스코프 정보가 유실된 경우(역할 회수·내보내기 등) 진입점으로 돌려보낸다.
   if (!currentUser || !overview) {
     return <Navigate to="/workspace/select" replace />
@@ -283,12 +296,6 @@ export function WorkspacePage() {
       }
     }
   }
-
-  const currentNodeId = overview.rootNode ? overview.rootNode.id : (activeWorkspaceRootId ? Number(activeWorkspaceRootId) : 1)
-
-  const tabPermissions = useMemo(() => {
-    return getWorkspaceTabPermissions(currentUserId, currentNodeId, snapshot)
-  }, [currentUserId, currentNodeId, snapshot])
 
   const isCurrentViewAllowed = tabPermissions[activeView] ?? true
 

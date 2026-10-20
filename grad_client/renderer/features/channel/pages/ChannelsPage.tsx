@@ -3,6 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
 import {
+  joinChannelPresence,
+  leaveChannelPresence,
+} from '../../workspace/data/server/serverWorkspace'
+import {
   subscribeToChatRealtimeEvents,
   subscribeToWorkspaceCache,
 } from '../../workspace/data/workspaceCacheEvents'
@@ -23,6 +27,7 @@ import {
   fetchChatSidebar,
   fetchThreadMessages,
   markChannelAsRead,
+  normalizeChannelParticipants,
   normalizeChatMessage,
   openOrCreateDmChannel,
   sendChatMessage,
@@ -31,6 +36,7 @@ import {
   uploadChatMessageFile,
 } from '../api/channelApi'
 import type {
+  ChannelParticipant,
   ChannelItem,
   ChatMessage,
   DmChannelItem,
@@ -77,6 +83,8 @@ export function ChannelsPage() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(
     () => Boolean(selectedChannelId) && initialMessageCache === null,
   )
+  const [channelParticipants, setChannelParticipants] = useState<ChannelParticipant[]>([])
+  const [isChannelPresenceReady, setIsChannelPresenceReady] = useState(false)
 
   const [activeThreadParent, setActiveThreadParent] = useState<ChatMessage | null>(null)
   const [threadReplies, setThreadReplies] = useState<ChatMessage[]>([])
@@ -217,6 +225,22 @@ export function ChannelsPage() {
     void loadChannelMessages(selectedChannelId)
   }, [selectedChannelId, loadChannelMessages])
 
+  useEffect(() => {
+    if (!selectedChannelId) {
+      setChannelParticipants([])
+      setIsChannelPresenceReady(false)
+      return
+    }
+
+    setChannelParticipants([])
+    setIsChannelPresenceReady(false)
+    void joinChannelPresence(selectedChannelId)
+
+    return () => {
+      leaveChannelPresence()
+    }
+  }, [selectedChannelId])
+
   const loadThread = useCallback(async (parentId: number) => {
     setIsLoadingThread(true)
     try {
@@ -251,6 +275,23 @@ export function ChannelsPage() {
       )
       const currentSelectedId = selectedChannelIdRef.current
       const currentThreadId = activeThreadParentIdRef.current
+
+      // 채널 참여자 presence 는 사이드바 갱신과 무관하므로 CHANNEL 계열 분기보다 먼저 처리한다.
+      if (subType === 'CHANNEL_PRESENCE') {
+        if (eventChannelId === currentSelectedId) {
+          setChannelParticipants(normalizeChannelParticipants(payloadRecord.participants))
+          setIsChannelPresenceReady(true)
+        }
+        return
+      }
+
+      if (subType === 'CHANNEL_PRESENCE_ERROR') {
+        if (eventChannelId === currentSelectedId) {
+          setChannelParticipants([])
+          setIsChannelPresenceReady(true)
+        }
+        return
+      }
 
       // 채널 생성/수정/삭제 이벤트인 경우 사이드바 전체 갱신
       if (
@@ -625,6 +666,8 @@ export function ChannelsPage() {
         <ChannelMainChat
           channel={selectedChannel}
           messages={messages}
+          participants={channelParticipants}
+          isPresenceReady={isChannelPresenceReady}
           currentUserId={currentUser.userId}
           currentUserEmail={currentUser.email}
           activeThreadParentId={activeThreadParent?.messageId ?? null}

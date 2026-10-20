@@ -6,6 +6,7 @@ import {
 import { isServerStatusResponse } from '../../workspace/data/server/apiTypes'
 import { getWorkspaceApiBaseUrl } from '../../workspace/data/server/workspaceMode'
 import type {
+  ChannelParticipant,
   ChatMessage,
   ChatMessageFile,
   DmChannelItem,
@@ -54,6 +55,41 @@ export function normalizeChatMessageFile(
           : null,
     createdAt: String(raw.created_at ?? raw.createdAt ?? new Date().toISOString()),
   }
+}
+
+export function normalizeChannelParticipants(raw: unknown): ChannelParticipant[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const participants: ChannelParticipant[] = []
+
+  raw.forEach((item) => {
+    if (!item || typeof item !== 'object') {
+      return
+    }
+
+    const record = item as Record<string, unknown>
+    const email = String(record.email ?? '').trim().toLowerCase()
+    if (!email || seen.has(email)) {
+      return
+    }
+
+    seen.add(email)
+    participants.push({
+      email,
+      name: String(record.name ?? email),
+      online: record.online === true,
+    })
+  })
+
+  return participants.sort((a, b) => {
+    if (a.online !== b.online) {
+      return a.online ? -1 : 1
+    }
+    return a.name.localeCompare(b.name, 'ko')
+  })
 }
 
 export function normalizeChatMessage(raw: Record<string, unknown>): ChatMessage {

@@ -1407,6 +1407,11 @@ let reconnectAttempts = 0
 let isIntentionalDisconnect = false
 const MAX_RECONNECT_DELAY_MS = 30_000
 
+// 채널 참여자 presence. 마지막으로 보고 있는 채널을 기억해 재연결 시 다시 join 한다.
+let activePresenceChannelId: number | null = null
+let socketPresenceChannelId: number | null = null
+let presenceJoinRequestId = 0
+
 // 앱 실행 단위로 고유한 연결 식별자. 재연결 시 서버가 같은 클라이언트의 이전 연결만 교체할 수 있게 한다.
 const WS_CLIENT_ID = 'client-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 const INITIAL_RECONNECT_DELAY_MS = 1_000
@@ -1418,6 +1423,52 @@ export function getNotificationWebSocketUrl(): string {
   urlObj.protocol = wsProtocol
   urlObj.pathname = `${urlObj.pathname.replace(/\/+$/, '')}/notification/ws`
   return urlObj.toString()
+}
+
+// 채널을 보고 있는 동안 서버에 참여자로 등록한다. 이미 연결된 소켓이 있으면 바로 신호를 보낸다.
+export async function joinChannelPresence(channelId: number) {
+  if (!Number.isFinite(channelId) || channelId <= 0) {
+    return
+  }
+
+  activePresenceChannelId = channelId
+  const requestId = ++presenceJoinRequestId
+
+  try {
+    const socket = await connectNotificationWebSocket()
+    if (requestId !== presenceJoinRequestId || activePresenceChannelId !== channelId) {
+      return
+    }
+    if (socket.readyState !== WebSocket.OPEN || socketPresenceChannelId === channelId) {
+      return
+    }
+
+    socket.send(JSON.stringify({ type: 'CHANNEL_JOIN', channel_id: channelId }))
+    socketPresenceChannelId = channelId
+  } catch (error) {
+    console.warn('[WebSocket] 채널 참여자 등록에 실패했습니다.', error)
+  }
+}
+
+// 채널 화면을 벗어나면 참여자 목록에서 빠진다. 소켓이 아직 연결 중이면 서버 방에도 들어가지 않았으므로 보내지 않는다.
+export function leaveChannelPresence() {
+  const channelId = activePresenceChannelId
+  activePresenceChannelId = null
+  presenceJoinRequestId += 1
+
+  if (!channelId) {
+    return
+  }
+
+  if (notificationSocket && notificationSocket.readyState === WebSocket.OPEN) {
+    try {
+      notificationSocket.send(JSON.stringify({ type: 'CHANNEL_LEAVE', channel_id: channelId }))
+    } catch {
+      // ignore
+    }
+  }
+
+  socketPresenceChannelId = null
 }
 
 function scheduleWebSocketReconnect() {
@@ -1546,6 +1597,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
       const wsUrl = getNotificationWebSocketUrl()
       const socket = new WebSocket(wsUrl)
       notificationSocket = socket
+      socketPresenceChannelId = null
 
       const timeoutId = setTimeout(() => {
         if (!isHandshakeComplete) {
@@ -1577,6 +1629,19 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         }
         console.info('[WebSocket] 실시간 알림 서버 연결 성공')
         startHeartbeat(socket)
+
+        // 재연결이면 이전 연결의 서버 방 상태가 사라졌으므로 마지막 채널에 다시 들어간다.
+        if (activePresenceChannelId) {
+          try {
+            socket.send(
+              JSON.stringify({ type: 'CHANNEL_JOIN', channel_id: activePresenceChannelId }),
+            )
+            socketPresenceChannelId = activePresenceChannelId
+          } catch {
+            // ignore
+          }
+        }
+
         resolve(socket)
       }
 
@@ -1745,6 +1810,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         console.info(`[WebSocket] 실시간 알림 서버 연결 종료 (코드: ${event.code})`)
         if (notificationSocket === socket) {
           notificationSocket = null
+          socketPresenceChannelId = null
         }
 
         if (!isHandshakeComplete) {
@@ -1776,6 +1842,8 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
 
 export function disconnectNotificationWebSocket() {
   isIntentionalDisconnect = true
+  activePresenceChannelId = null
+  socketPresenceChannelId = null
   stopHeartbeat()
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)

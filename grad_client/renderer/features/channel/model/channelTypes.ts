@@ -33,6 +33,12 @@ export type DmChannelItem = {
 
 export type ChannelItem = WorkspaceChannelItem | DmChannelItem
 
+export type ChannelParticipant = {
+  email: string
+  name: string
+  online: boolean
+}
+
 export type ChatMessageFile = {
   fileId: number
   messageId: number

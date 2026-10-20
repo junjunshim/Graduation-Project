@@ -1545,3 +1545,113 @@ BEGIN
             USING ERRCODE = 'P0906';
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- 14. NotificationWebSocketController::CHANNEL_JOIN / CHANNEL_PRESENCE 지원
+-- (1) 내부 헬퍼: 채널을 볼 수 있는 사용자 목록(이메일, 이름)을 반환한다.
+--     WORKSPACE 는 채널 소유 노드에서 CHANNEL_VIEW 를 통과하는 사용자 전체,
+--     DM 은 삭제되지 않은 두 참여자다.
+CREATE OR REPLACE FUNCTION get_chat_channel_audience(
+    p_channel_id INTEGER
+) RETURNS JSONB AS $$
+DECLARE
+    v_channel chat_channels%ROWTYPE;
+    v_path INTEGER[];
+BEGIN
+    SELECT * INTO v_channel
+    FROM chat_channels
+    WHERE channel_id = p_channel_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RETURN '[]'::jsonb;
+    END IF;
+
+    IF v_channel.channel_type = 'WORKSPACE' THEN
+        SELECT n.path INTO v_path
+        FROM organization_nodes n
+        WHERE n.node_id = v_channel.owner_node_id;
+
+        RETURN (
+            SELECT COALESCE(
+                jsonb_agg(
+                    jsonb_build_object('email', audience.email, 'name', audience.name)
+                    ORDER BY audience.name, audience.email
+                ), '[]'::jsonb
+            )
+            FROM (
+                SELECT DISTINCT
+                    u.email,
+                    COALESCE(NULLIF(TRIM(u.name), ''), u.email) AS name
+                FROM role_assignments ra
+                JOIN users u ON u.user_id = ra.user_id
+                WHERE ra.node_id = ANY(v_path)
+                  AND u.is_deleted = FALSE
+                  AND check_authority_with_override(u.user_id, v_channel.owner_node_id, 'CHANNEL_VIEW') = TRUE
+            ) AS audience
+        );
+    ELSIF v_channel.channel_type = 'DM' THEN
+        RETURN (
+            SELECT COALESCE(
+                jsonb_agg(
+                    jsonb_build_object(
+                        'email', u.email,
+                        'name', COALESCE(NULLIF(TRIM(u.name), ''), u.email)
+                    )
+                    ORDER BY u.email
+                ), '[]'::jsonb
+            )
+            FROM users u
+            WHERE u.user_id IN (v_channel.dm_user1_id, v_channel.dm_user2_id)
+              AND u.is_deleted = FALSE
+        );
+    END IF;
+
+    RETURN '[]'::jsonb;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
+-- (2) 채널 참여 자격(CHANNEL_VIEW)을 확인하고, 채널을 볼 수 있는 사용자 전체를 반환한다.
+CREATE OR REPLACE FUNCTION get_chat_channel_participants(
+    p_requester_email VARCHAR,
+    p_channel_id INTEGER
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user_id users.user_id%TYPE;
+    v_channel_type VARCHAR(20);
+BEGIN
+    SELECT user_id INTO v_user_id
+    FROM users
+    WHERE email = p_requester_email AND is_deleted = FALSE;
+
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 채널이 없거나 볼 권한이 없으면 같은 오류로 응답해 채널 존재 여부를 노출하지 않는다.
+    IF NOT check_chat_channel_authority(v_user_id, p_channel_id, 'CHANNEL_VIEW') THEN
+        RAISE EXCEPTION '[P0901]Channel not found or no permission: %', p_channel_id
+        USING ERRCODE = 'P0901';
+    END IF;
+
+    SELECT channel_type INTO v_channel_type
+    FROM chat_channels
+    WHERE channel_id = p_channel_id AND is_deleted = FALSE;
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'CHAT_PARTICIPANTS',
+        'channel_id', p_channel_id,
+        'channel_type', v_channel_type,
+        'participants', get_chat_channel_audience(p_channel_id)
+    );
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0901' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0906]Failed to get chat channel participants: %', SQLERRM
+            USING ERRCODE = 'P0906';
+END;
+$$ LANGUAGE plpgsql STABLE;

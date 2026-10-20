@@ -159,6 +159,13 @@
   white-space: nowrap;
 }
 
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-left: auto;
+}
+
 .headerActions {
   display: flex;
   align-items: center;

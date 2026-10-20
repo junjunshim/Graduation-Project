@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
-import type { ChannelItem, ChatMessage } from '../model/channelTypes'
+import type { ChannelItem, ChannelParticipant, ChatMessage } from '../model/channelTypes'
+import { ChannelPresence } from './ChannelPresence'
 import { ChatFileAttachments } from './ChatFileAttachments'
 import { ChatMessageComposer } from './ChatMessageComposer'
 import { ChatMessageText } from './ChatMessageText'
@@ -10,6 +11,8 @@ import styles from './ChannelMainChat.module.css'
 export type ChannelMainChatProps = {
   channel: ChannelItem | null
   messages: ChatMessage[]
+  participants: ChannelParticipant[]
+  isPresenceReady: boolean
   currentUserId: string
   currentUserEmail: string
   activeThreadParentId: number | null
@@ -60,6 +63,8 @@ function formatMessageTime(iso: string | null): string {
 export function ChannelMainChat({
   channel,
   messages,
+  participants,
+  isPresenceReady,
   currentUserId,
   currentUserEmail,
   activeThreadParentId,
@@ -182,28 +187,41 @@ export function ChannelMainChat({
           </div>
         )}
 
-        {isWorkspaceChannel && channel.canManage ? (
-          <div className={styles.headerActions}>
-            <button
-              type="button"
-              className={styles.headerActionBtn}
-              onClick={onOpenEditChannelModal}
-            >
-              <Icon name="pencil" size={14} />
-              <span>채널 수정</span>
-            </button>
-            {!channel.isDefault ? (
+        <div className={styles.headerRight}>
+          <ChannelPresence
+            channelId={channel.channelId}
+            channelType={channel.channelType}
+            participants={participants}
+            isPresenceReady={isPresenceReady}
+            currentUserEmail={currentUserEmail}
+            counterpartEmail={
+              channel.channelType === 'DM' ? channel.counterpartEmail : undefined
+            }
+          />
+
+          {isWorkspaceChannel && channel.canManage ? (
+            <div className={styles.headerActions}>
               <button
                 type="button"
-                className={`${styles.headerActionBtn} ${styles.headerDangerBtn}`}
-                onClick={onDeleteChannel}
+                className={styles.headerActionBtn}
+                onClick={onOpenEditChannelModal}
               >
-                <Icon name="trash" size={14} />
-                <span>채널 삭제</span>
+                <Icon name="pencil" size={14} />
+                <span>채널 수정</span>
               </button>
-            ) : null}
-          </div>
-        ) : null}
+              {!channel.isDefault ? (
+                <button
+                  type="button"
+                  className={`${styles.headerActionBtn} ${styles.headerDangerBtn}`}
+                  onClick={onDeleteChannel}
+                >
+                  <Icon name="trash" size={14} />
+                  <span>채널 삭제</span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </header>
 
       {/* 중앙 메시지 타임라인 피드 */}

@@ -293,6 +293,12 @@ export function ChannelsPage() {
         return
       }
 
+      // 채널 권한이 바뀌면 목록·관리 버튼이 달라지므로 사이드바를 다시 조회한다.
+      if (subType === 'CHANNEL_ACCESS_CHANGED') {
+        void loadSidebar()
+        return
+      }
+
       // 채널 생성/수정/삭제 이벤트인 경우 사이드바 전체 갱신
       if (
         subType.includes('CHANNEL') ||

@@ -722,6 +722,54 @@ bool NotificationWebSocketController::sendNotificationToUser(const std::string &
     return !targetConnections.empty();
 }
 
+// 채널 접근 권한이 바뀐 노드의 사용자에게 채널 사이드바 재조회를 알린다.
+// 대상 사용자 계산은 DB 함수(get_channel_refresh_targets)가 맡고, 이 함수는 전달만 한다.
+void NotificationWebSocketController::notifyChannelAccessChangedAsync(int node_id)
+{
+    if (node_id <= 0)
+    {
+        return;
+    }
+
+    std::thread worker([node_id]() {
+        std::vector<std::string> emails;
+        try
+        {
+            auto rows = app().getDbClient()->execSqlSync(
+                "SELECT email FROM get_channel_refresh_targets($1)", node_id);
+            for (const auto &row : rows)
+            {
+                emails.push_back(row["email"].as<std::string>());
+            }
+        }
+        catch (const std::exception &e)
+        {
+            LOG_WARN << "채널 권한 변경 대상 조회 실패: node=" << node_id << " reason=" << e.what();
+            return;
+        }
+
+        if (emails.empty())
+        {
+            return;
+        }
+
+        Json::Value event;
+        event["type"] = "CHAT";
+        event["sub_type"] = "CHANNEL_ACCESS_CHANGED";
+        event["data"]["node_id"] = node_id;
+        const std::string message = toJsonString(event);
+
+        // WebSocket 전송은 다른 알림 경로와 같이 이벤트 루프에서 수행한다.
+        app().getLoop()->queueInLoop([emails, message]() {
+            for (const auto &email : emails)
+            {
+                sendNotificationToUser(email, message);
+            }
+        });
+    });
+    worker.detach();
+}
+
 // 활동 알림 JSON을 수신자별 맞춤(업무 열람 권한 유무에 따른 마스킹)으로 생성하여 샤딩 락 분리를 통해 전송
 static void processActivityNotification(const std::string &rawPayload)
 {

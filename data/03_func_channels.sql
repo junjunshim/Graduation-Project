@@ -139,6 +139,32 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 
+-- 내부 헬퍼 3: 노드 권한 변경(역할 정의·배정, 노드 이동) 시 채널 사이드바를 다시 조회해야 하는 사용자 목록
+-- 해당 노드, 그 하위 노드, 그 상위 노드에 역할이 배정된 사용자를 대상으로 한다.
+CREATE OR REPLACE FUNCTION get_channel_refresh_targets(
+    p_node_id organization_nodes.node_id%TYPE
+) RETURNS TABLE(email VARCHAR) AS $$
+DECLARE
+    v_path organization_nodes.path%TYPE;
+BEGIN
+    SELECT path INTO v_path FROM organization_nodes WHERE node_id = p_node_id;
+
+    RETURN QUERY
+    SELECT DISTINCT u.email
+    FROM organization_nodes n
+    JOIN role_assignments ra ON ra.node_id = n.node_id
+    JOIN users u ON u.user_id = ra.user_id
+    WHERE u.is_deleted = FALSE
+      AND (
+          n.node_id = p_node_id
+          OR p_node_id = ANY(n.path)
+          OR n.node_id = ANY(v_path)
+      )
+    ORDER BY u.email;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
 -- 1. ChannelController::getSidebar (GET /api/channels/sidebar)
 CREATE OR REPLACE FUNCTION get_user_chat_sidebar(
     p_requester_email VARCHAR

@@ -31,6 +31,10 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
     // PostgreSQL LISTEN/NOTIFY 수신 백그라운드 리스너 시작 함수
     static void startNotificationListener(const std::string &conninfo);
 
+    // 채널 권한(역할 정의·배정, 노드 이동)이 바뀌면 대상 사용자에게
+    // 채널 사이드바를 다시 조회하라는 CHAT 이벤트를 보낸다. 대상은 DB가 계산한다.
+    static void notifyChannelAccessChangedAsync(int node_id);
+
   private:
     // 연결 1개당 유지하는 세션 상태. 인증 전에는 user_email 이 비어 있고 authenticated 가 false 다.
     struct WsSession {

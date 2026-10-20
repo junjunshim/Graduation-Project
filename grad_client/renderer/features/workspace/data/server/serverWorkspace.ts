@@ -49,6 +49,7 @@ import {
   notifyChatRealtimeEvent,
   notifyLiveNotificationReceived,
   notifyWorkspaceCacheRefreshFailed,
+  notifyWorkspaceLiveRefresh,
 } from '../workspaceCacheEvents.js'
 import { pruneFavoriteWorkspaceIds } from '../workspaceDirectorySelection.js'
 
@@ -1690,6 +1691,32 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
                   ? (payload.data as Record<string, unknown>)
                   : (payload as Record<string, unknown>),
             })
+            return
+          }
+          if (payload && payload.type === 'WORKSPACE_REFRESH') {
+            const data =
+              payload.data && typeof payload.data === 'object'
+                ? (payload.data as Record<string, unknown>)
+                : ({} as Record<string, unknown>)
+            const nodeIdValue = Number(data.node_id ?? 0)
+            const entityType = typeof data.entity_type === 'string' ? data.entity_type : ''
+            const action = typeof data.action === 'string' ? data.action : ''
+
+            notifyWorkspaceLiveRefresh({
+              nodeId: nodeIdValue > 0 ? nodeIdValue : null,
+              entityType,
+              entityId: typeof data.entity_id === 'string' ? data.entity_id : '',
+              action,
+              isRecurringFile: Boolean(data.is_recurring_file),
+            })
+
+            // 노드 생성/수정/복구는 물론 삭제도 트리 전체를 다시 받아 캐시에서 제거한다.
+            if (
+              isWorkspaceStructureNotification({ entity_type: entityType, action }) ||
+              (entityType === 'NODE' && action === 'deleted')
+            ) {
+              refreshWorkspaceTreeFromServer()
+            }
             return
           }
 

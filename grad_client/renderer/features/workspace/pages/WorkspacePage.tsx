@@ -13,6 +13,7 @@ import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
 import {
   subscribeToWorkspaceCache,
   subscribeToLiveNotifications,
+  subscribeToWorkspaceLiveRefresh,
   notifyRecurringCacheUpdated,
 } from '../data/workspaceCacheEvents'
 import {
@@ -115,44 +116,54 @@ export function WorkspacePage() {
       }
     })
 
-    // 실시간 WebSocket 알림 수신 시 현재 열람 중인 노드 데이터 자동 최신화
-    const unsubscribeLive = subscribeToLiveNotifications((payload) => {
+    // 실시간 알림/갱신 신호를 받으면 현재 열람 중인 노드 데이터를 다시 조회한다.
+    const refreshActiveNode = (nodeId: number | null, isRecurringEvent: boolean) => {
       if (!isSubscribed || !activeWorkspaceRootId) return
 
-      const notifNodeId = payload.node_id != null ? Number(payload.node_id) : null
       const currentNodeId = Number(activeWorkspaceRootId)
+      // 알림의 소속 노드가 현재 보고 있는 노드와 일치할 때만 갱신한다.
+      if (nodeId !== currentNodeId) return
 
-      // 알림의 소속 노드가 현재 보고 있는 노드와 일치할 때
-      if (notifNodeId === currentNodeId) {
-        // 1. 일정 관련 알림 (일정 생성/수정/삭제/복구 또는 일정 전용 파일)인 경우:
-        //    일정 전용 캐시 갱신 브로드캐스트만 수행 (fetchNodeDetail 중복 호출 방지)
-        //    일정 파일은 노드 상세가 아닌 일정(정기 규칙) 조회로 목록을 구성하므로 반드시 이 경로로 갱신해야 한다.
-        const isRecurringEvent =
-          payload.entity_type === 'RECURRING_RULE' ||
-          payload.is_recurring_file === true ||
-          payload.link_url?.includes('view=schedules')
-
-        if (isRecurringEvent) {
-          notifyRecurringCacheUpdated(currentNodeId)
-        } else {
-          // 2. 일반 업무, 노드, 권한, 파일 등 일반 노드 활동인 경우에만 fetchNodeDetail 호출
-          fetchNodeDetail(activeWorkspaceRootId)
-            .then((latestSnapshot) => {
-              if (isSubscribed) {
-                setSnapshot(latestSnapshot)
-              }
-            })
-            .catch((err) => {
-              console.warn('[WorkspacePage] 실시간 알림 수신 후 자동 최신화 실패:', err)
-            })
-        }
+      // 일정 관련 변경은 일정 캐시만 갱신한다. (fetchNodeDetail 중복 호출 방지)
+      if (isRecurringEvent) {
+        notifyRecurringCacheUpdated(currentNodeId)
+        return
       }
+
+      fetchNodeDetail(activeWorkspaceRootId)
+        .then((latestSnapshot) => {
+          if (isSubscribed) {
+            setSnapshot(latestSnapshot)
+          }
+        })
+        .catch((err) => {
+          console.warn('[WorkspacePage] 실시간 알림 수신 후 자동 최신화 실패:', err)
+        })
+    }
+
+    // 상세 알림(HISTORY_ALL_VIEW 보유자) 수신 경로
+    const unsubscribeLive = subscribeToLiveNotifications((payload) => {
+      const notifNodeId = payload.node_id != null ? Number(payload.node_id) : null
+      const isRecurringEvent =
+        payload.entity_type === 'RECURRING_RULE' ||
+        payload.is_recurring_file === true ||
+        payload.link_url?.includes('view=schedules')
+      refreshActiveNode(notifNodeId, Boolean(isRecurringEvent))
+    })
+
+    // 상세 열람 권한이 없는 사용자도 화면을 최신 상태로 유지하기 위한 갱신 신호 경로
+    const unsubscribeRefresh = subscribeToWorkspaceLiveRefresh((payload) => {
+      refreshActiveNode(
+        payload.nodeId,
+        payload.isRecurringFile || payload.entityType === 'RECURRING_RULE',
+      )
     })
 
     return () => {
       isSubscribed = false
       unsubscribeCache()
       unsubscribeLive()
+      unsubscribeRefresh()
     }
   }, [activeWorkspaceRootId, reloadTrigger])
 

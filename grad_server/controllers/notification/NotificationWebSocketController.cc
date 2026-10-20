@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstring>
 #include <fstream>
+#include <set>
 #include <libpq-fe.h>
 #ifndef _WIN32
 #include <sys/select.h>
@@ -781,7 +782,13 @@ static void processActivityNotification(const std::string &rawPayload)
         return;
     }
 
-    if (!root.isMember("recipients") || !root["recipients"].isArray() || root["recipients"].empty())
+    const bool hasDetailRecipients =
+        root.isMember("recipients") && root["recipients"].isArray() && !root["recipients"].empty();
+    const bool hasRefreshRecipients =
+        root.isMember("refresh_recipients") && root["refresh_recipients"].isArray() &&
+        !root["refresh_recipients"].empty();
+
+    if (!hasDetailRecipients && !hasRefreshRecipients)
     {
         return;
     }
@@ -879,17 +886,50 @@ static void processActivityNotification(const std::string &rawPayload)
     std::string fullMsg = Json::writeString(writer, fullPayload);
     std::string maskedMsg = Json::writeString(writer, maskedPayload);
 
-    // 3. 수신자 목록을 순회하며 각 유저에게 샤딩 락 격리 방식으로 발송 (중첩 락 없음)
-    for (const auto &recipient : root["recipients"])
+    // 3. 상세 알림 수신자에게는 기존처럼 활동 내용을 전송한다.
+    std::set<std::string> detailEmails;
+    if (hasDetailRecipients)
     {
-        std::string email = recipient["email"].asString();
-        bool canView = recipient["can_view_work_items"].asBool();
-        // 일정(정기 규칙) 파일은 업무 상세 권한과 무관하게 마스킹하지 않는다.
-        bool isWorkRelated = (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !isRecurringFile;
-        if (canView || !isWorkRelated) {
-            NotificationWebSocketController::sendNotificationToUser(email, fullMsg);
-        } else {
-            NotificationWebSocketController::sendNotificationToUser(email, maskedMsg);
+        for (const auto &recipient : root["recipients"])
+        {
+            std::string email = recipient["email"].asString();
+            bool canView = recipient["can_view_work_items"].asBool();
+            // 일정(정기 규칙) 파일은 업무 상세 권한과 무관하게 마스킹하지 않는다.
+            bool isWorkRelated = (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !isRecurringFile;
+            if (canView || !isWorkRelated) {
+                NotificationWebSocketController::sendNotificationToUser(email, fullMsg);
+            } else {
+                NotificationWebSocketController::sendNotificationToUser(email, maskedMsg);
+            }
+            detailEmails.insert(email);
+        }
+    }
+
+    // 4. 상세 알림을 받지 못한 멤버에게는 화면 갱신 신호만 보낸다.
+    //    상세 열람 권한(HISTORY_ALL_VIEW)이 없어도 워크스페이스 변경은 즉시 반영되어야 하므로,
+    //    활동 내용 없이 "이 노드가 바뀌었다"는 정보만 전달한다.
+    if (hasRefreshRecipients)
+    {
+        Json::Value refreshEvent;
+        refreshEvent["type"] = "WORKSPACE_REFRESH";
+        refreshEvent["sub_type"] = "ACTIVITY";
+        refreshEvent["data"]["node_id"] = nodeId;
+        refreshEvent["data"]["entity_type"] = entityType;
+        refreshEvent["data"]["entity_id"] = entityId;
+        refreshEvent["data"]["action"] = actionType;
+        refreshEvent["data"]["is_recurring_file"] = isRecurringFile;
+        const std::string refreshMsg = Json::writeString(writer, refreshEvent);
+
+        for (const auto &recipient : root["refresh_recipients"])
+        {
+            // SQL 이 이메일 문자열 배열로 내려준다. (구버전 객체 형식도 함께 허용)
+            const std::string email =
+                recipient.isString() ? recipient.asString() : recipient["email"].asString();
+            if (email.empty() || detailEmails.count(email) > 0)
+            {
+                continue;
+            }
+            NotificationWebSocketController::sendNotificationToUser(email, refreshMsg);
         }
     }
 }

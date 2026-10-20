@@ -181,3 +181,41 @@ export function subscribeToChatRealtimeEvents(
   return () => window.removeEventListener(CHAT_REALTIME_EVENT, handleChatEvent)
 }
 
+export const WORKSPACE_LIVE_REFRESH_EVENT = 'grad-client-workspace-live-refresh'
+
+// 활동 상세 열람 권한이 없는 사용자에게도 워크스페이스 변경을 즉시 반영하기 위한 갱신 신호.
+// 활동 내용은 담지 않고, 어떤 노드가 어떤 종류로 바뀌었는지만 전달한다.
+export type WorkspaceLiveRefreshPayload = {
+  nodeId: number | null
+  entityType: string
+  entityId: string
+  action: string
+  isRecurringFile: boolean
+}
+
+export function notifyWorkspaceLiveRefresh(payload: WorkspaceLiveRefreshPayload) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<WorkspaceLiveRefreshPayload>(WORKSPACE_LIVE_REFRESH_EVENT, { detail: payload }),
+  )
+}
+
+export function subscribeToWorkspaceLiveRefresh(
+  listener: (payload: WorkspaceLiveRefreshPayload) => void,
+) {
+  if (typeof window === 'undefined') {
+    return () => undefined
+  }
+
+  const handleRefresh = (event: Event) => {
+    if (event instanceof CustomEvent && event.detail) {
+      listener(event.detail as WorkspaceLiveRefreshPayload)
+    }
+  }
+
+  window.addEventListener(WORKSPACE_LIVE_REFRESH_EVENT, handleRefresh)
+  return () => window.removeEventListener(WORKSPACE_LIVE_REFRESH_EVENT, handleRefresh)
+}

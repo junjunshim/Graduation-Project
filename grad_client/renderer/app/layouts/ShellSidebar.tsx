@@ -5,6 +5,7 @@ import { SidebarFavorites } from './SidebarFavorites'
 import { navigationItems } from '../navigation'
 import { getOrgSnapshot } from '../../features/workspace/data/orgService'
 import { subscribeToWorkspaceCache } from '../../features/workspace/data/workspaceCacheEvents'
+import { getNodeVisualMetadata } from '../../features/workspace/queries/workspaceDirectory'
 import {
   getLastVisitedWorkspaceNodeId,
 } from '../../features/workspace/data/workspaceDirectorySelection'
@@ -184,7 +185,11 @@ export function ShellSidebar({ userId, isCollapsed, onToggleCollapsed, onSignOut
                         }
                       >
                         <span className={styles.workspaceActiveNodeHeaderLeft}>
-                          <Icon name="building" size={14} className={styles.workspaceActiveNodeIcon} />
+                          <Icon
+                            name={getNodeVisualMetadata(activeNode.nodeType).iconName}
+                            size={14}
+                            className={styles.workspaceActiveNodeIcon}
+                          />
                           <span className={styles.workspaceActiveNodeName}>{activeNode.name}</span>
                         </span>
                         <Icon

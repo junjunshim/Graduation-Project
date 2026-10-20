@@ -495,8 +495,8 @@ export function WorkspaceRolesTab({
   }
 
   // 좌측 열과 우측 열 도메인 분할
-  // 좌측: 공간 및 노드 (4개) + 공간 관리 (2개) + 역할 및 인원 관리 (2개) + 활동 히스토리 (2개) = 총 10개
-  // 우측: 업무 (WorkItem) (7개) + 파일 및 산출물 (2개) + 특수 제어 (1개) = 총 10개
+  // 좌측: 공간 및 노드 + 공간 관리 + 역할 및 인원 관리 + 활동 히스토리
+  // 우측: 업무 (WorkItem) + 파일 및 산출물 + 통합 (GitHub) + 특수 제어
   const { leftGroups, rightGroups } = useMemo(() => {
     const getCategoryBits = (cat: AuthorityBitInfo['category']) => {
       const bits = AUTHORITY_BITS.filter((b) => b.category === cat)
@@ -507,8 +507,8 @@ export function WorkspaceRolesTab({
       }
     }
 
-    const leftCats: AuthorityBitInfo['category'][] = ['space', 'manage', 'role', 'file', 'history']
-    const rightCats: AuthorityBitInfo['category'][] = ['work', 'integration', 'special']
+    const leftCats: AuthorityBitInfo['category'][] = ['space', 'manage', 'role', 'history']
+    const rightCats: AuthorityBitInfo['category'][] = ['work', 'file', 'integration', 'special']
 
     return {
       leftGroups: leftCats.map(getCategoryBits).filter((g) => g.bits.length > 0),

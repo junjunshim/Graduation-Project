@@ -403,10 +403,12 @@ export function ChannelsPage() {
       if (existing) {
         existing.channels.push(ch)
         if (canManage) existing.canManage = true
+        if (!existing.nodeType && ch.ownerNodeType) existing.nodeType = ch.ownerNodeType
       } else {
         groupMap.set(ch.ownerNodeId, {
           nodeId: ch.ownerNodeId,
           nodeName: ch.ownerNodeName,
+          nodeType: ch.ownerNodeType,
           canManage,
           channels: [ch],
         })

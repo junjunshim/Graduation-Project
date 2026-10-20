@@ -3,11 +3,13 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import type { DmChannelItem, WorkspaceChannelItem } from '../model/channelTypes'
+import { getNodeVisualMetadata } from '../../workspace/queries/workspaceDirectory'
 import styles from './ChannelSidebar.module.css'
 
 export type WorkspaceGroup = {
   nodeId: number
   nodeName: string
+  nodeType?: string
   canManage: boolean
   channels: WorkspaceChannelItem[]
 }
@@ -30,7 +32,8 @@ export function ChannelSidebar({
   onOpenNewDmModal,
 }: ChannelSidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [collapsedNodes, setCollapsedNodes] = useState<Record<number, boolean>>({})
+  // 처음 진입할 때는 모든 워크스페이스 채널 그룹을 접힌 상태로 둔다.
+  const [expandedNodes, setExpandedNodes] = useState<Record<number, boolean>>({})
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
 
@@ -64,8 +67,8 @@ export function ChannelSidebar({
     )
   }, [dmChannels, normalizedQuery])
 
-  function toggleNodeCollapse(nodeId: number) {
-    setCollapsedNodes((prev) => ({
+  function toggleNodeExpansion(nodeId: number) {
+    setExpandedNodes((prev) => ({
       ...prev,
       [nodeId]: !prev[nodeId],
     }))
@@ -94,7 +97,7 @@ export function ChannelSidebar({
           ) : (
             <div className={styles.groupList}>
               {filteredGroups.map((group) => {
-                const isCollapsed = Boolean(collapsedNodes[group.nodeId]) && !normalizedQuery
+                const isCollapsed = !expandedNodes[group.nodeId] && !normalizedQuery
                 const groupUnread = group.channels.reduce((sum, ch) => sum + ch.unreadCount, 0)
 
                 return (
@@ -104,14 +107,18 @@ export function ChannelSidebar({
                         type="button"
                         className={styles.groupToggleButton}
                         aria-expanded={!isCollapsed}
-                        onClick={() => toggleNodeCollapse(group.nodeId)}
+                        onClick={() => toggleNodeExpansion(group.nodeId)}
                       >
                         <Icon
                           name={isCollapsed ? 'chevronRight' : 'chevronDown'}
                           size={14}
                           className={styles.groupChevron}
                         />
-                        <Icon name="building" size={14} className={styles.groupBuildingIcon} />
+                        <Icon
+                          name={getNodeVisualMetadata(group.nodeType ?? '').iconName}
+                          size={14}
+                          className={styles.groupBuildingIcon}
+                        />
                         <span className={styles.groupName} title={group.nodeName}>
                           {group.nodeName}
                         </span>

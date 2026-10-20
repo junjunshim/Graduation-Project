@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../../design-system/primitives/Icon'
 import { SearchField } from '../../design-system/primitives/SearchField'
 import { getOrgSnapshot } from '../../features/workspace/data/orgService'
 import { getWorkspaceOverview } from '../../features/workspace/queries/workspaceOverview'
+import { getNodeVisualMetadata } from '../../features/workspace/queries/workspaceDirectory'
 import { subscribeToWorkspaceCache } from '../../features/workspace/data/workspaceCacheEvents'
 import { getFavoriteWorkspaceIds, toggleFavoriteWorkspaceId, selectWorkspaceRoot } from '../../features/workspace/data/workspaceDirectorySelection'
 import styles from './AppShell.module.css'
@@ -13,7 +14,7 @@ import modalStyles from './SidebarFavorites.module.css'
 import { getFavoriteWorkItemIds, toggleFavoriteWorkItem } from '../../features/workspace/data/workItemFavorites'
 
 type FavoriteType = 'workspace' | 'work-item' | 'channel'
-type FavoriteOption = { type: FavoriteType; id: string; name: string; path: string }
+type FavoriteOption = { type: FavoriteType; id: string; name: string; path: string; icon: IconName }
 const FAVORITES_EVENT = 'grad-client-favorites-updated'
 
 // 사이드바 목록과 추가 팝업에서 같은 기준으로 워크스페이스/업무를 구분한다.
@@ -44,8 +45,8 @@ export function SidebarFavorites({ userId }: { userId: string }) {
   const workspaceIds = getFavoriteWorkspaceIds(userId)
   const workIds = getFavoriteWorkItemIds(userId)
   const options: FavoriteOption[] = [
-    ...overview.visibleNodes.filter((node) => !node.isDeleted).map((node) => ({ type: 'workspace' as const, id: String(node.id), name: node.name, path: `/workspace?nodeId=${node.id}` })),
-    ...overview.visibleWorkItems.filter((item) => !item.isDeleted).map((item) => ({ type: 'work-item' as const, id: item.workItemId, name: item.title, path: `/work-items/${encodeURIComponent(item.workItemId)}` })),
+    ...overview.visibleNodes.filter((node) => !node.isDeleted).map((node) => ({ type: 'workspace' as const, id: String(node.id), name: node.name, path: `/workspace?nodeId=${node.id}`, icon: getNodeVisualMetadata(node.nodeType).iconName })),
+    ...overview.visibleWorkItems.filter((item) => !item.isDeleted).map((item) => ({ type: 'work-item' as const, id: item.workItemId, name: item.title, path: `/work-items/${encodeURIComponent(item.workItemId)}`, icon: 'page' as const })),
   ]
   const isFavorite = (option: FavoriteOption) => option.type === 'workspace' ? workspaceIds.has(option.id) : workIds.includes(option.id)
   const favorites = options.filter(isFavorite)
@@ -89,7 +90,7 @@ export function SidebarFavorites({ userId }: { userId: string }) {
                   <Link key={`${option.type}:${option.id}`} to={option.path} className={styles.recentWorkItem}
                     title={`${group.label}: ${option.name}`}
                     onClick={() => { if (option.type === 'workspace') selectWorkspaceRoot(option.id, false, userId) }}>
-                    <span className={styles.recentWorkItemIcon}><Icon name={group.icon} size={14} /></span><strong>{option.name}</strong>
+                    <span className={styles.recentWorkItemIcon}><Icon name={option.icon} size={14} /></span><strong>{option.name}</strong>
                   </Link>
                 ))}
               </div>
@@ -151,7 +152,7 @@ export function SidebarFavorites({ userId }: { userId: string }) {
                     data-favorite={isOptionFavorite ? 'true' : undefined}
                   >
                     <Icon
-                      name={option.type === 'workspace' ? 'building' : 'page'}
+                      name={option.icon}
                       size={15}
                       className={modalStyles.optionIcon}
                     />

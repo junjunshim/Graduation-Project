@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { Button } from '../../design-system/primitives/Button'
@@ -9,6 +9,7 @@ import { getWorkspaceOverview } from '../../features/workspace/queries/workspace
 import { getNodeVisualMetadata } from '../../features/workspace/queries/workspaceDirectory'
 import { subscribeToWorkspaceCache } from '../../features/workspace/data/workspaceCacheEvents'
 import { getFavoriteWorkspaceIds, toggleFavoriteWorkspaceId, selectWorkspaceRoot } from '../../features/workspace/data/workspaceDirectorySelection'
+import type { WorkspaceSnapshot } from '../../features/workspace/model/types'
 import styles from './AppShell.module.css'
 import modalStyles from './SidebarFavorites.module.css'
 import { getFavoriteWorkItemIds, toggleFavoriteWorkItem } from '../../features/workspace/data/workItemFavorites'
@@ -24,7 +25,7 @@ const FAVORITE_GROUPS: Array<{ type: 'workspace' | 'work-item'; label: string; i
 ]
 
 
-export function SidebarFavorites({ userId }: { userId: string }) {
+export function SidebarFavorites({ userId, snapshot: providedSnapshot }: { userId: string; snapshot?: WorkspaceSnapshot }) {
   const [, refresh] = useState(0)
   const [isOpen, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -41,13 +42,14 @@ export function SidebarFavorites({ userId }: { userId: string }) {
     if (isOpen) dialogRef.current?.showModal()
   }, [isOpen])
 
-  const overview = getWorkspaceOverview(userId, getOrgSnapshot())
+  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const overview = useMemo(() => getWorkspaceOverview(userId, snapshot), [userId, snapshot])
   const workspaceIds = getFavoriteWorkspaceIds(userId)
   const workIds = getFavoriteWorkItemIds(userId)
-  const options: FavoriteOption[] = [
+  const options = useMemo<FavoriteOption[]>(() => [
     ...overview.visibleNodes.filter((node) => !node.isDeleted).map((node) => ({ type: 'workspace' as const, id: String(node.id), name: node.name, path: `/workspace?nodeId=${node.id}`, icon: getNodeVisualMetadata(node.nodeType).iconName })),
     ...overview.visibleWorkItems.filter((item) => !item.isDeleted).map((item) => ({ type: 'work-item' as const, id: item.workItemId, name: item.title, path: `/work-items/${encodeURIComponent(item.workItemId)}`, icon: 'page' as const })),
-  ]
+  ], [overview])
   const isFavorite = (option: FavoriteOption) => option.type === 'workspace' ? workspaceIds.has(option.id) : workIds.includes(option.id)
   const favorites = options.filter(isFavorite)
   const favoriteGroups = FAVORITE_GROUPS.map((group) => ({

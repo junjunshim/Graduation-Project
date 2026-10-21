@@ -1,4 +1,3 @@
-import { resolveRoleAssignments } from '../model/roleDefinitions'
 import type {
   AssignRoleRequest,
   CreateSubNodeRequest,
@@ -11,8 +10,8 @@ import type {
   WorkspaceSnapshot,
   WorkspaceSummary,
 } from '../model/types'
-import { isWorkItemDueSoon } from '../model/workItemDue'
-import { readWorkspaceDb } from './localStore'
+import { isWorkItemDueSoon } from '../model/workItemDue.js'
+import { getWorkspaceRevision, readWorkspaceDb } from './localStore.js'
 import {
   assignRoleOnServer,
   createSubNodeOnServer,
@@ -27,7 +26,7 @@ import {
   restoreNodeOnServer,
   updateNodeOnServer,
   updateRoleOnServer,
-} from './serverWorkspace'
+} from './serverWorkspace.js'
 
 export function getAccessibleNodeIdsForUser(_userId: string, snapshot?: WorkspaceSnapshot) {
   const workspace = snapshot ?? readWorkspaceDb()
@@ -59,18 +58,30 @@ export function getNodePathLabel(nodeId: number, nodes?: OrganizationNodeRecord[
 /**
  * 진입점/워크스페이스 화면용 스냅샷.
  * 기본값은 살아있는 노드만 담고, 휴지통(삭제된 워크스페이스 목록)을 그릴 때만 includeDeleted 를 켠다.
+ * DB revision 이 바뀌면 무조건 새 스냅샷을 만들므로, 서버에서 삭제된 항목이 캐시에 남지 않는다.
  */
+const orgSnapshotCache = new Map<boolean, { revision: number; snapshot: WorkspaceSnapshot }>()
+
 export function getOrgSnapshot(options?: { includeDeleted?: boolean }): WorkspaceSnapshot {
+  const includeDeleted = options?.includeDeleted === true
+  const revision = getWorkspaceRevision()
+  const cached = orgSnapshotCache.get(includeDeleted)
+
+  if (cached?.revision === revision) {
+    return cached.snapshot
+  }
+
   const db = readWorkspaceDb()
-  const activeNodes = options?.includeDeleted
+  const activeNodes = includeDeleted
     ? db.nodes
     : db.nodes.filter((node) => !node.isDeleted)
   const activeNodeIds = new Set(activeNodes.map((node) => node.id))
 
-  return {
+  const snapshot: WorkspaceSnapshot = {
     users: db.users.map((user) => ({ ...user })),
     nodes: activeNodes.map((node) => ({ ...node, path: [...node.path] })),
-    roles: resolveRoleAssignments(db.roles, db.authorities ?? [])
+    // normalizeServerWorkspaceDb 단계에서 이미 역할 정의가 결합되어 있으므로 여기서 다시 계산하지 않는다.
+    roles: db.roles
       .filter((role) => !role.isDeleted && activeNodeIds.has(role.nodeId))
       .map((role) => ({ ...role })),
     workItems: db.workItems
@@ -81,6 +92,9 @@ export function getOrgSnapshot(options?: { includeDeleted?: boolean }): Workspac
     activities: (db.activities ?? []).map((act) => ({ ...act })),
     files: (db.files ?? []).map((f) => ({ ...f })),
   }
+
+  orgSnapshotCache.set(includeDeleted, { revision, snapshot })
+  return snapshot
 }
 
 export async function fetchNodeDetail(nodeId: number | string): Promise<WorkspaceSnapshot> {

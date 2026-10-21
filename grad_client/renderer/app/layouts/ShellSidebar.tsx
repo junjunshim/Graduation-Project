@@ -339,7 +339,7 @@ export function ShellSidebar({ userId, isCollapsed, onToggleCollapsed, onSignOut
           </nav>
         </div>
 
-        <SidebarFavorites key={userId} userId={userId} />
+        <SidebarFavorites key={userId} userId={userId} snapshot={snapshot} />
 
         <div className={styles.sidebarBottom}>
           <button

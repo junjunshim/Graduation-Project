@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { WindowTitleBar } from '../chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../chrome/windowControls'
@@ -69,10 +69,14 @@ export function AppShell() {
     workspaceRootParam ??
     getActiveWorkspaceRootId(currentUser.userId) ??
     getDefaultWorkspaceRootId(currentUser.userId)
-  const overview = getWorkspaceOverview(currentUser.userId, snapshot, {
-    rootNodeId: headingRootId,
-    singleNodeOnly: true,
-  })
+  const overview = useMemo(
+    () =>
+      getWorkspaceOverview(currentUser.userId, snapshot, {
+        rootNodeId: headingRootId,
+        singleNodeOnly: true,
+      }),
+    [currentUser.userId, headingRootId, snapshot],
+  )
   const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext, location.search)

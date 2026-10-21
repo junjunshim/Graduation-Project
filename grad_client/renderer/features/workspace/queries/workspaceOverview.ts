@@ -286,16 +286,17 @@ export function getWorkspaceOverview(
   const nodeActivities = (snapshot.activities ?? []).filter(
     (act) => scopedNodeId === undefined || act.nodeId === scopedNodeId,
   )
+  const visibleWorkItemIds = new Set(visibleWorkItems.map((item) => item.workItemId))
   const nodeFiles = (snapshot.files ?? []).filter(
-    (file) => !file.isDeleted && visibleWorkItems.some((item) => item.workItemId === file.workItemId),
+    (file) => !file.isDeleted && visibleWorkItemIds.has(file.workItemId),
   )
   const allNodeFiles = (snapshot.files ?? []).filter(
-    (file) => visibleWorkItems.some((item) => item.workItemId === file.workItemId),
+    (file) => visibleWorkItemIds.has(file.workItemId),
   )
 
+  const nodeTypeById = new Map(snapshot.nodes.map((node) => [node.id, node.nodeType]))
   const orgRoles = snapshot.roles.filter((role) => {
-    const node = snapshot.nodes.find((n) => n.id === role.nodeId)
-    return node?.nodeType !== 'USER'
+    return nodeTypeById.get(role.nodeId) !== 'USER'
   })
 
   return {

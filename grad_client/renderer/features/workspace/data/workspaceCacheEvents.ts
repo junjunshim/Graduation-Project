@@ -28,12 +28,34 @@ export function subscribeToGithubCache(listener: (event: { nodeId?: number }) =>
   return () => window.removeEventListener(GITHUB_CACHE_UPDATED_EVENT, handle)
 }
 
+let isWorkspaceCacheNotificationQueued = false
+
 export function notifyWorkspaceCacheUpdated() {
   if (typeof window === 'undefined') {
     return
   }
 
-  window.dispatchEvent(new Event(WORKSPACE_CACHE_UPDATED_EVENT))
+  // 한 tick 안에서 여러 번 저장해도 구독자(스냅샷/overview 계산)는 한 번만 깨어나게 한다.
+  // 저장 자체는 writeServerWorkspaceDb 에서 즉시 끝나므로 데이터 최신성에는 영향이 없다.
+  if (isWorkspaceCacheNotificationQueued) {
+    return
+  }
+
+  isWorkspaceCacheNotificationQueued = true
+  const flush = () => {
+    isWorkspaceCacheNotificationQueued = false
+    // 테스트/언마운트 중 window 가 사라졌다면 알림만 건너뛴다. 저장된 데이터 자체는 이미 최신이다.
+    if (typeof window === 'undefined') {
+      return
+    }
+    window.dispatchEvent(new Event(WORKSPACE_CACHE_UPDATED_EVENT))
+  }
+
+  if (typeof queueMicrotask === 'function') {
+    queueMicrotask(flush)
+  } else {
+    Promise.resolve().then(flush)
+  }
 }
 
 export function notifyRecurringCacheUpdated(nodeId?: number) {

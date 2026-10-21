@@ -329,6 +329,18 @@ export function normalizeServerWorkspaceDb(raw: unknown): WorkspaceDatabase {
 // In-memory cache to eliminate repetitive, expensive JSON.parse / JSON.stringify calls
 let inMemoryServerDb: WorkspaceDatabase | null = null
 
+// 서버 스코프가 적용될 때마다 증가한다. 파생 스냅샷 캐시는 이 값이 바뀌면 반드시 폐기한다.
+let workspaceRevision = 0
+
+export function getWorkspaceRevision(): number {
+  return workspaceRevision
+}
+
+function markWorkspaceChanged() {
+  workspaceRevision += 1
+  notifyWorkspaceCacheUpdated()
+}
+
 /** 서버 컨텍스트를 로컬에 캐시한 워크스페이스 DB */
 export function readWorkspaceDb(): WorkspaceDatabase {
   if (inMemoryServerDb) {
@@ -360,25 +372,39 @@ export function readWorkspaceDb(): WorkspaceDatabase {
 export function writeServerWorkspaceDb(db: WorkspaceDatabase) {
   inMemoryServerDb = db
   if (!hasStorage()) {
+    markWorkspaceChanged()
     return
   }
 
   const nextRaw = JSON.stringify(db)
-  const prevRaw = window.localStorage.getItem(SERVER_DB_STORAGE_KEY)
-  if (prevRaw === nextRaw) {
-    return
-  }
+  let unchanged = false
 
-  window.localStorage.setItem(SERVER_DB_STORAGE_KEY, nextRaw)
-  notifyWorkspaceCacheUpdated()
+  try {
+    const prevRaw = window.localStorage.getItem(SERVER_DB_STORAGE_KEY)
+    if (prevRaw === nextRaw) {
+      unchanged = true
+      return
+    }
+
+    window.localStorage.setItem(SERVER_DB_STORAGE_KEY, nextRaw)
+  } finally {
+    // Even if persistence fails, the in-memory server data is already authoritative.
+    if (!unchanged) {
+      markWorkspaceChanged()
+    }
+  }
 }
 
 export function clearServerWorkspaceDb() {
   inMemoryServerDb = null
   if (!hasStorage()) {
+    markWorkspaceChanged()
     return
   }
 
-  window.localStorage.removeItem(SERVER_DB_STORAGE_KEY)
-  notifyWorkspaceCacheUpdated()
+  try {
+    window.localStorage.removeItem(SERVER_DB_STORAGE_KEY)
+  } finally {
+    markWorkspaceChanged()
+  }
 }

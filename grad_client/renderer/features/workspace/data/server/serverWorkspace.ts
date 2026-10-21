@@ -204,10 +204,17 @@ function getCurrentServerEmail() {
   return normalizeEmail(getServerSessionEmail() ?? '')
 }
 
-function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDatabase): WorkspaceDatabase {
+function mergeServerUpdates(
+  current: WorkspaceDatabase,
+  updates: WorkspaceDatabase,
+  options?: { authoritativeNodeIds?: Iterable<number> },
+): WorkspaceDatabase {
   // 노드별 업무 재구성: updates에 노드가 들어온 경우, 해당 노드의 업무는 updates의 업무로 완전히 교체(Replace)
   // updates에 포함된 노드 ID 목록
-  const updatedNodeIds = new Set(updates.nodes.map((n) => n.id))
+  const updatedNodeIds = new Set<number>(updates.nodes.map((n) => n.id))
+  for (const nodeId of options?.authoritativeNodeIds ?? []) {
+    updatedNodeIds.add(nodeId)
+  }
 
   // 1. 노드: updates에 있는 노드로 교체/추가
   const nodesById = new Map(current.nodes.map((node) => [node.id, node]))
@@ -243,10 +250,15 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
 
   // 6. 파일: updates의 노드 업무 파일로 교체 (파일 ID 및 workItemId 기준 중복 방지)
   const updatedWorkItemIds = new Set(updates.workItems.map((w) => w.workItemId))
+  const removedWorkItemIds = new Set(
+    current.workItems
+      .filter((item) => updatedNodeIds.has(item.ownerNodeId) && !updatedWorkItemIds.has(item.workItemId))
+      .map((item) => item.workItemId),
+  )
   const filesById = new Map((current.files ?? []).map((f) => [f.id, f]))
-  if (updatedWorkItemIds.size > 0) {
+  if (updatedWorkItemIds.size > 0 || removedWorkItemIds.size > 0) {
     ;(current.files ?? []).forEach((f) => {
-      if (updatedWorkItemIds.has(f.workItemId)) {
+      if (updatedWorkItemIds.has(f.workItemId) || removedWorkItemIds.has(f.workItemId)) {
         filesById.delete(f.id)
       }
     })
@@ -254,11 +266,17 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
   ;(updates.files ?? []).forEach((f) => filesById.set(f.id, f))
   const files = Array.from(filesById.values())
 
-  // 7. 활동 및 멘션 병합
-  const mentionsById = new Map((current.mentions ?? []).map((m) => [m.id, m]))
-  const activitiesById = new Map((current.activities ?? []).map((act) => [act.id, act]))
-  ;(updates.mentions ?? []).forEach((m) => mentionsById.set(m.id, m))
-  ;(updates.activities ?? []).forEach((act) => activitiesById.set(act.id, act))
+  // 7. 활동: 노드 상세 응답은 해당 노드의 권위 데이터이므로, 응답에 없는 활동은 캐시에서도 제거한다.
+  const activities = [
+    ...(current.activities ?? []).filter((act) => !updatedNodeIds.has(act.nodeId)),
+    ...(updates.activities ?? []),
+  ]
+
+  // 8. 멘션: 업무 교체로 사라진 업무의 멘션만 정리한다. 그 외 멘션은 알림 이력이므로 보존한다.
+  const mentions = [
+    ...(current.mentions ?? []).filter((mention) => !removedWorkItemIds.has(mention.workItemId)),
+    ...(updates.mentions ?? []),
+  ]
 
   const nodes = Array.from(nodesById.values())
 
@@ -269,8 +287,8 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
     roles,
     workItems,
     authorities,
-    mentions: Array.from(mentionsById.values()),
-    activities: Array.from(activitiesById.values()),
+    mentions,
+    activities,
     files,
     counters: {
       node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
@@ -393,14 +411,31 @@ export async function loadWorkspaceDirectoryScopeOnServer(email = getCurrentServ
   const current = readWorkspaceDb()
   const { workspace: updates } = normalizeServerContext(items, email, { referenceWorkspace: current })
 
-  // 소프트 딜리트 및 휴지통 복구를 지원하기 위해, 기존 업무(workItems)와 파일(files)은 캐시에서 임의 삭제하지 않고 그대로 보존
+  // /context/scope 는 접근 가능한 노드 전체를 권위 데이터로 반환한다.
+  // 응답에서 사라진 노드의 업무/파일/활동은 서버에서 더 이상 이 사용자의 스코프가 아니므로 함께 제거한다.
+  // 살아있는 노드(삭제되어 is_deleted=true 로 내려오는 노드 포함)의 기존 업무/파일은 노드 상세 조회가 교체한다.
+  const visibleNodeIds = new Set(updates.nodes.map((node) => node.id))
+  const removedWorkItemIds = new Set(
+    current.workItems
+      .filter((item) => !visibleNodeIds.has(item.ownerNodeId))
+      .map((item) => item.workItemId),
+  )
+  const workItems = current.workItems.filter(
+    (item) => visibleNodeIds.has(item.ownerNodeId) && !removedWorkItemIds.has(item.workItemId),
+  )
+  const files = (current.files ?? []).filter((file) => !removedWorkItemIds.has(file.workItemId))
+  const activities = (current.activities ?? []).filter((activity) => visibleNodeIds.has(activity.nodeId))
+  const mentions = (current.mentions ?? []).filter((mention) => !removedWorkItemIds.has(mention.workItemId))
+
   const updatedDb: WorkspaceDatabase = {
     ...current,
     nodes: updates.nodes,
     roles: updates.roles,
     authorities: updates.authorities ?? [],
-    workItems: current.workItems,
-    files: current.files,
+    workItems,
+    files,
+    activities,
+    mentions,
     counters: {
       ...current.counters,
       node: Math.max(0, ...updates.nodes.map((node) => node.id), ...current.nodes.map((n) => n.id)) + 1,
@@ -449,7 +484,8 @@ export async function fetchNodeDetailOnServer(nodeId: number | string) {
     console.warn('[WorkspaceAdapter] 노드 상세 항목 정규화 이슈:', issues)
   }
 
-  const merged = mergeServerUpdates(current, normalized)
+  // Treat the requested node as authoritative even if the response omits the node record itself.
+  const merged = mergeServerUpdates(current, normalized, { authoritativeNodeIds: [parsedId] })
   writeServerWorkspaceDb(merged)
   return merged
 }

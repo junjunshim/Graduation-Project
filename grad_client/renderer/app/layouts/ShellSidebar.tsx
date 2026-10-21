@@ -13,6 +13,7 @@ import {
   WORKSPACE_SUB_TABS,
   getWorkspaceTabPermissions,
 } from '../../features/workspace/model/workspaceTabModel'
+import { prefetchWorkspaceTab } from '../../features/workspace/model/workspaceTabModules'
 import styles from './AppShell.module.css'
 
 type ShellSidebarProps = {
@@ -276,6 +277,8 @@ export function ShellSidebar({ userId, isCollapsed, onToggleCollapsed, onSignOut
                               <div key={subTab.view}>
                                 <Link
                                   to={targetHref}
+                                  onMouseEnter={() => prefetchWorkspaceTab(subTab.view)}
+                                  onFocus={() => prefetchWorkspaceTab(subTab.view)}
                                   className={[
                                     styles.subNavItem,
                                     isSubActive ? styles.subNavItemActive : '',

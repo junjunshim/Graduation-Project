@@ -26,31 +26,41 @@ import {
   type WorkspaceView,
   getWorkspaceTabPermissions,
 } from '../model/workspaceTabModel'
+import {
+  loadWorkspaceFilesTab,
+  loadWorkspaceGithubTab,
+  loadWorkspaceMembersTab,
+  loadWorkspaceOverviewTab,
+  loadWorkspaceRolesTab,
+  loadWorkspaceSchedulesTab,
+  loadWorkspaceTasksTab,
+  loadWorkspaceTimelineTab,
+} from '../model/workspaceTabModules'
 import styles from './WorkspacePage.module.css'
 
 const WorkspaceOverviewTab = lazy(() =>
-  import('../components/WorkspaceOverviewTab').then((module) => ({ default: module.WorkspaceOverviewTab })),
+  loadWorkspaceOverviewTab().then((module) => ({ default: module.WorkspaceOverviewTab })),
 )
 const WorkspaceTimelineTab = lazy(() =>
-  import('../components/WorkspaceTimelineTab').then((module) => ({ default: module.WorkspaceTimelineTab })),
+  loadWorkspaceTimelineTab().then((module) => ({ default: module.WorkspaceTimelineTab })),
 )
 const WorkspaceTasksTab = lazy(() =>
-  import('../components/WorkspaceTasksTab').then((module) => ({ default: module.WorkspaceTasksTab })),
+  loadWorkspaceTasksTab().then((module) => ({ default: module.WorkspaceTasksTab })),
 )
 const WorkspaceSchedulesTab = lazy(() =>
-  import('../components/WorkspaceSchedulesTab').then((module) => ({ default: module.WorkspaceSchedulesTab })),
+  loadWorkspaceSchedulesTab().then((module) => ({ default: module.WorkspaceSchedulesTab })),
 )
 const WorkspaceFilesTab = lazy(() =>
-  import('../components/WorkspaceFilesTab').then((module) => ({ default: module.WorkspaceFilesTab })),
+  loadWorkspaceFilesTab().then((module) => ({ default: module.WorkspaceFilesTab })),
 )
 const WorkspaceGithubTab = lazy(() =>
-  import('../components/WorkspaceGithubTab').then((module) => ({ default: module.WorkspaceGithubTab })),
+  loadWorkspaceGithubTab().then((module) => ({ default: module.WorkspaceGithubTab })),
 )
 const WorkspaceMembersTab = lazy(() =>
-  import('../components/WorkspaceMembersTab').then((module) => ({ default: module.WorkspaceMembersTab })),
+  loadWorkspaceMembersTab().then((module) => ({ default: module.WorkspaceMembersTab })),
 )
 const WorkspaceRolesTab = lazy(() =>
-  import('../components/WorkspaceRolesTab').then((module) => ({ default: module.WorkspaceRolesTab })),
+  loadWorkspaceRolesTab().then((module) => ({ default: module.WorkspaceRolesTab })),
 )
 
 function WorkspaceTabFallback() {

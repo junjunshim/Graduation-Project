@@ -28,6 +28,8 @@ import {
   updateRoleOnServer,
 } from './serverWorkspace.js'
 
+const nodeIndexCache = new WeakMap<OrganizationNodeRecord[], Map<number, OrganizationNodeRecord>>()
+
 export function getAccessibleNodeIdsForUser(_userId: string, snapshot?: WorkspaceSnapshot) {
   const workspace = snapshot ?? readWorkspaceDb()
 
@@ -44,14 +46,26 @@ export function getAccessibleNodeIdsForUser(_userId: string, snapshot?: Workspac
 export function getNodePathLabel(nodeId: number, nodes?: OrganizationNodeRecord[]) {
   const db = nodes ? null : readWorkspaceDb()
   const sourceNodes = nodes ?? db?.nodes ?? []
-  const node = sourceNodes.find((candidate) => candidate.id === nodeId)
+  let nodeIndex = nodeIndexCache.get(sourceNodes)
+
+  if (!nodeIndex) {
+    nodeIndex = new Map<number, OrganizationNodeRecord>()
+    sourceNodes.forEach((node) => {
+      if (!nodeIndex?.has(node.id)) {
+        nodeIndex?.set(node.id, node)
+      }
+    })
+    nodeIndexCache.set(sourceNodes, nodeIndex)
+  }
+
+  const node = nodeIndex.get(nodeId)
 
   if (!node) {
     return '경로 없음'
   }
 
   return node.path
-    .map((pathNodeId) => sourceNodes.find((candidate) => candidate.id === pathNodeId)?.name ?? `Node ${pathNodeId}`)
+    .map((pathNodeId) => nodeIndex?.get(pathNodeId)?.name ?? `Node ${pathNodeId}`)
     .join(' / ')
 }
 

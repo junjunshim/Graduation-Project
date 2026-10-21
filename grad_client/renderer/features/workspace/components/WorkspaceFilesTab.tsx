@@ -13,6 +13,7 @@ import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
 import type { WorkItemFileRecord, WorkItemRecord } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
+import { groupFilesByWorkItem } from '../model/workspaceFileIndex'
 import { FileContentViewerModal } from './FileContentViewerModal'
 import {
   useFileContextMenu,
@@ -196,17 +197,10 @@ export function WorkspaceFilesTab({
   }, [folderMode, showDeletedFiles])
 
   // --- 업무 폴더 매핑 ---
-  const filesByWorkItem = useMemo(() => {
-    const map = new Map<string, UnifiedFileRecord[]>()
-    workItems.forEach((item) => {
-      const targetFiles = unifiedWorkItemFiles.filter((f) => {
-        if (f.workItemId !== item.workItemId) return false
-        return showDeletedFiles ? Boolean(f.isDeleted) : !f.isDeleted
-      })
-      map.set(item.workItemId, targetFiles)
-    })
-    return map
-  }, [unifiedWorkItemFiles, showDeletedFiles, workItems])
+  const filesByWorkItem = useMemo(
+    () => groupFilesByWorkItem(workItems, unifiedWorkItemFiles, showDeletedFiles),
+    [unifiedWorkItemFiles, showDeletedFiles, workItems],
+  )
 
   const filteredWorkFolders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()

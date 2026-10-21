@@ -9,6 +9,7 @@
 #include <vector>
 #include "NotificationWebSocketController.h"
 #include "GitRunner.h"
+#include "LogContext.h"
 #include "WorkerLimiter.h"
 
 namespace {
@@ -367,18 +368,38 @@ int main() {
 
     // 6. CORS 허용 설정 (모든 도메인 및 포트 허용)
     drogon::app().registerPostHandlingAdvice([](const drogon::HttpRequestPtr &req, const drogon::HttpResponsePtr &resp) {
+        const std::string requestId = app_utils::ensureRequestId(req);
+        resp->addHeader(app_utils::kRequestIdHeader, requestId);
         resp->addHeader("Access-Control-Allow-Origin", "*"); // 모든 도메인 허용
         resp->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
-        resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+        resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Request-ID");
+        // 브라우저가 오류 응답에서도 요청 ID를 읽어 CS 문의에 쓸 수 있게 노출한다.
+        resp->addHeader("Access-Control-Expose-Headers", "X-Request-ID");
+
+        const int status = static_cast<int>(resp->statusCode());
+        if (status >= static_cast<int>(drogon::k400BadRequest)) {
+            std::string actor = "-";
+            const std::string userEmail = req->attributes()->get<std::string>("user_email");
+            if (!userEmail.empty()) {
+                actor = app_utils::maskEmail(userEmail);
+            }
+            LOG_WARN << "[HTTP] event=http.error " << app_utils::requestIdTag(requestId)
+                     << " method=" << req->methodString()
+                     << " path=" << app_utils::sanitizeLogValue(std::string(req->path()), 512)
+                     << " status=" << status << " user=" << actor;
+        }
     });
 
-    // 7. OPTIONS 요청(Preflight) 처리를 위한 간단한 처리
+    // 7. 요청 ID + OPTIONS 요청(Preflight) 처리
     drogon::app().registerPreRoutingAdvice([](const drogon::HttpRequestPtr &req, drogon::AdviceCallback &&acb, drogon::AdviceChainCallback &&accb) {
+        const std::string requestId = app_utils::ensureRequestId(req);
         if (req->method() == drogon::Options) {
             auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->addHeader(app_utils::kRequestIdHeader, requestId);
             resp->addHeader("Access-Control-Allow-Origin", "*");
             resp->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
-            resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+            resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Request-ID");
+            resp->addHeader("Access-Control-Expose-Headers", "X-Request-ID");
             resp->setStatusCode(drogon::k200OK);
             acb(resp);
             return;

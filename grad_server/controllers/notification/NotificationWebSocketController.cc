@@ -1,4 +1,5 @@
 #include "NotificationWebSocketController.h"
+#include "LogContext.h"
 #include <jwt-cpp/jwt.h>
 #include <json/json.h>
 #include <drogon/drogon.h>
@@ -29,7 +30,8 @@ std::string toJsonString(const Json::Value &value)
 } // namespace
 
 // JWT Access Token 을 검증하고 user_email 을 반환한다. 검증에 실패하면 빈 문자열을 반환한다.
-std::string NotificationWebSocketController::verifyAccessToken(const std::string &token)
+std::string NotificationWebSocketController::verifyAccessToken(const std::string &token,
+                                                               const std::string &requestId)
 {
     if (token.empty())
     {
@@ -50,7 +52,8 @@ std::string NotificationWebSocketController::verifyAccessToken(const std::string
     }
     catch (const std::exception &e)
     {
-        LOG_WARN << "WebSocket handshake failed: Invalid or expired token. Reason: " << e.what();
+        LOG_WARN << "[WS] event=notification.auth_failed " << app_utils::requestIdTag(requestId)
+                 << " reason=invalid_token error=" << app_utils::sanitizeLogValue(e.what(), 256);
         return "";
     }
 }
@@ -123,9 +126,10 @@ bool NotificationWebSocketController::registerConnection(const WebSocketConnecti
 
     wsConnPtr->setContext(session);
 
-    LOG_INFO << "WebSocket connected: " << user_email
-             << " (client_id: " << (client_id.empty() ? "-" : client_id)
-             << ", active sessions: " << activeCount << ")";
+    LOG_INFO << "[WS] event=notification.connected " << app_utils::requestIdTag(session->request_id)
+             << " user=" << app_utils::maskEmail(user_email)
+             << " client_id=" << app_utils::sanitizeLogValue(client_id.empty() ? "-" : client_id, 128)
+             << " active_sessions=" << activeCount;
 
     // 호출자는 AUTH_OK 를 먼저 보낸 뒤 이 값이 true 일 때 접속 상태를 브로드캐스트한다.
     // (핸드셰이크 응답이 채널 현황 조회에 묶여 지연되지 않도록 한다.)
@@ -446,6 +450,7 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
 {
     // 1. 세션을 만들어 연결에 바인딩한다. 인증이 끝나기 전까지 authenticated 는 false 다.
     auto session = std::make_shared<WsSession>();
+    session->request_id = app_utils::ensureRequestId(req);
     session->client_id = req->getParameter("client_id");
     wsConnPtr->setContext(session);
 
@@ -454,7 +459,7 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
     auto queryToken = req->getParameter("token");
     if (!queryToken.empty())
     {
-        auto userEmail = verifyAccessToken(queryToken);
+        auto userEmail = verifyAccessToken(queryToken, session->request_id);
         if (userEmail.empty())
         {
             wsConnPtr->forceClose();
@@ -484,7 +489,8 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
         auto conn = weakConn.lock();
         if (conn && !session->authenticated && !conn->disconnected())
         {
-            LOG_WARN << "WebSocket handshake failed: AUTH frame was not received in time.";
+            LOG_WARN << "[WS] event=notification.auth_timeout " << app_utils::requestIdTag(session->request_id)
+                     << " client_id=" << app_utils::sanitizeLogValue(session->client_id.empty() ? "-" : session->client_id, 128);
             conn->forceClose();
         }
     });
@@ -510,12 +516,13 @@ void NotificationWebSocketController::handleNewMessage(const WebSocketConnection
 
         if (!isAuthFrame)
         {
-            LOG_WARN << "WebSocket handshake failed: The first frame must be an AUTH message.";
+            LOG_WARN << "[WS] event=notification.auth_failed " << app_utils::requestIdTag(session->request_id)
+                     << " reason=first_frame_not_auth";
             wsConnPtr->forceClose();
             return;
         }
 
-        auto userEmail = verifyAccessToken(root["token"].asString());
+        auto userEmail = verifyAccessToken(root["token"].asString(), session->request_id);
         if (userEmail.empty())
         {
             // 클라이언트가 무한 재연결에 빠지지 않도록 인증 실패를 명시적으로 알린 뒤 닫는다.
@@ -588,7 +595,9 @@ void NotificationWebSocketController::handleNewMessage(const WebSocketConnection
         }
         catch (const std::exception &e)
         {
-            LOG_WARN << "채널 참여자 등록 실패: " << e.what();
+            LOG_WARN << "[WS] event=notification.channel_join_failed " << app_utils::requestIdTag(session->request_id)
+                     << " channel_id=" << channelId
+                     << " error=" << app_utils::sanitizeLogValue(e.what(), 512);
 
             Json::Value failure;
             failure["type"] = "CHAT";
@@ -609,7 +618,9 @@ void NotificationWebSocketController::handleNewMessage(const WebSocketConnection
         return;
     }
 
-    LOG_DEBUG << "WebSocket message from " << session->user_email << " (type: " << messageType << ")";
+    LOG_DEBUG << "[WS] event=notification.message " << app_utils::requestIdTag(session->request_id)
+              << " user=" << app_utils::maskEmail(session->user_email)
+              << " type=" << app_utils::sanitizeLogValue(messageType, 64);
 }
 
 void NotificationWebSocketController::handleConnectionClosed(const WebSocketConnectionPtr &wsConnPtr)
@@ -663,7 +674,8 @@ void NotificationWebSocketController::handleConnectionClosed(const WebSocketConn
         broadcastPresenceToAllRooms();
     }
 
-    LOG_INFO << "WebSocket disconnected: " << user_email;
+    LOG_INFO << "[WS] event=notification.disconnected " << app_utils::requestIdTag(session->request_id)
+             << " user=" << app_utils::maskEmail(user_email);
 }
 
 bool NotificationWebSocketController::sendNotificationToUser(const std::string &user_email, const std::string &message)
@@ -778,7 +790,7 @@ static void processActivityNotification(const std::string &rawPayload)
     Json::Value root;
     if (!reader.parse(rawPayload, root))
     {
-        LOG_ERROR << "[NotificationListener] Failed to parse activity payload: " << rawPayload;
+        LOG_ERROR << "[WS] event=activity_payload_invalid bytes=" << rawPayload.size();
         return;
     }
 

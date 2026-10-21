@@ -60,9 +60,9 @@ void RoleController::addRole(const HttpRequestPtr &req, std::function<void(const
             notifyAuthorityChangedAsync(node_id);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -131,9 +131,9 @@ void RoleController::updateRole(const HttpRequestPtr &req, std::function<void(co
             notifyAuthorityChangedAsync(node_id);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -203,8 +203,8 @@ void RoleController::createRoleDefinition(const HttpRequestPtr &req, std::functi
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -265,8 +265,8 @@ void RoleController::updateRoleAuthority(const HttpRequestPtr &req, std::functio
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -315,8 +315,8 @@ void RoleController::renameRoleDefinition(const HttpRequestPtr &req, std::functi
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -371,8 +371,8 @@ void RoleController::getRoleDefinitionDeletionPreview(const HttpRequestPtr &req,
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -421,8 +421,8 @@ void RoleController::deleteRoleDefinition(const HttpRequestPtr &req, std::functi
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -475,8 +475,8 @@ void RoleController::getRoleRemovalPreview(const HttpRequestPtr &req, std::funct
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -533,8 +533,8 @@ void RoleController::removeRole(const HttpRequestPtr &req, std::function<void(co
             // 통보가 실패해도 역할 변경 자체를 실패시키지 않는다.
             notifyAuthorityChangedAsync(node_id);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 

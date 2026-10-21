@@ -38,6 +38,7 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
   private:
     // 연결 1개당 유지하는 세션 상태. 인증 전에는 user_email 이 비어 있고 authenticated 가 false 다.
     struct WsSession {
+        std::string request_id;       // WebSocket 핸드셰이크 HTTP 요청의 상관 키
         std::string user_email;
         std::string client_id;
         bool authenticated = false;
@@ -66,7 +67,7 @@ class NotificationWebSocketController : public drogon::WebSocketController<Notif
     }
 
     // JWT Access Token 을 검증하고 user_email 을 반환한다. 검증에 실패하면 빈 문자열.
-    static std::string verifyAccessToken(const std::string &token);
+    static std::string verifyAccessToken(const std::string &token, const std::string &requestId = "");
 
     // 인증된 연결을 샤드에 등록한다. 같은 client_id 의 기존 연결은 교체한다.
     // 사용자가 오프라인 -> 온라인으로 바뀌었으면 true 를 반환한다.

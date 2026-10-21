@@ -76,8 +76,8 @@ HttpResponsePtr errorResponse(const std::string &code, const std::string &messag
 }
 
 // DB 오류를 기존 컨트롤러와 같은 규격({status, code, message})으로 변환한다.
-HttpResponsePtr dbErrorResponse(const orm::DrogonDbException &e) {
-    Json::Value ret = parseDbError(e);
+HttpResponsePtr dbErrorResponse(const orm::DrogonDbException &e, const std::string &requestId) {
+    Json::Value ret = parseDbError(e, requestId);
     auto httpCode = static_cast<HttpStatusCode>(ret["http_code"].asInt());
     ret.removeMember("http_code");
     return makeJsonResponse(ret, httpCode);
@@ -325,20 +325,22 @@ std::string requesterEmail(const HttpRequestPtr &req) {
 // 동시 실행 수는 WorkerLimiter 가 막는다. 상한이 없으면 요청 수만큼 스레드와
 // git 프로세스가 생겨 메모리가 예측 불가능해지고, DB 커넥션(사설 풀)이 마르면 무관한
 // 요청까지 줄을 선다. 원격 작업(clone/fetch/push)은 Lane::Network 로 넘겨 더 좁은 한도를 쓴다.
-void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
-                std::function<HttpResponsePtr()> &&work,
-                WorkerLimiter::Lane lane = WorkerLimiter::Lane::Normal) {
+void runOffLoopImpl(std::function<void(const HttpResponsePtr &)> &&callback,
+                    std::function<HttpResponsePtr()> &&work,
+                    WorkerLimiter::Lane lane,
+                    std::string requestId) {
     auto cb = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
-    std::thread worker([cb, work = std::move(work), lane]() {
+    std::thread worker([cb, work = std::move(work), lane, requestId = std::move(requestId)]() {
         auto &limiter = WorkerLimiter::instance();
         HttpResponsePtr resp;
 
         if (!limiter.acquire(lane)) {
             // 동시 실행 상한과 대기 줄 상한을 모두 넘었다. 더 기다리게 하면 그 대기가
             // 곧 스레드 쌓기라, 즉시 거부하고 클라이언트가 다시 시도하게 한다.
-            LOG_WARN << "동시 작업 한도 초과 — 요청을 거부합니다 (running=" << limiter.running()
-                     << ", network=" << limiter.networkRunning()
-                     << ", waiting=" << limiter.waiting() << ")";
+            LOG_WARN << "[GITHUB] event=worker.limit " << app_utils::requestIdTag(requestId)
+                     << " running=" << limiter.running()
+                     << " network=" << limiter.networkRunning()
+                     << " waiting=" << limiter.waiting();
             resp = errorResponse("503",
                                  "서버가 동시에 처리할 수 있는 작업 수를 넘었습니다. 잠시 뒤 다시 시도해 주세요.",
                                  k503ServiceUnavailable);
@@ -347,9 +349,10 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
             try {
                 resp = work();
             } catch (const orm::DrogonDbException &e) {
-                resp = dbErrorResponse(e);
+                resp = dbErrorResponse(e, requestId);
             } catch (const std::exception &e) {
-                LOG_ERROR << "GitHub 핸들러 실패: " << e.what();
+                LOG_ERROR << "[GITHUB] event=handler.failed " << app_utils::requestIdTag(requestId)
+                          << " error=" << app_utils::sanitizeLogValue(e.what(), 1024);
                 resp = errorResponse("500", "서버 처리 중 오류가 발생했습니다.", k500InternalServerError);
             }
             // 위 catch 가 모든 예외를 삼키므로 여기까지 반드시 온다 — 슬롯이 새지 않는다.
@@ -361,10 +364,30 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
     worker.detach();
 }
 
+void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
+                std::function<HttpResponsePtr()> &&work,
+                WorkerLimiter::Lane lane = WorkerLimiter::Lane::Normal) {
+    runOffLoopImpl(std::move(callback), std::move(work), lane, std::string());
+}
+
+void runOffLoop(const HttpRequestPtr &req,
+                std::function<void(const HttpResponsePtr &)> &&callback,
+                std::function<HttpResponsePtr()> &&work,
+                WorkerLimiter::Lane lane = WorkerLimiter::Lane::Normal) {
+    runOffLoopImpl(std::move(callback), std::move(work), lane, app_utils::requestIdOf(req));
+}
+
 // 원격 작업(clone / fetch / push) 전용 입구. 타임아웃이 분 단위라 더 좁은 차선을 쓴다.
 void runNetworkOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
                        std::function<HttpResponsePtr()> &&work) {
-    runOffLoop(std::move(callback), std::move(work), WorkerLimiter::Lane::Network);
+    runOffLoopImpl(std::move(callback), std::move(work), WorkerLimiter::Lane::Network, std::string());
+}
+
+void runNetworkOffLoop(const HttpRequestPtr &req,
+                       std::function<void(const HttpResponsePtr &)> &&callback,
+                       std::function<HttpResponsePtr()> &&work) {
+    runOffLoopImpl(std::move(callback), std::move(work), WorkerLimiter::Lane::Network,
+                   app_utils::requestIdOf(req));
 }
 
 // 작업 트리 헬퍼 (브랜치 격리 = git worktree)
@@ -1175,7 +1198,7 @@ void GithubController::connectRepository(const HttpRequestPtr &req, std::functio
     const std::string requestedBranch = (*jsonPtr)["default_branch"].isNull() ? "" : (*jsonPtr)["default_branch"].asString();
     const std::string givenUrl = (*jsonPtr)["clone_url"].isNull() ? "" : (*jsonPtr)["clone_url"].asString();
 
-    runNetworkOffLoop(std::move(callback), [requester, nodeId, owner, repo, requestedBranch, givenUrl]() -> HttpResponsePtr {
+    runNetworkOffLoop(req, std::move(callback), [requester, nodeId, owner, repo, requestedBranch, givenUrl]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         const std::string url = givenUrl.empty()
                                     ? ("https://github.com/" + owner + "/" + repo + ".git")
@@ -1257,7 +1280,7 @@ void GithubController::getRepositories(const HttpRequestPtr &req, std::function<
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, nodeId]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, nodeId]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         auto result = db->execSqlSync("SELECT * FROM get_github_repositories_by_node($1, $2)", requester, nodeId);
         return successResponse(rowsToArray(result), "저장소 목록을 조회했습니다.");
@@ -1273,7 +1296,7 @@ void GithubController::disconnectRepository(const HttpRequestPtr &req, std::func
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         // clone 디렉터리는 지우지 않는다. 연결만 끊고 다시 연결하면 그대로 재사용한다.
         auto result = db->execSqlSync("SELECT * FROM delete_github_repository($1, $2)", requester, repoId);
@@ -1295,7 +1318,7 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
     const std::string path = normalizePath(req->getParameter("path"));
     const std::string requester = requesterEmail(req);
 
-    runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         Json::Value repoRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
@@ -1424,7 +1447,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, path, since, refKind]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, path, since, refKind]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         Json::Value repoRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
@@ -1602,7 +1625,7 @@ void GithubController::getRepositoryRange(const HttpRequestPtr &req, std::functi
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, base, target]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, base, target]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         Json::Value repoRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
@@ -1686,7 +1709,7 @@ void GithubController::getBranches(const HttpRequestPtr &req, std::function<void
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         Json::Value repoRow;
@@ -1786,7 +1809,7 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, limit, allRefs]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, limit, allRefs]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         Json::Value repoRow;
         if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
@@ -1872,7 +1895,7 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
 // GET /api/github/credentials — 내 자격증명 상태 (토큰은 절대 넣지 않는다)
 void GithubController::getCredentialStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         auto result = db->execSqlSync("SELECT * FROM get_github_user_credential($1)", requester);
         return successResponse(rowsToArray(result), "GitHub 자격증명 상태를 조회했습니다.");
@@ -1900,7 +1923,7 @@ void GithubController::registerCredential(const HttpRequestPtr &req, std::functi
     // 1) GitHub API(GET /user)로 토큰을 검증하고 계정(login)·스코프를 수집한다.
     //    HttpClient 는 생성한 루프에서 호출해야 하므로, 메인 루프로 올려 생성·호출을 같은 스레드에서 한다.
     auto respond = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
-    app().getLoop()->queueInLoop([respond, requester, token, key]() {
+    app().getLoop()->queueInLoop([respond, requester, token, key, req]() {
         auto client = HttpClient::newHttpClient("https://api.github.com", app().getLoop());
         auto apiReq = HttpRequest::newHttpRequest();
         apiReq->setMethod(Get);
@@ -1913,7 +1936,7 @@ void GithubController::registerCredential(const HttpRequestPtr &req, std::functi
         // client 를 캡처해 응답이 올 때까지 클라이언트가 살아 있게 한다.
         client->sendRequest(
             apiReq,
-            [client, respond, requester, token, key](ReqResult result, const HttpResponsePtr &apiResp) {
+            [client, respond, requester, token, key, req](ReqResult result, const HttpResponsePtr &apiResp) {
                 if (result != ReqResult::Ok || apiResp == nullptr) {
                     (*respond)(errorResponse("P0807", "GitHub API 에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.", k502BadGateway));
                     return;
@@ -1958,7 +1981,9 @@ void GithubController::registerCredential(const HttpRequestPtr &req, std::functi
                     [respond](const orm::Result &dbResult) {
                         (*respond)(successResponse(rowsToArray(dbResult), "GitHub 자격증명을 등록했습니다.", k201Created));
                     },
-                    [respond](const orm::DrogonDbException &e) { (*respond)(dbErrorResponse(e)); },
+                    [respond, req](const orm::DrogonDbException &e) {
+                        (*respond)(dbErrorResponse(e, app_utils::requestIdOf(req)));
+                    },
                     requester, login, token, key, std::string("pat"), scopes);
             });
     });
@@ -1967,7 +1992,7 @@ void GithubController::registerCredential(const HttpRequestPtr &req, std::functi
 // DELETE /api/github/credentials — 자격증명 연결 해제(소프트 삭제 + 암호문 폐기)
 void GithubController::disconnectCredential(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         auto result = db->execSqlSync("SELECT * FROM delete_github_user_credential($1)", requester);
         return successResponse(rowsToArray(result), "GitHub 자격증명 연결을 해제했습니다.");
@@ -1985,7 +2010,7 @@ void GithubController::getPresence(const HttpRequestPtr &req, std::function<void
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         // get_github_branches 가 저장소 존재·권한까지 확인한다.
         Json::Value branches = rowsToArray(db->execSqlSync("SELECT * FROM get_github_branches($1, $2)", requester, repoId));
@@ -2019,7 +2044,7 @@ void GithubController::createBranch(const HttpRequestPtr &req, std::function<voi
         return;
     }
 
-    runOffLoop(std::move(callback), [requester, repoId, name, baseBranch]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, name, baseBranch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         // 1) 브랜치 행을 먼저 만든다(멱등). 저장소·권한 확인과 worktree 경로 계산은 SQL 이 맡는다.
@@ -2097,7 +2122,7 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
     const bool force = body["force"].isBool() ? body["force"].asBool() : (req->getParameter("force") == "true");
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, name, force]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, name, force]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         Json::Value repoRow;
@@ -2216,7 +2241,7 @@ void GithubController::getStatus(const HttpRequestPtr &req, std::function<void(c
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
@@ -2257,7 +2282,7 @@ void GithubController::stagePaths(const HttpRequestPtr &req, std::function<void(
         return;
     }
 
-    runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
@@ -2304,7 +2329,7 @@ void GithubController::unstagePaths(const HttpRequestPtr &req, std::function<voi
         return;
     }
 
-    runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
@@ -2350,7 +2375,7 @@ void GithubController::discardPaths(const HttpRequestPtr &req, std::function<voi
         return;
     }
 
-    runOffLoop(std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, paths]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
@@ -2480,7 +2505,7 @@ void GithubController::createFileEntry(const HttpRequestPtr &req, std::function<
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
@@ -2545,7 +2570,7 @@ void GithubController::createDirectory(const HttpRequestPtr &req, std::function<
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, path]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
@@ -2601,7 +2626,7 @@ void GithubController::renameFileEntry(const HttpRequestPtr &req, std::function<
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, from, to]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, from, to]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
@@ -2686,7 +2711,7 @@ void GithubController::deleteFileEntry(const HttpRequestPtr &req, std::function<
     const bool force = body["force"].isBool() ? body["force"].asBool() : (req->getParameter("force") == "true");
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch, path, force]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, path, force]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
@@ -2770,7 +2795,7 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
     const std::string branch = body["branch"].isString() ? trim(body["branch"].asString()) : trim(req->getParameter("branch"));
     const std::string requester = requesterEmail(req);
 
-    runNetworkOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+    runNetworkOffLoop(req, std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         Json::Value repoRow;
@@ -2862,7 +2887,7 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback),
+    runOffLoop(req, std::move(callback),
                [requester, repoId, branch, message, paths, identityName, identityEmail]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
@@ -3019,7 +3044,7 @@ void GithubController::getSync(const HttpRequestPtr &req, std::function<void(con
     }
 
     const std::string requester = requesterEmail(req);
-    runOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
         std::string workDir;
         HttpResponsePtr failure;
         if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
@@ -3049,7 +3074,7 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
     }
 
     const std::string requester = requesterEmail(req);
-    runNetworkOffLoop(std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+    runNetworkOffLoop(req, std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         std::string workDir;
@@ -3147,7 +3172,7 @@ void GithubController::createHandoffCode(const HttpRequestPtr &req, std::functio
     const int nodeId = (*jsonPtr)["node_id"].asInt();
     const int repoId = (*jsonPtr)["repo_id"].asInt();
 
-    runOffLoop(std::move(callback), [requester, nodeId, repoId]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, nodeId, repoId]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         // 권한·저장소-노드 일치 검사는 SQL 함수가 수행한다(불일치면 P0801).
         auto result = db->execSqlSync("SELECT * FROM create_github_handoff_code($1, $2, $3)",
@@ -3167,7 +3192,7 @@ void GithubController::exchangeSession(const HttpRequestPtr &req, std::function<
 
     const std::string code = (*jsonPtr)["code"].asString();
 
-    runOffLoop(std::move(callback), [code]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [code]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         // 1) 1회용 코드를 소비한다(원자적 — 동시 요청 중 하나만 성공한다).
@@ -3215,7 +3240,7 @@ void GithubController::refreshSession(const HttpRequestPtr &req, std::function<v
 
     const std::string refreshToken = (*jsonPtr)["refresh_token"].asString();
 
-    runOffLoop(std::move(callback), [refreshToken]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [refreshToken]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         // 1) 이 토큰의 주인을 먼저 찾는다. 만료된 토큰은 여기서 걸러진다.

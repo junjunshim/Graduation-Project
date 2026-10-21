@@ -120,8 +120,8 @@ void ChannelController::getSidebar(const HttpRequestPtr &req, std::function<void
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -161,8 +161,8 @@ void ChannelController::createChannel(const HttpRequestPtr &req, std::function<v
             resp->setStatusCode(k201Created);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -203,8 +203,8 @@ void ChannelController::updateChannel(const HttpRequestPtr &req, std::function<v
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -248,8 +248,8 @@ void ChannelController::deleteChannel(const HttpRequestPtr &req, std::function<v
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -287,8 +287,8 @@ void ChannelController::openOrCreateDm(const HttpRequestPtr &req, std::function<
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -349,8 +349,8 @@ void ChannelController::getMessages(const HttpRequestPtr &req, std::function<voi
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -399,8 +399,8 @@ void ChannelController::getThreadMessages(const HttpRequestPtr &req, std::functi
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -445,8 +445,8 @@ void ChannelController::createMessage(const HttpRequestPtr &req, std::function<v
             resp->setStatusCode(k201Created);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -483,8 +483,8 @@ void ChannelController::updateMessage(const HttpRequestPtr &req, std::function<v
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -528,8 +528,8 @@ void ChannelController::deleteMessage(const HttpRequestPtr &req, std::function<v
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -613,7 +613,7 @@ void ChannelController::uploadFile(const HttpRequestPtr &req, std::function<void
     dbClient->execSqlAsync(
         "SELECT * FROM get_chat_message_upload_target($1, $2)",
         [callback, sendError, parser, original_file_name, stored_file_name, file_size, mime_type,
-         requester_email](const orm::Result &result) {
+         requester_email, req](const orm::Result &result) {
             Json::Value parsed = parseIntegratedDataResult(result);
             if (!parsed["data"].isArray() || parsed["data"].empty()) {
                 sendError(k404NotFound, "업로드 대상 메시지를 찾을 수 없습니다.");
@@ -663,11 +663,11 @@ void ChannelController::uploadFile(const HttpRequestPtr &req, std::function<void
                     resp->setStatusCode(k201Created);
                     callback(resp);
                 },
-                [callback, savedPath](const orm::DrogonDbException &e) {
+                [callback, savedPath, req](const orm::DrogonDbException &e) {
                     std::error_code removeError;
                     std::filesystem::remove(savedPath, removeError);
 
-                    Json::Value ret = parseDbError(e);
+                    Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
                     auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
                     ret.removeMember("http_code");
                     auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -677,8 +677,8 @@ void ChannelController::uploadFile(const HttpRequestPtr &req, std::function<void
                 requester_email, resolved_message_id, original_file_name, stored_file_name, savedPath,
                 static_cast<int64_t>(file_size), mime_type);
         },
-        [sendError](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [sendError, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             sendError(statusCode, ret.isMember("message") ? ret["message"].asString()
                                                             : "업로드 권한을 확인하지 못했습니다.");
@@ -758,8 +758,8 @@ void ChannelController::downloadFile(const HttpRequestPtr &req, std::function<vo
                 callback(resp);
             }
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -795,8 +795,8 @@ void ChannelController::markAsRead(const HttpRequestPtr &req, std::function<void
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);

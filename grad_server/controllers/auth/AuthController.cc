@@ -124,9 +124,9 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e){
+        [callback, req](const orm::DrogonDbException &e){
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());

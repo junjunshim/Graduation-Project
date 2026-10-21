@@ -4,6 +4,7 @@
 #include <drogon/drogon.h>
 #include <drogon/orm/Result.h>
 #include <drogon/orm/Exception.h>
+#include "LogContext.h"
 
 // DB 에러 코드를 나타내는 Enum 클래스
 enum class DbErrorCode {
@@ -113,7 +114,7 @@ namespace app_utils {
     // 문자열 에러 메시지에서 Enum으로 변환하는 헬퍼 함수
     DbErrorCode parseDbErrorCode(const std::string &errMsg);
     // DB 에러 발생 시 Json::Value 반환하는 함수
-    Json::Value parseDbError(const drogon::orm::DrogonDbException &e);
+    Json::Value parseDbError(const drogon::orm::DrogonDbException &e, const std::string &requestId = "");
     // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
     bool sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message = "", const Json::Value &extra = Json::Value());
 }

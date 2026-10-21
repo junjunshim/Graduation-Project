@@ -1,5 +1,6 @@
 #include "GithubWebSocketController.h"
 
+#include "LogContext.h"
 #include "ResponseUtils.h"
 
 #include <drogon/drogon.h>
@@ -88,9 +89,10 @@ void sendError(const WebSocketConnectionPtr &wsConnPtr, const std::string &code,
 }
 
 // DB 오류를 제어 소켓 규격(err)으로 바꾼다. 코드는 SQL 이 던진 Pxxxx 를 그대로 쓴다.
-void sendDbError(const WebSocketConnectionPtr &wsConnPtr, const orm::DrogonDbException &e)
+void sendDbError(const WebSocketConnectionPtr &wsConnPtr, const orm::DrogonDbException &e,
+                 const std::string &requestId)
 {
-    Json::Value detail = app_utils::parseDbError(e);
+    Json::Value detail = app_utils::parseDbError(e, requestId);
     sendError(wsConnPtr, extractErrorCode(e.base().what()), detail["message"].asString());
 }
 
@@ -131,7 +133,8 @@ Json::Value presenceOfBranch(const std::string &requester, int repoId, const std
 } // namespace
 
 // JWT Access Token 을 검증하고 user_email 을 돌려준다. 실패하면 빈 문자열.
-std::string GithubWebSocketController::verifyAccessToken(const std::string &token)
+std::string GithubWebSocketController::verifyAccessToken(const std::string &token,
+                                                          const std::string &requestId)
 {
     if (token.empty())
     {
@@ -152,7 +155,8 @@ std::string GithubWebSocketController::verifyAccessToken(const std::string &toke
     }
     catch (const std::exception &e)
     {
-        LOG_WARN << "GitHub WebSocket handshake failed: invalid or expired token. Reason: " << e.what();
+        LOG_WARN << "[WS] event=github.auth_failed " << app_utils::requestIdTag(requestId)
+                 << " reason=invalid_token error=" << app_utils::sanitizeLogValue(e.what(), 256);
         return "";
     }
 }
@@ -216,9 +220,11 @@ void GithubWebSocketController::registerConnection(const WebSocketConnectionPtr 
 
     wsConnPtr->setContext(session);
 
-    LOG_INFO << "GitHub WebSocket connected: " << user_email
-             << " (client_id: " << (client_id.empty() ? "-" : client_id)
-             << ", active sessions: " << activeCount << ")";
+    LOG_INFO << "[WS] event=github.connected " << app_utils::requestIdTag(session->request_id)
+             << " user=" << app_utils::maskEmail(user_email)
+             << " client_id=" << app_utils::sanitizeLogValue(client_id.empty() ? "-" : client_id, 128)
+             << " connection_id=" << app_utils::sanitizeLogValue(session->connection_id, 128)
+             << " active_sessions=" << activeCount;
 }
 
 void GithubWebSocketController::unregisterConnection(const std::string &user_email,
@@ -500,6 +506,7 @@ void GithubWebSocketController::handleNewConnection(const HttpRequestPtr &req, c
 {
     // 1. 세션을 만들어 연결에 바인딩한다. 인증 전에는 authenticated 가 false 다.
     auto session = std::make_shared<WsSession>();
+    session->request_id = app_utils::ensureRequestId(req);
     session->client_id = req->getParameter("client_id");
     session->connection_id = makeConnectionId();
     wsConnPtr->setContext(session);
@@ -511,7 +518,8 @@ void GithubWebSocketController::handleNewConnection(const HttpRequestPtr &req, c
         auto conn = weakConn.lock();
         if (conn && !session->authenticated && !conn->disconnected())
         {
-            LOG_WARN << "GitHub WebSocket handshake failed: auth frame was not received in time.";
+            LOG_WARN << "[WS] event=github.auth_timeout " << app_utils::requestIdTag(session->request_id)
+                     << " client_id=" << app_utils::sanitizeLogValue(session->client_id.empty() ? "-" : session->client_id, 128);
             conn->forceClose();
         }
     });
@@ -547,12 +555,13 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
         // 인증 프레임 이름은 소문자 auth 를 쓴다. 알림 소켓과 같은 대문자 AUTH 도 함께 받아 준다.
         if (messageType != "auth" && messageType != "AUTH")
         {
-            LOG_WARN << "GitHub WebSocket handshake failed: the first frame must be an auth message.";
+            LOG_WARN << "[WS] event=github.auth_failed " << app_utils::requestIdTag(session->request_id)
+                     << " reason=first_frame_not_auth";
             wsConnPtr->forceClose();
             return;
         }
 
-        const std::string userEmail = verifyAccessToken(root["token"].asString());
+        const std::string userEmail = verifyAccessToken(root["token"].asString(), session->request_id);
         if (userEmail.empty())
         {
             // 무한 재연결에 빠지지 않도록 실패를 명시적으로 알린 뒤 닫는다.
@@ -648,7 +657,9 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
                     });
                     return;
                 }
-                LOG_WARN << "GitHub presence heartbeat 실패: " << e.base().what();
+                LOG_WARN << "[WS] event=github.presence_heartbeat_failed "
+                         << app_utils::requestIdTag(session->request_id)
+                         << " error=" << app_utils::sanitizeLogValue(e.base().what(), 512);
             }
         }
         return;
@@ -662,7 +673,9 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
         return;
     }
 
-    LOG_DEBUG << "GitHub WebSocket message from " << session->user_email << " (type: " << messageType << ")";
+    LOG_DEBUG << "[WS] event=github.message " << app_utils::requestIdTag(session->request_id)
+              << " user=" << app_utils::maskEmail(session->user_email)
+              << " type=" << app_utils::sanitizeLogValue(messageType, 64);
 }
 
 void GithubWebSocketController::enterRoom(const WebSocketConnectionPtr &wsConnPtr,
@@ -677,7 +690,7 @@ void GithubWebSocketController::enterRoom(const WebSocketConnectionPtr &wsConnPt
     }
     catch (const orm::DrogonDbException &e)
     {
-        sendDbError(wsConnPtr, e);
+        sendDbError(wsConnPtr, e, session->request_id);
         return;
     }
 
@@ -706,7 +719,8 @@ void GithubWebSocketController::enterRoom(const WebSocketConnectionPtr &wsConnPt
         }
         catch (const orm::DrogonDbException &e)
         {
-            LOG_WARN << "이전 브랜치 접속자 목록 조회 실패: " << e.base().what();
+            LOG_WARN << "[WS] event=github.presence_lookup_failed " << app_utils::requestIdTag(session->request_id)
+                     << " error=" << app_utils::sanitizeLogValue(e.base().what(), 512);
         }
         broadcastToRepository(previousRepo, left);
     }
@@ -739,7 +753,8 @@ bool GithubWebSocketController::removePresenceAndNotify(const std::shared_ptr<Ws
     }
     catch (const orm::DrogonDbException &e)
     {
-        LOG_WARN << "GitHub presence 해제 실패: " << e.base().what();
+        LOG_WARN << "[WS] event=github.presence_remove_failed " << app_utils::requestIdTag(session->request_id)
+                 << " error=" << app_utils::sanitizeLogValue(e.base().what(), 512);
         return false;
     }
 
@@ -758,7 +773,8 @@ bool GithubWebSocketController::removePresenceAndNotify(const std::shared_ptr<Ws
     }
     catch (const orm::DrogonDbException &e)
     {
-        LOG_WARN << "브랜치 접속자 목록 조회 실패: " << e.base().what();
+        LOG_WARN << "[WS] event=github.presence_lookup_failed " << app_utils::requestIdTag(session->request_id)
+                 << " error=" << app_utils::sanitizeLogValue(e.base().what(), 512);
     }
     broadcastToRepository(repoId, left);
     return true;
@@ -784,5 +800,7 @@ void GithubWebSocketController::handleConnectionClosed(const WebSocketConnection
 
     // 3. 사용자 목록에서 제거한다.
     unregisterConnection(session->user_email, wsConnPtr);
-    LOG_INFO << "GitHub WebSocket disconnected: " << session->user_email;
+    LOG_INFO << "[WS] event=github.disconnected " << app_utils::requestIdTag(session->request_id)
+             << " user=" << app_utils::maskEmail(session->user_email)
+             << " connection_id=" << app_utils::sanitizeLogValue(session->connection_id, 128);
 }

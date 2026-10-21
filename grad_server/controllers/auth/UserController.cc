@@ -65,9 +65,9 @@ void UserController::createUser(const HttpRequestPtr &req, std::function<void(co
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -126,9 +126,9 @@ void UserController::getUser(const HttpRequestPtr &req, std::function<void(const
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -195,9 +195,9 @@ void UserController::updateUser(const HttpRequestPtr &req, std::function<void(co
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -269,9 +269,9 @@ void UserController::deleteUser(const HttpRequestPtr &req, std::function<void(co
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -322,8 +322,8 @@ void UserController::readNotification(const HttpRequestPtr &req, std::function<v
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 

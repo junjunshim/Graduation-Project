@@ -1,5 +1,6 @@
 #include "ResponseUtils.h"
 #include "AuthorityBits.h"
+#include "LogContext.h"
 #include "NotificationWebSocketController.h"
 
 // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
@@ -13,13 +14,13 @@ bool app_utils::sendNotificationFromDbResult(const drogon::orm::Result &result, 
         std::string jsonStr = row["out_data"].as<std::string>();
         Json::Value item;
         if (!reader.parse(jsonStr, item)) {
-            LOG_ERROR << "Failed to parse notification JSON: " << jsonStr;
+            LOG_ERROR << "[WS] event=notification.payload_invalid bytes=" << jsonStr.size();
             continue;
         }
 
         // 대상 이메일 추출
         if (!item.isMember("target_email")) {
-            LOG_WARN << "Notification payload missing target_email: " << jsonStr;
+            LOG_WARN << "[WS] event=notification.target_missing bytes=" << jsonStr.size();
             continue;
         }
         std::string targetEmail = item["target_email"].asString();
@@ -62,7 +63,7 @@ Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &resu
         if(reader.parse(jsonStr, item)){
             items.append(item);
         } else {
-            LOG_ERROR << "Failed to parse integrated JSON data: " << jsonStr;
+            LOG_ERROR << "[DB] event=integrated_data.parse_failed bytes=" << jsonStr.size();
         }
     }
 
@@ -86,7 +87,7 @@ Json::Value app_utils::parseAndDispatchChatResult(const drogon::orm::Result &res
         std::string jsonStr = row["out_data"].as<std::string>();
         Json::Value item;
         if (!reader.parse(jsonStr, item)) {
-            LOG_ERROR << "Failed to parse chat JSON data: " << jsonStr;
+            LOG_ERROR << "[DB] event=chat_data.parse_failed bytes=" << jsonStr.size();
             continue;
         }
 
@@ -210,12 +211,20 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
 }
 
 // DB 에러 발생 시 Json::Value 반환하는 함수
-Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
+Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e, const std::string &requestId) {
     // DB 에러 메시지 추출
     std::string errMsg = e.base().what();
 
-    // 에러 메시지를 로그에 기록
-    LOG_ERROR << "Database error: " << errMsg;
+    // 메시지 안의 Pxxxx 코드를 꺼내 로그에서 바로 검색할 수 있게 한다.
+    std::string errorCodeText = "UNKNOWN";
+    const std::size_t codeStart = errMsg.find("[P");
+    if (codeStart != std::string::npos && codeStart + 6 < errMsg.size() && errMsg[codeStart + 6] == ']') {
+        errorCodeText = errMsg.substr(codeStart + 1, 5);
+    }
+
+    LOG_ERROR << "[DB] event=db.error " << requestIdTag(requestId)
+              << " code=" << errorCodeText
+              << " message=" << sanitizeLogValue(errMsg, 4096);
 
     // 반환 JSON 객체 초기화
     Json::Value ret;

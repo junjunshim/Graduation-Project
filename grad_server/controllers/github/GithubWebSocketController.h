@@ -52,6 +52,7 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
   private:
     // 연결 1개당 유지하는 세션 상태. 인증 전에는 user_email 이 비어 있고 authenticated 가 false 다.
     struct WsSession {
+        std::string request_id;      // WebSocket 핸드셰이크 HTTP 요청의 상관 키
         std::string user_email;
         std::string client_id;
         std::string connection_id;   // github_branch_presence.connection_id
@@ -85,7 +86,7 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
     static ConnectionShard &getShard(const std::string &key);
 
     // JWT Access Token 을 검증하고 user_email 을 돌려준다. 실패하면 빈 문자열.
-    static std::string verifyAccessToken(const std::string &token);
+    static std::string verifyAccessToken(const std::string &token, const std::string &requestId = "");
 
     // 인증된 연결을 사용자 목록에 등록한다. 같은 client_id 의 기존 연결은 교체한다.
     static void registerConnection(const WebSocketConnectionPtr &wsConnPtr,

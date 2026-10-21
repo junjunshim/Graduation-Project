@@ -69,8 +69,8 @@ HttpResponsePtr errorResponse(const std::string &code, const std::string &messag
     return makeJsonResponse(ret, httpCode);
 }
 
-HttpResponsePtr dbErrorResponse(const orm::DrogonDbException &e) {
-    Json::Value ret = parseDbError(e);
+HttpResponsePtr dbErrorResponse(const orm::DrogonDbException &e, const std::string &requestId) {
+    Json::Value ret = parseDbError(e, requestId);
     auto httpCode = static_cast<HttpStatusCode>(ret["http_code"].asInt());
     ret.removeMember("http_code");
     return makeJsonResponse(ret, httpCode);
@@ -104,24 +104,27 @@ std::string requesterEmail(const HttpRequestPtr &req) {
 // 경로(티켓 소비·작업 경로 해석)라, GitHub 의 git 작업(clone/fetch/push)과 자리를 겨루지 않게
 // 별도 차선으로 센다 — git 이 도는 동안 파일을 못 열면 안 된다.
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
-                std::function<HttpResponsePtr()> &&work) {
+                std::function<HttpResponsePtr()> &&work,
+                std::string requestId) {
     auto cb = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
-    std::thread worker([cb, work = std::move(work)]() {
+    std::thread worker([cb, work = std::move(work), requestId = std::move(requestId)]() {
         auto &limiter = WorkerLimiter::instance();
         HttpResponsePtr resp;
 
         if (!limiter.acquire(WorkerLimiter::Lane::Internal)) {
-            LOG_WARN << "collab 내부 API 동시 한도 초과 — 요청을 거부합니다 (internal="
-                     << limiter.internalRunning() << ", waiting=" << limiter.waiting() << ")";
+            LOG_WARN << "[COLLAB] event=worker.limit " << app_utils::requestIdTag(requestId)
+                     << " lane=internal running=" << limiter.internalRunning()
+                     << " waiting=" << limiter.waiting();
             resp = errorResponse("503", "서버가 붐빕니다. 잠시 뒤 다시 시도해 주세요.", k503ServiceUnavailable);
             resp->addHeader("Retry-After", "2");
         } else {
             try {
                 resp = work();
             } catch (const orm::DrogonDbException &e) {
-                resp = dbErrorResponse(e);
+                resp = dbErrorResponse(e, requestId);
             } catch (const std::exception &e) {
-                LOG_ERROR << "collab 핸들러 실패: " << e.what();
+                LOG_ERROR << "[COLLAB] event=handler.failed " << app_utils::requestIdTag(requestId)
+                          << " error=" << app_utils::sanitizeLogValue(e.what(), 1024);
                 resp = errorResponse("500", "서버 처리 중 오류가 발생했습니다.", k500InternalServerError);
             }
             limiter.release(WorkerLimiter::Lane::Internal);
@@ -130,6 +133,17 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
         app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
     });
     worker.detach();
+}
+
+void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
+                std::function<HttpResponsePtr()> &&work) {
+    runOffLoop(std::move(callback), std::move(work), std::string());
+}
+
+void runOffLoop(const HttpRequestPtr &req,
+                std::function<void(const HttpResponsePtr &)> &&callback,
+                std::function<HttpResponsePtr()> &&work) {
+    runOffLoop(std::move(callback), std::move(work), app_utils::requestIdOf(req));
 }
 
 // 내부 토큰 / 시간 / 난수
@@ -297,7 +311,7 @@ void CollabController::issueTicket(const HttpRequestPtr &req,
     const std::string requester = requesterEmail(req);
     const int repoId = (*jsonPtr)["repo_id"].asInt();
 
-    runOffLoop(std::move(callback), [requester, repoId]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         // 1) 저장소가 연결돼 있고 요청자가 그 노드를 볼 수 있어야 한다.
@@ -413,7 +427,7 @@ void CollabController::resolvePath(const HttpRequestPtr &req,
     const int repoId = (*jsonPtr)["repo_id"].asInt();
     const std::string branch = (*jsonPtr)["branch"].asString();
 
-    runOffLoop(std::move(callback), [repoId, branch]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [repoId, branch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
         // 2) 저장소 + 브랜치를 한 번에 읽는다. 기본 브랜치도 github_branches 행이 있으므로
@@ -603,7 +617,7 @@ void CollabController::recheckPermissions(const HttpRequestPtr &req,
     writer["indentation"] = "";
     const std::string sessionsJson = Json::writeString(writer, sessions);
 
-    runOffLoop(std::move(callback), [sessionsJson]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [sessionsJson]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         auto rows = db->execSqlSync("SELECT * FROM get_collab_session_permissions($1::JSONB)", sessionsJson);
 

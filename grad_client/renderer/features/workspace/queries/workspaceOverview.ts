@@ -11,7 +11,7 @@ import type {
 import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService.js'
 import { getCurrentUser } from '../data/userService.js'
 import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters.js'
-import { isWorkItemDueSoon } from '../model/workItemDue.js'
+import { getWorkspaceTodayTimestamp, isWorkItemDueSoon } from '../model/workItemDue.js'
 import { analyzeWorkspaceMembers } from '../model/memberInheritance.js'
 
 type WorkspaceOverviewOptions = {
@@ -252,7 +252,10 @@ export function getWorkspaceOverview(
   const teamPoolWorkItems = sortWorkspaceWorkItems(
     visibleWorkItems.filter((item) => !isMyWorkItem(item) && item.status !== 'done'),
   )
-  const dueSoonWorkItems = sortWorkspaceWorkItems(visibleWorkItems.filter(isWorkItemDueSoon))
+  const todayTimestamp = getWorkspaceTodayTimestamp()
+  const dueSoonWorkItems = sortWorkspaceWorkItems(
+    visibleWorkItems.filter((item) => isWorkItemDueSoon(item, todayTimestamp)),
+  )
   const urgentWorkItemIds = new Set<string>()
   const urgentWorkItems = sortWorkspaceWorkItems(
     [...dueSoonWorkItems, ...visibleWorkItems.filter((item) => item.priority <= 2 && item.status !== 'done')].filter(

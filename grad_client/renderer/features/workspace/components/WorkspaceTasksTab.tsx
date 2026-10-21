@@ -12,7 +12,11 @@ import { getWorkItemTag } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
 import { buildMemberNameLookup, groupWorkItemsByStatus } from '../model/workspaceTaskIndex'
 import { calculateOverallProgress } from '../model/workItemProgress'
-import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItemDue'
+import {
+  getWorkItemDueScheduleInfo,
+  getWorkspaceTodayTimestamp,
+  parseWorkspaceDay,
+} from '../model/workItemDue'
 import type { DueScheduleType } from '../model/workItemDue'
 import { canRestoreWorkItem } from '../model/workItemPermission'
 import { canViewWorkItemDetail } from '../model/effectiveAuthority'
@@ -399,6 +403,10 @@ export function WorkspaceTasksTab({
 
   const filteredWorkItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
+    const scheduleToday =
+      scheduleFilter === 'all' || scheduleFilter === 'none'
+        ? undefined
+        : getWorkspaceTodayTimestamp()
 
     return effectiveWorkItems.filter((item) => {
       const ownerName = getMemberName(item.ownerUserId, memberNames)
@@ -423,7 +431,7 @@ export function WorkspaceTasksTab({
           ? true
           : scheduleFilter === 'none'
             ? parseWorkspaceDay(item.dueDate) === null
-            : getWorkItemDueScheduleInfo(item).scheduleType === scheduleFilter
+            : getWorkItemDueScheduleInfo(item, scheduleToday).scheduleType === scheduleFilter
 
       const matchesTag = tagFilter === 'all' || getWorkItemTag(item)?.id === tagFilter
 

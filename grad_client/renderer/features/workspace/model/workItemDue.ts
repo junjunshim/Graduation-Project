@@ -6,16 +6,27 @@ export type DueStatusTone = 'neutral' | 'soon' | 'overdue' | 'done'
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
 
+const WORKSPACE_DAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: WORKSPACE_TIME_ZONE,
+  year: 'numeric',
+})
+
 export function getWorkspaceTodayTimestamp() {
-  const dateParts = new Intl.DateTimeFormat('en-US', {
-    day: '2-digit',
-    month: '2-digit',
-    timeZone: WORKSPACE_TIME_ZONE,
-    year: 'numeric',
-  }).formatToParts(new Date())
-  const year = Number(dateParts.find((part) => part.type === 'year')?.value)
-  const month = Number(dateParts.find((part) => part.type === 'month')?.value)
-  const day = Number(dateParts.find((part) => part.type === 'day')?.value)
+  let year = Number.NaN
+  let month = Number.NaN
+  let day = Number.NaN
+
+  WORKSPACE_DAY_FORMATTER.formatToParts(new Date()).forEach((part) => {
+    if (part.type === 'year') {
+      year = Number(part.value)
+    } else if (part.type === 'month') {
+      month = Number(part.value)
+    } else if (part.type === 'day') {
+      day = Number(part.value)
+    }
+  })
 
   if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
     return Date.now()

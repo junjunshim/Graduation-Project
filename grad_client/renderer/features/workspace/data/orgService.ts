@@ -10,7 +10,7 @@ import type {
   WorkspaceSnapshot,
   WorkspaceSummary,
 } from '../model/types'
-import { isWorkItemDueSoon } from '../model/workItemDue.js'
+import { getWorkspaceTodayTimestamp, isWorkItemDueSoon } from '../model/workItemDue.js'
 import { getWorkspaceRevision, readWorkspaceDb } from './localStore.js'
 import {
   assignRoleOnServer,
@@ -148,9 +148,7 @@ export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapsho
     (item) => visibleNodeIdSet.has(item.ownerNodeId) && !item.isDeleted,
   )
   const visibleNodes = workspace.nodes.filter((node) => visibleNodeIdSet.has(node.id) && !node.isDeleted)
-  const now = new Date()
-  const dueSoonThreshold = new Date(now)
-  dueSoonThreshold.setDate(now.getDate() + 7)
+  const todayTimestamp = getWorkspaceTodayTimestamp()
 
   return {
     nodeCount: visibleNodes.length,
@@ -170,7 +168,9 @@ export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapsho
         : 0,
     myWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId === userId).length,
     teamPoolWorkItemCount: visibleWorkItems.filter((item) => item.ownerUserId !== userId).length,
-    dueSoonWorkItemCount: visibleWorkItems.filter(isWorkItemDueSoon).length,
+    dueSoonWorkItemCount: visibleWorkItems.filter((item) =>
+      isWorkItemDueSoon(item, todayTimestamp),
+    ).length,
   }
 }
 

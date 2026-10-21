@@ -3,6 +3,7 @@
 #include <drogon/WebSocketController.h>
 #include <json/json.h>
 #include <array>
+#include <chrono>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -59,6 +60,9 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
         bool authenticated = false;
         int repo_id = 0;             // 들어가 있는 방(방에 없으면 0)
         std::string branch;
+        // 마지막으로 저장소·권한·브랜치를 전부 확인한 시각. heartbeat 는 이 사이에는
+        // last_seen_at 만 가볍게 갱신하고, 주기가 지나면 upsert 로 전체 검증을 다시 한다.
+        std::chrono::steady_clock::time_point presence_checked_at{};
     };
 
     // 한 저장소(repo:{id}:branch:…)의 방들에 붙은 연결 중 accept 가 true 인 것만 모은다.

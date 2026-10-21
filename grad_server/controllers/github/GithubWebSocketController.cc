@@ -71,6 +71,11 @@ std::string extractErrorCode(const std::string &message)
 // 큐에 남은 프레임이 버려질 수 있어, 확장이 "왜 끊겼는지" 를 못 보게 된다.
 constexpr double kCloseAfterNotifySeconds = 0.25;
 
+// heartbeat 는 60초마다 온다. 매번 저장소·권한·브랜치·접속자 목록을 다시 조립하면
+// 연결 수에 비례해 DB 읽기가 쌓이므로, 그 사이에는 last_seen_at 만 갱신한다.
+// 권한 변경 통보가 유실되는 경우를 대비해 이 주기마다 전체 검증을 다시 한다.
+constexpr auto kPresenceRevalidateInterval = std::chrono::minutes(5);
+
 void sendEvent(const WebSocketConnectionPtr &wsConnPtr, const Json::Value &event)
 {
     if (wsConnPtr && wsConnPtr->connected())
@@ -114,6 +119,18 @@ Json::Value registerPresence(const std::string &requester, int repoId, const std
     auto db = app().getDbClient();
     return rowsToArray(db->execSqlSync("SELECT * FROM upsert_github_branch_presence($1, $2, $3, $4)", requester,
                                        repoId, branch, connectionId));
+}
+
+// 가벼운 heartbeat. 이미 등록된 접속자 행의 last_seen_at 만 갱신한다.
+// 행이 없으면(재접속 승계 실패·정리됨) false 를 돌려주고 호출자가 전체 upsert 로 복구한다.
+bool touchPresence(const std::string &requester, const std::string &connectionId)
+{
+    auto db = app().getDbClient();
+    auto rows = db->execSqlSync(
+        "UPDATE github_branch_presence SET last_seen_at = CURRENT_TIMESTAMP "
+        "WHERE connection_id = $1 AND user_email = $2 RETURNING 1",
+        connectionId, requester);
+    return !rows.empty();
 }
 
 // 브랜치 하나의 접속자 목록만 뽑는다(방 목록 갱신 브로드캐스트용).
@@ -637,7 +654,20 @@ void GithubWebSocketController::handleNewMessage(const WebSocketConnectionPtr &w
         {
             try
             {
+                const auto now = std::chrono::steady_clock::now();
+                const bool needsFullCheck =
+                    session->presence_checked_at.time_since_epoch().count() == 0 ||
+                    now - session->presence_checked_at >= kPresenceRevalidateInterval;
+
+                // 평소 heartbeat 는 last_seen_at 한 줄만 갱신한다. 전체 upsert 는 권한·저장소·
+                // 브랜치를 다시 확인하고 접속자 목록까지 만드므로, 주기 검증과 행 복구에만 쓴다.
+                if (!needsFullCheck && touchPresence(session->user_email, session->connection_id))
+                {
+                    return;
+                }
+
                 registerPresence(session->user_email, session->repo_id, session->branch, session->connection_id);
+                session->presence_checked_at = now;
             }
             catch (const orm::DrogonDbException &e)
             {
@@ -687,6 +717,7 @@ void GithubWebSocketController::enterRoom(const WebSocketConnectionPtr &wsConnPt
     try
     {
         presence = registerPresence(session->user_email, repo_id, branch, session->connection_id);
+        session->presence_checked_at = std::chrono::steady_clock::now();
     }
     catch (const orm::DrogonDbException &e)
     {

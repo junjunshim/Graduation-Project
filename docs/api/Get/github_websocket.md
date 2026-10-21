@@ -63,7 +63,10 @@
 }
 ```
 
-- **하트비트 (`heartbeat`)**: 접속자 행(`last_seen_at`) 갱신
+- **하트비트 (`heartbeat`)**: 접속자 행(`last_seen_at`) 갱신.
+  - 평소에는 `connection_id` 행의 `last_seen_at` 만 갱신합니다.
+  - 5분마다 저장소·브랜치·`GITHUB_VIEW` 권한을 다시 검증합니다. 권한 변경 통보를 놓친 연결은 이때 `P0103`/`P0815` 를 받고 종료됩니다.
+  - 재접속 승계 등으로 접속자 행이 사라졌으면 전체 등록을 다시 수행합니다.
 ```json
 {
   "type": "heartbeat"

@@ -705,7 +705,11 @@ Json::Value readWorktreeStatus(const std::string &workDir, GitResult &out) {
     if (!out.ok()) {
         return Json::Value(Json::arrayValue);
     }
-    return filterNoiseEntries(parseStatusPorcelain(out.out), nestedWorktreePaths(workDir));
+    const Json::Value entries = parseStatusPorcelain(out.out);
+    if (entries.empty()) {
+        return entries;   // 지울 잡음 항목이 없으므로 worktree list 조회를 생략한다.
+    }
+    return filterNoiseEntries(entries, nestedWorktreePaths(workDir));
 }
 
 // 확장이 실패 사유를 프로그램으로 구분할 수 있게 data 에 reason 만 담는다.
@@ -770,12 +774,17 @@ SyncState readSyncState(const std::string &workDir, const std::string &branch) {
 
     state.hasUpstream = true;
     state.originSha = trim(origin.out);
-    int count = 0;
-    if (auto ahead = GitRunner::revListCount(workDir, remoteRef + "..HEAD"); ahead.ok() && parseInt(trim(ahead.out), count)) {
-        state.ahead = count;
-    }
-    if (auto behind = GitRunner::revListCount(workDir, "HEAD.." + remoteRef); behind.ok() && parseInt(trim(behind.out), count)) {
-        state.behind = count;
+    // 왼쪽(origin)에만 있는 커밋 = behind, 오른쪽(HEAD)에만 있는 커밋 = ahead.
+    // 두 번의 rev-list 대신 --left-right --count 한 번으로 계산한다.
+    auto counts = GitRunner::run(workDir, {"rev-list", "--left-right", "--count", remoteRef + "...HEAD"});
+    if (counts.ok()) {
+        int behind = 0;
+        int ahead = 0;
+        std::istringstream stream(counts.out);
+        if (stream >> behind >> ahead) {
+            state.behind = behind;
+            state.ahead = ahead;
+        }
     }
     return state;
 }

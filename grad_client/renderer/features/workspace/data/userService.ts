@@ -1,6 +1,6 @@
 import type { SignInRequest, SignInResponse, SignUpRequest, WorkspaceDatabase } from '../model/types'
-import { getCurrentServerUser, signInServerUser, signOutServerUser, signUpServerUser } from './serverWorkspace'
-import { createServerEntityId } from './server/serverId'
+import { getCurrentServerUser, signInServerUser, signOutServerUser, signUpServerUser } from './serverWorkspace.js'
+import { createServerEntityId } from './server/serverId.js'
 
 export function getNextGeneratedUserId() {
   return createServerEntityId('U')

@@ -1,4 +1,4 @@
-import { resolveRoleAssignments } from '../model/roleDefinitions'
+import { resolveRoleAssignments } from '../model/roleDefinitions.js'
 import type {
   OnboardingStep,
   OrganizationNodeRecord,
@@ -8,15 +8,26 @@ import type {
   WorkspaceOverview,
   WorkspaceSnapshot,
 } from '../model/types'
-import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService'
-import { getCurrentUser } from '../data/userService'
-import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters'
-import { isWorkItemDueSoon } from '../model/workItemDue'
-import { analyzeWorkspaceMembers } from '../model/memberInheritance'
+import { getAccessibleNodeIdsForUser, getOrgSnapshot, getWorkspaceSummary } from '../data/orgService.js'
+import { getCurrentUser } from '../data/userService.js'
+import { sortWorkspaceNodes, sortWorkspaceWorkItems } from '../model/sorters.js'
+import { isWorkItemDueSoon } from '../model/workItemDue.js'
+import { analyzeWorkspaceMembers } from '../model/memberInheritance.js'
 
 type WorkspaceOverviewOptions = {
   rootNodeId?: string | null
   singleNodeOnly?: boolean
+}
+
+const overviewCacheBySnapshot = new WeakMap<WorkspaceSnapshot, Map<string, WorkspaceOverview>>()
+const MAX_OVERVIEW_CACHE_ENTRIES = 32
+
+function getOverviewCacheKey(userId: string | undefined, options?: WorkspaceOverviewOptions) {
+  return [
+    userId ?? '',
+    options?.rootNodeId ?? '',
+    options?.singleNodeOnly === true ? '1' : '0',
+  ].join('\u0000')
 }
 
 function parseRootNodeId(rootNodeId?: string | null) {
@@ -160,6 +171,13 @@ export function getWorkspaceOverview(
   options?: WorkspaceOverviewOptions,
 ): WorkspaceOverview {
   const source = providedSnapshot ?? getOrgSnapshot()
+  const cacheKey = getOverviewCacheKey(userId, options)
+  const cachedOverview = overviewCacheBySnapshot.get(source)?.get(cacheKey)
+
+  if (cachedOverview) {
+    return cachedOverview
+  }
+
   const snapshot = { ...source, roles: resolveRoleAssignments(source.roles, source.authorities ?? []) }
   const currentUser = getCurrentUser(snapshot)
   const resolvedUserId = userId ?? currentUser?.userId
@@ -299,7 +317,7 @@ export function getWorkspaceOverview(
     return nodeTypeById.get(role.nodeId) !== 'USER'
   })
 
-  return {
+  const overview: WorkspaceOverview = {
     summary,
     accessibleNodeIds,
     visibleNodes,
@@ -328,4 +346,15 @@ export function getWorkspaceOverview(
       hasWorkItem: summary.workItemCount > 0,
     }),
   }
+
+  const snapshotCache = overviewCacheBySnapshot.get(source) ?? new Map<string, WorkspaceOverview>()
+  if (snapshotCache.size >= MAX_OVERVIEW_CACHE_ENTRIES) {
+    const oldestKey = snapshotCache.keys().next()
+    if (!oldestKey.done) {
+      snapshotCache.delete(oldestKey.value)
+    }
+  }
+  snapshotCache.set(cacheKey, overview)
+  overviewCacheBySnapshot.set(source, snapshotCache)
+  return overview
 }

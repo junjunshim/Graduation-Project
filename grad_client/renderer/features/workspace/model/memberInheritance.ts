@@ -1,9 +1,9 @@
-import { resolveRoleAssignments } from './roleDefinitions'
+import { resolveRoleAssignments } from './roleDefinitions.js'
 import {
   AUTHORITY_BITS,
   AUTHORITY_DENY_BIT,
   parseAuthorityBitSet,
-} from './authorityDefinitions'
+} from './authorityDefinitions.js'
 import type {
   AuthorityRecord,
   OrganizationNodeRecord,

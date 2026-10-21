@@ -3,16 +3,42 @@ import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
 import { readWorkspaceDb, writeServerWorkspaceDb } from './localStore'
 import { waitForDownloadCompletion } from './downloadCompletion'
+import {
+  deleteCachedFileContent,
+  getCachedFileContent,
+  setCachedFileContent,
+} from './fileContentCache'
 
-export type CachedFileItem = {
-  fileId: number
-  fileName: string
-  content: string
-  lastModified?: string
-  cachedAt: number
-}
+export type { CachedFileItem } from './fileContentCache'
 
 const FILE_CACHE_PREFIX = 'grad-file-cache-'
+let legacyFileCacheCleanupScheduled = false
+
+function cleanupLegacyFileCacheStorage() {
+  if (
+    legacyFileCacheCleanupScheduled ||
+    typeof window === 'undefined' ||
+    typeof window.localStorage === 'undefined'
+  ) {
+    return
+  }
+
+  legacyFileCacheCleanupScheduled = true
+  globalThis.setTimeout(() => {
+    try {
+      const legacyKeys: string[] = []
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const key = window.localStorage.key(index)
+        if (key?.startsWith(FILE_CACHE_PREFIX)) {
+          legacyKeys.push(key)
+        }
+      }
+      legacyKeys.forEach((key) => window.localStorage.removeItem(key))
+    } catch {
+      // A storage failure must not affect file viewing.
+    }
+  }, 0)
+}
 
 export async function downloadWorkItemFile(fileId: number, fileName: string): Promise<void> {
   const blob = await apiRequest<Blob>(`/workItems/files/download?file_id=${fileId}`, {
@@ -62,7 +88,7 @@ export async function uploadWorkItemFile(workItemId: string, file: File): Promis
     const rawData = (response as { data?: Array<{ file_id?: number }> }).data
     if (Array.isArray(rawData) && rawData.length > 0 && typeof rawData[0]?.file_id === 'number') {
       const newFileId = rawData[0].file_id
-      localStorage.removeItem(`${FILE_CACHE_PREFIX}${newFileId}`)
+      await deleteCachedFileContent(newFileId)
     }
   } catch (err) {
     console.warn('[fileService] 업로드 후 캐시 무효화 실패:', err)
@@ -127,24 +153,6 @@ export async function restoreWorkItemFile(fileId: number): Promise<void> {
   }
 }
 
-function getCachedFile(fileId: number): CachedFileItem | null {
-  try {
-    const raw = localStorage.getItem(`${FILE_CACHE_PREFIX}${fileId}`)
-    if (!raw) return null
-    return JSON.parse(raw) as CachedFileItem
-  } catch {
-    return null
-  }
-}
-
-function setCachedFile(item: CachedFileItem): void {
-  try {
-    localStorage.setItem(`${FILE_CACHE_PREFIX}${item.fileId}`, JSON.stringify(item))
-  } catch (err) {
-    console.warn('[fileService] 캐시 저장 실패:', err)
-  }
-}
-
 export type FetchFileContentResult = {
   content: string
   fromCache: boolean
@@ -167,7 +175,8 @@ export async function fetchWorkItemFileContent(
   fileId: number,
   options?: FetchFileContentOptions,
 ): Promise<FetchFileContentResult> {
-  const cached = getCachedFile(fileId)
+  cleanupLegacyFileCacheStorage()
+  const cached = await getCachedFileContent(fileId)
 
   // 캐시된 파일명 또는 예상 수정시각이 불일치하면 이전 파일 캐시로 간주하고 무효화
   const isCacheInvalid =
@@ -175,11 +184,7 @@ export async function fetchWorkItemFileContent(
     (cached && options?.expectedFileName && cached.fileName !== `file_${fileId}` && cached.fileName !== options.expectedFileName)
 
   if (isCacheInvalid && cached) {
-    try {
-      localStorage.removeItem(`${FILE_CACHE_PREFIX}${fileId}`)
-    } catch {
-      // ignore
-    }
+    await deleteCachedFileContent(fileId)
   }
 
   const validCache = isCacheInvalid ? null : cached
@@ -219,7 +224,7 @@ export async function fetchWorkItemFileContent(
     const textContent = await response.text()
     const serverLastModified = response.headers.get('Last-Modified') || options?.expectedUpdatedAt || new Date().toISOString()
 
-    setCachedFile({
+    await setCachedFileContent({
       fileId,
       fileName: options?.expectedFileName || `file_${fileId}`,
       content: textContent,

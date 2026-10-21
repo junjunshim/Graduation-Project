@@ -45,6 +45,7 @@ import { normalizeServerContext } from './contextAdapter.js'
 import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
 import { setCurrentSessionUserId } from '../session.js'
+import { clearCachedFileContents } from '../fileContentCache.js'
 import {
   notifyChatRealtimeEvent,
   notifyLiveNotificationReceived,
@@ -257,13 +258,15 @@ function mergeServerUpdates(
   )
   const filesById = new Map((current.files ?? []).map((f) => [f.id, f]))
   if (updatedWorkItemIds.size > 0 || removedWorkItemIds.size > 0) {
-    ;(current.files ?? []).forEach((f) => {
+    const currentFiles = current.files ?? []
+    currentFiles.forEach((f) => {
       if (updatedWorkItemIds.has(f.workItemId) || removedWorkItemIds.has(f.workItemId)) {
         filesById.delete(f.id)
       }
     })
   }
-  ;(updates.files ?? []).forEach((f) => filesById.set(f.id, f))
+  const updatedFiles = updates.files ?? []
+  updatedFiles.forEach((f) => filesById.set(f.id, f))
   const files = Array.from(filesById.values())
 
   // 7. 활동: 노드 상세 응답은 해당 노드의 권위 데이터이므로, 응답에 없는 활동은 캐시에서도 제거한다.
@@ -523,6 +526,7 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
     }
 
     shouldRollbackSession = true
+    await clearCachedFileContents()
     setServerSession({
       ...tokens,
       email,
@@ -612,6 +616,7 @@ export function signOutServerUser() {
   clearServerSession()
   clearServerWorkspaceDb()
   setCurrentSessionUserId(null)
+  void clearCachedFileContents()
 }
 
 export async function deleteNodeOnServer(nodeId: number) {

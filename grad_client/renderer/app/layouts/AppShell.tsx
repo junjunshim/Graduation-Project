@@ -60,23 +60,26 @@ export function AppShell() {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isSidebarCollapsed))
   }, [isSidebarCollapsed])
 
-  if (!currentUser) {
-    return null
-  }
-
   const workspaceRootParam = searchParams.get('rootId') || searchParams.get('nodeId')
   const headingRootId =
     workspaceRootParam ??
-    getActiveWorkspaceRootId(currentUser.userId) ??
-    getDefaultWorkspaceRootId(currentUser.userId)
+    getActiveWorkspaceRootId(currentUser?.userId) ??
+    getDefaultWorkspaceRootId(currentUser?.userId)
   const overview = useMemo(
     () =>
-      getWorkspaceOverview(currentUser.userId, snapshot, {
-        rootNodeId: headingRootId,
-        singleNodeOnly: true,
-      }),
-    [currentUser.userId, headingRootId, snapshot],
+      currentUser
+        ? getWorkspaceOverview(currentUser.userId, snapshot, {
+            rootNodeId: headingRootId,
+            singleNodeOnly: true,
+          })
+        : null,
+    [currentUser, headingRootId, snapshot],
   )
+
+  if (!currentUser || !overview) {
+    return null
+  }
+
   const summary = overview.summary
   const hasOrgContext = summary.orgNodeCount > 0
   const pageMeta = getShellPageMeta(location.pathname, hasOrgContext, location.search)

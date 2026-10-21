@@ -1,14 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
-import { WorkspaceFilesTab } from '../components/WorkspaceFilesTab'
-import { WorkspaceGithubTab } from '../components/WorkspaceGithubTab'
-import { WorkspaceMembersTab } from '../components/WorkspaceMembersTab'
-import { WorkspaceRolesTab } from '../components/WorkspaceRolesTab'
-import { WorkspaceSchedulesTab } from '../components/WorkspaceSchedulesTab'
-import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
-import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
 import {
   subscribeToWorkspaceCache,
@@ -26,7 +19,6 @@ import { findDeletedAncestorNode } from '../model/nodeDeletion'
 import { showToast as showLiveToast } from '../../notification/data/toastEvents'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
-import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
 import {
   canCreateWorkItem,
 } from '../model/effectiveAuthority'
@@ -35,6 +27,40 @@ import {
   getWorkspaceTabPermissions,
 } from '../model/workspaceTabModel'
 import styles from './WorkspacePage.module.css'
+
+const WorkspaceOverviewTab = lazy(() =>
+  import('../components/WorkspaceOverviewTab').then((module) => ({ default: module.WorkspaceOverviewTab })),
+)
+const WorkspaceTimelineTab = lazy(() =>
+  import('../components/WorkspaceTimelineTab').then((module) => ({ default: module.WorkspaceTimelineTab })),
+)
+const WorkspaceTasksTab = lazy(() =>
+  import('../components/WorkspaceTasksTab').then((module) => ({ default: module.WorkspaceTasksTab })),
+)
+const WorkspaceSchedulesTab = lazy(() =>
+  import('../components/WorkspaceSchedulesTab').then((module) => ({ default: module.WorkspaceSchedulesTab })),
+)
+const WorkspaceFilesTab = lazy(() =>
+  import('../components/WorkspaceFilesTab').then((module) => ({ default: module.WorkspaceFilesTab })),
+)
+const WorkspaceGithubTab = lazy(() =>
+  import('../components/WorkspaceGithubTab').then((module) => ({ default: module.WorkspaceGithubTab })),
+)
+const WorkspaceMembersTab = lazy(() =>
+  import('../components/WorkspaceMembersTab').then((module) => ({ default: module.WorkspaceMembersTab })),
+)
+const WorkspaceRolesTab = lazy(() =>
+  import('../components/WorkspaceRolesTab').then((module) => ({ default: module.WorkspaceRolesTab })),
+)
+
+function WorkspaceTabFallback() {
+  return (
+    <div className={styles.loadingStateContainer} role={'status'} aria-live={'polite'}>
+      <div className={styles.spinnerLarge} aria-hidden={'true'} />
+      <p className={styles.loadingStateText}>탭을 불러오는 중입니다...</p>
+    </div>
+  )
+}
 
 export function WorkspacePage() {
   const navigate = useNavigate()
@@ -338,7 +364,9 @@ export function WorkspacePage() {
             개요 탭으로 이동
           </button>
         </div>
-      ) : activeView === 'timeline' ? (
+      ) : (
+        <Suspense fallback={<WorkspaceTabFallback />}>
+          {activeView === 'timeline' ? (
         <WorkspaceTimelineTab
           workItems={overview.visibleWorkItems}
           nodes={overview.visibleNodes}
@@ -403,8 +431,10 @@ export function WorkspacePage() {
           currentUserId={currentUser.userId}
           currentUser={currentUser}
         />
-      ) : (
-        <WorkspaceOverviewTab overview={overview} snapshot={snapshot} currentUserId={currentUser.userId} />
+          ) : (
+            <WorkspaceOverviewTab overview={overview} snapshot={snapshot} currentUserId={currentUser.userId} />
+          )}
+        </Suspense>
       )}
     </section>
   )

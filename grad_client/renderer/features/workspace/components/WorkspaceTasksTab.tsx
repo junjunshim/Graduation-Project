@@ -10,6 +10,7 @@ import {
 import type { OrganizationNodeRecord, UserRecord, WorkItemRecord, WorkItemStatus } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
 import type { WorkItemTagId } from '../model/workItemTags'
+import { buildMemberNameLookup, groupWorkItemsByStatus } from '../model/workspaceTaskIndex'
 import { calculateOverallProgress } from '../model/workItemProgress'
 import { getWorkItemDueScheduleInfo, parseWorkspaceDay } from '../model/workItemDue'
 import type { DueScheduleType } from '../model/workItemDue'
@@ -53,12 +54,9 @@ type TaskTreeNode = {
 
 const WORK_ITEM_STATUSES: WorkItemStatus[] = ['in-progress', 'todo', 'done']
 
-function getMemberName(
-  userId: string,
-  members: Array<Pick<UserRecord, 'userId' | 'name'> & Partial<Pick<UserRecord, 'email'>>>,
-) {
-  const found = members.find((member) => member.userId === userId || (member.email && member.email === userId))
-  if (found) return found.name
+function getMemberName(userId: string, memberNames: ReadonlyMap<string, string>) {
+  const memberName = memberNames.get(userId)
+  if (memberName !== undefined) return memberName
   if (userId && !userId.startsWith('U-') && !userId.includes('@')) return userId
   return '미지정'
 }
@@ -118,7 +116,7 @@ function TaskProgressBar({
 function ModernTreeNodeRow({
   node,
   depth = 0,
-  members,
+  memberNames,
   collapsedMap,
   onToggleCollapse,
   isTrashMode = false,
@@ -129,7 +127,7 @@ function ModernTreeNodeRow({
 }: {
   node: TaskTreeNode
   depth?: number
-  members: WorkspaceTasksTabProps['members']
+  memberNames: ReadonlyMap<string, string>
   collapsedMap: ReadonlyMap<string, boolean>
   onToggleCollapse: (id: string) => void
   isTrashMode?: boolean
@@ -141,7 +139,7 @@ function ModernTreeNodeRow({
   const { item, children } = node
   const hasChildren = children.length > 0
   const isCollapsed = collapsedMap.get(item.workItemId) ?? false
-  const ownerName = getMemberName(item.ownerUserId, members)
+  const ownerName = getMemberName(item.ownerUserId, memberNames)
   const statusTone = getWorkItemStatusTone(item.status)
   const restorable = canRestoreItem ? canRestoreItem(item) : true
   const viewable = canViewDetailItem ? canViewDetailItem(item) : true
@@ -246,7 +244,7 @@ function ModernTreeNodeRow({
               key={child.item.workItemId}
               node={child}
               depth={depth + 1}
-              members={members}
+              memberNames={memberNames}
               collapsedMap={collapsedMap}
               onToggleCollapse={onToggleCollapse}
               isTrashMode={isTrashMode}
@@ -349,6 +347,8 @@ export function WorkspaceTasksTab({
     return showDeletedTasks ? deletedWorkItems : workItems
   }, [showDeletedTasks, deletedWorkItems, workItems])
 
+  const memberNames = useMemo(() => buildMemberNameLookup(members), [members])
+
   // 전체 및 상태별 카운트 계산
   const statusCounts = useMemo(() => {
     const items = effectiveWorkItems
@@ -363,7 +363,12 @@ export function WorkspaceTasksTab({
 
   const ownerOptions = useMemo(() => {
     const ownerIds = new Set<string>()
-    ;[...workItems, ...deletedWorkItems, ...allWorkItems].forEach((item) => ownerIds.add(item.ownerUserId))
+    const collectOwnerIds = (items: WorkItemRecord[]) => {
+      items.forEach((item) => ownerIds.add(item.ownerUserId))
+    }
+    collectOwnerIds(workItems)
+    collectOwnerIds(deletedWorkItems)
+    collectOwnerIds(allWorkItems)
 
     const ownersFromWorkItems = members.filter(
       (member) => ownerIds.has(member.userId) || Boolean(member.email && ownerIds.has(member.email)),
@@ -375,6 +380,11 @@ export function WorkspaceTasksTab({
       ).values(),
     ).sort((left, right) => left.name.localeCompare(right.name, 'ko'))
   }, [allWorkItems, deletedWorkItems, filterMembers, members, workItems])
+
+  const selectedOwner = useMemo(
+    () => ownerFilter === 'all' ? null : ownerOptions.find((member) => member.userId === ownerFilter) ?? null,
+    [ownerFilter, ownerOptions],
+  )
 
   const tagOptions = useMemo(() => {
     const map = new Map<string, { id: string; label: string }>()
@@ -391,13 +401,12 @@ export function WorkspaceTasksTab({
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase('ko-KR')
 
     return effectiveWorkItems.filter((item) => {
-      const ownerName = getMemberName(item.ownerUserId, members)
+      const ownerName = getMemberName(item.ownerUserId, memberNames)
       const matchesQuery =
         normalizedQuery.length === 0 ||
         item.title.toLocaleLowerCase('ko-KR').includes(normalizedQuery) ||
         ownerName.toLocaleLowerCase('ko-KR').includes(normalizedQuery)
 
-      const selectedOwner = ownerOptions.find((member) => member.userId === ownerFilter)
       const matchesOwner =
         ownerFilter === 'all' ||
         item.ownerUserId === ownerFilter ||
@@ -409,13 +418,12 @@ export function WorkspaceTasksTab({
 
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter
 
-      const dueScheduleInfo = getWorkItemDueScheduleInfo(item)
       const matchesSchedule =
         scheduleFilter === 'all'
           ? true
           : scheduleFilter === 'none'
             ? parseWorkspaceDay(item.dueDate) === null
-            : dueScheduleInfo.scheduleType === scheduleFilter
+            : getWorkItemDueScheduleInfo(item).scheduleType === scheduleFilter
 
       const matchesTag = tagFilter === 'all' || getWorkItemTag(item)?.id === tagFilter
 
@@ -423,15 +431,20 @@ export function WorkspaceTasksTab({
     })
   }, [
     effectiveWorkItems,
-    members,
+    memberNames,
     ownerFilter,
-    ownerOptions,
+    selectedOwner,
     scheduleFilter,
     searchQuery,
     showDeletedTasks,
     statusFilter,
     tagFilter,
   ])
+
+  const workItemsByStatus = useMemo(
+    () => groupWorkItemsByStatus(filteredWorkItems),
+    [filteredWorkItems],
+  )
 
   // 트리 빌드
   const taskTrees = useMemo(() => buildTaskTrees(filteredWorkItems), [filteredWorkItems])
@@ -818,7 +831,7 @@ export function WorkspaceTasksTab({
               <ModernTreeNodeRow
                 key={rootNode.item.workItemId}
                 node={rootNode}
-                members={members}
+                memberNames={memberNames}
                 collapsedMap={treeCollapsedMap}
                 onToggleCollapse={toggleTreeCollapse}
                 isTrashMode={showDeletedTasks}
@@ -854,7 +867,7 @@ export function WorkspaceTasksTab({
           {/* 상태별 그룹 아코디언 */}
           <div className={styles.modernTableBody}>
             {WORK_ITEM_STATUSES.map((status) => {
-              const groupItems = filteredWorkItems.filter((i) => i.status === status)
+              const groupItems = workItemsByStatus[status]
               if (groupItems.length === 0) return null
               const isCollapsed = collapsedGroups[status] ?? false
 
@@ -888,7 +901,7 @@ export function WorkspaceTasksTab({
                   {!isCollapsed &&
                     groupItems.map((item) => {
                       const isSelected = selectedIds.has(item.workItemId)
-                      const ownerName = getMemberName(item.ownerUserId, members)
+                      const ownerName = getMemberName(item.ownerUserId, memberNames)
                       const restorable = canRestoreItem ? canRestoreItem(item) : true
                       const viewable = canViewDetailItem(item)
 

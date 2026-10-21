@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { Icon, type IconName } from '../../../design-system/primitives/Icon'
@@ -88,13 +88,33 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   }, [node?.id])
 
   const href = (view: string) => `/workspace?view=${view}${node ? `&nodeId=${node.id}` : ''}`
-  const members = analyzeWorkspaceMembers({ rootNode: node, ...snapshot }).all
-  const managers = members.filter((member) => member.isDirect && member.isTopRole)
-  const myMembership = members.find((member) => member.userId === currentUserId)
+  const members = useMemo(
+    () => analyzeWorkspaceMembers({
+      rootNode: node,
+      nodes: snapshot.nodes,
+      roles: snapshot.roles,
+      users: snapshot.users,
+      authorities: snapshot.authorities,
+    }).all,
+    [node, snapshot.authorities, snapshot.nodes, snapshot.roles, snapshot.users],
+  )
+  const memberByUserId = useMemo(
+    () => new Map(members.map((member) => [member.userId, member])),
+    [members],
+  )
+  const userById = useMemo(
+    () => new Map(snapshot.users.map((user) => [user.userId, user])),
+    [snapshot.users],
+  )
+  const managers = useMemo(
+    () => members.filter((member) => member.isDirect && member.isTopRole),
+    [members],
+  )
+  const myMembership = memberByUserId.get(currentUserId)
   const myRole = myMembership?.effectiveRoleName
   const parent = snapshot.nodes.find((candidate) => candidate.id === node?.parentNodeId && !candidate.isDeleted)
   const children = snapshot.nodes.filter((candidate) => node && candidate.parentNodeId === node.id && !candidate.isDeleted)
-  const resolveUserName = (id: string) => members.find((member) => member.userId === id)?.name || snapshot.users.find((user) => user.userId === id)?.name
+  const resolveUserName = (id: string) => memberByUserId.get(id)?.name || userById.get(id)?.name
   const userName = (id: string) => resolveUserName(id) || '미지정'
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
   const dayDifference = (date: string) => Math.round((Date.parse(date.slice(0, 10)) - Date.parse(today)) / 86400000)

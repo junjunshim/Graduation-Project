@@ -8,7 +8,45 @@ import type {
   WorkItemRecord,
 } from './types'
 
-export function getEffectiveAuthorityBitSet(
+export type DirectAuthoritySource = Pick<WorkspaceSnapshot, 'roles' | 'authorities'>
+
+const MAX_AUTHORITY_CACHE_ENTRIES = 512
+const effectiveAuthorityBitSetCache = new WeakMap<WorkspaceSnapshot, Map<string, Set<number>>>()
+const directAuthorityBitSetCache = new WeakMap<DirectAuthoritySource, Map<string, Set<number>>>()
+
+function getAuthorityCacheKey(userId: string, nodeId: number) {
+  return `${userId.toLowerCase()}\u0000${nodeId}`
+}
+
+function getCachedAuthorityBitSet<Source extends object>(
+  cache: WeakMap<Source, Map<string, Set<number>>>,
+  source: Source,
+  cacheKey: string,
+  calculate: () => Set<number>,
+) {
+  let sourceCache = cache.get(source)
+  const cached = sourceCache?.get(cacheKey)
+
+  if (cached) {
+    return cached
+  }
+
+  const bitSet = calculate()
+  sourceCache ??= new Map<string, Set<number>>()
+
+  if (sourceCache.size >= MAX_AUTHORITY_CACHE_ENTRIES) {
+    const oldestKey = sourceCache.keys().next()
+    if (!oldestKey.done) {
+      sourceCache.delete(oldestKey.value)
+    }
+  }
+
+  sourceCache.set(cacheKey, bitSet)
+  cache.set(source, sourceCache)
+  return bitSet
+}
+
+function calculateEffectiveAuthorityBitSet(
   userId: string,
   nodeId: number,
   snapshot: WorkspaceSnapshot,
@@ -69,14 +107,33 @@ export function getEffectiveAuthorityBitSet(
   return combinedBitSet
 }
 
+function resolveEffectiveAuthorityBitSet(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): Set<number> {
+  return getCachedAuthorityBitSet(
+    effectiveAuthorityBitSetCache,
+    snapshot,
+    getAuthorityCacheKey(userId, nodeId),
+    () => calculateEffectiveAuthorityBitSet(userId, nodeId, snapshot),
+  )
+}
+
+export function getEffectiveAuthorityBitSet(
+  userId: string,
+  nodeId: number,
+  snapshot: WorkspaceSnapshot,
+): Set<number> {
+  return new Set(resolveEffectiveAuthorityBitSet(userId, nodeId, snapshot))
+}
+
 /**
  * 해당 노드에 '직접' 부여된 역할만으로 계산한 권한 비트 집합.
  * 서버의 get_direct_authority 와 동일하게 조상 노드로 상속하지 않는다.
  * 역할 부여/변경/회수와 역할 정의 변경은 이 직속 권한만 인정한다.
  */
-export type DirectAuthoritySource = Pick<WorkspaceSnapshot, 'roles' | 'authorities'>
-
-export function getDirectAuthorityBitSet(
+function calculateDirectAuthorityBitSet(
   userId: string,
   nodeId: number,
   snapshot: DirectAuthoritySource,
@@ -113,6 +170,27 @@ export function getDirectAuthorityBitSet(
   return combinedBitSet
 }
 
+function resolveDirectAuthorityBitSet(
+  userId: string,
+  nodeId: number,
+  snapshot: DirectAuthoritySource,
+): Set<number> {
+  return getCachedAuthorityBitSet(
+    directAuthorityBitSetCache,
+    snapshot,
+    getAuthorityCacheKey(userId, nodeId),
+    () => calculateDirectAuthorityBitSet(userId, nodeId, snapshot),
+  )
+}
+
+export function getDirectAuthorityBitSet(
+  userId: string,
+  nodeId: number,
+  snapshot: DirectAuthoritySource,
+): Set<number> {
+  return new Set(resolveDirectAuthorityBitSet(userId, nodeId, snapshot))
+}
+
 /** 특정 유저가 해당 노드에 '직속'으로 주어진 권한 비트를 가졌는지 검사 */
 export function hasDirectAuthorityBit(
   userId: string,
@@ -120,7 +198,7 @@ export function hasDirectAuthorityBit(
   bit: number,
   snapshot: DirectAuthoritySource,
 ): boolean {
-  return getDirectAuthorityBitSet(userId, nodeId, snapshot).has(bit)
+  return resolveDirectAuthorityBitSet(userId, nodeId, snapshot).has(bit)
 }
 
 /** 사용자 역할 추가/변경/회수에 필요한 직속 권한 (NODE_ADD_ROLE, Bit 14) */
@@ -150,7 +228,7 @@ export function hasEffectiveAuthorityBit(
   bit: number,
   snapshot: WorkspaceSnapshot,
 ): boolean {
-  const bitSet = getEffectiveAuthorityBitSet(userId, nodeId, snapshot)
+  const bitSet = resolveEffectiveAuthorityBitSet(userId, nodeId, snapshot)
   return bitSet.has(bit)
 }
 

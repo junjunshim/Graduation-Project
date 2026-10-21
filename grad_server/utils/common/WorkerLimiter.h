@@ -1,15 +1,20 @@
 #pragma once
 
+#include <array>
 #include <condition_variable>
 #include <cstddef>
+#include <deque>
+#include <functional>
 #include <mutex>
+#include <thread>
+#include <vector>
 
 namespace app_utils {
 
 // 무거운 작업(git 실행 + 동기 DB)의 동시 실행 수 상한.
 //
-// 왜 필요한가: runOffLoop 는 요청마다 스레드를 하나 띄우고 그 안에서 git 을 fork 한다.
-// 상한이 없으면 동시 요청 수만큼 스레드와 git 프로세스가 생겨 메모리가 예측 불가능해지고,
+// 왜 필요한가: runOffLoop 는 작업을 고정 워커 큐에 넣고, 워커 스레드가 그 안에서 git 을 fork 한다.
+// 상한이 없으면 동시 요청 수만큼 git 프로세스가 생겨 메모리가 예측 불가능해지고,
 // DB 커넥션(사설 풀)이 마르면 무관한 요청까지 전부 줄을 선다.
 //
 // 차선(lane)을 나눠 막는다:
@@ -17,11 +22,13 @@ namespace app_utils {
 //   - Network : clone / fetch / push. 최대 2 (기본) 이고 Normal 과 합산된다.
 //               원격 작업은 타임아웃이 분 단위라, 몇 건이 전체 자리를 다 잡으면
 //               파일 트리 조회까지 그 뒤에 줄을 선다. 그래서 합산 상한을 둔다.
+//               반대로 로컬 작업이 빈자리를 모두 채가지 않도록, 대기 중인 원격 작업 수만큼
+//               Normal 슬롯을 예약한다.
 //   - Internal: collab 내부 API(티켓 소비·작업 경로 해석). 최대 8 (기본), 합산하지 않는다.
 //               편집을 시작하는 경로라 git 작업 뒤에 서면 안 된다.
 //
 // 대기 줄에도 차선별 상한을 둔다(기본 32). 넘으면 기다리지 않고 즉시 거부한다 —
-// 무한 대기는 스레드를 무제한 쌓는 것과 같아서 제한의 뜻이 없어진다.
+// 무한 대기는 작업을 무제한 쌓는 것과 같아서 제한의 뜻이 없어진다.
 //
 // 기다리는 시간에도 상한을 둔다(기본 20초). 하염없이 기다리면 nginx 의 proxy_read_timeout(120초)이
 // 먼저 걸려 사용자에게 504 가 나간다 — 그 전에 스스로 503 으로 거절하는 편이 낫다.
@@ -32,7 +39,12 @@ public:
 
     static WorkerLimiter &instance();
 
-    // 슬롯을 잡는다. 대기 줄이 꽉 찼으면 기다리지 않고 false 를 준다(부르는 쪽이 503 으로 거부).
+    using Task = std::function<void()>;
+
+    // 고정 워커 큐에 작업을 넣는다. 큐가 가득 차면 false 를 돌려주고 호출부가 503 을 만든다.
+    bool submit(Lane lane, Task task);
+
+    // 슬롯을 잡는다. 자리가 날 때까지 기다리되, maxWaitMs 를 넘으면 false 를 준다(부르는 쪽이 503 으로 거부).
     // 자리가 날 때까지는 여기서 블록된다 — IO 스레드가 아니라 워커 스레드에서 부른다.
     bool acquire(Lane lane);
 
@@ -52,10 +64,16 @@ public:
     int maxWaitMs() const;
 
 private:
+    struct LaneState {
+        std::deque<Task> queue;
+        std::condition_variable cv;
+    };
+
     WorkerLimiter();
 
+    void workerLoop(Lane lane);
+
     bool canRunLocked(Lane lane) const;
-    bool queuedFullLocked(Lane lane) const;
 
     mutable std::mutex mutex_;
     std::condition_variable cv_;
@@ -64,6 +82,8 @@ private:
     int maxInternal_;
     int maxQueued_;
     int maxWaitMs_;
+    std::array<LaneState, 3> lanes_;
+    std::vector<std::thread> workers_;
     int running_ = 0;         // Normal + Network (Network 도 여기 포함된다)
     int networkRunning_ = 0;  // running_ 에 포함
     int internalRunning_ = 0; // 합산하지 않는다

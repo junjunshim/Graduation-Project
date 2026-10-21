@@ -22,7 +22,6 @@
 #include <mutex>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
 
 using namespace api;
@@ -322,7 +321,7 @@ std::string requesterEmail(const HttpRequestPtr &req) {
 // clone/fetch 같은 git 실행과 동기 DB 호출은 오래 걸린다.
 // 이벤트 루프를 막지 않도록 워커 스레드에서 실행하고, 응답만 원래 루프로 되돌린다.
 //
-// 동시 실행 수는 WorkerLimiter 가 막는다. 상한이 없으면 요청 수만큼 스레드와
+// 동시 실행 수는 WorkerLimiter 가 막는다. 상한이 없으면 요청 수만큼
 // git 프로세스가 생겨 메모리가 예측 불가능해지고, DB 커넥션(사설 풀)이 마르면 무관한
 // 요청까지 줄을 선다. 원격 작업(clone/fetch/push)은 Lane::Network 로 넘겨 더 좁은 한도를 쓴다.
 void runOffLoopImpl(std::function<void(const HttpResponsePtr &)> &&callback,
@@ -330,8 +329,8 @@ void runOffLoopImpl(std::function<void(const HttpResponsePtr &)> &&callback,
                     WorkerLimiter::Lane lane,
                     std::string requestId) {
     auto cb = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
-    std::thread worker([cb, work = std::move(work), lane, requestId = std::move(requestId)]() {
-        auto &limiter = WorkerLimiter::instance();
+    auto &limiter = WorkerLimiter::instance();
+    auto task = [cb, work = std::move(work), lane, requestId, &limiter]() {
         HttpResponsePtr resp;
 
         if (!limiter.acquire(lane)) {
@@ -360,8 +359,19 @@ void runOffLoopImpl(std::function<void(const HttpResponsePtr &)> &&callback,
         }
 
         app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
-    });
-    worker.detach();
+    };
+
+    if (!limiter.submit(lane, std::move(task))) {
+        LOG_WARN << "[GITHUB] event=worker.limit " << app_utils::requestIdTag(requestId)
+                 << " running=" << limiter.running()
+                 << " network=" << limiter.networkRunning()
+                 << " waiting=" << limiter.waiting();
+        auto resp = errorResponse("503",
+                                  "서버가 동시에 처리할 수 있는 작업 수를 넘었습니다. 잠시 후 다시 시도해 주세요.",
+                                  k503ServiceUnavailable);
+        resp->addHeader("Retry-After", "5");
+        app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
+    }
 }
 
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
@@ -477,16 +487,31 @@ GitResult ensureWorktree(const std::string &localPath, const std::string &worktr
     // 회수나 실패한 flush 로 그 자리에 남은 잔여 디렉터리를 치우고 git 등록 정보도 맞춘다.
     clearStaleWorktreeDir(localPath, worktreePath);
 
-    // 원격에만 있는 브랜치·기준 커밋을 쓰려면 먼저 원격을 최신화한다.
-    auto fetched = GitRunner::fetchAll(localPath, auth);
-    if (!fetched.ok()) {
-        LOG_WARN << "worktree 준비 전 fetch 실패 (" << branch << "): " << trim(fetched.err);
+    const auto hasLocal = [&]() {
+        return GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/heads/" + branch}).ok();
+    };
+    const auto hasRemote = [&]() {
+        return GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/remotes/origin/" + branch}).ok();
+    };
+
+    // 이미 있는 ref 로 worktree 를 만들 수 있으면 원격을 건드리지 않는다. 회수된 브랜치를 다시
+    // 여는 흔한 경로가 매번 네트워크 fetch 를 하면 Normal 차선이 원격 지연에 묶인다.
+    // 둘 다 없을 때만(새 원격 브랜치·기준 커밋) 원격을 최신화한다.
+    bool localExists = hasLocal();
+    bool remoteExists = hasRemote();
+    if (!localExists && !remoteExists) {
+        auto fetched = GitRunner::fetchAll(localPath, auth);
+        if (!fetched.ok()) {
+            LOG_WARN << "worktree 준비 전 fetch 실패 (" << branch << "): " << trim(fetched.err);
+        }
+        localExists = hasLocal();
+        remoteExists = hasRemote();
     }
 
-    if (GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/heads/" + branch}).ok()) {
+    if (localExists) {
         return GitRunner::worktreeAdd(localPath, worktreePath, branch);
     }
-    if (GitRunner::run(localPath, {"show-ref", "--verify", "--quiet", "refs/remotes/origin/" + branch}).ok()) {
+    if (remoteExists) {
         return GitRunner::worktreeAdd(localPath, worktreePath, branch, "origin/" + branch);
     }
     return GitRunner::worktreeAdd(localPath, worktreePath, branch, baseBranch.empty() ? "HEAD" : baseBranch);

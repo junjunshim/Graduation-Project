@@ -15,7 +15,6 @@
 #include <filesystem>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -107,8 +106,8 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
                 std::function<HttpResponsePtr()> &&work,
                 std::string requestId) {
     auto cb = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
-    std::thread worker([cb, work = std::move(work), requestId = std::move(requestId)]() {
-        auto &limiter = WorkerLimiter::instance();
+    auto &limiter = WorkerLimiter::instance();
+    auto task = [cb, work = std::move(work), requestId, &limiter]() {
         HttpResponsePtr resp;
 
         if (!limiter.acquire(WorkerLimiter::Lane::Internal)) {
@@ -131,8 +130,16 @@ void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
         }
 
         app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
-    });
-    worker.detach();
+    };
+
+    if (!limiter.submit(WorkerLimiter::Lane::Internal, std::move(task))) {
+        LOG_WARN << "[COLLAB] event=worker.limit " << app_utils::requestIdTag(requestId)
+                 << " lane=internal running=" << limiter.internalRunning()
+                 << " waiting=" << limiter.waiting();
+        auto resp = errorResponse("503", "서버가 붐빕니다. 잠시 후 다시 시도해 주세요.", k503ServiceUnavailable);
+        resp->addHeader("Retry-After", "2");
+        app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
+    }
 }
 
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,

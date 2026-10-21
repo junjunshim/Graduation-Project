@@ -3,6 +3,7 @@ import {
   parseAuthorityBitSet,
 } from './authorityDefinitions.js'
 import type {
+  OrganizationNodeRecord,
   RoleAssignmentRecord,
   WorkspaceSnapshot,
   WorkItemRecord,
@@ -10,12 +11,92 @@ import type {
 
 export type DirectAuthoritySource = Pick<WorkspaceSnapshot, 'roles' | 'authorities'>
 
+type AuthoritySourceIndex = {
+  rolesByUserNode: Map<string, RoleAssignmentRecord[]>
+  authorityBitsByDefinition: Map<string, Set<number>>
+}
+
 const MAX_AUTHORITY_CACHE_ENTRIES = 512
 const effectiveAuthorityBitSetCache = new WeakMap<WorkspaceSnapshot, Map<string, Set<number>>>()
 const directAuthorityBitSetCache = new WeakMap<DirectAuthoritySource, Map<string, Set<number>>>()
+const authoritySourceIndexCache = new WeakMap<DirectAuthoritySource, AuthoritySourceIndex>()
+const nodeIndexCache = new WeakMap<WorkspaceSnapshot, Map<number, OrganizationNodeRecord>>()
+const EMPTY_ROLES: RoleAssignmentRecord[] = []
 
 function getAuthorityCacheKey(userId: string, nodeId: number) {
   return `${userId.toLowerCase()}\u0000${nodeId}`
+}
+
+function getAuthorityDefinitionKey(nodeId: number, roleId: number | undefined) {
+  return roleId === undefined ? '' : `${nodeId}\u0000${roleId}`
+}
+
+function getNodeIndex(snapshot: WorkspaceSnapshot) {
+  const cached = nodeIndexCache.get(snapshot)
+  if (cached) {
+    return cached
+  }
+
+  const nodeById = new Map<number, OrganizationNodeRecord>()
+  snapshot.nodes.forEach((node) => {
+    if (!nodeById.has(node.id)) {
+      nodeById.set(node.id, node)
+    }
+  })
+  nodeIndexCache.set(snapshot, nodeById)
+  return nodeById
+}
+
+function getAuthoritySourceIndex(source: DirectAuthoritySource) {
+  const cached = authoritySourceIndexCache.get(source)
+  if (cached) {
+    return cached
+  }
+
+  const rolesByUserNode = new Map<string, RoleAssignmentRecord[]>()
+  source.roles.forEach((role) => {
+    if (role.isDeleted) {
+      return
+    }
+
+    const key = getAuthorityCacheKey(role.userId, role.nodeId)
+    const roles = rolesByUserNode.get(key)
+
+    if (roles) {
+      roles.push(role)
+    } else {
+      rolesByUserNode.set(key, [role])
+    }
+  })
+
+  const authorityBitsByDefinition = new Map<string, Set<number>>()
+  source.authorities?.forEach((authority) => {
+    const key = getAuthorityDefinitionKey(authority.nodeId, authority.id)
+
+    if (!authorityBitsByDefinition.has(key)) {
+      authorityBitsByDefinition.set(key, parseAuthorityBitSet(authority.authority))
+    }
+  })
+
+  const index = { rolesByUserNode, authorityBitsByDefinition }
+  authoritySourceIndexCache.set(source, index)
+  return index
+}
+
+function getRolesForUserNode(source: DirectAuthoritySource, userId: string, nodeId: number) {
+  return (
+    getAuthoritySourceIndex(source).rolesByUserNode.get(getAuthorityCacheKey(userId, nodeId)) ??
+    EMPTY_ROLES
+  )
+}
+
+function getAuthorityBitsForRole(
+  source: DirectAuthoritySource,
+  role: RoleAssignmentRecord,
+): Set<number> | undefined {
+  return getAuthoritySourceIndex(source).authorityBitsByDefinition.get(
+    getAuthorityDefinitionKey(role.nodeId, role.roleId),
+  )
 }
 
 function getCachedAuthorityBitSet<Source extends object>(
@@ -51,26 +132,20 @@ function calculateEffectiveAuthorityBitSet(
   nodeId: number,
   snapshot: WorkspaceSnapshot,
 ): Set<number> {
-  const node = snapshot.nodes.find((n) => n.id === nodeId)
+  const node = getNodeIndex(snapshot).get(nodeId)
   if (!node) {
     return new Set()
   }
 
   // 1단계: 현재 노드(nodeId)에 직접 할당된 역할들 확인
-  const directRoles = snapshot.roles.filter(
-    (r) => !r.isDeleted && r.nodeId === nodeId && (r.userId === userId || r.userId.toLowerCase() === userId.toLowerCase()),
-  )
-
-  let effectiveRoles: RoleAssignmentRecord[] = directRoles
+  let effectiveRoles = getRolesForUserNode(snapshot, userId, nodeId)
 
   // 2단계: 직접 할당이 없으면 path(부모 노드 역순) 탐색
   if (effectiveRoles.length === 0 && node.path && Array.isArray(node.path)) {
-    const reversedPath = [...node.path].reverse()
-    for (const ancestorId of reversedPath) {
-      if (ancestorId === nodeId) continue
-      const ancestorRoles = snapshot.roles.filter(
-        (r) => !r.isDeleted && r.nodeId === ancestorId && (r.userId === userId || r.userId.toLowerCase() === userId.toLowerCase()),
-      )
+    for (let index = node.path.length - 1; index >= 0; index -= 1) {
+      const ancestorId = node.path[index]
+      if (ancestorId === undefined || ancestorId === nodeId) continue
+      const ancestorRoles = getRolesForUserNode(snapshot, userId, ancestorId)
       if (ancestorRoles.length > 0) {
         effectiveRoles = ancestorRoles
         break
@@ -88,15 +163,7 @@ function calculateEffectiveAuthorityBitSet(
   effectiveRoles.forEach((roleRecord) => {
 
     // 해당 노드(또는 기본 프리셋)의 권한 비트마스크 찾기
-    const matchingAuth = snapshot.authorities?.find(
-      (a) => a.nodeId === roleRecord.nodeId && a.id === roleRecord.roleId,
-    )
-
-    const mask = matchingAuth?.authority
-    if (!mask) return
-
-    const bits = parseAuthorityBitSet(mask)
-    bits.forEach((bit) => combinedBitSet.add(bit))
+    getAuthorityBitsForRole(snapshot, roleRecord)?.forEach((bit) => combinedBitSet.add(bit))
   })
 
   // 4단계: DENY 비트 확인
@@ -138,12 +205,7 @@ function calculateDirectAuthorityBitSet(
   nodeId: number,
   snapshot: DirectAuthoritySource,
 ): Set<number> {
-  const directRoles = snapshot.roles.filter(
-    (r) =>
-      !r.isDeleted &&
-      r.nodeId === nodeId &&
-      (r.userId === userId || r.userId.toLowerCase() === userId.toLowerCase()),
-  )
+  const directRoles = getRolesForUserNode(snapshot, userId, nodeId)
 
   if (directRoles.length === 0) {
     return new Set()
@@ -152,14 +214,7 @@ function calculateDirectAuthorityBitSet(
   const combinedBitSet = new Set<number>()
 
   directRoles.forEach((roleRecord) => {
-    const matchingAuth = snapshot.authorities?.find(
-      (a) => a.nodeId === roleRecord.nodeId && a.id === roleRecord.roleId,
-    )
-
-    const mask = matchingAuth?.authority
-    if (!mask) return
-
-    parseAuthorityBitSet(mask).forEach((bit) => combinedBitSet.add(bit))
+    getAuthorityBitsForRole(snapshot, roleRecord)?.forEach((bit) => combinedBitSet.add(bit))
   })
 
   // DENY 비트가 켜져 있으면 권한 없음으로 취급한다.

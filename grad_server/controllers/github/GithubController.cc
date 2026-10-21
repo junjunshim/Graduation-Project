@@ -510,27 +510,19 @@ bool requireGithubChange(const std::string &requester, int nodeId, HttpResponseP
     return true;
 }
 
-// 요청한 브랜치가 실제로 checkout 되어 있는 작업 디렉터리를 확정한다.
-// 기본 브랜치는 clone 디렉터리 자체가 작업 트리이고, 나머지는 등록된 worktree 를 쓴다.
-// forWrite=true(편집 계열)면 연결 노드에 대한 GITHUB_CHANGE 권한까지 함께 확인한다.
-// 조회 계열은 위 get_github_repository_by_id 의 NODE_INFO_VIEW 만으로 충분하다.
-// 실패하면 outError 에 응답을 담고 false 를 돌려준다.
-bool resolveWorkDir(const std::string &requester, int repoId, const std::string &requestedBranch,
-                    std::string &outWorkDir, HttpResponsePtr &outError, bool forWrite = false) {
+// 이미 조회한 저장소 정보를 재사용해 작업 디렉터리를 확정한다.
+// 호출부가 get_github_repository_by_id 로 권한을 확인한 경우 같은 쿼리를 반복하지 않는다.
+bool resolveWorkDir(const std::string &requester, const Json::Value &repoRow,
+                    const std::string &requestedBranch, std::string &outWorkDir,
+                    HttpResponsePtr &outError, bool forWrite = false) {
     auto db = app().getDbClient();
 
-    Json::Value repoRow;
-    if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
-        outError = errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
-        return false;
-    }
-
     // 편집 계열이면 저장소가 연결된 노드의 GITHUB_CHANGE 권한을 한 번 더 본다.
-    // (조회는 위 함수의 NODE_INFO_VIEW 로 끝나지만 커밋·push·파일 조작은 그보다 높은 권한이 필요하다)
     if (forWrite && !requireGithubChange(requester, repoRow["node_id"].asInt(), outError)) {
         return false;
     }
 
+    const int repoId = repoRow["repo_id"].asInt();
     const std::string localPath = repoRow["local_path"].asString();
     const std::string defaultBranch = repoRow["default_branch"].asString();
     const std::string branch = requestedBranch.empty() ? defaultBranch : requestedBranch;
@@ -540,49 +532,48 @@ bool resolveWorkDir(const std::string &requester, int repoId, const std::string 
         return true;
     }
 
-    // 등록된 브랜치여야 worktree 경로를 알 수 있다.
-    // (원격에만 있는 브랜치는 먼저 POST /api/github/repos/branches 로 등록한다)
-    Json::Value target;
-    bool found = false;
-    Json::Value branches = rowsToArray(db->execSqlSync("SELECT * FROM get_github_branches($1, $2)", requester, repoId));
-    for (const auto &item : branches) {
-        if (item["name"].asString() == branch) {
-            target = item;
-            found = true;
-            break;
-        }
-    }
-    if (!found) {
+    // 등록된 브랜치 한 건만 읽는다. 전체 브랜치와 접속자(presence)를 매번 조립하는
+    // get_github_branches 호출은 작업 디렉터리 해석에 필요하지 않다.
+    auto branchRows = db->execSqlSync(
+        "SELECT worktree_path, base_branch FROM github_branches "
+        "WHERE repo_id = $1 AND name = $2 AND is_deleted = FALSE",
+        repoId, branch);
+    if (branchRows.empty()) {
         outError = errorResponse("P0801", "등록되지 않은 브랜치입니다: " + branch, k404NotFound);
         return false;
     }
 
-    const std::string worktreePath = target["worktree_path"].asString();
+    const std::string worktreePath = branchRows[0]["worktree_path"].asString();
     if (worktreePath.empty()) {
-        outError = errorResponse("P0807", "브랜치 작업 디렉터리 정보가 없습니다: " + branch, k500InternalServerError);
-        return false;
-    }
-
-    GitRunner::Auth auth;
-    const GitRunner::Auth *authPtr = nullptr;
-    const std::string token = userToken(db, requester);
-    if (!token.empty()) {
-        auth.login = "x-access-token";
-        auth.token = token;
-        authPtr = &auth;
-    }
-
-    auto ready = ensureWorktree(localPath, worktreePath, branch, target["base_branch"].asString(), authPtr);
-    if (!ready.ok()) {
-        LOG_WARN << "worktree 준비 실패 (" << branch << "): " << trim(ready.err);
-        outError = errorResponse("P0807", "브랜치 작업 디렉터리를 준비하지 못했습니다: " + trim(ready.err),
+        outError = errorResponse("P0807", "브랜치 작업 디렉터리 정보가 없습니다: " + branch,
                                  k500InternalServerError);
         return false;
     }
 
-    // 이 브랜치의 작업 디렉터리를 실제로 쓴다 — 회수 판정용 마지막 사용 시각을 남긴다.
-    // 조회·편집 모두 이 함수를 지나므로 기록 지점은 여기 하나면 충분하다. 기록이 실패해도 요청은
-    // 그대로 진행한다 — 회수 판정이 조금 늦어질 뿐, 응답을 실패시킬 이유가 없다.
+    // worktree 가 이미 준비되어 있으면 PAT 조회와 원격 fetch 를 모두 건너뛴다.
+    if (!worktreeReady(worktreePath)) {
+        GitRunner::Auth auth;
+        const GitRunner::Auth *authPtr = nullptr;
+        const std::string token = userToken(db, requester);
+        if (!token.empty()) {
+            auth.login = "x-access-token";
+            auth.token = token;
+            authPtr = &auth;
+        }
+
+        const auto &baseBranchField = branchRows[0]["base_branch"];
+        const std::string baseBranch =
+            baseBranchField.isNull() ? std::string() : baseBranchField.as<std::string>();
+        auto ready = ensureWorktree(localPath, worktreePath, branch, baseBranch, authPtr);
+        if (!ready.ok()) {
+            LOG_WARN << "worktree 준비 실패 (" << branch << "): " << trim(ready.err);
+            outError = errorResponse("P0807", "브랜치 작업 디렉터리를 준비하지 못했습니다: " + trim(ready.err),
+                                     k500InternalServerError);
+            return false;
+        }
+    }
+
+    // 마지막 사용 시각은 10분 단위로만 갱신되지만, 조회·편집 경로마다 한 번씩 기록한다.
     try {
         db->execSqlSync("SELECT touch_github_branch_worktree($1, $2)", repoId, branch);
     } catch (const std::exception &e) {
@@ -591,6 +582,19 @@ bool resolveWorkDir(const std::string &requester, int repoId, const std::string 
 
     outWorkDir = worktreePath;
     return true;
+}
+
+// 저장소 조회가 필요한 호출부를 위한 기존 진입점. 이미 조회한 호출부는 위 오버로드를 쓴다.
+bool resolveWorkDir(const std::string &requester, int repoId, const std::string &requestedBranch,
+                    std::string &outWorkDir, HttpResponsePtr &outError, bool forWrite = false) {
+    Json::Value repoRow;
+    if (!singleRow(app().getDbClient()->execSqlSync(
+                       "SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId),
+                   repoRow)) {
+        outError = errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        return false;
+    }
+    return resolveWorkDir(requester, repoRow, requestedBranch, outWorkDir, outError, forWrite);
 }
 
 // JSON 배열에서 비어 있지 않은 문자열만 순서대로 모은다.
@@ -1338,7 +1342,7 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
         // worktree 를 준비하지 못하면 커밋된 트리만 보여준다 — 조회 자체를 실패시키지 않는다.
         std::string workDir;
         HttpResponsePtr workDirFailure;
-        const bool hasWorkDir = resolveWorkDir(requester, repoId, requested, workDir, workDirFailure);
+        const bool hasWorkDir = resolveWorkDir(requester, repoRow, requested, workDir, workDirFailure);
         if (!hasWorkDir) {
             LOG_WARN << "worktree 확인 실패 (" << requested << "): 커밋된 트리만 조회합니다";
         }
@@ -1472,7 +1476,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
         if (wantIndex) {
             std::string workDir;
             HttpResponsePtr failure;
-            if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            if (!resolveWorkDir(requester, repoRow, branch, workDir, failure)) {
                 return failure;
             }
             readDir = workDir;

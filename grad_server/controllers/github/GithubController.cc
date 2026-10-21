@@ -39,8 +39,6 @@ constexpr long long kMaxReadOnlyFileBytes = 4 * 1024 * 1024;
 
 // GitHub 연동 권한 비트. 조회는 GITHUB_VIEW(bit 22), 저장소 추가/해제는 GITHUB_REPO_MANAGE(bit 24) 로 SQL 함수가 판정하고,
 // worktree 편집(브랜치 생성·삭제, 커밋, push, 파일 조작)은 GITHUB_CHANGE(bit 23) 로 여기서 한 번 더 막는다.
-constexpr char kGithubChangeAuthority[] = "GITHUB_CHANGE";
-
 // 응답 헬퍼
 
 HttpResponsePtr makeJsonResponse(const Json::Value &body, HttpStatusCode code) {
@@ -520,15 +518,15 @@ GitResult ensureWorktree(const std::string &localPath, const std::string &worktr
 // 저장소가 연결된 노드에 대한 GITHUB_CHANGE(bit 23) 권한을 확인한다.
 // 통과하면 true, 아니면 outError 에 응답을 담고 false 를 돌려준다.
 bool requireGithubChange(const std::string &requester, int nodeId, HttpResponsePtr &outError) {
-    auto authRows = app().getDbClient()->execSqlSync(
-        "SELECT check_authority_with_override(u.user_id, $2, $3) AS can_write "
-        "FROM users u WHERE u.email = $1 AND u.is_deleted = FALSE",
-        requester, nodeId, std::string(kGithubChangeAuthority));
-    if (authRows.empty()) {
+    Json::Value auth;
+    if (!singleRow(app().getDbClient()->execSqlSync(
+                       "SELECT * FROM get_github_change_authority($1, $2)",
+                       requester, nodeId),
+                   auth)) {
         outError = errorResponse("P0001", "요청자 계정을 찾을 수 없습니다.", k401Unauthorized);
         return false;
     }
-    if (!authRows[0]["can_write"].as<bool>()) {
+    if (!auth["can_write"].as<bool>()) {
         outError = errorResponse("P0103", "저장소 편집 권한(GITHUB_CHANGE)이 없습니다.", k403Forbidden);
         return false;
     }
@@ -559,16 +557,16 @@ bool resolveWorkDir(const std::string &requester, const Json::Value &repoRow,
 
     // 등록된 브랜치 한 건만 읽는다. 전체 브랜치와 접속자(presence)를 매번 조립하는
     // get_github_branches 호출은 작업 디렉터리 해석에 필요하지 않다.
-    auto branchRows = db->execSqlSync(
-        "SELECT worktree_path, base_branch FROM github_branches "
-        "WHERE repo_id = $1 AND name = $2 AND is_deleted = FALSE",
-        repoId, branch);
-    if (branchRows.empty()) {
+    Json::Value branchRow;
+    if (!singleRow(db->execSqlSync(
+                       "SELECT * FROM get_github_branch_worktree($1, $2)",
+                       repoId, branch),
+                   branchRow)) {
         outError = errorResponse("P0801", "등록되지 않은 브랜치입니다: " + branch, k404NotFound);
         return false;
     }
 
-    const std::string worktreePath = branchRows[0]["worktree_path"].asString();
+    const std::string worktreePath = branchRow["worktree_path"].asString();
     if (worktreePath.empty()) {
         outError = errorResponse("P0807", "브랜치 작업 디렉터리 정보가 없습니다: " + branch,
                                  k500InternalServerError);
@@ -586,7 +584,7 @@ bool resolveWorkDir(const std::string &requester, const Json::Value &repoRow,
             authPtr = &auth;
         }
 
-        const auto &baseBranchField = branchRows[0]["base_branch"];
+        const auto &baseBranchField = branchRow["base_branch"];
         const std::string baseBranch =
             baseBranchField.isNull() ? std::string() : baseBranchField.as<std::string>();
         auto ready = ensureWorktree(localPath, worktreePath, branch, baseBranch, authPtr);
@@ -3308,13 +3306,14 @@ void GithubController::refreshSession(const HttpRequestPtr &req, std::function<v
         auto db = app().getDbClient();
 
         // 1) 이 토큰의 주인을 먼저 찾는다. 만료된 토큰은 여기서 걸러진다.
-        auto owner = db->execSqlSync(
-            "SELECT user_email FROM github_extension_tokens WHERE refresh_token = $1 AND expires_at > CURRENT_TIMESTAMP",
-            refreshToken);
-        if (owner.empty()) {
+        Json::Value owner;
+        if (!singleRow(db->execSqlSync(
+                           "SELECT * FROM get_github_extension_token_owner($1)",
+                           refreshToken),
+                       owner)) {
             return errorResponse("P0812", "확장 세션이 만료되었습니다. 앱에서 다시 연결해 주세요.", k401Unauthorized);
         }
-        const std::string email = owner[0]["user_email"].as<std::string>();
+        const std::string email = owner["user_email"].as<std::string>();
 
         // 2) 새 토큰 세트를 만든다(회전 후 값을 저장해야 하므로 먼저 발급한다).
         Json::Value tokens = AuthController::generateToken(email);

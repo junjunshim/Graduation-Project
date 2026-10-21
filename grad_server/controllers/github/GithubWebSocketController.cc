@@ -127,9 +127,8 @@ bool touchPresence(const std::string &requester, const std::string &connectionId
 {
     auto db = app().getDbClient();
     auto rows = db->execSqlSync(
-        "UPDATE github_branch_presence SET last_seen_at = CURRENT_TIMESTAMP "
-        "WHERE connection_id = $1 AND user_email = $2 RETURNING 1",
-        connectionId, requester);
+        "SELECT * FROM touch_github_branch_presence($1, $2)",
+        requester, connectionId);
     return !rows.empty();
 }
 
@@ -137,26 +136,10 @@ bool touchPresence(const std::string &requester, const std::string &connectionId
 Json::Value presenceOfBranch(const std::string &requester, int repoId, const std::string &branch)
 {
     auto db = app().getDbClient();
-    // get_github_branches 는 저장소의 모든 브랜치와 접속자 배열을 만든다. 이동·퇴장 알림은
-    // 한 브랜치만 필요하므로, 권한을 한 번 확인한 뒤 그 브랜치의 접속자만 읽는다.
-    // 권한이 없으면 기존과 같이 빈 목록으로 처리한다(호출부는 알림 자체를 계속 보낸다).
+    // 저장소·노드·브랜치·GITHUB_VIEW 검증과 접속자 조회는 DB 함수 하나가 맡는다.
+    // 호출부는 실패해도 알림 자체를 계속 보내도록 예외를 잡아 빈 목록으로 대체한다.
     return rowsToArray(db->execSqlSync(
-        "WITH authorized AS ("
-        "  SELECT r.node_id FROM users u "
-        "  JOIN github_repositories r ON r.repo_id = $2 "
-        "  WHERE u.email = $1 AND u.is_deleted = FALSE AND r.is_deleted = FALSE "
-        "    AND check_authority_with_override(u.user_id, r.node_id, 'GITHUB_VIEW')"
-        ") "
-        "SELECT jsonb_build_object("
-        "  'email', gp.user_email, 'name', u.name, 'connection_id', gp.connection_id,"
-        "  'connected_at', gp.connected_at, 'last_seen_at', gp.last_seen_at"
-        ")::jsonb AS out_data "
-        "FROM github_branch_presence gp "
-        "JOIN github_branches b ON b.branch_id = gp.branch_id "
-        "JOIN users u ON u.email = gp.user_email "
-        "CROSS JOIN authorized a "
-        "WHERE b.repo_id = $2 AND b.name = $3 AND b.is_deleted = FALSE "
-        "ORDER BY gp.connected_at",
+        "SELECT * FROM get_github_branch_presence($1, $2, $3)",
         requester, repoId, branch));
 }
 } // namespace

@@ -126,3 +126,142 @@ BEGIN
     LEFT JOIN users u ON u.email = s.user_email AND u.is_deleted = FALSE;
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ---------------------------------------------------------------------------
+-- collab 문맥 조회 보조 함수
+--   티켓 발급과 경로 해석에 필요한 사용자·저장소·노드 정보를 한 번에 검증한다.
+-- ---------------------------------------------------------------------------
+
+-- Function: get_collab_ticket_context (CollabController::issueTicket)
+-- 저장소 조회 권한(GITHUB_VIEW)과 쓰기 권한(GITHUB_CHANGE)을 함께 계산한다.
+-- 검증 순서는 기존 C++ 흐름과 같다: 요청자 → 저장소 → 보기 권한 → 노드 생존.
+CREATE OR REPLACE FUNCTION get_collab_ticket_context(
+    p_requester_email users.email%TYPE,
+    p_repo_id github_repositories.repo_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_requester_name users.name%TYPE;
+    v_node_id organization_nodes.node_id%TYPE;
+    v_can_write BOOLEAN;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id, name INTO v_requester_id, v_requester_name
+    FROM users
+    WHERE email = p_requester_email AND is_deleted = FALSE;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 저장소 확인
+    SELECT node_id INTO v_node_id
+    FROM github_repositories
+    WHERE repo_id = p_repo_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
+    END IF;
+
+    -- 3. 저장소 보기 권한 확인
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_VIEW') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_VIEW permission on node: %', v_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 저장소가 연결된 노드가 살아 있는지 확인
+    IF NOT EXISTS (
+        SELECT 1 FROM organization_nodes
+        WHERE node_id = v_node_id AND is_deleted = FALSE
+    ) THEN
+        RAISE EXCEPTION '[P0815]Node of repository has been deleted: %', p_repo_id
+        USING ERRCODE = 'P0815';
+    END IF;
+
+    -- 5. 협업 쓰기 권한 (브랜치 생성·삭제, 커밋, push 와 같은 기준)
+    v_can_write := check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_CHANGE');
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'COLLAB_TICKET_CONTEXT',
+        'repo_id', p_repo_id,
+        'node_id', v_node_id,
+        'name', v_requester_name,
+        'can_write', v_can_write
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' OR SQLSTATE 'P0815' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to get collab ticket context: repo %, (REASON: %)',
+                p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Function: get_collab_worktree_context (CollabController::resolvePath /internal/collab/resolve)
+-- 저장소와 브랜치가 모두 살아 있고, 저장소의 노드도 삭제되지 않았을 때
+-- collab 이 쓸 경로 정보를 반환한다. 판정 주체는 계속 서버(DB 함수) 하나다.
+CREATE OR REPLACE FUNCTION get_collab_worktree_context(
+    p_repo_id github_repositories.repo_id%TYPE,
+    p_branch_name github_branches.name%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_node_id organization_nodes.node_id%TYPE;
+    v_local_path github_repositories.local_path%TYPE;
+    v_default_branch github_repositories.default_branch%TYPE;
+    v_worktree_path github_branches.worktree_path%TYPE;
+    v_branch_name github_branches.name%TYPE;
+BEGIN
+    SELECT r.node_id, r.local_path, r.default_branch,
+           b.worktree_path, b.name
+    INTO v_node_id, v_local_path, v_default_branch,
+         v_worktree_path, v_branch_name
+    FROM github_repositories r
+    JOIN github_branches b
+      ON b.repo_id = r.repo_id
+     AND b.name = p_branch_name
+     AND b.is_deleted = FALSE
+    WHERE r.repo_id = p_repo_id
+      AND r.is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0801]Repository or branch is not registered: % (repo %)',
+            p_branch_name, p_repo_id
+        USING ERRCODE = 'P0801';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM organization_nodes
+        WHERE node_id = v_node_id AND is_deleted = FALSE
+    ) THEN
+        RAISE EXCEPTION '[P0815]Node of repository has been deleted: %', p_repo_id
+        USING ERRCODE = 'P0815';
+    END IF;
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'COLLAB_WORKTREE_CONTEXT',
+        'repo_id', p_repo_id,
+        'node_id', v_node_id,
+        'branch', v_branch_name,
+        'local_path', v_local_path,
+        'default_branch', v_default_branch,
+        'worktree_path', v_worktree_path,
+        'branch_slug', github_branch_slug(v_branch_name)
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0801' OR SQLSTATE 'P0815' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to get collab worktree context: % (repo %), (REASON: %)',
+                p_branch_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;

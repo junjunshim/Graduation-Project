@@ -1537,3 +1537,216 @@ BEGIN
     ORDER BY b.repo_id, COALESCE(b.last_used_at, b.created_at) DESC;
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ---------------------------------------------------------------------------
+-- GitHub 조회·heartbeat 보조 함수
+--   컨트롤러가 저장소·브랜치·접속자 정보를 직접 읽지 않고 이 함수들을 호출한다.
+-- ---------------------------------------------------------------------------
+
+-- Function: touch_github_branch_presence (GitHubWebSocketController::touchPresence)
+-- 이미 등록된 접속 행의 last_seen_at 만 갱신한다. 행이 없으면 0건을 돌려주며,
+-- 호출자는 그때 전체 upsert 로 접속 행을 복구한다.
+CREATE OR REPLACE FUNCTION touch_github_branch_presence(
+    p_requester_email users.email%TYPE,
+    p_connection_id github_branch_presence.connection_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_last_seen_at github_branch_presence.last_seen_at%TYPE;
+BEGIN
+    UPDATE github_branch_presence
+    SET last_seen_at = CURRENT_TIMESTAMP
+    WHERE connection_id = p_connection_id
+      AND user_email = p_requester_email
+    RETURNING last_seen_at INTO v_last_seen_at;
+
+    IF NOT FOUND THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_PRESENCE',
+        'email', p_requester_email,
+        'connection_id', p_connection_id,
+        'last_seen_at', v_last_seen_at
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to touch github branch presence: %, (REASON: %)',
+                p_connection_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Function: get_github_branch_presence (GitHubWebSocketController::presenceOfBranch)
+-- 브랜치 하나의 접속자 목록만 반환한다. 권한이 없으면 P0103, 저장소·브랜치가
+-- 없으면 P0801, 저장소의 노드가 삭제됐으면 P0815 다.
+CREATE OR REPLACE FUNCTION get_github_branch_presence(
+    p_requester_email users.email%TYPE,
+    p_repo_id github_repositories.repo_id%TYPE,
+    p_branch_name github_branches.name%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_node_id organization_nodes.node_id%TYPE;
+    v_branch_id github_branches.branch_id%TYPE;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id
+    FROM users
+    WHERE email = p_requester_email AND is_deleted = FALSE;
+
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 저장소 확인
+    SELECT node_id INTO v_node_id
+    FROM github_repositories
+    WHERE repo_id = p_repo_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
+    END IF;
+
+    -- 3. 저장소가 연결된 노드가 살아 있는지 확인
+    IF NOT EXISTS (
+        SELECT 1 FROM organization_nodes
+        WHERE node_id = v_node_id AND is_deleted = FALSE
+    ) THEN
+        RAISE EXCEPTION '[P0815]Node of repository has been deleted: %', p_repo_id
+        USING ERRCODE = 'P0815';
+    END IF;
+
+    -- 4. 저장소 조회 권한 확인
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_VIEW') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_VIEW permission on node: %', v_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 5. 브랜치 확인
+    SELECT branch_id INTO v_branch_id
+    FROM github_branches
+    WHERE repo_id = p_repo_id
+      AND name = p_branch_name
+      AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0801]Branch is not registered on this repository: %', p_branch_name
+        USING ERRCODE = 'P0801';
+    END IF;
+
+    -- 6. 해당 브랜치의 접속자 목록 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_PRESENCE',
+        'repo_id', b.repo_id,
+        'branch', b.name,
+        'email', gp.user_email,
+        'name', u.name,
+        'connection_id', gp.connection_id,
+        'connected_at', gp.connected_at,
+        'last_seen_at', gp.last_seen_at
+    )::jsonb AS out_data
+    FROM github_branch_presence gp
+    JOIN github_branches b ON b.branch_id = gp.branch_id
+    JOIN users u ON u.email = gp.user_email
+    WHERE gp.branch_id = v_branch_id
+    ORDER BY gp.connected_at;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' OR SQLSTATE 'P0815' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to get github branch presence: % (repo %), (REASON: %)',
+                p_branch_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Function: get_github_change_authority (GitHubController::requireGithubChange)
+-- 요청자 행이 없으면 0건을 돌려준다. C++ 는 이를 P0001 로 유지하고,
+-- can_write=false 는 P0103 으로 유지한다. 노드 검사는 기존 호출 흐름과 같다.
+CREATE OR REPLACE FUNCTION get_github_change_authority(
+    p_requester_email users.email%TYPE,
+    p_node_id organization_nodes.node_id%TYPE
+) RETURNS SETOF integrated_data AS $$
+BEGIN
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_CHANGE_AUTHORITY',
+        'node_id', p_node_id,
+        'can_write', check_authority_with_override(u.user_id, p_node_id, 'GITHUB_CHANGE')
+    )::jsonb AS out_data
+    FROM users u
+    WHERE u.email = p_requester_email
+      AND u.is_deleted = FALSE;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to get github change authority: node %, (REASON: %)',
+                p_node_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Function: get_github_branch_worktree (GitHubController::resolveWorkDir)
+-- 저장소에 등록된 브랜치의 worktree 경로와 기준 브랜치만 반환한다.
+-- 등록되지 않은 브랜치는 0건이며 C++ 가 기존처럼 P0801 응답을 만든다.
+CREATE OR REPLACE FUNCTION get_github_branch_worktree(
+    p_repo_id github_repositories.repo_id%TYPE,
+    p_branch_name github_branches.name%TYPE
+) RETURNS SETOF integrated_data AS $$
+BEGIN
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_BRANCH_WORKTREE',
+        'repo_id', b.repo_id,
+        'name', b.name,
+        'worktree_path', b.worktree_path,
+        'base_branch', b.base_branch
+    )::jsonb AS out_data
+    FROM github_branches b
+    WHERE b.repo_id = p_repo_id
+      AND b.name = p_branch_name
+      AND b.is_deleted = FALSE;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to get github branch worktree: % (repo %), (REASON: %)',
+                p_branch_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Function: get_github_extension_token_owner (GitHubController::refreshSession)
+-- 확장 리프레시 토큰의 소유자만 반환한다. 토큰 값은 반환하지 않는다.
+CREATE OR REPLACE FUNCTION get_github_extension_token_owner(
+    p_refresh_token github_extension_tokens.refresh_token%TYPE
+) RETURNS SETOF integrated_data AS $$
+BEGIN
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_EXTENSION_SESSION',
+        'user_email', t.user_email,
+        'expires_at', t.expires_at
+    )::jsonb AS out_data
+    FROM github_extension_tokens t
+    WHERE t.refresh_token = p_refresh_token
+      AND t.expires_at > CURRENT_TIMESTAMP
+    LIMIT 1;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to get github extension token owner, (REASON: %)', SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;

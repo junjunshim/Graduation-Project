@@ -13,6 +13,11 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
+import {
+  buildTimelineMemberNameLookup,
+  getTimelineRange,
+  resolveTimelineMemberName,
+} from '../model/workspaceTaskIndex'
 import type { OrganizationNodeRecord, RoleMember, UserRecord, WorkItemRecord } from '../model/types'
 import styles from './WorkspaceTimelineTab.module.css'
 import { useWorkItemContextMenu } from './useWorkItemContextMenu'
@@ -73,8 +78,14 @@ const MAX_VERTICAL_SCALE = 1.4
 const ZOOM_BUTTON_FACTOR = 1.16
 const GROUP_ROW_HEIGHT_REM = 2.85
 const TASK_ROW_HEIGHT_REM = 2.45
-const RANGE_PADDING_MONTHS = 6
 const TIMELINE_TONES: TimelineTone[] = ['purple', 'blue', 'green', 'yellow']
+
+const WORKSPACE_DAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: WORKSPACE_TIME_ZONE,
+  year: 'numeric',
+})
 
 const toneClassNames: Record<TimelineTone, string> = {
   purple: styles.tonePurple,
@@ -107,12 +118,7 @@ function parseWorkspaceDay(value?: string) {
 }
 
 function getWorkspaceTodayTimestamp() {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    day: '2-digit',
-    month: '2-digit',
-    timeZone: WORKSPACE_TIME_ZONE,
-    year: 'numeric',
-  }).formatToParts(new Date())
+  const parts = WORKSPACE_DAY_FORMATTER.formatToParts(new Date())
   const year = Number(parts.find((part) => part.type === 'year')?.value)
   const month = Number(parts.find((part) => part.type === 'month')?.value)
   const day = Number(parts.find((part) => part.type === 'day')?.value)
@@ -178,33 +184,6 @@ function getTimelineEntries(workItems: WorkItemRecord[]) {
     )
 }
 
-function getMemberName(
-  userId: string,
-  members: RoleMember[],
-  users: WorkspaceTimelineTabProps['users'] = [],
-) {
-  const fromMembers = members.find((member) => member.userId === userId)
-  if (fromMembers) return fromMembers.name
-
-  // 역할이 제거되어 멤버 목록에 없는 담당자도 실제 이름으로 표시한다.
-  const fromUsers = users.find(
-    (user) => user.userId === userId || Boolean(user.email && user.email === userId),
-  )
-  return fromUsers?.name ?? '담당자 미정'
-}
-
-function getTimelineRange(entries: TimelineEntry[], today: number) {
-  const earliest = entries.length > 0 ? Math.min(today, ...entries.map((entry) => entry.start)) : today
-  const latest = entries.length > 0 ? Math.max(today, ...entries.map((entry) => entry.endExclusive)) : today
-  const earliestDate = new Date(earliest)
-  const latestDate = new Date(latest)
-
-  return {
-    start: Date.UTC(earliestDate.getUTCFullYear(), earliestDate.getUTCMonth() - RANGE_PADDING_MONTHS, 1),
-    end: Date.UTC(latestDate.getUTCFullYear(), latestDate.getUTCMonth() + RANGE_PADDING_MONTHS + 1, 1),
-  }
-}
-
 export function WorkspaceTimelineTab({ workItems, members, users = [] }: WorkspaceTimelineTabProps) {
   const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -256,6 +235,10 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
     getMonthStart(getWorkspaceTodayTimestamp()),
   )
   const today = getWorkspaceTodayTimestamp()
+  const memberNameLookup = useMemo(
+    () => buildTimelineMemberNameLookup(members, users),
+    [members, users],
+  )
 
   const entries = useMemo(() => getTimelineEntries(workItems), [workItems])
   const groups = useMemo<TimelineGroup[]>(() => {
@@ -1087,7 +1070,10 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
                             18,
                             ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
                           )
-                          const memberName = getMemberName(entry.item.ownerUserId, members, users)
+                          const memberName = resolveTimelineMemberName(
+                            memberNameLookup,
+                            entry.item.ownerUserId,
+                          )
                           const barStyle = group.style
 
                           return (

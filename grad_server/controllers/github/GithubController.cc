@@ -983,6 +983,22 @@ bool worktreePathExists(const std::string &workDir, const std::string &relPath) 
     return std::filesystem::exists(worktreeAbsPath(workDir, relPath), ec);
 }
 
+// workDir/path 디렉터리의 한 단계 항목 이름을 한 번에 모은다.
+// tree 조회에서 커밋 항목마다 exists() 를 호출하던 N+1 을 readdir 한 번으로 바꾼다.
+std::map<std::string, bool> worktreeChildNames(const std::string &workDir, const std::string &path) {
+    std::map<std::string, bool> names;
+    const std::string dir = path.empty() ? workDir : worktreeAbsPath(workDir, path);
+
+    std::error_code ec;
+    std::filesystem::directory_iterator it(dir, ec);
+    const std::filesystem::directory_iterator end;
+    while (!ec && it != end) {
+        names.emplace(it->path().filename().string(), false);
+        it.increment(ec);
+    }
+    return names;
+}
+
 // git 이 그 경로를 추적하는가(인덱스 기준). untracked 는 git mv / git rm 으로 다룰 수 없다.
 bool isTrackedPath(const std::string &workDir, const std::string &relPath) {
     return GitRunner::run(workDir, {"ls-files", "--error-unmatch", "--", relPath}).ok();
@@ -1094,8 +1110,8 @@ std::map<std::string, bool> worktreeOnlyNames(const std::string &workDir, const 
                           slash != std::string::npos);
         }
     };
-    collect(GitRunner::lsFiles(workDir, {"--cached", "-z", "--", pathspec}));
-    collect(GitRunner::lsFiles(workDir, {"--others", "--exclude-standard", "-z", "--", pathspec}));
+    // tracked(index) 와 untracked 를 한 번의 git 호출로 모은다.
+    collect(GitRunner::lsFiles(workDir, {"--cached", "--others", "--exclude-standard", "--", pathspec}));
 
     return names;
 }
@@ -1348,6 +1364,12 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
         }
 
         // 디렉터리 단위 lazy 조회: 요청한 경로의 한 단계만 받는다.
+        // 현재 디렉터리의 실제 항목을 한 번만 읽는다. 커밋 항목별 exists() 호출을 없앤다.
+        std::map<std::string, bool> worktreeChildren;
+        if (hasWorkDir) {
+            worktreeChildren = worktreeChildNames(workDir, path);
+        }
+
         auto tree = GitRunner::lsTree(localPath, ref, path, true);
 
         // 아직 커밋에 없는 디렉터리(새 폴더 안에 파일만 만든 경우)는 ls-tree 가 실패한다.
@@ -1377,7 +1399,7 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
             const std::string relPath = path.empty() ? name : (path + "/" + name);
 
             // 작업 트리에서 지운 항목은 아직 커밋에 남아 있어도 트리에서 감춘다.
-            if (hasWorkDir && !worktreePathExists(workDir, relPath)) {
+            if (hasWorkDir && worktreeChildren.find(name) == worktreeChildren.end()) {
                 continue;
             }
 
@@ -1404,6 +1426,10 @@ void GithubController::getRepositoryTree(const HttpRequestPtr &req, std::functio
         if (hasWorkDir) {
             for (const auto &item : worktreeOnlyNames(workDir, path)) {
                 if (present.find(item.first) != present.end()) {
+                    continue;
+                }
+                // index 에는 남아 있지만 작업 트리에서 지운 파일은 다시 보여주지 않는다.
+                if (worktreeChildren.find(item.first) == worktreeChildren.end()) {
                     continue;
                 }
 

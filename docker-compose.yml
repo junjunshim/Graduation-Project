@@ -21,6 +21,8 @@ services:
     build:
       context: .                # 빌드할 파일들이 있는 위치 (루트)
       dockerfile: Dockerfile.backend  # 사용할 레시피 파일 이름
+      args:
+        BASE_IMAGE: ${BACKEND_BASE_IMAGE:-axisflow-backend-base:1}
     container_name: ${SERVER_CONTAINER}
     ports:
       - "127.0.0.1:${SERVER_PORT}:8080"   # 호스트 루프백에만 바인딩 (외부 노출은 nginx 담당)

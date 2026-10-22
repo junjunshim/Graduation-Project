@@ -1186,31 +1186,46 @@ export function WorkspaceEntryPage() {
     }
   }, [paramRootId])
 
-  const sortedRootOptions = [...chooserDirectory.rootOptions].sort((a, b) => {
-    const aFav = favoriteIds.has(a.id) ? 1 : 0
-    const bFav = favoriteIds.has(b.id) ? 1 : 0
-    return bFav - aFav
-  })
+  const sortedRootOptions = useMemo(
+    () =>
+      [...chooserDirectory.rootOptions].sort((a, b) => {
+        const aFav = favoriteIds.has(a.id) ? 1 : 0
+        const bFav = favoriteIds.has(b.id) ? 1 : 0
+        return bFav - aFav
+      }),
+    [chooserDirectory.rootOptions, favoriteIds],
+  )
 
-  const hierarchyBranches = hierarchyRoot ? hierarchyRoot.children : []
-  const scopedListItems = hierarchyRoot
-    ? visibleDirectory.listItems.filter(
-        (item) => item.rootId === hierarchyRoot.id || item.id === hierarchyRoot.id,
-      )
-    : visibleDirectory.listItems
+  const hierarchyBranches = useMemo(
+    () => (hierarchyRoot ? hierarchyRoot.children : []),
+    [hierarchyRoot],
+  )
+  const scopedListItems = useMemo(
+    () =>
+      hierarchyRoot
+        ? visibleDirectory.listItems.filter(
+            (item) => item.rootId === hierarchyRoot.id || item.id === hierarchyRoot.id,
+          )
+        : visibleDirectory.listItems,
+    [hierarchyRoot, visibleDirectory.listItems],
+  )
 
   // 즐겨찾기된 워크스페이스가 목록의 맨 앞에 우선 배치되도록 정렬
-  const filteredListRows = [...scopedListItems].sort((a, b) => {
-    const aFav = favoriteIds.has(a.id) ? 1 : 0
-    const bFav = favoriteIds.has(b.id) ? 1 : 0
-    return bFav - aFav
-  })
+  const filteredListRows = useMemo(
+    () =>
+      [...scopedListItems].sort((a, b) => {
+        const aFav = favoriteIds.has(a.id) ? 1 : 0
+        const bFav = favoriteIds.has(b.id) ? 1 : 0
+        return bFav - aFav
+      }),
+    [favoriteIds, scopedListItems],
+  )
 
   const listPageCount = Math.max(1, Math.ceil(filteredListRows.length / WORKSPACE_LIST_PAGE_SIZE))
   const listPageStart = (currentPage - 1) * WORKSPACE_LIST_PAGE_SIZE
-  const visibleListRows = filteredListRows.slice(
-    listPageStart,
-    listPageStart + WORKSPACE_LIST_PAGE_SIZE,
+  const visibleListRows = useMemo(
+    () => filteredListRows.slice(listPageStart, listPageStart + WORKSPACE_LIST_PAGE_SIZE),
+    [filteredListRows, listPageStart],
   )
 
   function handleViewChange(nextView: 'hierarchy' | 'list') {
@@ -1286,6 +1301,8 @@ export function WorkspaceEntryPage() {
     if (hierarchyBranches.length > 0) {
       setCollapsedIds(collectAllCollapsibleIds(hierarchyBranches))
     }
+    // Only reset when the hierarchy root changes so cache refreshes keep the user's collapse state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hierarchyRoot?.id])
 
   function toggleCollapse(id: string) {

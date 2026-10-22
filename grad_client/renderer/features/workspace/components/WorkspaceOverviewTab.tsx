@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../../../design-system/primitives/Icon'
 import { getNodeVisualMetadata } from '../queries/workspaceDirectory'
 import { formatActivityMessage } from '../../dashboard/model/activityFormatter'
 import { getActivityLink } from '../../dashboard/model/activityLink'
-import { resolveActivityEntity } from '../../dashboard/model/resolveActivityEntity'
+import { resolveActivityEntities } from '../../dashboard/model/resolveActivityEntity'
 import { analyzeWorkspaceMembers } from '../model/memberInheritance'
 import { getRoleBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
 import type { WorkspaceOverview, WorkspaceSnapshot } from '../model/types'
@@ -161,8 +161,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   const selectedSchedules = weekDays.find((day) => day.key === selectedDate)?.schedules ?? []
   const activities = useMemo(
     () =>
-      (overview.activities ?? [])
-        .map((activity) => resolveActivityEntity(activity, rules, snapshot.workItems))
+      resolveActivityEntities(overview.activities ?? [], rules, snapshot.workItems)
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id),
     [overview.activities, rules, snapshot.workItems],
   )

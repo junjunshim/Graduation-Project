@@ -90,6 +90,14 @@ export function getRecurringCategoryLabel(category: RecurringCategory | string |
 
 // 32가지 톤온톤 뮤티드 역할/카테고리 뱃지 컬러 팔레트 (CSS 토큰 변수 매핑)
 const PALETTE_COUNT = 32
+const MAX_CATEGORY_BADGE_STYLE_CACHE_SIZE = 256
+
+const NEUTRAL_CATEGORY_BADGE_STYLE: React.CSSProperties = Object.freeze({
+  backgroundColor: 'var(--axis-status-neutral-soft, #ECE9E2)',
+  color: 'var(--axis-status-neutral, #6B665E)',
+  border: '1px solid var(--axis-status-neutral-border, #DCD7CE)',
+})
+const categoryBadgeStyleCache = new Map<string, React.CSSProperties>()
 
 function getPaletteStyleByIndex(index: number): React.CSSProperties {
   const safeIndex = Math.abs(index) % PALETTE_COUNT
@@ -132,11 +140,12 @@ export function getCategoryBadgeStyle(categoryName: string): React.CSSProperties
   const normalized = (categoryName || '').trim()
 
   if (!normalized) {
-    return {
-      backgroundColor: 'var(--axis-status-neutral-soft, #ECE9E2)',
-      color: 'var(--axis-status-neutral, #6B665E)',
-      border: '1px solid var(--axis-status-neutral-border, #DCD7CE)',
-    }
+    return NEUTRAL_CATEGORY_BADGE_STYLE
+  }
+
+  const cachedStyle = categoryBadgeStyleCache.get(normalized)
+  if (cachedStyle) {
+    return cachedStyle
   }
 
   let hash = 0
@@ -145,5 +154,15 @@ export function getCategoryBadgeStyle(categoryName: string): React.CSSProperties
     hash |= 0
   }
 
-  return getPaletteStyleByIndex(hash)
+  const style = Object.freeze(getPaletteStyleByIndex(hash))
+
+  if (categoryBadgeStyleCache.size >= MAX_CATEGORY_BADGE_STYLE_CACHE_SIZE) {
+    const oldestKey = categoryBadgeStyleCache.keys().next().value
+    if (oldestKey !== undefined) {
+      categoryBadgeStyleCache.delete(oldestKey)
+    }
+  }
+  categoryBadgeStyleCache.set(normalized, style)
+
+  return style
 }

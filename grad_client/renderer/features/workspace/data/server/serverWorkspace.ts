@@ -53,6 +53,7 @@ import {
   notifyWorkspaceLiveRefresh,
 } from '../workspaceCacheEvents.js'
 import { pruneFavoriteWorkspaceIds } from '../workspaceDirectorySelection.js'
+import { createCoalescedTask } from './coalescedTask.js'
 
 type ServerOperationError = {
   status: 'error'
@@ -162,10 +163,19 @@ function applyNodeSubtreeDeletionLocally(nodeId: number, isDeleted: boolean) {
  * 새로 생긴 노드의 역할이나 하위 노드 범위는 로컬에서 추정할 수 없다.
  * 진입점과 동일한 경량 스코프(/context/scope)를 다시 받아 노드 트리를 서버 기준으로 맞춘다.
  */
+const WORKSPACE_TREE_REFRESH_DELAY_MS = 50
+const workspaceTreeRefreshTask = createCoalescedTask(
+  () => loadWorkspaceDirectoryScopeOnServer(),
+  {
+    delayMs: WORKSPACE_TREE_REFRESH_DELAY_MS,
+    onError: (err) => {
+      console.warn('[WebSocket] 워크스페이스 트리 동기화 실패:', err)
+    },
+  },
+)
+
 function refreshWorkspaceTreeFromServer() {
-  void loadWorkspaceDirectoryScopeOnServer().catch((err) => {
-    console.warn('[WebSocket] 워크스페이스 트리 동기화 실패:', err)
-  })
+  workspaceTreeRefreshTask.schedule()
 }
 
 /**
@@ -1910,6 +1920,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
 
 export function disconnectNotificationWebSocket() {
   isIntentionalDisconnect = true
+  workspaceTreeRefreshTask.cancel()
   activePresenceChannelId = null
   socketPresenceChannelId = null
   stopHeartbeat()

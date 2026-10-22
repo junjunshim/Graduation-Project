@@ -14,6 +14,8 @@ import { fetchRecurringRules, getLocalRecurringRules, hasLoadedRecurringRulesFor
 import { subscribeToRecurringCache } from '../data/workspaceCacheEvents'
 import { getSchedulesForCalendarDate } from '../model/recurringCalendar'
 import { useKoreanHolidays } from '../model/koreanHolidays'
+import { getWorkspaceTodayTimestamp } from '../model/workItemDue'
+import { buildWorkspaceOverviewTaskSummary } from '../model/workspaceOverviewSummary'
 import {
   canViewHistory,
   canViewMembers,
@@ -43,6 +45,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   overview: WorkspaceOverview; snapshot: WorkspaceSnapshot; currentUserId: string
 }) {
   const node = overview.rootNode
+  const nodeId = node?.id
   const [rules, setRules] = useState<RecurringRuleRecord[]>(() => {
     return node ? getLocalRecurringRules(node.id, true) : []
   })
@@ -56,23 +59,23 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   useEffect(() => {
     let disposed = false
     setSelectedScheduleDate(null)
-    if (node) {
-      const cached = getLocalRecurringRules(node.id, true)
+    if (nodeId !== undefined) {
+      const cached = getLocalRecurringRules(nodeId, true)
       setRules(cached)
-      if (cached.length === 0 && !hasLoadedRecurringRulesForNode(node.id)) {
+      if (cached.length === 0 && !hasLoadedRecurringRulesForNode(nodeId)) {
         setLoading(true)
       }
     }
     let requestId = 0
     const reload = async () => {
       const request = ++requestId
-      const cached = node ? getLocalRecurringRules(node.id, true) : []
-      if (cached.length === 0 && node && !hasLoadedRecurringRulesForNode(node.id)) {
+      const cached = nodeId !== undefined ? getLocalRecurringRules(nodeId, true) : []
+      if (cached.length === 0 && nodeId !== undefined && !hasLoadedRecurringRulesForNode(nodeId)) {
         setLoading(true)
       }
       setError(false)
       try {
-        const next = node ? await fetchRecurringRules(node.id, true) : []
+        const next = nodeId !== undefined ? await fetchRecurringRules(nodeId, true) : []
         if (!disposed && request === requestId) setRules(next)
       } catch {
         if (!disposed && request === requestId) setError(true)
@@ -82,10 +85,10 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
     }
     void reload()
     const unsubscribe = subscribeToRecurringCache((event) => {
-      if (!event.nodeId || event.nodeId === node?.id) void reload()
+      if (!event.nodeId || event.nodeId === nodeId) void reload()
     })
     return () => { disposed = true; unsubscribe() }
-  }, [node?.id])
+  }, [nodeId])
 
   const href = (view: string) => `/workspace?view=${view}${node ? `&nodeId=${node.id}` : ''}`
   const members = useMemo(
@@ -112,35 +115,57 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
   )
   const myMembership = memberByUserId.get(currentUserId)
   const myRole = myMembership?.effectiveRoleName
-  const parent = snapshot.nodes.find((candidate) => candidate.id === node?.parentNodeId && !candidate.isDeleted)
-  const children = snapshot.nodes.filter((candidate) => node && candidate.parentNodeId === node.id && !candidate.isDeleted)
+  const parent = useMemo(
+    () => snapshot.nodes.find((candidate) => candidate.id === node?.parentNodeId && !candidate.isDeleted),
+    [node?.parentNodeId, snapshot.nodes],
+  )
+  const children = useMemo(
+    () => snapshot.nodes.filter((candidate) => node && candidate.parentNodeId === node.id && !candidate.isDeleted),
+    [node, snapshot.nodes],
+  )
   const resolveUserName = (id: string) => memberByUserId.get(id)?.name || userById.get(id)?.name
   const userName = (id: string) => resolveUserName(id) || '미지정'
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-  const dayDifference = (date: string) => Math.round((Date.parse(date.slice(0, 10)) - Date.parse(today)) / 86400000)
+  const todayTimestamp = getWorkspaceTodayTimestamp()
+  const today = new Date(todayTimestamp).toISOString().slice(0, 10)
   // 일정 패널도 공휴일 정책을 반영하므로, 공휴일 데이터가 늦게 도착하면 이번 주 일정을 다시 계산한다.
   const scheduleYear = Number(today.slice(0, 4))
-  useKoreanHolidays([scheduleYear - 1, scheduleYear, scheduleYear + 1])
-  const tasks = overview.visibleWorkItems.filter((item) => !item.isDeleted)
-  const pending = tasks.filter((item) => item.status !== 'done').sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || a.title.localeCompare(b.title, 'ko'))
-  const overdue = pending.filter((item) => item.dueDate && dayDifference(item.dueDate) < 0).length
-  const priorityTasks = pending.filter((item) => item.dueDate && dayDifference(item.dueDate) < 7)
-  const weekStart = new Date(`${today}T00:00:00Z`)
-  weekStart.setUTCDate(weekStart.getUTCDate() - (weekStart.getUTCDay() + 6) % 7)
-  const weekDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart)
-    date.setUTCDate(date.getUTCDate() + index)
-    const key = date.toISOString().slice(0, 10)
-    return { key, day: date.getUTCDate(), label: ['월', '화', '수', '목', '금', '토', '일'][index], schedules: getSchedulesForCalendarDate(rules, key) }
-  })
+  const holidayRevision = useKoreanHolidays([scheduleYear - 1, scheduleYear, scheduleYear + 1])
+  const taskSummary = useMemo(
+    () => buildWorkspaceOverviewTaskSummary(overview.visibleWorkItems, todayTimestamp),
+    [overview.visibleWorkItems, todayTimestamp],
+  )
+  const {
+    tasks,
+    pending,
+    priorityTasks,
+    overdueCount,
+    completedCount,
+    inProgressCount,
+    todoCount,
+    completionRate,
+  } = taskSummary
+  const weekDays = useMemo(() => {
+    const weekStart = new Date(`${today}T00:00:00Z`)
+    weekStart.setUTCDate(weekStart.getUTCDate() - (weekStart.getUTCDay() + 6) % 7)
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(weekStart)
+      date.setUTCDate(date.getUTCDate() + index)
+      const key = date.toISOString().slice(0, 10)
+      return { key, day: date.getUTCDate(), label: ['월', '화', '수', '목', '금', '토', '일'][index], schedules: getSchedulesForCalendarDate(rules, key) }
+    })
+    // 공휴일 데이터가 늦게 도착하면 주간 일정의 휴일 정책도 다시 계산해야 한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holidayRevision, rules, today])
   const selectedDate = selectedScheduleDate ?? today
   const selectedSchedules = weekDays.find((day) => day.key === selectedDate)?.schedules ?? []
-  const completedCount = tasks.filter((item) => item.status === 'done').length
-  const inProgressCount = tasks.filter((item) => item.status === 'in-progress').length
-  const todoCount = tasks.length - completedCount - inProgressCount
-  const completionRate = tasks.length ? Math.round(completedCount / tasks.length * 100) : 0
-  const activities = (overview.activities ?? []).map((activity) => resolveActivityEntity(activity, rules, snapshot.workItems))
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id)
+  const activities = useMemo(
+    () =>
+      (overview.activities ?? [])
+        .map((activity) => resolveActivityEntity(activity, rules, snapshot.workItems))
+        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id - a.id),
+    [overview.activities, rules, snapshot.workItems],
+  )
 
   const canViewTasks = node ? canViewWorkItems(currentUserId, node.id, snapshot) : false
   const canViewSched = node ? canViewSchedule(currentUserId, node.id, snapshot) : false
@@ -157,9 +182,9 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
           {canViewTasks ? (
             <>
               <span className={styles.statTotal}><span className={styles.statLabel}><Icon name="list" size={16} />전체</span><b>{tasks.length}</b></span>
-              <span className={styles.statProgress}><span className={styles.statLabel}><Icon name="clock" size={16} />진행 중</span><b>{tasks.filter((item) => item.status === 'in-progress').length}</b></span>
-              <span className={styles.statDone}><span className={styles.statLabel}><Icon name="checkCircle" size={16} />완료</span><b>{tasks.filter((item) => item.status === 'done').length}</b></span>
-              <span className={styles.statOverdue}><span className={styles.statLabel}><Icon name="alertTriangle" size={16} />기한 초과</span><b>{overdue}</b></span>
+              <span className={styles.statProgress}><span className={styles.statLabel}><Icon name="clock" size={16} />진행 중</span><b>{inProgressCount}</b></span>
+              <span className={styles.statDone}><span className={styles.statLabel}><Icon name="checkCircle" size={16} />완료</span><b>{completedCount}</b></span>
+              <span className={styles.statOverdue}><span className={styles.statLabel}><Icon name="alertTriangle" size={16} />기한 초과</span><b>{overdueCount}</b></span>
             </>
           ) : (
             <div className={styles.statRestricted}>
@@ -268,14 +293,13 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
           <div className={styles.progressLegend}><span><i className={styles.progressDone} />완료 <b>{completedCount}</b></span><span><i className={styles.progressActive} />진행 중 <b>{inProgressCount}</b></span><span><i />예정 <b>{todoCount}</b></span></div>
           <div className={styles.priorityHeading}><strong>먼저 확인할 업무</strong><span className={styles.muted}>기한 초과 · 오늘부터 6일 이내 마감</span></div>
           <div className={styles.taskList} role="region" aria-label="먼저 확인할 업무 목록" tabIndex={0}>
-          {priorityTasks.length ? <div className={styles.priorityTasks}>{priorityTasks.map((item) => {
-            const days = item.dueDate ? dayDifference(item.dueDate) : null
+          {priorityTasks.length ? <div className={styles.priorityTasks}>{priorityTasks.map(({ item, days }) => {
             const canDetail = canViewWorkItemDetail(currentUserId, item, snapshot)
-            const cardClasses = [styles.priorityTask, days !== null && days < 0 ? styles.priorityOverdue : '', !canDetail ? styles.priorityTaskDisabled : ''].filter(Boolean).join(' ')
+            const cardClasses = [styles.priorityTask, days < 0 ? styles.priorityOverdue : '', !canDetail ? styles.priorityTaskDisabled : ''].filter(Boolean).join(' ')
             const content = <>
-              <span className={styles.taskIcon}><Icon name={days !== null && days < 0 ? 'alertTriangle' : 'checkCircle'} size={18} /></span>
+              <span className={styles.taskIcon}><Icon name={days < 0 ? 'alertTriangle' : 'checkCircle'} size={18} /></span>
               <span className={styles.itemContent}><strong>{item.title}</strong><span className={styles.meta}><span className={styles.statusBadge}>{getWorkItemStatusLabel(item.status)}</span><span className={styles.person}><Icon name="user" size={15} /><span>{userName(item.ownerUserId)}</span></span></span></span>
-              <span className={[styles.badge, days !== null && days < 0 ? styles.overdue : styles.due].join(' ')}>{days === null ? '마감일 없음' : days < 0 ? `${-days}일 초과` : days === 0 ? 'D-Day' : `D-${days}`}</span>
+              <span className={[styles.badge, days < 0 ? styles.overdue : styles.due].join(' ')}>{days < 0 ? `${-days}일 초과` : days === 0 ? 'D-Day' : `D-${days}`}</span>
               {canDetail && <Icon name="chevronRight" size={16} className={styles.rowArrow} />}
             </>
             return canDetail ? (

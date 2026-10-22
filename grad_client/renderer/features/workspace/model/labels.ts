@@ -83,9 +83,12 @@ export const RECURRING_CATEGORY_OPTIONS: ReadonlyArray<{ value: RecurringCategor
   { value: 'MEETING', label: '정기 회의' },
   { value: 'EVENT', label: '조직 행사' },
 ]
+const RECURRING_CATEGORY_LABEL_BY_VALUE: ReadonlyMap<string, string> = new Map(
+  RECURRING_CATEGORY_OPTIONS.map(({ value, label }) => [value, label]),
+)
 
 export function getRecurringCategoryLabel(category: RecurringCategory | string | null | undefined) {
-  return RECURRING_CATEGORY_OPTIONS.find((option) => option.value === category)?.label ?? category ?? ''
+  return RECURRING_CATEGORY_LABEL_BY_VALUE.get(category ?? '') ?? category ?? ''
 }
 
 // 32가지 톤온톤 뮤티드 역할/카테고리 뱃지 컬러 팔레트 (CSS 토큰 변수 매핑)

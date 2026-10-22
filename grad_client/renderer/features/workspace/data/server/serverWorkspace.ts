@@ -1825,16 +1825,19 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
                     }
                   })
 
+                  const targetWorkItemIds = new Set<string>()
                   currentDb.workItems.forEach((item) => {
-                    if (targetNodeIds.has(item.ownerNodeId) && !item.isDeleted) {
+                    if (!targetNodeIds.has(item.ownerNodeId)) return
+
+                    targetWorkItemIds.add(item.workItemId)
+                    if (!item.isDeleted) {
                       item.isDeleted = true
                       isModified = true
                     }
                   })
 
                   ;(currentDb.files ?? []).forEach((file) => {
-                    const owner = currentDb.workItems.find((item) => item.workItemId === file.workItemId)
-                    if (owner && targetNodeIds.has(owner.ownerNodeId) && !file.isDeleted) {
+                    if (targetWorkItemIds.has(file.workItemId) && !file.isDeleted) {
                       file.isDeleted = true
                       isModified = true
                     }

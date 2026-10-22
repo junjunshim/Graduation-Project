@@ -50,6 +50,10 @@ export function useOrgManagement(currentUser: UserRecord | null) {
 
     return orgNodes.filter((node) => matchedIds.has(node.id))
   }, [overview, searchQuery])
+  const visibleOrgNodeIdSet = useMemo(
+    () => new Set(visibleOrgNodes.map((node) => node.id)),
+    [visibleOrgNodes],
+  )
 
   useEffect(() => {
     if (!currentUser) {
@@ -75,18 +79,17 @@ export function useOrgManagement(currentUser: UserRecord | null) {
       return
     }
 
-    if (!selectedNodeId || !visibleOrgNodes.some((node) => node.id === selectedNodeId)) {
+    if (!selectedNodeId || !visibleOrgNodeIdSet.has(selectedNodeId)) {
       setSelectedNodeId(visibleOrgNodes[0].id)
     }
-  }, [selectedNodeId, visibleOrgNodes])
+  }, [selectedNodeId, visibleOrgNodeIdSet, visibleOrgNodes])
 
-  const rootNodes = visibleOrgNodes.filter((node) => {
-    if (!node.parentNodeId) {
-      return true
-    }
-
-    return !visibleOrgNodes.some((candidate) => candidate.id === node.parentNodeId)
-  })
+  const rootNodes = useMemo(
+    () => visibleOrgNodes.filter((node) =>
+      !node.parentNodeId || !visibleOrgNodeIdSet.has(node.parentNodeId),
+    ),
+    [visibleOrgNodeIdSet, visibleOrgNodes],
+  )
 
   const currentUserId = currentUser?.userId
   const selectedDetail = useMemo(

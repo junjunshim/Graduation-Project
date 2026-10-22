@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
@@ -151,48 +151,21 @@ function DendroBranchConnectors({
   const svgHeight = 100
 
   useLayoutEffect(() => {
+    let frameId: number | null = null
+
     function updateCurves() {
       const container = containerRef.current
       if (!container) return
 
-      const containerRect = container.getBoundingClientRect()
-      if (containerRect.width === 0) return
-
-      // 부모 카드 요소 찾기 (바로 상위의 dendroSubTree 또는 dendroTopDownRoot)
-      const parentSubTree = container.parentElement?.closest(`.${styles.dendroSubTree}, .${styles.dendroTopDownRoot}`)
-      const parentCard = (parentSubTree?.querySelector(`:scope > .${styles.dendroNodeCardWrapper} > .${styles.dendroCard}`) ||
-        parentSubTree?.querySelector(`:scope > .${styles.rootCardWrapper} > .${styles.rootCard}`)) as HTMLElement | null
+      const containerWidth = container.offsetWidth
+      if (containerWidth === 0) return
 
       const childCols = Array.from(container.querySelectorAll(`:scope > .${styles.dendroChildCol}`)) as HTMLElement[]
       if (childCols.length === 0) return
 
-      // 자식 카드들의 위치 추출
-      const childCardCenters: number[] = []
-      childCols.forEach((col) => {
-        const childCard = (col.querySelector(`:scope > .${styles.dendroSubTree} > .${styles.dendroNodeCardWrapper} > .${styles.dendroCard}`) ||
-          col.querySelector(`.${styles.dendroCard}`)) as HTMLElement | null
-        
-        let childX = col.offsetLeft + col.offsetWidth / 2
-        if (childCard) {
-          const childRect = childCard.getBoundingClientRect()
-          const childCenterScreen = childRect.left + childRect.width / 2
-          const relativeRatio = (childCenterScreen - containerRect.left) / containerRect.width
-          childX = relativeRatio * container.offsetWidth
-        }
-        childCardCenters.push(childX)
-      })
-
-      // 부모 카드의 연결선 출발점 (X좌표):
-      // 자식들이 1개 이상 있을 때 첫 번째 자식 중심과 마지막 자식 중심의 정중앙 또는 부모 카드의 화면 중심
-      let parentX = container.offsetWidth / 2
-      if (parentCard) {
-        const parentRect = parentCard.getBoundingClientRect()
-        const parentCenterScreen = parentRect.left + parentRect.width / 2
-        const relativeRatio = (parentCenterScreen - containerRect.left) / containerRect.width
-        parentX = relativeRatio * container.offsetWidth
-      } else if (childCardCenters.length > 0) {
-        parentX = (childCardCenters[0] + childCardCenters[childCardCenters.length - 1]) / 2
-      }
+      // 부모 카드는 행 중앙에 고정되어 있으므로 화면 좌표 재측정 없이 offset만 사용한다.
+      const childCardCenters = childCols.map((col) => col.offsetLeft + col.offsetWidth / 2)
+      const parentX = containerWidth / 2
       const parentY = 0
 
       const newPaths: string[] = []
@@ -205,36 +178,37 @@ function DendroBranchConnectors({
         newPaths.push(path)
       })
 
-      setPaths(newPaths)
+      setPaths((previousPaths) =>
+        previousPaths.length === newPaths.length
+        && previousPaths.every((path, index) => path === newPaths[index])
+          ? previousPaths
+          : newPaths,
+      )
     }
 
-    updateCurves()
-    const startTime = performance.now()
-    let animFrameId: number
-    const animateCurves = (now: number) => {
-      updateCurves()
-      if (now - startTime < 450) {
-        animFrameId = requestAnimationFrame(animateCurves)
-      }
+    function scheduleUpdate() {
+      if (frameId !== null) return
+      frameId = requestAnimationFrame(() => {
+        frameId = null
+        updateCurves()
+      })
     }
-    animFrameId = requestAnimationFrame(animateCurves)
 
+    scheduleUpdate()
     const containerEl = containerRef.current
     let resizeObserver: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined' && containerEl) {
-      resizeObserver = new ResizeObserver(() => {
-        updateCurves()
-      })
+      resizeObserver = new ResizeObserver(scheduleUpdate)
       resizeObserver.observe(containerEl)
       const subTree = containerEl.closest(`.${styles.dendroSubTree}`) || containerEl.closest(`.${styles.dendroTopDownRoot}`)
       if (subTree) resizeObserver.observe(subTree)
     }
 
-    window.addEventListener('resize', updateCurves)
+    window.addEventListener('resize', scheduleUpdate)
     return () => {
-      cancelAnimationFrame(animFrameId)
+      if (frameId !== null) cancelAnimationFrame(frameId)
       if (resizeObserver) resizeObserver.disconnect()
-      window.removeEventListener('resize', updateCurves)
+      window.removeEventListener('resize', scheduleUpdate)
     }
   }, [childrenCount, containerRef, triggerKey])
 
@@ -396,7 +370,7 @@ function TreeNodeCard({
                 )}
                 {item.children.map((child) => (
                   <div key={child.id} className={styles.dendroChildCol}>
-                    <TreeNodeCard
+                    <MemoizedTreeNodeCard
                       item={child}
                       depth={depth + 1}
                       favoriteIds={favoriteIds}
@@ -419,6 +393,8 @@ function TreeNodeCard({
     </div>
   )
 }
+
+const MemoizedTreeNodeCard = memo(TreeNodeCard)
 
 function HierarchyView({
   root,
@@ -495,6 +471,36 @@ function HierarchyView({
   // 카드 자체를 누르고 드래그해도 정상적으로 캔버스를 끌 수 있도록 허용
   const isDraggingRef = useRef(false)
   const dragStartPosRef = useRef({ x: 0, y: 0 })
+  const panFrameRef = useRef<number | null>(null)
+  const pendingPanRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (panFrameRef.current !== null) window.cancelAnimationFrame(panFrameRef.current)
+    }
+  }, [])
+
+  const schedulePan = (nextPan: { x: number; y: number }) => {
+    pendingPanRef.current = nextPan
+    if (panFrameRef.current !== null) return
+
+    panFrameRef.current = window.requestAnimationFrame(() => {
+      panFrameRef.current = null
+      const pendingPan = pendingPanRef.current
+      pendingPanRef.current = null
+      if (pendingPan) setPan(pendingPan)
+    })
+  }
+
+  const flushPan = () => {
+    if (panFrameRef.current !== null) {
+      window.cancelAnimationFrame(panFrameRef.current)
+      panFrameRef.current = null
+    }
+    const pendingPan = pendingPanRef.current
+    pendingPanRef.current = null
+    if (pendingPan) setPan(pendingPan)
+  }
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return // 좌클릭만
@@ -522,13 +528,14 @@ function HierarchyView({
       isDraggingRef.current = true
     }
 
-    setPan({
+    schedulePan({
       x: panStartRef.current.panX + dx,
       y: panStartRef.current.panY + dy,
     })
   }
 
   const handleMouseUp = () => {
+    flushPan()
     setIsPanning(false)
   }
 
@@ -542,7 +549,7 @@ function HierarchyView({
   }, [])
 
   // 카드 좌클릭 시: 마우스를 잡고 캔버스를 끈(드래그) 경우에는 포커싱 취소, 순수한 클릭일 때만 상단 중앙으로 포커싱 이동
-  const handleCardClick = (e: React.MouseEvent<HTMLElement>) => {
+  const handleCardClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation()
 
     // 드래그해서 캔버스를 움직인 경우 클릭 액션 방지
@@ -573,7 +580,7 @@ function HierarchyView({
     transitionTimerRef.current = window.setTimeout(() => {
       setIsTransitioning(false)
     }, 350)
-  }
+  }, [])
 
   return (
     <div
@@ -708,7 +715,7 @@ function HierarchyView({
                   />
                   {branches.map((branch) => (
                     <div key={branch.id} className={styles.dendroChildCol}>
-                      <TreeNodeCard
+                      <MemoizedTreeNodeCard
                         item={branch}
                         depth={1}
                         favoriteIds={favoriteIds}

@@ -19,6 +19,11 @@ export type WorkspaceDirectoryView = {
   defaultRootId: string | null
 }
 
+const workspaceDirectoryCache = new WeakMap<
+  WorkspaceSnapshot,
+  Map<string, WorkspaceDirectoryView>
+>()
+
 const ROOT_TONES: WorkspaceDirectoryTone[] = [
   'indigo',
   'teal',
@@ -76,7 +81,26 @@ export function getWorkspaceDirectory(
   snapshot: WorkspaceSnapshot,
   options?: { selectedRootId?: string | null },
 ): WorkspaceDirectoryView {
-  return queryWorkspaceDirectory(snapshot, userId ? { userId } : null, options)
+  const normalizedUserId = userId?.trim() ?? ''
+  const cacheKey = `${normalizedUserId}\u0000${options?.selectedRootId ?? ''}`
+  let cacheByKey = workspaceDirectoryCache.get(snapshot)
+  if (!cacheByKey) {
+    cacheByKey = new Map<string, WorkspaceDirectoryView>()
+    workspaceDirectoryCache.set(snapshot, cacheByKey)
+  }
+
+  const cached = cacheByKey.get(cacheKey)
+  if (cached) {
+    return cached
+  }
+
+  const directory = queryWorkspaceDirectory(
+    snapshot,
+    normalizedUserId ? { userId: normalizedUserId } : null,
+    options,
+  )
+  cacheByKey.set(cacheKey, directory)
+  return directory
 }
 
 export function queryWorkspaceDirectory(

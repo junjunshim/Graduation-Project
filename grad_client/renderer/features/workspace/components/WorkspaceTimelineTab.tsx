@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
+import { getWorkspaceTodayTimestamp, parseWorkspaceDay } from '../model/workItemDue'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
 import {
   buildTimelineMemberNameLookup,
@@ -68,7 +69,6 @@ type TimelineMonthGroup = {
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
-const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
 const DEFAULT_PIXELS_PER_DAY = 18
 const MIN_PIXELS_PER_DAY = 3
 const MAX_PIXELS_PER_DAY = 64
@@ -80,10 +80,9 @@ const GROUP_ROW_HEIGHT_REM = 2.85
 const TASK_ROW_HEIGHT_REM = 2.45
 const TIMELINE_TONES: TimelineTone[] = ['purple', 'blue', 'green', 'yellow']
 
-const WORKSPACE_DAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
-  day: '2-digit',
-  month: '2-digit',
-  timeZone: WORKSPACE_TIME_ZONE,
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+  month: 'long',
+  timeZone: 'UTC',
   year: 'numeric',
 })
 
@@ -98,45 +97,8 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value))
 }
 
-function parseWorkspaceDay(value?: string) {
-  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/)
-
-  if (!match) {
-    return null
-  }
-
-  const [, rawYear, rawMonth, rawDay] = match
-  const year = Number(rawYear)
-  const month = Number(rawMonth) - 1
-  const day = Number(rawDay)
-
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return null
-  }
-
-  return Date.UTC(year, month, day)
-}
-
-function getWorkspaceTodayTimestamp() {
-  const parts = WORKSPACE_DAY_FORMATTER.formatToParts(new Date())
-  const year = Number(parts.find((part) => part.type === 'year')?.value)
-  const month = Number(parts.find((part) => part.type === 'month')?.value)
-  const day = Number(parts.find((part) => part.type === 'day')?.value)
-
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    const now = new Date()
-    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  }
-
-  return Date.UTC(year, month - 1, day)
-}
-
 function formatMonthLabel(timestamp: number) {
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: 'long',
-    timeZone: 'UTC',
-    year: 'numeric',
-  }).format(new Date(timestamp))
+  return MONTH_LABEL_FORMATTER.format(new Date(timestamp))
 }
 
 function getMonthStart(timestamp: number) {
@@ -161,27 +123,27 @@ function formatTickLabel(timestamp: number, stepDays: number) {
 }
 
 function getTimelineEntries(workItems: WorkItemRecord[]) {
-  return workItems
-    .map((item): TimelineEntry | null => {
-      const parsedStart = parseWorkspaceDay(item.startDate)
-      const parsedEnd = parseWorkspaceDay(item.dueDate)
+  const entries: TimelineEntry[] = []
 
-      if (parsedStart === null || parsedEnd === null) {
-        return null
-      }
+  workItems.forEach((item) => {
+    const parsedStart = parseWorkspaceDay(item.startDate)
+    const parsedEnd = parseWorkspaceDay(item.dueDate)
 
-      const start = Math.min(parsedStart, parsedEnd)
-      const end = Math.max(parsedStart, parsedEnd)
+    if (parsedStart === null || parsedEnd === null) {
+      return
+    }
 
-      return { item, start, endExclusive: end + MS_PER_DAY }
-    })
-    .filter((entry): entry is TimelineEntry => entry !== null)
-    .sort(
-      (left, right) =>
-        left.start - right.start ||
-        left.endExclusive - right.endExclusive ||
-        left.item.title.localeCompare(right.item.title, 'ko'),
-    )
+    const start = Math.min(parsedStart, parsedEnd)
+    const end = Math.max(parsedStart, parsedEnd)
+    entries.push({ item, start, endExclusive: end + MS_PER_DAY })
+  })
+
+  return entries.sort(
+    (left, right) =>
+      left.start - right.start ||
+      left.endExclusive - right.endExclusive ||
+      left.item.title.localeCompare(right.item.title, 'ko'),
+  )
 }
 
 export function WorkspaceTimelineTab({ workItems, members, users = [] }: WorkspaceTimelineTabProps) {

@@ -109,6 +109,10 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
     () => new Map(snapshot.users.map((user) => [user.userId, user])),
     [snapshot.users],
   )
+  const workItemById = useMemo(
+    () => new Map(snapshot.workItems.map((item) => [item.workItemId, item])),
+    [snapshot.workItems],
+  )
   const managers = useMemo(
     () => members.filter((member) => member.isDirect && member.isTopRole),
     [members],
@@ -324,7 +328,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         </div>
       ) : activities.length ? activities.map((activity) => {
         const actorName = activity.actorName || userName(activity.actorUserId)
-        const message = formatActivityMessage(activity, { actorName, resolveUserName, resolveWorkItemTitle: (id) => snapshot.workItems.find((item) => item.workItemId === id)?.title })
+        const message = formatActivityMessage(activity, { actorName, resolveUserName, resolveWorkItemTitle: (id) => workItemById.get(id)?.title })
         const action = message.match(/([^\s.]+했습니다)\.$/)
         const actorEnd = message.startsWith(actorName) ? actorName.length : 0
         const actionStart = action?.index ?? message.length
@@ -334,7 +338,7 @@ export function WorkspaceOverviewTab({ overview, snapshot, currentUserId }: {
         let activityLink = rawLink
         if (rawLink && rawLink.startsWith('/work-items/')) {
           const targetItemId = decodeURIComponent(rawLink.replace('/work-items/', ''))
-          const targetItem = snapshot.workItems.find((w) => w.workItemId === targetItemId)
+          const targetItem = workItemById.get(targetItemId)
           if (targetItem && !canViewWorkItemDetail(currentUserId, targetItem, snapshot)) {
             activityLink = null
           }

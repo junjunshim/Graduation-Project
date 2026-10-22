@@ -79,6 +79,9 @@ const ZOOM_BUTTON_FACTOR = 1.16
 const GROUP_ROW_HEIGHT_REM = 2.85
 const TASK_ROW_HEIGHT_REM = 2.45
 const TIMELINE_TONES: TimelineTone[] = ['purple', 'blue', 'green', 'yellow']
+const WORK_ITEM_TAG_ORDER_INDEX = new Map<string, number>(
+  Object.keys(WORK_ITEM_TAGS).map((key, index) => [key, index] as const),
+)
 
 const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
   month: 'long',
@@ -279,15 +282,10 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
       groupedEntries.set(groupKey, existing)
     })
 
-    // 미리 정의된 태그 순서 (planning, research, design, document, review, release) 우선 정렬
-    const tagOrder = Object.keys(WORK_ITEM_TAGS)
-
     return Array.from(groupedEntries.entries())
       .sort(([keyA], [keyB]) => {
-        const indexA = tagOrder.indexOf(keyA)
-        const indexB = tagOrder.indexOf(keyB)
-        const orderA = indexA >= 0 ? indexA : 999
-        const orderB = indexB >= 0 ? indexB : 999
+        const orderA = WORK_ITEM_TAG_ORDER_INDEX.get(keyA) ?? 999
+        const orderB = WORK_ITEM_TAG_ORDER_INDEX.get(keyB) ?? 999
         return orderA - orderB || keyA.localeCompare(keyB, 'ko')
       })
       .map(([key, groupData], index) => ({

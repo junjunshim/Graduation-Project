@@ -90,22 +90,66 @@ export function getRecurringCategoryLabel(category: RecurringCategory | string |
 
 // 32가지 톤온톤 뮤티드 역할/카테고리 뱃지 컬러 팔레트 (CSS 토큰 변수 매핑)
 const PALETTE_COUNT = 32
-const MAX_CATEGORY_BADGE_STYLE_CACHE_SIZE = 256
+const MAX_BADGE_STYLE_CACHE_SIZE = 256
 
 const NEUTRAL_CATEGORY_BADGE_STYLE: React.CSSProperties = Object.freeze({
   backgroundColor: 'var(--axis-status-neutral-soft, #ECE9E2)',
   color: 'var(--axis-status-neutral, #6B665E)',
   border: '1px solid var(--axis-status-neutral-border, #DCD7CE)',
 })
+const ADMIN_ROLE_BADGE_STYLE: React.CSSProperties = Object.freeze({
+  backgroundColor: 'var(--axis-status-danger-soft, #FBECE9)',
+  color: 'var(--axis-status-danger, #A83B2E)',
+  border: '1px solid var(--axis-status-danger-border, #F1CEC9)',
+})
 const categoryBadgeStyleCache = new Map<string, React.CSSProperties>()
+const roleBadgeStyleCache = new Map<string, React.CSSProperties>()
+
+const PALETTE_BADGE_STYLES: ReadonlyArray<React.CSSProperties> = Object.freeze(
+  Array.from({ length: PALETTE_COUNT }, (_, index) =>
+    Object.freeze({
+      backgroundColor: `var(--axis-palette-${index}-bg)`,
+      color: `var(--axis-palette-${index}-text)`,
+      border: `1px solid var(--axis-palette-${index}-border)`,
+    }),
+  ),
+)
 
 function getPaletteStyleByIndex(index: number): React.CSSProperties {
   const safeIndex = Math.abs(index) % PALETTE_COUNT
-  return {
-    backgroundColor: `var(--axis-palette-${safeIndex}-bg)`,
-    color: `var(--axis-palette-${safeIndex}-text)`,
-    border: `1px solid var(--axis-palette-${safeIndex}-border)`,
+  return PALETTE_BADGE_STYLES[safeIndex]
+}
+
+function getPaletteStyleForText(value: string) {
+  let hash = 0
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i)
+    hash |= 0
   }
+
+  return getPaletteStyleByIndex(hash)
+}
+
+function getCachedBadgeStyle(
+  cache: Map<string, React.CSSProperties>,
+  cacheKey: string,
+  createStyle: () => React.CSSProperties,
+) {
+  const cachedStyle = cache.get(cacheKey)
+  if (cachedStyle) {
+    return cachedStyle
+  }
+
+  const style = Object.freeze(createStyle())
+  if (cache.size >= MAX_BADGE_STYLE_CACHE_SIZE) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey)
+    }
+  }
+  cache.set(cacheKey, style)
+
+  return style
 }
 
 /**
@@ -116,21 +160,12 @@ export function getRoleBadgeStyle(roleName: string, isTopRole = false): React.CS
   const normalized = (roleName || '').trim().toUpperCase()
 
   if (isTopRole || normalized === 'ADMIN') {
-    return {
-      backgroundColor: 'var(--axis-status-danger-soft, #FBECE9)',
-      color: 'var(--axis-status-danger, #A83B2E)',
-      border: '1px solid var(--axis-status-danger-border, #F1CEC9)',
-    }
+    return ADMIN_ROLE_BADGE_STYLE
   }
 
-  // 문자열 해시 계산 (djb2 기반)
-  let hash = 0
-  for (let i = 0; i < normalized.length; i += 1) {
-    hash = (hash << 5) - hash + normalized.charCodeAt(i)
-    hash |= 0 // 32비트 정수로 변환
-  }
-
-  return getPaletteStyleByIndex(hash)
+  return getCachedBadgeStyle(roleBadgeStyleCache, normalized, () =>
+    getPaletteStyleForText(normalized),
+  )
 }
 
 /**
@@ -143,26 +178,7 @@ export function getCategoryBadgeStyle(categoryName: string): React.CSSProperties
     return NEUTRAL_CATEGORY_BADGE_STYLE
   }
 
-  const cachedStyle = categoryBadgeStyleCache.get(normalized)
-  if (cachedStyle) {
-    return cachedStyle
-  }
-
-  let hash = 0
-  for (let i = 0; i < normalized.length; i += 1) {
-    hash = (hash << 5) - hash + normalized.charCodeAt(i)
-    hash |= 0
-  }
-
-  const style = Object.freeze(getPaletteStyleByIndex(hash))
-
-  if (categoryBadgeStyleCache.size >= MAX_CATEGORY_BADGE_STYLE_CACHE_SIZE) {
-    const oldestKey = categoryBadgeStyleCache.keys().next().value
-    if (oldestKey !== undefined) {
-      categoryBadgeStyleCache.delete(oldestKey)
-    }
-  }
-  categoryBadgeStyleCache.set(normalized, style)
-
-  return style
+  return getCachedBadgeStyle(categoryBadgeStyleCache, normalized, () =>
+    getPaletteStyleForText(normalized),
+  )
 }

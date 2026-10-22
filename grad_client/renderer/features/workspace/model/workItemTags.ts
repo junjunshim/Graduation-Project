@@ -1,4 +1,5 @@
 import type { WorkItemRecord } from './types'
+import { getCategoryBadgeStyle } from './labels.js'
 
 export const WORK_ITEM_TAGS = {
   planning: { label: '기획', tone: 'purple' },
@@ -10,6 +11,14 @@ export const WORK_ITEM_TAGS = {
 } as const
 
 export type WorkItemTagId = keyof typeof WORK_ITEM_TAGS
+
+const WORK_ITEM_TAG_ID_BY_LABEL = new Map<string, WorkItemTagId>()
+for (const id of Object.keys(WORK_ITEM_TAGS) as WorkItemTagId[]) {
+  const label = WORK_ITEM_TAGS[id].label
+  if (!WORK_ITEM_TAG_ID_BY_LABEL.has(label)) {
+    WORK_ITEM_TAG_ID_BY_LABEL.set(label, id)
+  }
+}
 
 /**
  * 임시 업무별 태그
@@ -28,8 +37,6 @@ export const TEMPORARY_WORK_ITEM_TAGS: Partial<Record<string, WorkItemTagId>> = 
   '0704': 'research',
 }
 
-import { getCategoryBadgeStyle } from './labels'
-
 export function getWorkItemTag(item: WorkItemRecord) {
   if (item.category && item.category.trim()) {
     const label = item.category.trim()
@@ -43,11 +50,9 @@ export function getWorkItemTag(item: WorkItemRecord) {
     }
 
     // 한글 레이블 매칭 확인
-    const foundEntry = Object.entries(WORK_ITEM_TAGS).find(
-      ([, tag]) => tag.label === label,
-    )
-    if (foundEntry) {
-      return { id: foundEntry[0] as WorkItemTagId, ...foundEntry[1], style }
+    const labelTagId = WORK_ITEM_TAG_ID_BY_LABEL.get(label)
+    if (labelTagId) {
+      return { id: labelTagId, ...WORK_ITEM_TAGS[labelTagId], style }
     }
 
     return {

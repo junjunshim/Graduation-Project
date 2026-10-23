@@ -219,29 +219,6 @@
   gap: 0.7rem;
 }
 
-.languageChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.72rem;
-  justify-content: center;
-  min-width: 9.3rem;
-  min-height: 2.9rem;
-  padding: 0 0.95rem;
-  border: 1px solid var(--login-border);
-  border-radius: 0.7rem;
-  background: color-mix(in srgb, var(--login-surface) 88%, transparent);
-  box-shadow: 0 8px 24px rgba(var(--login-shadow-rgb), 0.05);
-  color: var(--login-text);
-  font-size: 1.125rem;
-  font-weight: 600;
-  white-space: nowrap;
-  backdrop-filter: blur(14px);
-}
-
-.languageChip > svg {
-  color: var(--login-muted);
-}
-
 .content {
   position: relative;
   z-index: 1;
@@ -742,12 +719,6 @@
 
   .utilityBar {
     min-height: 2.65rem;
-  }
-
-  .languageChip {
-    min-height: 2.65rem;
-    padding: 0 0.78rem;
-    font-size: 0.9rem;
   }
 
   .content {

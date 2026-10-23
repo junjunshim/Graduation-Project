@@ -192,10 +192,6 @@ export function LoginPage() {
         <header className={styles.utilityBar}>
           <div className={styles.utilityActions}>
             {!hasCustomTitleBar ? <ThemeToggle compact /> : null}
-            <div className={styles.languageChip}>
-              <Icon name="globe" size={20} />
-              <span lang="ko">한국어</span>
-            </div>
           </div>
         </header>
 

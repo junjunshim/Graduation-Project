@@ -171,7 +171,10 @@ CREATE OR REPLACE FUNCTION get_user_chat_sidebar(
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_user_id users.user_id%TYPE;
-    v_node RECORD;
+    v_channel_view authority_mask;
+    v_channel_chat authority_mask;
+    v_channel_manage authority_mask;
+    v_deny authority_mask;
 BEGIN
     -- 1. 요청자 확인
     SELECT user_id INTO v_user_id
@@ -183,56 +186,107 @@ BEGIN
         USING ERRCODE = 'P0001';
     END IF;
 
-    -- 2. 요청자가 CHANNEL_VIEW 권한을 가진 공유 워크스페이스 노드 중 기본 채널이 없는 레거시 노드에 '#일반' 채널 보장
-    FOR v_node IN
-        SELECT DISTINCT n.node_id
+    -- 권한 상수는 요청당 한 번만 읽는다. 기존에는 워크스페이스마다 권한 함수가 상수를 다시 조회했다.
+    SELECT
+        BIT_OR(CASE WHEN name = 'CHANNEL_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'CHANNEL_CHAT' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'CHANNEL_MANAGE' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
+    INTO v_channel_view, v_channel_chat, v_channel_manage, v_deny
+    FROM authority_constants
+    WHERE name IN ('CHANNEL_VIEW', 'CHANNEL_CHAT', 'CHANNEL_MANAGE', 'DENY');
+
+    IF v_channel_view IS NULL OR v_channel_chat IS NULL OR v_channel_manage IS NULL OR v_deny IS NULL THEN
+        RAISE EXCEPTION '[P0101]Invalid channel authority constants'
+        USING ERRCODE = 'P0101';
+    END IF;
+
+    -- 2. 요청자가 CHANNEL_VIEW 권한을 가진 노드 중 기본 채널이 없는 레거시 노드에 '#일반' 채널을 보장한다.
+    -- get_effective_authority 와 동일하게 '현재 노드의 직접 역할, 없으면 가장 가까운 조상 역할'을 한 번에 계산한다.
+    WITH accessible_nodes AS MATERIALIZED (
+        SELECT n.node_id
         FROM organization_nodes n
+        JOIN LATERAL (
+            SELECT rh.authority
+            FROM unnest(n.path) WITH ORDINALITY AS path_nodes(path_node_id, path_index)
+            JOIN role_assignments ra
+              ON ra.user_id = v_user_id
+             AND ra.node_id = path_nodes.path_node_id
+            JOIN role_authorities rh
+              ON rh.node_id = ra.node_id
+             AND rh.authority_id = ra.role_id
+            ORDER BY path_nodes.path_index DESC
+            LIMIT 1
+        ) effective ON TRUE
         WHERE n.is_deleted = FALSE
           AND n.node_type NOT IN ('PERSONAL', 'USER')
-          AND EXISTS (
-              SELECT 1 FROM role_assignments ra
-              WHERE ra.user_id = v_user_id
-                AND ra.node_id = ANY(n.path)
-          )
-          AND check_authority_with_override(v_user_id, n.node_id, 'CHANNEL_VIEW') = TRUE
-    LOOP
-        IF NOT EXISTS (
+          AND (effective.authority & v_deny) <> v_deny
+          AND (effective.authority & v_channel_view) = v_channel_view
+    ),
+    missing_default_nodes AS MATERIALIZED (
+        SELECT n.node_id
+        FROM accessible_nodes n
+        WHERE NOT EXISTS (
             SELECT 1 FROM chat_channels c
             WHERE c.channel_type = 'WORKSPACE'
-              AND c.owner_node_id = v_node.node_id
+              AND c.owner_node_id = n.node_id
               AND c.is_default = TRUE
               AND c.is_deleted = FALSE
-        ) THEN
-            -- 레거시 데이터에 '일반' 채널이 이미 있으면 새로 만들지 않고 기본 채널로 승격한다.
-            UPDATE chat_channels
-            SET is_default = TRUE
-            WHERE channel_type = 'WORKSPACE'
-              AND owner_node_id = v_node.node_id
-              AND lower(name) = '일반'
-              AND is_deleted = FALSE;
-
-            IF NOT FOUND THEN
-                INSERT INTO chat_channels (
-                    channel_type,
-                    owner_node_id,
-                    name,
-                    description,
-                    is_default,
-                    created_by_user_id
-                ) VALUES (
-                    'WORKSPACE',
-                    v_node.node_id,
-                    '일반',
-                    '워크스페이스 기본 소통 채널입니다.',
-                    TRUE,
-                    v_user_id
-                ) ON CONFLICT DO NOTHING;
-            END IF;
-        END IF;
-    END LOOP;
+        )
+    ),
+    promoted AS (
+        UPDATE chat_channels c
+        SET is_default = TRUE
+        FROM missing_default_nodes n
+        WHERE c.channel_type = 'WORKSPACE'
+          AND c.owner_node_id = n.node_id
+          AND lower(c.name) = '일반'
+          AND c.is_deleted = FALSE
+        RETURNING c.owner_node_id
+    )
+    INSERT INTO chat_channels (
+        channel_type,
+        owner_node_id,
+        name,
+        description,
+        is_default,
+        created_by_user_id
+    )
+    SELECT
+        'WORKSPACE',
+        n.node_id,
+        '일반',
+        '워크스페이스 기본 소통 채널입니다.',
+        TRUE,
+        v_user_id
+    FROM missing_default_nodes n
+    WHERE NOT EXISTS (
+        SELECT 1 FROM promoted p WHERE p.owner_node_id = n.node_id
+    )
+    ON CONFLICT DO NOTHING;
 
     -- 3-A. 워크스페이스 채널 목록 반환
     RETURN QUERY
+    WITH accessible_nodes AS MATERIALIZED (
+        SELECT n.node_id, n.name, n.node_type, n.path, effective.authority
+        FROM organization_nodes n
+        JOIN LATERAL (
+            SELECT rh.authority
+            FROM unnest(n.path) WITH ORDINALITY AS path_nodes(path_node_id, path_index)
+            JOIN role_assignments ra
+              ON ra.user_id = v_user_id
+             AND ra.node_id = path_nodes.path_node_id
+            JOIN role_authorities rh
+              ON rh.node_id = ra.node_id
+             AND rh.authority_id = ra.role_id
+            ORDER BY path_nodes.path_index DESC
+            LIMIT 1
+        ) effective ON TRUE
+        WHERE n.is_deleted = FALSE
+          AND n.node_type NOT IN ('PERSONAL', 'USER')
+          AND (effective.authority & v_deny) <> v_deny
+          AND (effective.authority & v_channel_view) = v_channel_view
+    )
     SELECT jsonb_build_object(
         'type', 'WORKSPACE_CHANNEL',
         'channel_id', c.channel_id,
@@ -243,8 +297,8 @@ BEGIN
         'name', c.name,
         'description', COALESCE(c.description, ''),
         'is_default', c.is_default,
-        'can_chat', check_authority_with_override(v_user_id, n.node_id, 'CHANNEL_CHAT'),
-        'can_manage', check_authority_with_override(v_user_id, n.node_id, 'CHANNEL_MANAGE'),
+        'can_chat', (n.authority & v_channel_chat) = v_channel_chat,
+        'can_manage', (n.authority & v_channel_manage) = v_channel_manage,
         'unread_count', COALESCE((
             SELECT COUNT(*)::INT
             FROM chat_messages m
@@ -259,7 +313,7 @@ BEGIN
         'last_message_at', COALESCE(last_msg.created_at, c.last_message_at, c.created_at),
         'created_at', c.created_at
     )
-    FROM organization_nodes n
+    FROM accessible_nodes n
     JOIN chat_channels c ON c.owner_node_id = n.node_id
         AND c.channel_type = 'WORKSPACE'
         AND c.is_deleted = FALSE
@@ -284,14 +338,6 @@ BEGIN
         ORDER BY m.message_id DESC
         LIMIT 1
     ) last_msg ON TRUE
-    WHERE n.is_deleted = FALSE
-      AND n.node_type NOT IN ('PERSONAL', 'USER')
-      AND EXISTS (
-          SELECT 1 FROM role_assignments ra
-          WHERE ra.user_id = v_user_id
-            AND ra.node_id = ANY(n.path)
-      )
-      AND check_authority_with_override(v_user_id, n.node_id, 'CHANNEL_VIEW') = TRUE
     ORDER BY n.path ASC, c.is_default DESC, c.channel_id ASC;
 
     -- 3-B. 참여 중인 1:1 DM 채널 목록 반환

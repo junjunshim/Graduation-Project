@@ -6,6 +6,7 @@ import {
   joinChannelPresence,
   leaveChannelPresence,
 } from '../../workspace/data/server/serverWorkspace'
+import { createCoalescedTask } from '../../workspace/data/server/coalescedTask'
 import {
   subscribeToChatRealtimeEvents,
   subscribeToWorkspaceCache,
@@ -51,6 +52,41 @@ import {
 import { ChannelSidebar, type WorkspaceGroup } from '../ui/ChannelSidebar'
 import { ChannelThreadPanel } from '../ui/ChannelThreadPanel'
 import styles from './ChannelsPage.module.css'
+
+const CHANNEL_SIDEBAR_REFRESH_DELAY_MS = 120
+
+type SidebarChannel = WorkspaceChannelItem | DmChannelItem
+
+function timestampOf(value: string): number {
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
+function buildLastMessagePreview(message: ChatMessage): string {
+  if (message.content.trim()) return message.content
+  return message.files.length > 0 ? '[파일 첨부]' : ''
+}
+
+function applyIncomingMessageToSidebarChannel<T extends SidebarChannel>(
+  channel: T,
+  message: ChatMessage,
+  currentUserId: string,
+): T {
+  const isLatestMessage = timestampOf(message.createdAt) >= timestampOf(channel.lastMessageAt)
+
+  return {
+    ...channel,
+    unreadCount:
+      channel.unreadCount + (message.senderUserId === currentUserId ? 0 : 1),
+    lastMessagePreview: isLatestMessage
+      ? buildLastMessagePreview(message)
+      : channel.lastMessagePreview,
+    lastMessageSenderName: isLatestMessage
+      ? message.senderName
+      : channel.lastMessageSenderName,
+    lastMessageAt: isLatestMessage ? message.createdAt : channel.lastMessageAt,
+  }
+}
 
 export function ChannelsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -107,6 +143,15 @@ export function ChannelsPage() {
   const activeThreadParentIdRef = useRef<number | null>(activeThreadParent?.messageId ?? null)
   activeThreadParentIdRef.current = activeThreadParent?.messageId ?? null
 
+  const workspaceChannelsRef = useRef(workspaceChannels)
+  workspaceChannelsRef.current = workspaceChannels
+  const dmChannelsRef = useRef(dmChannels)
+  dmChannelsRef.current = dmChannels
+  const currentUserIdRef = useRef(currentUser?.userId ?? '')
+  currentUserIdRef.current = currentUser?.userId ?? ''
+  const sidebarLoadPromiseRef = useRef<Promise<void> | null>(null)
+  const sidebarReloadQueuedRef = useRef(false)
+
   useEffect(() => {
     return subscribeToWorkspaceCache(() => {
       setSnapshot(getOrgSnapshot())
@@ -124,33 +169,64 @@ export function ChannelsPage() {
   }, [messages])
 
   const loadSidebar = useCallback(async () => {
-    try {
-      const data = await fetchChatSidebar()
-      setWorkspaceChannels(data.workspaceChannels)
-      setDmChannels(data.dmChannels)
+    // 이미 조회 중이면 새 요청을 만들지 않고, 완료 직후 한 번만 다시 맞춘다.
+    if (sidebarLoadPromiseRef.current) {
+      sidebarReloadQueuedRef.current = true
+      return sidebarLoadPromiseRef.current
+    }
 
-      const knownChannelIds = new Set([
-        ...data.workspaceChannels.map((c) => c.channelId),
-        ...data.dmChannels.map((d) => d.channelId),
-      ])
-      pruneCachedChannelMessages(knownChannelIds)
+    const run = async () => {
+      do {
+        sidebarReloadQueuedRef.current = false
+        try {
+          const data = await fetchChatSidebar()
+          setWorkspaceChannels(data.workspaceChannels)
+          setDmChannels(data.dmChannels)
 
-      setSelectedChannelId((currentId) => {
-        if (currentId && knownChannelIds.has(currentId)) {
-          return currentId
+          const knownChannelIds = new Set([
+            ...data.workspaceChannels.map((c) => c.channelId),
+            ...data.dmChannels.map((d) => d.channelId),
+          ])
+          pruneCachedChannelMessages(knownChannelIds)
+
+          setSelectedChannelId((currentId) => {
+            if (currentId && knownChannelIds.has(currentId)) {
+              return currentId
+            }
+            const firstId =
+              data.workspaceChannels[0]?.channelId ?? data.dmChannels[0]?.channelId ?? null
+            return firstId
+          })
+        } catch (error) {
+          setBannerError(
+            error instanceof Error && error.message
+              ? error.message
+              : '채널 목록을 불러오지 못했습니다.',
+          )
         }
-        const firstId =
-          data.workspaceChannels[0]?.channelId ?? data.dmChannels[0]?.channelId ?? null
-        return firstId
-      })
-    } catch (error) {
-      setBannerError(
-        error instanceof Error && error.message
-          ? error.message
-          : '채널 목록을 불러오지 못했습니다.',
-      )
+      } while (sidebarReloadQueuedRef.current)
+    }
+
+    const promise = run()
+    sidebarLoadPromiseRef.current = promise
+    try {
+      await promise
+    } finally {
+      sidebarLoadPromiseRef.current = null
     }
   }, [])
+
+  const loadSidebarRef = useRef(loadSidebar)
+  loadSidebarRef.current = loadSidebar
+  const sidebarRefreshTask = useMemo(
+    () =>
+      createCoalescedTask(() => loadSidebarRef.current(), {
+        delayMs: CHANNEL_SIDEBAR_REFRESH_DELAY_MS,
+      }),
+    [],
+  )
+
+  useEffect(() => () => sidebarRefreshTask.cancel(), [sidebarRefreshTask])
 
   useEffect(() => {
     void loadSidebar()
@@ -295,7 +371,7 @@ export function ChannelsPage() {
 
       // 채널 권한이 바뀌면 목록·관리 버튼이 달라지므로 사이드바를 다시 조회한다.
       if (subType === 'CHANNEL_ACCESS_CHANGED') {
-        void loadSidebar()
+        sidebarRefreshTask.schedule()
         return
       }
 
@@ -305,7 +381,7 @@ export function ChannelsPage() {
         subType === 'DM_CREATED' ||
         !eventChannelId
       ) {
-        void loadSidebar()
+        sidebarRefreshTask.schedule()
         return
       }
 
@@ -376,11 +452,67 @@ export function ChannelsPage() {
           }
         }
       } else {
-        // 다른 채널의 메시지인 경우 사이드바 Unread 카운트 동기화
-        void loadSidebar()
+        // 다른 채널의 새 메시지는 전체 사이드바를 다시 받지 않고 해당 채널 항목만 갱신한다.
+        if (
+          subType === 'MESSAGE_CREATED' &&
+          incomingMessage &&
+          incomingMessage.parentMessageId === null
+        ) {
+          const knownWorkspaceChannel = workspaceChannelsRef.current.some(
+            (channel) => channel.channelId === incomingMessage.channelId,
+          )
+          const knownDmChannel = dmChannelsRef.current.some(
+            (channel) => channel.channelId === incomingMessage.channelId,
+          )
+
+          if (!knownWorkspaceChannel && !knownDmChannel) {
+            sidebarRefreshTask.schedule()
+            return
+          }
+
+          const currentUserId = currentUserIdRef.current
+          if (knownWorkspaceChannel) {
+            setWorkspaceChannels((prev) =>
+              prev.map((channel) =>
+                channel.channelId === incomingMessage.channelId
+                  ? applyIncomingMessageToSidebarChannel(
+                      channel,
+                      incomingMessage,
+                      currentUserId,
+                    )
+                  : channel,
+              ),
+            )
+          }
+          if (knownDmChannel) {
+            setDmChannels((prev) =>
+              prev.map((channel) =>
+                channel.channelId === incomingMessage.channelId
+                  ? applyIncomingMessageToSidebarChannel(
+                      channel,
+                      incomingMessage,
+                      currentUserId,
+                    )
+                  : channel,
+              ),
+            )
+          }
+          return
+        }
+
+        // 스레드 답글은 사이드바의 최근 메시지/Unread 계산에 영향을 주지 않는다.
+        if (
+          subType === 'MESSAGE_CREATED' &&
+          incomingMessage &&
+          incomingMessage.parentMessageId !== null
+        ) {
+          return
+        }
+
+        sidebarRefreshTask.schedule()
       }
     })
-  }, [loadSidebar, loadChannelMessages, loadThread])
+  }, [loadChannelMessages, loadThread, sidebarRefreshTask])
 
   const workspaceGroups = useMemo<WorkspaceGroup[]>(() => {
     const groupMap = new Map<number, WorkspaceGroup>()
@@ -389,13 +521,19 @@ export function ChannelsPage() {
     // 로컬 스냅샷에서 CHANNEL_MANAGE 권한을 가진 공유 노드도 파악
     const nodeManageMap = new Map<number, boolean>()
     if (userId) {
+      const authorityByNodeRole = new Map<string, string>()
+      ;(snapshot.authorities ?? []).forEach((authority) => {
+        authorityByNodeRole.set(
+          `${authority.nodeId}:${authority.roleName}`,
+          authority.authority,
+        )
+      })
+
       snapshot.roles
         .filter((r) => !r.isDeleted && r.userId === userId)
         .forEach((role) => {
-          const authDef = (snapshot.authorities ?? []).find(
-            (a) => a.nodeId === role.nodeId && a.roleName === role.roleName,
-          )
-          const mask = authDef?.authority ?? ''
+          const mask =
+            authorityByNodeRole.get(`${role.nodeId}:${role.roleName}`) ?? ''
           const bits = parseAuthorityBitSet(mask)
           if (bits.has(27) || role.roleName === 'ADMIN' || role.roleName === 'MANAGER') {
             nodeManageMap.set(role.nodeId, true)
@@ -432,6 +570,13 @@ export function ChannelsPage() {
     return Array.from(groupMap.values())
   }, [workspaceChannels, currentUser?.userId, snapshot.roles, snapshot.authorities])
 
+  const channelById = useMemo(() => {
+    const lookup = new Map<number, ChannelItem>()
+    workspaceChannels.forEach((channel) => lookup.set(channel.channelId, channel))
+    dmChannels.forEach((channel) => lookup.set(channel.channelId, channel))
+    return lookup
+  }, [workspaceChannels, dmChannels])
+
   const manageableWorkspaces = useMemo<ManageableWorkspaceOption[]>(() => {
     return workspaceGroups
       .filter((g) => g.canManage)
@@ -440,14 +585,10 @@ export function ChannelsPage() {
 
   const selectedChannel = useMemo<ChannelItem | null>(() => {
     if (!selectedChannelId) return null
-    return (
-      workspaceChannels.find((c) => c.channelId === selectedChannelId) ??
-      dmChannels.find((d) => d.channelId === selectedChannelId) ??
-      null
-    )
-  }, [selectedChannelId, workspaceChannels, dmChannels])
+    return channelById.get(selectedChannelId) ?? null
+  }, [selectedChannelId, channelById])
 
-  function handleSelectChannel(channelId: number) {
+  const handleSelectChannel = useCallback((channelId: number) => {
     if (selectedChannelIdRef.current === channelId) {
       return
     }
@@ -461,7 +602,16 @@ export function ChannelsPage() {
     setIsLoadingMessages(cached === null)
 
     setSearchParams({ channelId: String(channelId) }, { replace: true })
-  }
+  }, [setSearchParams])
+
+  const handleOpenCreateChannelModal = useCallback((nodeId: number) => {
+    setModalInitialNodeId(nodeId)
+    setChannelModalMode('create')
+  }, [])
+
+  const handleOpenNewDmModal = useCallback(() => {
+    setIsNewDmModalOpen(true)
+  }, [])
 
   async function handleSendMainMessage(content: string, attachedFiles: File[]) {
     if (!selectedChannel) return
@@ -664,11 +814,8 @@ export function ChannelsPage() {
           dmChannels={dmChannels}
           selectedChannelId={selectedChannelId}
           onSelectChannel={handleSelectChannel}
-          onOpenCreateChannelModal={(nodeId) => {
-            setModalInitialNodeId(nodeId)
-            setChannelModalMode('create')
-          }}
-          onOpenNewDmModal={() => setIsNewDmModalOpen(true)}
+          onOpenCreateChannelModal={handleOpenCreateChannelModal}
+          onOpenNewDmModal={handleOpenNewDmModal}
         />
 
         <ChannelMainChat
@@ -686,7 +833,7 @@ export function ChannelsPage() {
           onOpenThread={handleOpenThread}
           onOpenEditChannelModal={() => setChannelModalMode('edit')}
           onDeleteChannel={() => void handleDeleteChannel()}
-          onOpenNewDmModal={() => setIsNewDmModalOpen(true)}
+          onOpenNewDmModal={handleOpenNewDmModal}
         />
 
         {selectedChannel && activeThreadParent ? (

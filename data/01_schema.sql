@@ -498,6 +498,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS unique_dm_user_pair
     WHERE channel_type = 'DM' AND NOT is_deleted;
 
 CREATE INDEX IF NOT EXISTS idx_chat_channels_node_id ON chat_channels(owner_node_id) WHERE NOT is_deleted;
+CREATE INDEX IF NOT EXISTS idx_chat_channels_default_node ON chat_channels(owner_node_id) WHERE channel_type = 'WORKSPACE' AND is_default AND NOT is_deleted;
 CREATE INDEX IF NOT EXISTS idx_chat_channels_dm_user1 ON chat_channels(dm_user1_id) WHERE channel_type = 'DM' AND NOT is_deleted;
 CREATE INDEX IF NOT EXISTS idx_chat_channels_dm_user2 ON chat_channels(dm_user2_id) WHERE channel_type = 'DM' AND NOT is_deleted;
 CREATE INDEX IF NOT EXISTS idx_chat_channels_last_message_at ON chat_channels(last_message_at DESC);
@@ -515,6 +516,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_chat_messages_channel_main ON chat_messages(channel_id, message_id DESC) WHERE parent_message_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_messages_channel_live_main ON chat_messages(channel_id, message_id DESC) WHERE parent_message_id IS NULL AND NOT is_deleted;
 CREATE INDEX IF NOT EXISTS idx_chat_messages_parent_thread ON chat_messages(parent_message_id, message_id ASC) WHERE parent_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_chat_messages_sender ON chat_messages(sender_user_id);
 

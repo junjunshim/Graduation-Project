@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
@@ -23,7 +23,7 @@ export type ChannelSidebarProps = {
   onOpenNewDmModal: () => void
 }
 
-export function ChannelSidebar({
+export const ChannelSidebar = memo(function ChannelSidebar({
   workspaceGroups,
   dmChannels,
   selectedChannelId,
@@ -250,4 +250,4 @@ export function ChannelSidebar({
       </div>
     </aside>
   )
-}
+})

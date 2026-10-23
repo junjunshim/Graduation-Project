@@ -9,21 +9,12 @@ import { useTheme } from '../../../design-system/theme/ThemeContext'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
 import { getCurrentUser, signIn } from '../api'
 import { getAuthIllustrationUrl } from '../model/authAssets'
+import { readRememberedEmail, saveRememberedEmail } from '../model/rememberedEmail'
 import styles from './LoginPage.module.css'
-
-const REMEMBERED_EMAIL_KEY = 'axis-remembered-login-email'
 
 type Feedback = {
   tone: 'error' | 'info'
   message: string
-}
-
-function readRememberedEmail() {
-  if (typeof window === 'undefined') {
-    return ''
-  }
-
-  return window.localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? ''
 }
 
 export function LoginPage() {
@@ -115,11 +106,7 @@ export function LoginPage() {
       // 4. 워크스페이스 데이터 준비 완료
       setSyncPhase('parse')
 
-      if (rememberEmail) {
-        window.localStorage.setItem(REMEMBERED_EMAIL_KEY, form.email.trim())
-      } else {
-        window.localStorage.removeItem(REMEMBERED_EMAIL_KEY)
-      }
+      saveRememberedEmail(emailTrimmed, rememberEmail)
 
       navigate('/dashboard', { replace: true })
     } catch (error) {

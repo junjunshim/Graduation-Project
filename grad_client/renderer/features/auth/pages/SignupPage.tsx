@@ -3,12 +3,12 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
 import { useBodyScrollSurface } from '../../../app/chrome/useBodyScrollSurface'
-import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
-import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
+import { AxisMark } from '../../../design-system/primitives/AxisMark'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { useTheme } from '../../../design-system/theme/ThemeContext'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
-import signupHeroUrl from '../assets/signup-collaboration-hero.png'
 import { getCurrentUser, signUp } from '../api'
+import { getAuthIllustrationUrl } from '../model/authAssets'
 import styles from './SignupPage.module.css'
 
 const initialForm = {
@@ -26,6 +26,7 @@ type ErrorField = 'userId' | 'email' | 'name' | 'password' | 'all' | null
 
 export function SignupPage() {
   const navigate = useNavigate()
+  const { themeMode } = useTheme()
   const currentUser = getCurrentUser()
   const hasCustomTitleBar = hasCustomWindowControls()
   const [form, setForm] = useState(initialForm)
@@ -222,26 +223,16 @@ export function SignupPage() {
 
         <div className={styles.content}>
           <aside className={styles.visualPanel} aria-label="Axis 소개">
-            <span className={styles.axisBrand} role="img" aria-label="Axis">
-              <img
-                src={axisLogoLightUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoLight}`}
-              />
-              <img
-                src={axisLogoDarkUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoDark}`}
-              />
+            <span className={styles.axisBrand}>
+              <span className={styles.axisLogoWrap}>
+                <AxisMark size={52} className={styles.axisLogo} />
+              </span>
+              <span className={styles.axisTitle}>Axis</span>
             </span>
 
             <p className={styles.heroTitle}>
               함께 일하는
-              <br />더 나은 방법, <span>Axis</span>
+              <br />더 나은 방법
             </p>
             <p className={styles.heroDescription}>
               업무 관리부터 협업까지,
@@ -250,7 +241,7 @@ export function SignupPage() {
 
             <div className={styles.illustrationWrap} aria-hidden="true">
               <img
-                src={signupHeroUrl}
+                src={getAuthIllustrationUrl('signup', themeMode)}
                 alt=""
                 draggable={false}
                 className={styles.illustration}

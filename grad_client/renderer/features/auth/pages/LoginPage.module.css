@@ -1,19 +1,54 @@
 .page {
-  --login-bg: #faf9fe;
-  --login-surface: #ffffff;
-  --login-ink: #10192f;
-  --login-text: #182139;
-  --login-muted: #65718a;
-  --login-placeholder: #8792aa;
-  --login-border: #dde1eb;
-  --login-primary: #5549e6;
-  --login-primary-strong: #4938e5;
-  --login-accent: #665bf0;
+  --login-bg: #f4f2ec;
+  --login-surface: #f7f6f2;
+  --login-ink: #1c1b18;
+  --login-text: #3f3b35;
+  --login-muted: #6f6a61;
+  --login-placeholder: #9a958b;
+  --login-border: #e2ddd2;
+  --login-primary: #7a5c43;
+  --login-primary-strong: #694e37;
+  --login-accent: #7a5c43;
+  --login-on-primary: #ffffff;
+  --login-shadow-rgb: 122, 92, 67;
+  --login-primary-shadow-rgb: 122, 92, 67;
+  --login-glow-start: rgba(226, 221, 210, 0.72);
+  --login-glow-end: rgba(247, 246, 242, 0.2);
+  --login-wave-back-start: rgba(247, 246, 242, 0);
+  --login-wave-back-end: rgba(235, 231, 222, 0.75);
+  --login-wave-front-start: rgba(247, 246, 242, 0);
+  --login-wave-front-end: rgba(241, 236, 230, 0.55);
+  --login-dot-start: #d1bca7;
+  --login-dot-end: #9d7f63;
   display: grid;
   min-height: 100vh;
   min-height: 100dvh;
   color: var(--login-ink);
   background: var(--login-bg);
+}
+
+:global([data-theme='white']) .page {
+  --login-bg: #f8fafc;
+  --login-surface: #ffffff;
+  --login-ink: #0f172a;
+  --login-text: #334155;
+  --login-muted: #64748b;
+  --login-placeholder: #94a3b8;
+  --login-border: #e2e8f0;
+  --login-primary: #0d766e;
+  --login-primary-strong: #0f5b55;
+  --login-accent: #0d766e;
+  --login-on-primary: #ffffff;
+  --login-shadow-rgb: 13, 118, 110;
+  --login-primary-shadow-rgb: 13, 118, 110;
+  --login-glow-start: rgba(204, 251, 241, 0.6);
+  --login-glow-end: rgba(248, 250, 252, 0.15);
+  --login-wave-back-start: rgba(248, 250, 252, 0);
+  --login-wave-back-end: rgba(230, 244, 242, 0.65);
+  --login-wave-front-start: rgba(248, 250, 252, 0);
+  --login-wave-front-end: rgba(204, 251, 241, 0.35);
+  --login-dot-start: #99d2cd;
+  --login-dot-end: #5fb8ae;
 }
 
 :global([data-theme='dark']) .page {
@@ -27,6 +62,40 @@
   --login-primary: #756bf5;
   --login-primary-strong: #5e50ed;
   --login-accent: #958cff;
+  --login-shadow-rgb: 117, 107, 245;
+  --login-primary-shadow-rgb: 117, 107, 245;
+  --login-glow-start: rgba(110, 98, 175, 0.32);
+  --login-glow-end: rgba(60, 54, 88, 0.08);
+  --login-wave-back-start: rgba(23, 23, 38, 0);
+  --login-wave-back-end: rgba(73, 64, 110, 0.25);
+  --login-wave-front-start: rgba(23, 23, 38, 0);
+  --login-wave-front-end: rgba(45, 40, 69, 0.35);
+  --login-dot-start: #9b92ec;
+  --login-dot-end: #6f66c4;
+}
+
+:global([data-theme='navy']) .page {
+  --login-bg: #0b1120;
+  --login-surface: rgba(17, 29, 50, 0.97);
+  --login-ink: #f8fafc;
+  --login-text: #e2e8f0;
+  --login-muted: #94a3b8;
+  --login-placeholder: #64748b;
+  --login-border: #243859;
+  --login-primary: #38bdf8;
+  --login-primary-strong: #0ea5e9;
+  --login-accent: #7dd3fc;
+  --login-on-primary: #071426;
+  --login-shadow-rgb: 56, 189, 248;
+  --login-primary-shadow-rgb: 14, 165, 233;
+  --login-glow-start: rgba(56, 189, 248, 0.18);
+  --login-glow-end: rgba(11, 17, 32, 0.04);
+  --login-wave-back-start: rgba(11, 17, 32, 0);
+  --login-wave-back-end: rgba(30, 73, 112, 0.28);
+  --login-wave-front-start: rgba(11, 17, 32, 0);
+  --login-wave-front-end: rgba(17, 43, 70, 0.45);
+  --login-dot-start: #38bdf8;
+  --login-dot-end: #0284c7;
 }
 
 .pageWithCustomChrome {
@@ -59,6 +128,12 @@
     var(--login-bg);
 }
 
+:global([data-theme='navy']) .surface {
+  background:
+    radial-gradient(circle at 53% 42%, rgba(56, 189, 248, 0.1), transparent 35%),
+    var(--login-bg);
+}
+
 .pageWithCustomChrome .surface {
   min-height: calc(100vh - var(--window-titlebar-height));
   min-height: calc(100dvh - var(--window-titlebar-height));
@@ -79,7 +154,7 @@
   width: 42rem;
   height: 29rem;
   border-radius: 42% 58% 62% 38% / 62% 50% 50% 38%;
-  background: linear-gradient(135deg, rgba(205, 200, 255, 0.66), rgba(240, 238, 255, 0.2));
+  background: linear-gradient(135deg, var(--login-glow-start), var(--login-glow-end));
   filter: blur(1px);
   transform: rotate(-11deg);
 }
@@ -96,13 +171,13 @@
 }
 
 .waveBack {
-  background: linear-gradient(145deg, rgba(245, 243, 255, 0), rgba(232, 229, 255, 0.72));
+  background: linear-gradient(145deg, var(--login-wave-back-start), var(--login-wave-back-end));
 }
 
 .waveFront {
   right: -21rem;
   bottom: -30rem;
-  background: linear-gradient(145deg, rgba(249, 248, 255, 0), rgba(216, 211, 255, 0.52));
+  background: linear-gradient(145deg, var(--login-wave-front-start), var(--login-wave-front-end));
 }
 
 .decorDot {
@@ -110,9 +185,9 @@
   width: 0.9rem;
   height: 0.9rem;
   border-radius: 50%;
-  background: linear-gradient(145deg, #bbb5ff, #8f88ed);
+  background: linear-gradient(145deg, var(--login-dot-start), var(--login-dot-end));
   opacity: 0.72;
-  box-shadow: 0 0 18px rgba(105, 94, 235, 0.12);
+  box-shadow: 0 0 18px rgba(var(--login-shadow-rgb), 0.12);
 }
 
 .dotOne {
@@ -155,7 +230,7 @@
   border: 1px solid var(--login-border);
   border-radius: 0.7rem;
   background: color-mix(in srgb, var(--login-surface) 88%, transparent);
-  box-shadow: 0 8px 24px rgba(64, 53, 134, 0.03);
+  box-shadow: 0 8px 24px rgba(var(--login-shadow-rgb), 0.05);
   color: var(--login-text);
   font-size: 1.125rem;
   font-weight: 600;
@@ -187,10 +262,19 @@
 }
 
 .axisBrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.axisLogoWrap {
   position: relative;
   display: block;
-  width: 9.5625rem;
-  height: 3rem;
+  width: 4.25rem;
+  height: 4.25rem;
   flex: 0 0 auto;
   line-height: 0;
 }
@@ -208,16 +292,12 @@
   -webkit-user-drag: none;
 }
 
-.axisLogoDark {
-  display: none;
-}
-
-:global([data-theme='dark']) .axisLogoLight {
-  display: none;
-}
-
-:global([data-theme='dark']) .axisLogoDark {
-  display: block;
+.axisTitle {
+  color: var(--login-ink);
+  font-size: 2.1rem;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.045em;
 }
 
 .heroTitle {
@@ -242,19 +322,23 @@
 }
 
 .illustrationWrap {
-  width: 37.75rem;
-  margin: 2.15rem 0 -0.9rem -9.5rem;
+  width: 31rem;
+  margin: 2.1rem 0 -0.5rem -4rem;
+  aspect-ratio: 1 / 1;
 }
 
 .illustration {
+  display: block;
   width: 100%;
-  height: auto;
-  filter:
-    saturate(0.65)
-    brightness(1.07)
-    contrast(0.92)
-    drop-shadow(0 22px 28px rgba(72, 59, 177, 0.08));
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 24px rgba(var(--login-shadow-rgb), 0.12));
   user-select: none;
+}
+
+:global([data-theme='dark']) .illustration,
+:global([data-theme='navy']) .illustration {
+  filter: drop-shadow(0 20px 28px rgba(0, 0, 0, 0.28));
 }
 
 .loginCard {
@@ -266,13 +350,18 @@
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 1.4rem;
   background: var(--login-surface);
-  box-shadow: 0 22px 64px rgba(58, 48, 122, 0.055);
+  box-shadow: 0 22px 64px rgba(var(--login-shadow-rgb), 0.06);
   backdrop-filter: blur(18px);
 }
 
 :global([data-theme='dark']) .loginCard {
   border-color: rgba(255, 255, 255, 0.07);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
+}
+
+:global([data-theme='navy']) .loginCard {
+  border-color: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
 }
 
 .cardHeader {
@@ -512,8 +601,8 @@
   margin-top: 0.05rem;
   border-radius: 0.72rem;
   background: linear-gradient(105deg, var(--login-primary-strong), var(--login-primary));
-  box-shadow: 0 12px 25px rgba(76, 61, 220, 0.17);
-  color: white;
+  box-shadow: 0 12px 25px rgba(var(--login-primary-shadow-rgb), 0.2);
+  color: var(--login-on-primary);
   font-size: 1.25rem;
   font-weight: 650;
   letter-spacing: -0.02em;
@@ -524,7 +613,7 @@
 }
 
 .primaryButton:hover:not(:disabled) {
-  box-shadow: 0 15px 30px rgba(76, 61, 220, 0.24);
+  box-shadow: 0 15px 30px rgba(var(--login-primary-shadow-rgb), 0.28);
   transform: translateY(-1px);
 }
 
@@ -598,8 +687,8 @@
   }
 
   .illustrationWrap {
-    width: 31rem;
-    margin-left: -5.25rem;
+    width: 27rem;
+    margin-left: -2.75rem;
   }
 }
 
@@ -666,9 +755,13 @@
     padding: 1.5rem 0 2rem;
   }
 
-  .axisBrand {
-    width: 7.96875rem;
-    height: 2.5rem;
+  .axisLogoWrap {
+    width: 3.75rem;
+    height: 3.75rem;
+  }
+
+  .axisTitle {
+    font-size: 1.9rem;
   }
 
   .loginCard {
@@ -765,7 +858,7 @@
   }
 
   .illustrationWrap {
-    width: 29rem;
+    width: 25.5rem;
     margin-top: 0.75rem;
   }
 
@@ -800,9 +893,13 @@
     padding-block: 1rem 1.5rem;
   }
 
-  .axisBrand {
-    width: 7.171875rem;
-    height: 2.25rem;
+  .axisLogoWrap {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .axisTitle {
+    font-size: 1.8rem;
   }
 
   .loginCard {
@@ -865,6 +962,10 @@
   background: rgba(23, 23, 38, 0.88);
 }
 
+:global([data-theme='navy']) .loadingOverlay {
+  background: rgba(11, 17, 32, 0.9);
+}
+
 .loadingModal {
   display: flex;
   flex-direction: column;
@@ -882,7 +983,7 @@
 .spinner {
   width: 3rem;
   height: 3rem;
-  border: 3.5px solid rgba(85, 73, 230, 0.15);
+  border: 3.5px solid color-mix(in srgb, var(--login-primary) 15%, transparent);
   border-top-color: var(--login-primary);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
@@ -890,6 +991,11 @@
 
 :global([data-theme='dark']) .spinner {
   border-color: rgba(117, 107, 245, 0.2);
+  border-top-color: var(--login-primary);
+}
+
+:global([data-theme='navy']) .spinner {
+  border-color: rgba(56, 189, 248, 0.2);
   border-top-color: var(--login-primary);
 }
 

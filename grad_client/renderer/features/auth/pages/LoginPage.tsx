@@ -3,11 +3,12 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
 import { useBodyScrollSurface } from '../../../app/chrome/useBodyScrollSurface'
-import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
-import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
+import { AxisMark } from '../../../design-system/primitives/AxisMark'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { useTheme } from '../../../design-system/theme/ThemeContext'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
 import { getCurrentUser, signIn } from '../api'
+import { getAuthIllustrationUrl } from '../model/authAssets'
 import styles from './LoginPage.module.css'
 
 const REMEMBERED_EMAIL_KEY = 'axis-remembered-login-email'
@@ -28,6 +29,7 @@ function readRememberedEmail() {
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { themeMode } = useTheme()
   const currentUser = getCurrentUser()
   const hasCustomTitleBar = hasCustomWindowControls()
   const rememberedEmail = readRememberedEmail()
@@ -199,21 +201,11 @@ export function LoginPage() {
 
         <div className={styles.content}>
           <section className={styles.brandPanel} aria-labelledby="login-hero-title">
-            <span className={styles.axisBrand} role="img" aria-label="Axis">
-              <img
-                src={axisLogoLightUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoLight}`}
-              />
-              <img
-                src={axisLogoDarkUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoDark}`}
-              />
+            <span className={styles.axisBrand}>
+              <span className={styles.axisLogoWrap}>
+                <AxisMark size={64} className={styles.axisLogo} />
+              </span>
+              <span className={styles.axisTitle}>Axis</span>
             </span>
 
             <h1 id="login-hero-title" className={styles.heroTitle}>
@@ -229,8 +221,8 @@ export function LoginPage() {
 
             <div className={styles.illustrationWrap}>
               <img
-                src="./images/axis-workspace-illustration.png"
-                alt="업무 카드와 협업 도구가 어우러진 3D 일러스트"
+                src={getAuthIllustrationUrl('login', themeMode)}
+                alt="팀원들이 함께 협업하는 모습을 표현한 일러스트"
                 className={styles.illustration}
                 draggable={false}
               />

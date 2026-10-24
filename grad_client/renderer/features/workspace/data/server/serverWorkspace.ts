@@ -1602,6 +1602,7 @@ const MAX_RECONNECT_DELAY_MS = 30_000
 let activePresenceChannelId: number | null = null
 let socketPresenceChannelId: number | null = null
 let presenceJoinRequestId = 0
+const notifiedChatMessageIds = new Set<number>()
 
 // 앱 실행 단위로 고유한 연결 식별자. 재연결 시 서버가 같은 클라이언트의 이전 연결만 교체할 수 있게 한다.
 const WS_CLIENT_ID = 'client-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
@@ -1660,6 +1661,112 @@ export function leaveChannelPresence() {
   }
 
   socketPresenceChannelId = null
+}
+
+function asChatAttachmentNames(files: unknown): string[] {
+  if (!Array.isArray(files)) {
+    return []
+  }
+
+  return files
+    .map((file) => {
+      if (!file || typeof file !== 'object') {
+        return ''
+      }
+      const record = file as Record<string, unknown>
+      return String(record.original_file_name ?? record.originalFileName ?? '').trim()
+    })
+    .filter((name) => name.length > 0)
+}
+
+// CHAT WebSocket 은 채널 화면이 열려 있지 않아도 전역으로 들어온다. 이 신호를 벨/토스트용
+// 알람으로 복제하되, 발신자 본인과 현재 열고 있는 채널은 제외한다.
+function notifyChatMessageAsInbox(subType: string, data: Record<string, unknown>) {
+  if (subType !== 'MESSAGE_CREATED' && subType !== 'MESSAGE_FILE_ADDED') {
+    return
+  }
+
+  const currentEmail = getCurrentServerEmail()
+  if (!currentEmail) {
+    return
+  }
+
+  const channelId = Number(data.channel_id ?? 0)
+  const messageId = Number(data.message_id ?? 0)
+  if (!Number.isFinite(channelId) || channelId <= 0 || !Number.isFinite(messageId) || messageId <= 0) {
+    return
+  }
+  if (activePresenceChannelId === channelId) {
+    return
+  }
+
+  const senderEmail = normalizeEmail(String(data.sender_email ?? ''))
+  if (!senderEmail || senderEmail === currentEmail) {
+    return
+  }
+
+  const content = typeof data.content === 'string' ? data.content : ''
+  const attachmentNames = asChatAttachmentNames(data.files)
+  const attachmentCount = attachmentNames.length
+  const hasText = content.trim().length > 0
+
+  // 파일은 메시지 생성 뒤 별도 업로드 이벤트로 도착한다. 빈 메시지 생성은 보류하고,
+  // 첫 파일이 붙었을 때 같은 notification_key 로 알람을 만든다.
+  if (subType === 'MESSAGE_CREATED' && !hasText && attachmentCount === 0) {
+    return
+  }
+  if (subType === 'MESSAGE_FILE_ADDED' && (hasText || attachmentCount === 0)) {
+    return
+  }
+  if (notifiedChatMessageIds.has(messageId)) {
+    return
+  }
+
+  const channelType = String(data.channel_type ?? '').toUpperCase()
+  const parentValue = Number(data.parent_message_id ?? 0)
+  const parentMessageId = Number.isFinite(parentValue) && parentValue > 0 ? parentValue : null
+  const ownerNodeId = Number(data.owner_node_id ?? 0)
+  const channelName = typeof data.channel_name === 'string' ? data.channel_name : null
+  const actorName = String(data.sender_name ?? data.sender_email ?? '사용자')
+  const createdAt = typeof data.created_at === 'string' ? data.created_at : new Date().toISOString()
+  const title = parentMessageId
+    ? '스레드 답글'
+    : channelType === 'DM'
+      ? '다이렉트 메시지'
+      : '채널 메시지'
+
+  // 벨 목록은 notification_key 로 중복을 막지만 토스트는 수신 즉시 표시한다. 같은 메시지의
+  // 파일 추가 이벤트가 여러 번 와도 토스트가 반복되지 않도록 여기서 먼저 기억한다.
+  notifiedChatMessageIds.add(messageId)
+  if (notifiedChatMessageIds.size > 500) {
+    const oldest = notifiedChatMessageIds.values().next().value
+    if (oldest != null) {
+      notifiedChatMessageIds.delete(oldest)
+    }
+  }
+
+  notifyLiveNotificationReceived({
+    notification_key: `chat:${messageId}`,
+    sub_type: 'CHAT_MESSAGE',
+    entity_type: 'CHAT_MESSAGE',
+    entity_id: String(messageId),
+    action: 'inserted',
+    node_id: channelType === 'WORKSPACE' && ownerNodeId > 0 ? ownerNodeId : undefined,
+    actor_user_id: String(data.sender_user_id ?? senderEmail),
+    actor_name: actorName,
+    title,
+    content,
+    channel_id: channelId,
+    channel_type: channelType,
+    channel_name: channelName,
+    parent_message_id: parentMessageId,
+    attachment_count: attachmentCount,
+    attachment_names: attachmentNames,
+    link_url: `/channels?channelId=${channelId}`,
+    is_read: false,
+    created_at: createdAt,
+    can_view_detail: true,
+  })
 }
 
 function scheduleWebSocketReconnect() {
@@ -1874,13 +1981,13 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
           }
 
           if (payload && payload.type === 'CHAT') {
-            notifyChatRealtimeEvent({
-              subType: typeof payload.sub_type === 'string' ? payload.sub_type : '',
-              data:
-                payload.data && typeof payload.data === 'object'
-                  ? (payload.data as Record<string, unknown>)
-                  : (payload as Record<string, unknown>),
-            })
+            const subType = typeof payload.sub_type === 'string' ? payload.sub_type : ''
+            const chatData =
+              payload.data && typeof payload.data === 'object'
+                ? (payload.data as Record<string, unknown>)
+                : (payload as Record<string, unknown>)
+            notifyChatRealtimeEvent({ subType, data: chatData })
+            notifyChatMessageAsInbox(subType, chatData)
             return
           }
           if (payload && payload.type === 'WORKSPACE_REFRESH') {
@@ -1915,6 +2022,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
 
             // 1. 전역 라이브 알림 이벤트 발송 (Toast 및 Bell 헤더 팝오버용)
             notifyLiveNotificationReceived({
+              notification_key: typeof data.notification_key === 'string' ? data.notification_key : undefined,
               notification_id: data.notification_id || data.mention_id,
               node_id: data.node_id,
               entity_type: data.entity_type || (payload.sub_type === 'MENTION' ? 'COMMENT' : undefined),
@@ -1935,6 +2043,14 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
               is_read: Boolean(data.is_read),
               created_at: data.created_at || new Date().toISOString(),
               can_view_detail: data.can_view_detail !== false,
+              repo_id: Number.isFinite(Number(data.repo_id)) ? Number(data.repo_id) : undefined,
+              repo_full_name: typeof data.repo_full_name === 'string' ? data.repo_full_name : undefined,
+              branch: typeof data.branch === 'string' ? data.branch : undefined,
+              commit_sha: typeof data.commit_sha === 'string' ? data.commit_sha : undefined,
+              commit_message: typeof data.commit_message === 'string' ? data.commit_message : undefined,
+              pushed_commit_count: Number.isFinite(Number(data.pushed_commit_count))
+                ? Number(data.pushed_commit_count)
+                : undefined,
             })
 
             // 2. 삭제 활동(action === 'deleted')인 경우, 서버 재호출 없이 로컬 캐시에서 즉시 제거하여 유령 데이터 소멸

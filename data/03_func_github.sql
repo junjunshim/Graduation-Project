@@ -47,6 +47,38 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 
+-- Function: GitHub 알람 수신자 조회
+-- 저장소가 연결된 노드에서 GITHUB_VIEW 를 가진 사용자 중 작업 수행자 본인을 제외한다.
+-- 권한 판정은 get_channel_recipient_emails 와 같은 상속 규칙을 따른다.
+CREATE OR REPLACE FUNCTION get_github_notification_recipients_by_node(
+    p_node_id organization_nodes.node_id%TYPE,
+    p_actor_email users.email%TYPE
+) RETURNS TABLE(email VARCHAR) AS $$
+DECLARE
+    v_path organization_nodes.path%TYPE;
+BEGIN
+    SELECT path INTO v_path
+    FROM organization_nodes
+    WHERE node_id = p_node_id AND is_deleted = FALSE;
+
+    IF v_path IS NULL THEN
+        RETURN;
+    END IF;
+
+    RETURN QUERY
+    SELECT DISTINCT u.email
+    FROM role_assignments ra
+    JOIN organization_nodes n ON n.node_id = ra.node_id
+    JOIN users u ON u.user_id = ra.user_id
+    WHERE n.node_id = ANY(v_path)
+      AND u.is_deleted = FALSE
+      AND (p_actor_email IS NULL OR u.email <> p_actor_email)
+      AND check_authority_with_override(u.user_id, p_node_id, 'GITHUB_VIEW') = TRUE
+    ORDER BY u.email;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
 -- GitHubController::공통 - 저장소 단건 조회
 -- repo_id 로 노드·clone 경로·기본 브랜치를 확정한다. 저장소를 다루는 모든 API 의 진입점이다.
 CREATE OR REPLACE FUNCTION get_github_repository_by_id(
@@ -121,10 +153,10 @@ CREATE OR REPLACE FUNCTION create_github_repository(
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
-    v_node_name organization_nodes.name%TYPE;
     v_repo_id github_repositories.repo_id%TYPE;
     v_clone_url github_repositories.clone_url%TYPE;
     v_local_path TEXT;
+    v_is_new_connection BOOLEAN := FALSE;
 BEGIN
     -- 1. 요청자 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
@@ -134,8 +166,9 @@ BEGIN
     END IF;
 
     -- 2. 노드 존재 확인
-    SELECT name INTO v_node_name FROM organization_nodes WHERE node_id = p_node_id AND is_deleted = FALSE;
-    IF NOT FOUND THEN
+    IF NOT EXISTS (
+        SELECT 1 FROM organization_nodes WHERE node_id = p_node_id AND is_deleted = FALSE
+    ) THEN
         RAISE EXCEPTION '[P0002]Owner node does not exist or is deleted: %', p_node_id
         USING ERRCODE = 'P0002';
     END IF;
@@ -170,6 +203,7 @@ BEGIN
             LIMIT 1
         )
         RETURNING repo_id INTO v_repo_id;
+        v_is_new_connection := TRUE;
     END IF;
 
     -- 7. 처음 연결이면 새로 만든다
@@ -177,22 +211,10 @@ BEGIN
         INSERT INTO github_repositories (node_id, owner_login, repo_name, clone_url, default_branch, local_path)
         VALUES (p_node_id, p_owner_login, p_repo_name, v_clone_url, p_default_branch, v_local_path)
         RETURNING repo_id INTO v_repo_id;
+        v_is_new_connection := TRUE;
     END IF;
 
-    -- 8. 활동 피드 기록 (TASK_10 §4.6: 저장소 연결·해제는 'NODE' 활동으로 남긴다)
-    PERFORM log_activity(
-        p_node_id,
-        p_requester_email,
-        'NODE',
-        p_node_id::VARCHAR,
-        v_node_name,
-        'updated',
-        'github_repository',
-        NULL,
-        p_owner_login || '/' || p_repo_name
-    );
-
-    -- 9. 기본 브랜치를 "등록된 브랜치"로 남긴다.
+    -- 8. 기본 브랜치를 "등록된 브랜치"로 남긴다.
     --    접속자(presence)·브랜치 목록·브랜치 판정이 모두 github_branches 행을 전제로 한다.
     --    특히 제어 소켓 join 은 upsert_github_branch_presence 로 들어오는데, 기본 브랜치 행이 없으면
     --    [P0801] 로 거부되어 접속자 목록(Editing 뷰)이 늘 비어 버린다 (2026-10-08 수정).
@@ -221,7 +243,7 @@ BEGIN
         END IF;
     END IF;
 
-    -- 10. 저장소 정보 반환 (토큰은 들어가지 않는다)
+    -- 9. 저장소 정보 반환 (토큰은 들어가지 않는다)
     RETURN QUERY
     SELECT jsonb_build_object(
         'type', 'GITHUB_REPOSITORY',
@@ -233,6 +255,7 @@ BEGIN
         'default_branch', r.default_branch,
         'local_path', r.local_path,
         'is_deleted', r.is_deleted,
+        'is_new_connection', v_is_new_connection,
         'created_at', r.created_at,
         'updated_at', r.updated_at
     )::jsonb AS out_data
@@ -316,8 +339,6 @@ CREATE OR REPLACE FUNCTION delete_github_repository(
 DECLARE
     v_requester_id users.user_id%TYPE;
     v_node_id organization_nodes.node_id%TYPE;
-    v_node_name organization_nodes.name%TYPE;
-    v_repo_label TEXT;
 BEGIN
     -- 1. 요청자 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
@@ -327,7 +348,7 @@ BEGIN
     END IF;
 
     -- 2. 저장소 존재 확인
-    SELECT node_id, owner_login || '/' || repo_name INTO v_node_id, v_repo_label
+    SELECT node_id INTO v_node_id
     FROM github_repositories
     WHERE repo_id = p_repo_id AND is_deleted = FALSE;
 
@@ -341,8 +362,6 @@ BEGIN
         RAISE EXCEPTION '[P0103]Requester does not have GITHUB_REPO_MANAGE permission on node: %', v_node_id
         USING ERRCODE = 'P0103';
     END IF;
-
-    SELECT name INTO v_node_name FROM organization_nodes WHERE node_id = v_node_id;
 
     -- 4. 접속자 정리 (휘발성 캐시. 남겨 두면 죽은 접속자가 계속 보인다)
     DELETE FROM github_branch_presence
@@ -358,25 +377,14 @@ BEGIN
     SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP
     WHERE repo_id = p_repo_id;
 
-    -- 7. 활동 피드 기록
-    PERFORM log_activity(
-        v_node_id,
-        p_requester_email,
-        'NODE',
-        v_node_id::VARCHAR,
-        v_node_name,
-        'updated',
-        'github_repository',
-        v_repo_label,
-        NULL
-    );
-
-    -- 8. 결과 반환
+    -- 7. 결과 반환
     RETURN QUERY
     SELECT jsonb_build_object(
         'type', 'GITHUB_REPOSITORY',
         'repo_id', r.repo_id,
         'node_id', r.node_id,
+        'owner_login', r.owner_login,
+        'repo_name', r.repo_name,
         'status', 'deleted',
         'is_deleted', r.is_deleted,
         'updated_at', r.updated_at
@@ -412,6 +420,7 @@ DECLARE
     v_worktree_path TEXT;
     v_display_id INTEGER;
     v_work_item_id work_items.work_item_id%TYPE;
+    v_is_new_branch BOOLEAN := FALSE;
 BEGIN
     -- 1. 요청자 확인
     SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
@@ -465,6 +474,7 @@ BEGIN
             p_requester_email
         )
         RETURNING branch_id INTO v_branch_id;
+        v_is_new_branch := TRUE;
     END IF;
 
     -- 8. 결과 반환
@@ -481,6 +491,7 @@ BEGIN
         'is_default', (b.name = r.default_branch),
         'created_by_email', b.created_by_email,
         'is_deleted', b.is_deleted,
+        'is_new_branch', v_is_new_branch,
         'created_at', b.created_at,
         'updated_at', b.updated_at
     )::jsonb AS out_data

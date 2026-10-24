@@ -110,10 +110,15 @@ export function NotificationPopover({ userId, buttonClassName }: NotificationPop
                 }
 
                 return notifications.map((item) => {
-                  const isDirectlyDeleted = item.action === 'deleted'
+                  const isDeletableEntity =
+                    item.entity_type === 'WORK_ITEM' ||
+                    item.entity_type === 'COMMENT' ||
+                    item.entity_type === 'FILE' ||
+                    item.entity_type === 'NODE'
+                  const isDirectlyDeleted = item.action === 'deleted' && isDeletableEntity
                   let isDeleted = isDirectlyDeleted
 
-                  if (!isDeleted && db && item.entity_id) {
+                  if (!isDeleted && isDeletableEntity && db && item.entity_id) {
                     if (
                       item.entity_type === 'WORK_ITEM' ||
                       item.entity_type === 'COMMENT' ||

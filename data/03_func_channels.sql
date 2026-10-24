@@ -1111,6 +1111,7 @@ BEGIN
     -- 후속 행: 채널 수신자 웹소켓 이벤트 반환
     v_ws_data := v_msg_json || jsonb_build_object(
         'channel_type', v_channel.channel_type,
+        'channel_name', v_channel.name,
         'owner_node_id', v_channel.owner_node_id
     );
 
@@ -1195,6 +1196,7 @@ BEGIN
 
     v_ws_data := v_msg_json || jsonb_build_object(
         'channel_type', v_channel.channel_type,
+        'channel_name', v_channel.name,
         'owner_node_id', v_channel.owner_node_id
     );
 

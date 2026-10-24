@@ -6,6 +6,7 @@
 #include "AuthController.h"
 #include "CollabClient.h"
 #include "WorkerLimiter.h"
+#include "NotificationWebSocketController.h"
 
 #include <drogon/HttpClient.h>
 #include <json/json.h>
@@ -14,6 +15,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -278,6 +280,104 @@ int accessTokenExpirySeconds() {
 // data/03_func_github.sql 의 create_github_repository 와 같은 식이어야 한다.
 std::string localPathFor(int nodeId, const std::string &repoName) {
     return "repository/" + std::to_string(nodeId) + "/" + repoName;
+}
+
+std::string utcTimestampNow() {
+    const std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::tm utc{};
+    gmtime_r(&now, &utc);
+    char buffer[32] = {};
+    std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    return buffer;
+}
+
+// GitHub 작업 성공을 GITHUB_VIEW 보유자에게만 알린다. 알람 발행 실패는 원래 작업의 성공을
+// 뒤집지 않는다. 수신자 계산과 표시 문구 원본은 클라이언트가 아니라 이 payload 가 기준이다.
+void notifyGithubEvent(const orm::DbClientPtr &db,
+                       int nodeId,
+                       int repoId,
+                       const std::string &repoFullName,
+                       const std::string &actorEmail,
+                       const std::string &entityType,
+                       const std::string &entityId,
+                       const std::string &action,
+                       const std::string &branch = "",
+                       const std::string &commitSha = "",
+                       const std::string &commitMessage = "",
+                       int pushedCommitCount = -1) {
+    try {
+        std::string actorName = actorEmail;
+        Json::Value userRow;
+        if (singleRow(db->execSqlSync("SELECT * FROM get_user_profile($1, $2)", actorEmail, actorEmail),
+                      userRow)) {
+            actorName = userRow["name"].asString();
+        }
+
+        auto recipients = db->execSqlSync(
+            "SELECT email FROM get_github_notification_recipients_by_node($1, $2)",
+            nodeId, actorEmail);
+        if (recipients.empty()) {
+            return;
+        }
+
+        const std::string createdAt = utcTimestampNow();
+        Json::Value event;
+        event["type"] = "NOTIFICATION";
+        event["sub_type"] = "GITHUB";
+
+        Json::Value &data = event["data"];
+        data["notification_key"] = "github:" + std::to_string(repoId) + ":" + entityType + ":" +
+                                   action + ":" + entityId + ":" + createdAt;
+        data["entity_type"] = entityType;
+        data["entity_id"] = entityId;
+        data["action"] = action;
+        data["node_id"] = nodeId;
+        data["repo_id"] = repoId;
+        data["repo_full_name"] = repoFullName;
+        data["actor_user_id"] = actorEmail;
+        data["actor_name"] = actorName;
+        data["title"] = "GitHub 알림";
+        data["content"] = commitMessage;
+        data["link_url"] = "/workspace?nodeId=" + std::to_string(nodeId) + "&view=github";
+        data["is_read"] = false;
+        data["created_at"] = createdAt;
+        data["can_view_detail"] = true;
+
+        if (!branch.empty()) {
+            data["branch"] = branch;
+        }
+        if (!commitSha.empty()) {
+            data["commit_sha"] = commitSha;
+        }
+        if (!commitMessage.empty()) {
+            data["commit_message"] = commitMessage;
+        }
+        if (pushedCommitCount >= 0) {
+            data["pushed_commit_count"] = pushedCommitCount;
+        }
+
+        Json::StreamWriterBuilder writer;
+        const std::string message = Json::writeString(writer, event);
+        std::vector<std::string> emails;
+        emails.reserve(recipients.size());
+        for (const auto &row : recipients) {
+            const std::string email = row["email"].asString();
+            if (!email.empty()) {
+                emails.push_back(email);
+            }
+        }
+
+        if (!emails.empty()) {
+            app().getLoop()->queueInLoop([emails, message]() {
+                for (const auto &email : emails) {
+                    NotificationWebSocketController::sendNotificationToUser(email, message);
+                }
+            });
+        }
+    } catch (const std::exception &e) {
+        LOG_WARN << "GitHub 알람 발행 실패 (repo=" << repoId << ", type=" << entityType
+                 << "): " << e.what();
+    }
 }
 
 // 활성 자격증명의 복호화된 토큰. 없거나 키가 없으면 빈 문자열(P0802/P0806 은 "없음"으로 취급).
@@ -1319,6 +1419,14 @@ void GithubController::connectRepository(const HttpRequestPtr &req, std::functio
             "SELECT * FROM create_github_repository($1, $2, $3, $4, $5, $6)",
             requester, nodeId, owner, repo, url, defaultBranch);
 
+        Json::Value repositoryRow;
+        if (singleRow(result, repositoryRow) && repositoryRow["is_new_connection"].asBool()) {
+            notifyGithubEvent(db, nodeId, repositoryRow["repo_id"].asInt(),
+                              owner + "/" + repo, requester,
+                              "GITHUB_REPOSITORY", std::to_string(repositoryRow["repo_id"].asInt()),
+                              "inserted");
+        }
+
         return successResponse(rowsToArray(result), "저장소를 연결했습니다.", k201Created);
     });
 }
@@ -1352,6 +1460,12 @@ void GithubController::disconnectRepository(const HttpRequestPtr &req, std::func
         auto db = app().getDbClient();
         // clone 디렉터리는 지우지 않는다. 연결만 끊고 다시 연결하면 그대로 재사용한다.
         auto result = db->execSqlSync("SELECT * FROM delete_github_repository($1, $2)", requester, repoId);
+        Json::Value repositoryRow;
+        if (singleRow(result, repositoryRow)) {
+            notifyGithubEvent(db, repositoryRow["node_id"].asInt(), repoId,
+                              repositoryRow["owner_login"].asString() + "/" + repositoryRow["repo_name"].asString(),
+                              requester, "GITHUB_REPOSITORY", std::to_string(repoId), "deleted");
+        }
         return successResponse(rowsToArray(result), "저장소 연결을 해제했습니다.");
     });
 }
@@ -2147,6 +2261,12 @@ void GithubController::createBranch(const HttpRequestPtr &req, std::function<voi
             }
         }
 
+        if (branchRow["is_new_branch"].asBool()) {
+            notifyGithubEvent(db, repoRow["node_id"].asInt(), repoId,
+                              repoRow["owner_login"].asString() + "/" + repoRow["repo_name"].asString(),
+                              requester, "GITHUB_BRANCH", name, "inserted", name);
+        }
+
         // 브랜치 생성은 같은 저장소의 모든 접속자에게 알린다.
         Json::Value created;
         created["type"] = "branch_created";
@@ -2273,6 +2393,10 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
         }
 
         auto result = db->execSqlSync("SELECT * FROM delete_github_branch($1, $2, $3)", requester, repoId, name);
+
+        notifyGithubEvent(db, repoRow["node_id"].asInt(), repoId,
+                          repoRow["owner_login"].asString() + "/" + repoRow["repo_name"].asString(),
+                          requester, "GITHUB_BRANCH", name, "deleted", name);
 
         // 삭제 확정을 같은 저장소 전체에 알린다. 그 브랜치에 있던 사용자는 클라이언트가 기본 브랜치로 옮긴다.
         Json::Value deleted;
@@ -2969,6 +3093,11 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         const std::string authorName = identityName.empty() ? accountName : identityName;
         const std::string authorEmail = accountEmail;
 
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+
         // 2) 브랜치의 작업 디렉터리를 확정한다(없으면 worktree 를 만든다).
         std::string workDir;
         HttpResponsePtr failure;
@@ -3086,6 +3215,10 @@ void GithubController::commitPaths(const HttpRequestPtr &req, std::function<void
         GithubWebSocketController::broadcastToBranch(repoId, branch, finished);
         lockGuard.disarm(); // 결과를 담아 직접 보냈으니 가드는 아무것도 하지 않게 한다.
 
+        notifyGithubEvent(db, repoRow["node_id"].asInt(), repoId,
+                          repoRow["owner_login"].asString() + "/" + repoRow["repo_name"].asString(),
+                          requester, "GITHUB_COMMIT", sha, "inserted", branch, sha, message);
+
         return successResponse(data, "커밋했습니다. 원격 전송은 push 로 따로 합니다.", k201Created);
     });
 }
@@ -3138,6 +3271,11 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
     const std::string requester = requesterEmail(req);
     runNetworkOffLoop(req, std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
+
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
 
         std::string workDir;
         HttpResponsePtr failure;
@@ -3194,12 +3332,14 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
         // 성공: 그 브랜치의 미push 커밋 로그를 확정한다(pushed_by_email = 요청자).
         Json::Value data = syncToJson(readSyncState(workDir, branch));
         data["pushed"] = true;
+        int pushedCommitCount = before.ahead;
         try {
             Json::Value markRow;
             if (singleRow(db->execSqlSync("SELECT * FROM mark_github_branch_pushed($1, $2, $3)",
                                           requester, repoId, branch),
                           markRow)) {
                 data["pushed_commit_count"] = markRow["pushed_commit_count"];
+                pushedCommitCount = markRow["pushed_commit_count"].asInt();
             }
         } catch (const orm::DrogonDbException &e) {
             // push 는 이미 성공했다. 기록 실패로 사용자 작업을 되돌리지 않고 로그만 남긴다.
@@ -3214,6 +3354,10 @@ void GithubController::pushRepository(const HttpRequestPtr &req, std::function<v
         finished["pushed"] = true;
         finished["ahead"] = data["ahead"];
         GithubWebSocketController::broadcastToBranch(repoId, branch, finished);
+
+        notifyGithubEvent(db, repoRow["node_id"].asInt(), repoId,
+                          repoRow["owner_login"].asString() + "/" + repoRow["repo_name"].asString(),
+                          requester, "GITHUB_PUSH", branch, "pushed", branch, "", "", pushedCommitCount);
 
         return successResponse(singleItemArray(data), "원격에 push 했습니다.");
     });

@@ -604,6 +604,15 @@ export function ChannelsPage() {
     setSearchParams({ channelId: String(channelId) }, { replace: true })
   }, [setSearchParams])
 
+  // 알림에서 /channels?channelId=... 로 이동했을 때 이미 채널 화면에 머물러 있어도
+  // 해당 채널로 전환한다. 내부 클릭도 같은 searchParam 을 쓰므로 값이 같을 때는 무시된다.
+  useEffect(() => {
+    const channelId = Number(searchParams.get('channelId'))
+    if (Number.isFinite(channelId) && channelId > 0) {
+      handleSelectChannel(channelId)
+    }
+  }, [handleSelectChannel, searchParams])
+
   const handleOpenCreateChannelModal = useCallback((nodeId: number) => {
     setModalInitialNodeId(nodeId)
     setChannelModalMode('create')

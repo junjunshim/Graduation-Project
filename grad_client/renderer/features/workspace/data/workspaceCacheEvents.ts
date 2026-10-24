@@ -122,6 +122,7 @@ export function subscribeToWorkspaceCacheRefreshFailure(listener: (message: stri
 export const LIVE_NOTIFICATION_EVENT = 'grad-client-live-notification'
 
 export type LiveNotificationPayload = {
+  notification_key?: string
   notification_id?: number
   node_id?: number
   entity_type?: string
@@ -142,6 +143,18 @@ export type LiveNotificationPayload = {
   is_read?: boolean
   created_at: string
   can_view_detail?: boolean
+  channel_id?: number
+  channel_type?: string
+  channel_name?: string | null
+  parent_message_id?: number | null
+  attachment_count?: number
+  attachment_names?: string[]
+  repo_id?: number
+  repo_full_name?: string
+  branch?: string
+  commit_sha?: string
+  commit_message?: string
+  pushed_commit_count?: number
 }
 
 export function notifyLiveNotificationReceived(payload: LiveNotificationPayload) {

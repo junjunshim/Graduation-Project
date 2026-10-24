@@ -42,8 +42,7 @@ enum class DbErrorCode {
     DeleteRoleDefinitionFailed, // P0421 역할 정의 삭제 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
-    EmailNotFound,              // P0503 이메일 찾을 수 없음
-    IncorrectPassword,          // P0504 비밀번호 틀림
+    InvalidCredentials,         // P0503/P0504 로그인 실패(계정 존재 여부 비노출)
     LoginFailed,                // P0505 로그인 실패
     DeleteUserError,            // P0506 사용자 삭제 실패
     GetUserProfileFailed,       // P0507 사용자 프로필 조회 실패

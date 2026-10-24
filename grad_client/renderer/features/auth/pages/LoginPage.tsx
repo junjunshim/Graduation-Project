@@ -86,16 +86,10 @@ export function LoginPage() {
       })
 
       if (response.status === 'error') {
-        const msg = response.message || '로그인에 실패했습니다.'
+        const msg = response.message || '이메일 또는 비밀번호가 올바르지 않습니다.'
         setFeedback({ tone: 'error', message: msg })
-
-        if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
-          setErrorField('email')
-        } else if (msg.includes('비밀번호') || msg.toLowerCase().includes('password')) {
-          setErrorField('password')
-        } else {
-          setErrorField('all')
-        }
+        // 로그인 실패 메시지로 어느 입력값이 틀렸는지 추론해 표시하지 않는다.
+        setErrorField('all')
         return
       }
 
@@ -117,13 +111,7 @@ export function LoginPage() {
         tone: 'error',
         message: msg,
       })
-      if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
-        setErrorField('email')
-      } else if (msg.includes('비밀번호') || msg.toLowerCase().includes('password')) {
-        setErrorField('password')
-      } else {
-        setErrorField('all')
-      }
+      setErrorField('all')
     } finally {
       setSubmitting(false)
     }

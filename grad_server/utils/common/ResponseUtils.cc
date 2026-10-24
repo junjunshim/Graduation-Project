@@ -150,8 +150,8 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0417") != std::string::npos) return DbErrorCode::RemoveRoleFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
-    else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
-    else if (errMsg.find("P0504") != std::string::npos) return DbErrorCode::IncorrectPassword;
+    else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::InvalidCredentials;
+    else if (errMsg.find("P0504") != std::string::npos) return DbErrorCode::InvalidCredentials;
     else if (errMsg.find("P0505") != std::string::npos) return DbErrorCode::LoginFailed;
     else if (errMsg.find("P0506") != std::string::npos) return DbErrorCode::DeleteUserError;
     else if (errMsg.find("P0507") != std::string::npos) return DbErrorCode::GetUserProfileFailed;
@@ -458,13 +458,9 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e, con
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
-        case DbErrorCode::EmailNotFound:{
-            ret["message"] = "이메일을 찾을 수 없습니다.";
-            ret["http_code"] = drogon::k404NotFound;
-            break;
-        }
-        case DbErrorCode::IncorrectPassword:{
-            ret["message"] = "비밀번호가 일치하지 않습니다.";
+        case DbErrorCode::InvalidCredentials:{
+            // 이메일 미존재와 비밀번호 불일치를 구분하지 않아 계정 존재 여부를 노출하지 않는다.
+            ret["message"] = "이메일 또는 비밀번호가 올바르지 않습니다.";
             ret["http_code"] = drogon::k401Unauthorized;
             break;
         }

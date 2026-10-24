@@ -107,7 +107,7 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
                 // 실패 응답 생성 및 반환
                 Json::Value ret;
                 ret["status"] = "error";
-                ret["message"] = "Invalid email or password.";
+                ret["message"] = "이메일 또는 비밀번호가 올바르지 않습니다.";
                 auto resp = HttpResponse::newHttpJsonResponse(ret);
                 resp->setStatusCode(k401Unauthorized);
                 callback(resp);

@@ -267,7 +267,9 @@ CREATE OR REPLACE FUNCTION login_user (
 RETURNS BOOLEAN AS $$
 DECLARE
     v_user_password_hash users.password_hash%TYPE;
-    v_is_match BOOLEAN;
+    v_is_match BOOLEAN := FALSE;
+    -- 계정이 없을 때도 동일한 bcrypt 비용을 수행해 계정 존재 여부가 응답 시간으로 드러나지 않게 한다.
+    v_dummy_password_hash CONSTANT users.password_hash%TYPE := '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 BEGIN
     -- 1. 이메일 존재 여부 확인 및 패스워드 해시값 검증
     SELECT password_hash INTO v_user_password_hash
@@ -275,19 +277,20 @@ BEGIN
     WHERE email = p_email AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0503] Email not found: %', p_email
-        USING ERRCODE = 'P0503';
-    END IF;
-
-    -- Bcrypt 해시 검증 (crypt(입력비번, 저장된해시) = 저장된해시) 또는 레거시 평문 일치 호환
-    IF v_user_password_hash LIKE '$2a$%' OR v_user_password_hash LIKE '$2b$%' THEN
-        v_is_match := (v_user_password_hash = crypt(p_password_hash, v_user_password_hash));
+        PERFORM crypt(p_password_hash, v_dummy_password_hash);
     ELSE
-        v_is_match := (v_user_password_hash = p_password_hash);
+        -- Bcrypt 해시 검증 (crypt(입력비번, 저장된해시) = 저장된해시) 또는 레거시 평문 일치 호환
+        IF v_user_password_hash LIKE '$2a$%' OR v_user_password_hash LIKE '$2b$%' THEN
+            v_is_match := (v_user_password_hash = crypt(p_password_hash, v_user_password_hash));
+        ELSE
+            PERFORM crypt(p_password_hash, v_dummy_password_hash);
+            v_is_match := (v_user_password_hash = p_password_hash);
+        END IF;
     END IF;
 
     IF NOT v_is_match THEN
-        RAISE EXCEPTION '[P0504] Incorrect password for email: %', p_email
+        -- 이메일 미존재와 비밀번호 불일치를 같은 오류로 처리하고 이메일을 메시지에 남기지 않는다.
+        RAISE EXCEPTION '[P0504] Invalid credentials'
         USING ERRCODE = 'P0504';
     END IF;
 
@@ -301,11 +304,11 @@ BEGIN
     RETURN TRUE;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0503' OR SQLSTATE 'P0504' THEN
-        RAISE;
+        WHEN SQLSTATE 'P0504' THEN
+            RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0505] Error occurred during login: %', SQLERRM
-        USING ERRCODE = 'P0505';
+            RAISE EXCEPTION '[P0505] Error occurred during login: %', SQLERRM
+            USING ERRCODE = 'P0505';
 END;
 $$ LANGUAGE plpgsql;
 

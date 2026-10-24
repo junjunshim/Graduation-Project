@@ -15,7 +15,10 @@ import {
   removeRoleOnServer,
   signInServerUser,
 } from '../renderer/features/workspace/data/server/serverWorkspace.js'
-import { readWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
+import {
+  clearServerWorkspaceDb,
+  readWorkspaceDb,
+} from '../renderer/features/workspace/data/localStore.js'
 import { fetchNodeMovePreview, moveNode } from '../renderer/features/workspace/data/nodeMoveService.js'
 
 type MemoryStorageOptions = {
@@ -341,6 +344,46 @@ test('server login stores both tokens before loading and preserving the document
     assert.equal(workspace.files?.[0]?.mimeType, 'image/png')
   } finally {
     globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
+
+test('server login returns the generic unauthorized message and keeps no session', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  clearServerWorkspaceDb()
+  const originalFetch = globalThis.fetch
+  let requestCount = 0
+
+  globalThis.fetch = async (input, init) => {
+    requestCount += 1
+    assert.equal(requestCount, 1)
+    assert.match(getRequestPath(input), /\/users\/login$/)
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      email: 'user@example.com',
+      password: 'wrong-password',
+    })
+
+    return jsonResponse(
+      { status: 'error', message: '이메일 또는 비밀번호가 올바르지 않습니다.' },
+      401,
+    )
+  }
+
+  try {
+    const response = await signInServerUser({
+      email: 'user@example.com',
+      password: 'wrong-password',
+    })
+
+    assert.deepEqual(response, {
+      status: 'error',
+      message: '이메일 또는 비밀번호가 올바르지 않습니다.',
+    })
+    assert.equal(requestCount, 1)
+    assertEmptyServerState()
+  } finally {
+    globalThis.fetch = originalFetch
+    clearServerWorkspaceDb()
     restoreWindow()
   }
 })

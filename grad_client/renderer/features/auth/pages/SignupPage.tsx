@@ -9,6 +9,7 @@ import { useTheme } from '../../../design-system/theme/ThemeContext'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
 import { getCurrentUser, signUp } from '../api'
 import { getAuthIllustrationUrl } from '../model/authAssets'
+import { getPasswordValidationError } from '../model/authValidation'
 import styles from './SignupPage.module.css'
 
 const initialForm = {
@@ -109,30 +110,9 @@ export function SignupPage() {
       return
     }
 
-    if (!form.password) {
-      setFeedback({ message: '비밀번호를 입력해 주세요.' })
-      setErrorField('password')
-      return
-    }
-
-    if (form.password.length < 8) {
-      setFeedback({ message: '비밀번호는 최소 8자 이상이어야 합니다.' })
-      setErrorField('password')
-      return
-    }
-
-    if (form.password.length > 64) {
-      setFeedback({ message: '비밀번호는 최대 64자까지 입력할 수 있습니다.' })
-      setErrorField('password')
-      return
-    }
-
-    const hasLetter = /[a-zA-Z]/.test(form.password)
-    const hasNumber = /\d/.test(form.password)
-    const hasSpecial = /[@$!%*#?&~^_\-+=[\]{}|:;.,<>/?]/.test(form.password)
-
-    if (!hasLetter || !hasNumber || !hasSpecial) {
-      setFeedback({ message: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' })
+    const passwordError = getPasswordValidationError(form.password)
+    if (passwordError) {
+      setFeedback({ message: passwordError })
       setErrorField('password')
       return
     }

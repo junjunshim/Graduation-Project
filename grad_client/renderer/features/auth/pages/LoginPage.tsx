@@ -11,6 +11,7 @@ import { getCurrentUser, signIn } from '../api'
 import { getAuthIllustrationUrl } from '../model/authAssets'
 import { readRememberedEmail, saveRememberedEmail } from '../model/rememberedEmail'
 import styles from './LoginPage.module.css'
+import { PasswordResetDialog } from './PasswordResetDialog'
 
 type Feedback = {
   tone: 'error' | 'info'
@@ -28,6 +29,7 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(Boolean(rememberedEmail))
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [passwordResetOpen, setPasswordResetOpen] = useState(false)
   const [errorField, setErrorField] = useState<'email' | 'password' | 'all' | null>(null)
   const [syncPhase, setSyncPhase] = useState<'auth' | 'ws' | 'sync' | 'parse'>('auth')
   const [feedback, setFeedback] = useState<Feedback | null>(() => {
@@ -128,7 +130,7 @@ export function LoginPage() {
   }
 
   function handlePasswordHelp() {
-    setFeedback({ tone: 'info', message: '비밀번호 재설정은 워크스페이스 관리자에게 문의해 주세요.' })
+    setPasswordResetOpen(true)
   }
 
   return (
@@ -345,6 +347,12 @@ export function LoginPage() {
           <span>개인정보처리방침</span>
         </footer>
       </div>
+
+      <PasswordResetDialog
+        isOpen={passwordResetOpen}
+        initialEmail={form.email}
+        onClose={() => setPasswordResetOpen(false)}
+      />
     </main>
   )
 }

@@ -124,6 +124,24 @@ CREATE TABLE IF NOT EXISTS user_refresh_tokens (
 );
 
 
+-- 6.1 비밀번호 재설정 토큰
+-- 링크에 들어가는 원문 토큰은 저장하지 않고 SHA-256 해시만 보관한다.
+-- 한 사용자에게 활성 토큰 하나만 허용하며, 재요청 시 기존 토큰을 먼저 소비 처리한다.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    reset_id SERIAL PRIMARY KEY,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    token_hash CHAR(64) NOT NULL UNIQUE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_email
+    ON password_reset_tokens(user_email, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_active_password_reset_token
+    ON password_reset_tokens(user_email)
+    WHERE used_at IS NULL;
+
+
 -- 7. 복구용 테이블 생성 (외래키 제약조건 없음)
 CREATE TABLE user_histories (
     history_id SERIAL PRIMARY KEY,

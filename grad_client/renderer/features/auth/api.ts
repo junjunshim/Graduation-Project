@@ -1,6 +1,7 @@
 import {
   getCurrentUser as getCurrentUserWorkspace,
   getNextGeneratedUserId,
+  requestPasswordReset as requestPasswordResetUser,
   signInUser,
   signOutUser,
   signUpUser,
@@ -21,6 +22,10 @@ export function signUp(payload: SignUpRequest) {
 
 export function signOut() {
   signOutUser()
+}
+
+export function requestPasswordReset(email: string) {
+  return requestPasswordResetUser(email)
 }
 
 export function getSuggestedUserId() {

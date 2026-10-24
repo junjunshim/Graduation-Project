@@ -24,6 +24,7 @@
     "renderer/features/workspace/model/vscodeLink.ts",
     "renderer/features/workspace/model/gitGraph.ts",
     "renderer/features/auth/model/rememberedEmail.ts",
+    "renderer/features/auth/model/authValidation.ts",
     "tests/**/*.ts"
   ]
 }

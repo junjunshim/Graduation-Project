@@ -43,6 +43,14 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ACCESS_TOKEN_EXPIRY: ${ACCESS_TOKEN_EXPIRY}
       REFRESH_TOKEN_EXPIRY: ${REFRESH_TOKEN_EXPIRY}
+      # 비밀번호 재설정 링크와 메일 발송. MAIL_API_KEY 는 .env 에만 둔다.
+      PASSWORD_RESET_BASE_URL: ${PASSWORD_RESET_BASE_URL:-https://axisflow.team}
+      PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-30}
+      PASSWORD_RESET_COOLDOWN_SECONDS: ${PASSWORD_RESET_COOLDOWN_SECONDS:-60}
+      PASSWORD_RESET_MAX_PER_HOUR: ${PASSWORD_RESET_MAX_PER_HOUR:-3}
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-resend}
+      MAIL_API_KEY: ${MAIL_API_KEY}
+      MAIL_FROM: "${MAIL_FROM:-Axis <no-reply@axisflow.team>}"
       # collab 사이드카와의 내부 인증 토큰 (backend <-> collab). .env 에만 두고 커밋하지 않는다.
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       # collab 사이드카 주소 (backend -> collab, 되돌리기 통보 §12.11.1). compose 내부망 서비스 이름을 쓴다.

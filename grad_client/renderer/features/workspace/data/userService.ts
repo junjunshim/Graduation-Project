@@ -1,5 +1,11 @@
 import type { SignInRequest, SignInResponse, SignUpRequest, WorkspaceDatabase } from '../model/types'
-import { getCurrentServerUser, signInServerUser, signOutServerUser, signUpServerUser } from './serverWorkspace.js'
+import {
+  getCurrentServerUser,
+  requestPasswordResetOnServer,
+  signInServerUser,
+  signOutServerUser,
+  signUpServerUser,
+} from './serverWorkspace.js'
 import { createServerEntityId } from './server/serverId.js'
 
 export function getNextGeneratedUserId() {
@@ -16,6 +22,10 @@ export async function signInUser(payload: SignInRequest): Promise<SignInResponse
 
 export async function signUpUser(payload: SignUpRequest) {
   return signUpServerUser(payload)
+}
+
+export function requestPasswordReset(email: string) {
+  return requestPasswordResetOnServer(email)
 }
 
 export function signOutUser() {

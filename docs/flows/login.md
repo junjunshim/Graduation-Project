@@ -38,6 +38,7 @@ const currentUser = getCurrentUser()
 | 이메일 입력 | `form.email` 상태 업데이트 |
 | 비밀번호 입력 | `form.password` 상태 업데이트 |
 | 로그인 | `signIn` API 호출 및 응답 대기 |
+| 비밀번호 찾기 | 이메일 재설정 안내 모달 표시 |
 
 ## 클릭 후 이동 페이지
 | 메뉴 | 이동 | MD링크 |
@@ -45,6 +46,7 @@ const currentUser = getCurrentUser()
 | 회원가입 | 회원가입 페이지 | [link](signup.md) |
 | 로그인 성공 | 대시보드 페이지 | [link](dashboard.md) |
 | 로그인 실패 | 현재 페이지 유지 (`feedback` 상태) | - |
+| 비밀번호 찾기 | 비밀번호 재설정 안내 | [link](password_reset.md) |
 
 ## 전체 흐름
 

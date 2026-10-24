@@ -576,6 +576,43 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
   }
 }
 
+export type PasswordResetRequestResult = {
+  status: 'success' | 'error'
+  message: string
+}
+
+const PASSWORD_RESET_GENERIC_MESSAGE =
+  '입력한 이메일이 등록되어 있다면 재설정 안내를 보냈습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.'
+
+export async function requestPasswordResetOnServer(email: string): Promise<PasswordResetRequestResult> {
+  const normalizedEmail = normalizeEmail(email)
+
+  try {
+    const response = await requestServerStatus('/users/password-reset/request', {
+      method: 'POST',
+      body: { email: normalizedEmail },
+      includeToken: false,
+    })
+
+    if (response.status === 'error') {
+      return {
+        status: 'error',
+        message: response.message ?? '비밀번호 재설정 요청에 실패했습니다.',
+      }
+    }
+
+    return {
+      status: 'success',
+      message: PASSWORD_RESET_GENERIC_MESSAGE,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : '비밀번호 재설정 요청에 실패했습니다.',
+    }
+  }
+}
+
 export async function signUpServerUser(payload: SignUpRequest) {
   const email = normalizeEmail(payload.email)
 

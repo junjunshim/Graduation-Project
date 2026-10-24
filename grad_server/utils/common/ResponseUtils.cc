@@ -158,6 +158,9 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0508") != std::string::npos) return DbErrorCode::UpdateUserFailed;
     else if (errMsg.find("P0509") != std::string::npos) return DbErrorCode::ReadMentionFailed;
     else if (errMsg.find("P0510") != std::string::npos) return DbErrorCode::UserIdAlreadyExists;
+    else if (errMsg.find("P0511") != std::string::npos) return DbErrorCode::PasswordResetTokenInvalid;
+    else if (errMsg.find("P0512") != std::string::npos) return DbErrorCode::PasswordPolicyViolation;
+    else if (errMsg.find("P0513") != std::string::npos) return DbErrorCode::PasswordResetFailed;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
@@ -403,6 +406,21 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e, con
         case DbErrorCode::UserIdAlreadyExists:{
             ret["message"] = "이미 존재하는 아이디입니다.";
             ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::PasswordResetTokenInvalid:{
+            ret["message"] = "재설정 링크가 유효하지 않거나 만료되었습니다. 재설정을 다시 요청해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::PasswordPolicyViolation:{
+            ret["message"] = "비밀번호는 8~64자이며 영문, 숫자, 특수문자를 모두 포함해야 합니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::PasswordResetFailed:{
+            ret["message"] = "비밀번호 재설정 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
         case DbErrorCode::UserRegistrationFailed:{

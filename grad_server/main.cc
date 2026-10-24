@@ -313,6 +313,30 @@ int main() {
             custom["access_token_expiry"]  = std::stoi(getEnv("ACCESS_TOKEN_EXPIRY", std::to_string(custom["access_token_expiry"].asInt())));
             custom["refresh_token_expiry"] = std::stoi(getEnv("REFRESH_TOKEN_EXPIRY", std::to_string(custom["refresh_token_expiry"].asInt())));
 
+            // 비밀번호 재설정 링크와 메일 발송 설정. API 키는 서버 환경변수로만 주입한다.
+            const std::string resetBaseUrl = custom.isMember("password_reset_base_url")
+                                                 ? custom["password_reset_base_url"].asString()
+                                                 : "https://axisflow.team";
+            const int resetExpiryMinutes = custom.isMember("password_reset_expire_minutes")
+                                               ? custom["password_reset_expire_minutes"].asInt()
+                                               : 30;
+            const int resetCooldownSeconds = custom.isMember("password_reset_cooldown_seconds")
+                                                 ? custom["password_reset_cooldown_seconds"].asInt()
+                                                 : 60;
+            const int resetMaxPerHour = custom.isMember("password_reset_max_per_hour")
+                                            ? custom["password_reset_max_per_hour"].asInt()
+                                            : 3;
+            const std::string mailFrom = custom.isMember("mail_from")
+                                             ? custom["mail_from"].asString()
+                                             : "Axis <no-reply@axisflow.team>";
+            custom["password_reset_base_url"] = getEnv("PASSWORD_RESET_BASE_URL", resetBaseUrl);
+            custom["password_reset_expire_minutes"] = std::stoi(getEnv("PASSWORD_RESET_EXPIRE_MINUTES", std::to_string(resetExpiryMinutes)));
+            custom["password_reset_cooldown_seconds"] = std::stoi(getEnv("PASSWORD_RESET_COOLDOWN_SECONDS", std::to_string(resetCooldownSeconds)));
+            custom["password_reset_max_per_hour"] = std::stoi(getEnv("PASSWORD_RESET_MAX_PER_HOUR", std::to_string(resetMaxPerHour)));
+            custom["mail_provider"] = getEnv("MAIL_PROVIDER", custom.isMember("mail_provider") ? custom["mail_provider"].asString() : "resend");
+            custom["mail_api_key"] = getEnv("MAIL_API_KEY", custom.isMember("mail_api_key") ? custom["mail_api_key"].asString() : "");
+            custom["mail_from"] = getEnv("MAIL_FROM", mailFrom);
+
             // 브랜치 worktree 회수 설정. config.json 에 없으면 기본값을 쓰고 env 가 있으면 덮어쓴다.
             //  - worktree_idle_days   : 이 일수보다 오래 안 쓴 브랜치의 작업 디렉터리를 회수한다(0 이면 유휴 회수 없음).
             //  - worktree_max_per_repo: 저장소 하나가 들고 있을 작업 디렉터리 수 상한(기본 브랜치는 세지 않는다, 0 이면 무제한).

@@ -30,7 +30,8 @@ add_executable(${PROJECT_NAME} main.cc)
 # and comment out the following lines
 find_package(Drogon CONFIG REQUIRED)
 find_package(PostgreSQL REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon ${PostgreSQL_LIBRARIES})
+find_package(OpenSSL REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon ${PostgreSQL_LIBRARIES} OpenSSL::Crypto)
 target_include_directories(${PROJECT_NAME} PRIVATE ${PostgreSQL_INCLUDE_DIRS})
 
 # ##############################################################################
@@ -67,6 +68,7 @@ set(MODEL_SRC ${MODEL_AUTH_SRC} ${MODEL_NODE_SRC} ${MODEL_WORK_SRC} ${MODEL_ROLE
 aux_source_directory(utils/common UTIL_SRC)
 aux_source_directory(utils/git UTIL_GIT_SRC)
 aux_source_directory(utils/collab UTIL_COLLAB_SRC)
+aux_source_directory(utils/mail UTIL_MAIL_SRC)
 
 drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
                     ${CMAKE_CURRENT_BINARY_DIR})
@@ -97,7 +99,8 @@ target_include_directories(${PROJECT_NAME}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/role
                                    ${CMAKE_CURRENT_SOURCE_DIR}/utils/common
                                    ${CMAKE_CURRENT_SOURCE_DIR}/utils/git
-                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/collab)
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/collab
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/mail)
 target_sources(${PROJECT_NAME}
                PRIVATE
                ${SRC_DIR}
@@ -107,7 +110,8 @@ target_sources(${PROJECT_NAME}
                ${MODEL_SRC}
                ${UTIL_SRC}
                ${UTIL_GIT_SRC}
-               ${UTIL_COLLAB_SRC})
+               ${UTIL_COLLAB_SRC}
+               ${UTIL_MAIL_SRC})
 # ##############################################################################
 # uncomment the following line for dynamically loading views 
 # set_property(TARGET ${PROJECT_NAME} PROPERTY ENABLE_EXPORTS ON)

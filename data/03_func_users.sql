@@ -1,5 +1,185 @@
 -- 컨트롤러에서 사용될 users 관련 함수 생성
 
+-- 비밀번호 정책은 회원가입·프로필 변경·비밀번호 재설정이 같은 규칙을 쓰도록 DB 에서도 강제한다.
+-- 클라이언트 검증은 사용자 안내용이고, 최종 판단은 이 함수가 한다.
+CREATE OR REPLACE FUNCTION validate_password_strength(
+    p_password TEXT
+) RETURNS VOID AS $$
+BEGIN
+    IF p_password IS NULL OR p_password = '' THEN
+        RAISE EXCEPTION '[P0512] Password is required'
+        USING ERRCODE = 'P0512';
+    END IF;
+
+    IF char_length(p_password) < 8 OR char_length(p_password) > 64 THEN
+        RAISE EXCEPTION '[P0512] Password must be between 8 and 64 characters'
+        USING ERRCODE = 'P0512';
+    END IF;
+
+    IF p_password !~ '[A-Za-z]'
+       OR p_password !~ '[0-9]'
+       OR p_password !~ '[@$!%*#?&~^_+=\[\]{}|:;.,<>/?-]' THEN
+        RAISE EXCEPTION '[P0512] Password must contain letters, numbers, and special characters'
+        USING ERRCODE = 'P0512';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- AuthController::requestPasswordReset
+-- 계정 존재 여부는 API 응답에 노출하지 않는다. 이 함수는 메일을 실제로 보낼 수 있는
+-- 경우에만 requested=true 를 반환하고, 없거나 쿨다운 중이면 false 를 반환한다.
+CREATE OR REPLACE FUNCTION request_password_reset_token(
+    p_email users.email%TYPE,
+    p_token_hash TEXT,
+    p_expiry_minutes INTEGER DEFAULT 30,
+    p_cooldown_seconds INTEGER DEFAULT 60,
+    p_max_per_hour INTEGER DEFAULT 3
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user users%ROWTYPE;
+    v_last_created TIMESTAMP WITH TIME ZONE;
+    v_recent_count BIGINT := 0;
+BEGIN
+    IF p_token_hash !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION '[P0513] Invalid password reset token hash'
+        USING ERRCODE = 'P0513';
+    END IF;
+
+    -- 같은 사용자에 대한 동시 요청을 직렬화한다. 없는 계정은 잠글 행이 없으므로
+    -- 바로 일반 응답으로 돌아가고, 외부 API 는 항상 같은 성공 메시지를 반환한다.
+    SELECT * INTO v_user
+    FROM users
+    WHERE lower(email) = lower(trim(p_email)) AND is_deleted = FALSE
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'PASSWORD_RESET_REQUEST',
+            'requested', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    SELECT MAX(created_at),
+           COUNT(*) FILTER (
+               WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
+           )
+    INTO v_last_created, v_recent_count
+    FROM password_reset_tokens
+    WHERE user_email = v_user.email;
+
+    IF (v_last_created IS NOT NULL
+        AND v_last_created > CURRENT_TIMESTAMP - make_interval(secs => GREATEST(p_cooldown_seconds, 0)))
+       OR v_recent_count >= GREATEST(p_max_per_hour, 0) THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'PASSWORD_RESET_REQUEST',
+            'requested', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    -- 새 링크를 발급하면 이전 링크는 즉시 무효화한다(활성 토큰 1개 정책).
+    UPDATE password_reset_tokens
+    SET used_at = CURRENT_TIMESTAMP
+    WHERE user_email = v_user.email AND used_at IS NULL;
+
+    INSERT INTO password_reset_tokens (user_email, token_hash, expires_at)
+    VALUES (
+        v_user.email,
+        lower(p_token_hash),
+        CURRENT_TIMESTAMP + make_interval(mins => GREATEST(p_expiry_minutes, 1))
+    );
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'PASSWORD_RESET_REQUEST',
+        'requested', TRUE,
+        'email', v_user.email,
+        'name', v_user.name
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0513' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0513] Failed to request password reset: %', SQLERRM
+            USING ERRCODE = 'P0513';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- AuthController::confirmPasswordReset
+-- 토큰을 원자적으로 소비하고 비밀번호를 변경한 뒤 모든 기존 세션을 폐기한다.
+CREATE OR REPLACE FUNCTION consume_password_reset_token(
+    p_token_hash TEXT,
+    p_new_password TEXT
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_token password_reset_tokens%ROWTYPE;
+    v_user users%ROWTYPE;
+BEGIN
+    IF p_token_hash !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION '[P0511] Invalid password reset token'
+        USING ERRCODE = 'P0511';
+    END IF;
+
+    SELECT * INTO v_token
+    FROM password_reset_tokens
+    WHERE token_hash = lower(trim(p_token_hash))
+    FOR UPDATE;
+
+    IF NOT FOUND OR v_token.used_at IS NOT NULL OR v_token.expires_at <= CURRENT_TIMESTAMP THEN
+        RAISE EXCEPTION '[P0511] Password reset token is invalid, used, or expired'
+        USING ERRCODE = 'P0511';
+    END IF;
+
+    SELECT * INTO v_user
+    FROM users
+    WHERE email = v_token.user_email AND is_deleted = FALSE
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0511] Password reset user is unavailable'
+        USING ERRCODE = 'P0511';
+    END IF;
+
+    PERFORM validate_password_strength(p_new_password);
+
+    UPDATE users
+    SET password_hash = crypt(p_new_password, gen_salt('bf', 10)),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = v_user.user_id;
+
+    PERFORM revoke_user_sessions(v_user.email);
+    RETURN TRUE;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0511' OR SQLSTATE 'P0512' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0513] Failed to consume password reset token: %', SQLERRM
+            USING ERRCODE = 'P0513';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- 비밀번호가 바뀌면 앱·VSCode 확장 세션과 아직 살아 있는 재설정 링크를 함께 폐기한다.
+CREATE OR REPLACE FUNCTION revoke_user_sessions(
+    p_email users.email%TYPE
+) RETURNS VOID AS $$
+BEGIN
+    DELETE FROM user_refresh_tokens WHERE user_email = p_email;
+    DELETE FROM github_extension_tokens WHERE user_email = p_email;
+    UPDATE password_reset_tokens
+    SET used_at = COALESCE(used_at, CURRENT_TIMESTAMP)
+    WHERE user_email = p_email AND used_at IS NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+
 -- UserController::register_user
 CREATE OR REPLACE FUNCTION register_user(
     p_user_id users.user_id%TYPE,
@@ -20,6 +200,11 @@ BEGIN
     IF EXISTS (SELECT 1 FROM users WHERE email = p_email) THEN
         RAISE EXCEPTION '[P0501] Email already exists: %', p_email
         USING ERRCODE = 'P0501';
+    END IF;
+
+    -- 사전 해시된 시드/마이그레이션 값은 원문을 알 수 없으므로 정책 검사를 건너뛴다.
+    IF p_password_hash NOT LIKE '$2a$%' AND p_password_hash NOT LIKE '$2b$%' THEN
+        PERFORM validate_password_strength(p_password_hash);
     END IF;
 
     -- 0-1. 비밀번호 단방향 Bcrypt 솔팅 해시 암호화 (이미 해시된 문자열이 아니면 crypt 처리)
@@ -270,6 +455,11 @@ BEGIN
     END IF;
 
     -- 3. 유저 정보 갱신 (NULL이거나 빈값 전송 시 기존값 유지, 비밀번호는 crypt 처리)
+    IF p_password_hash IS NOT NULL AND p_password_hash <> ''
+       AND p_password_hash NOT LIKE '$2a$%' AND p_password_hash NOT LIKE '$2b$%' THEN
+        PERFORM validate_password_strength(p_password_hash);
+    END IF;
+
     UPDATE users
     SET
         name = COALESCE(NULLIF(p_name, ''), name),
@@ -283,6 +473,11 @@ BEGIN
         END,
         updated_at = CURRENT_TIMESTAMP
     WHERE user_id = v_target_id;
+
+    -- 비밀번호 변경은 기존 로그인 세션과 남아 있는 재설정 링크를 즉시 폐기한다.
+    IF p_password_hash IS NOT NULL AND p_password_hash <> '' THEN
+        PERFORM revoke_user_sessions(p_target_email);
+    END IF;
 
     -- 4. 활동 피드 기록 (이름이 바뀐 경우에만 기록)
     IF p_name IS NOT NULL AND p_name <> '' AND p_name <> v_old_name THEN

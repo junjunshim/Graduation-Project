@@ -21,6 +21,7 @@ export type ChannelMainChatProps = {
   onEditMessage: (messageId: number, content: string) => Promise<void>
   onDeleteMessage: (messageId: number) => Promise<void>
   onOpenThread: (message: ChatMessage) => void
+  onOpenChannelPopup?: () => void
   onOpenEditChannelModal: () => void
   onDeleteChannel: () => void
   onOpenNewDmModal: () => void
@@ -73,6 +74,7 @@ export function ChannelMainChat({
   onEditMessage,
   onDeleteMessage,
   onOpenThread,
+  onOpenChannelPopup,
   onOpenEditChannelModal,
   onDeleteChannel,
   onOpenNewDmModal,
@@ -188,6 +190,18 @@ export function ChannelMainChat({
         )}
 
         <div className={styles.headerRight}>
+          {onOpenChannelPopup ? (
+            <button
+              type="button"
+              className={styles.headerActionBtn}
+              onClick={onOpenChannelPopup}
+              title="채널을 별도 창으로 열기"
+            >
+              <Icon name="maximize2" size={14} />
+              <span>새 창</span>
+            </button>
+          ) : null}
+
           <ChannelPresence
             channelId={channel.channelId}
             channelType={channel.channelType}

@@ -5,6 +5,10 @@ import { fileURLToPath } from 'node:url'
 import { watchDownloadCompletion } from './downloads'
 import { registerOpenExternalHandlers } from './openExternal'
 import {
+  closeChannelPopupWindow,
+  registerChannelPopupHandlers,
+} from './channelPopup'
+import {
   registerWindowControlHandlers,
   sendWindowMaximizeState,
   watchWindowMaximizeState,
@@ -37,6 +41,7 @@ const isWindows = process.platform === 'win32'
 
 registerWindowControlHandlers()
 registerOpenExternalHandlers()
+registerChannelPopupHandlers()
 
 function createWindow() {
   win = new BrowserWindow({
@@ -52,6 +57,11 @@ function createWindow() {
   if (isWindows) {
     watchWindowMaximizeState(win)
   }
+
+  win.on('closed', () => {
+    closeChannelPopupWindow()
+    win = null
+  })
 
   win.webContents.on('did-finish-load', () => {
     sendWindowMaximizeState(win)

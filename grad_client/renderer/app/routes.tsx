@@ -90,6 +90,13 @@ const router = createHashRouter([
     errorElement: <RouteErrorFallback />,
     children: [
       {
+        path: '/channels/popup',
+        lazy: async () => {
+          const { ChannelPopupPage } = await import('../features/channel/pages/ChannelPopupPage')
+          return { Component: ChannelPopupPage }
+        },
+      },
+      {
         path: '/',
         lazy: async () => {
           const { AppShell } = await import('./layouts/AppShell')

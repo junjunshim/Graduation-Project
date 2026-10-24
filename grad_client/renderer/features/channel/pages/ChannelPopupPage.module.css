@@ -1,0 +1,24 @@
+.popupShell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--axis-surface-canvas);
+}
+
+.withCustomChrome {
+  grid-template-rows: var(--window-titlebar-height) minmax(0, 1fr);
+}
+
+.titleBarSlot {
+  background: var(--surface-shell);
+}
+
+.popupBody {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}

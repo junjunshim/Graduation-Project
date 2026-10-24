@@ -57,6 +57,10 @@ const CHANNEL_SIDEBAR_REFRESH_DELAY_MS = 120
 
 type SidebarChannel = WorkspaceChannelItem | DmChannelItem
 
+type ChannelsPageProps = {
+  mode?: 'page' | 'popup'
+}
+
 function timestampOf(value: string): number {
   const timestamp = Date.parse(value)
   return Number.isNaN(timestamp) ? 0 : timestamp
@@ -88,7 +92,8 @@ function applyIncomingMessageToSidebarChannel<T extends SidebarChannel>(
   }
 }
 
-export function ChannelsPage() {
+export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
+  const isPopupMode = mode === 'popup'
   const [searchParams, setSearchParams] = useSearchParams()
   const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const currentUser = getCurrentUser(snapshot)
@@ -604,6 +609,18 @@ export function ChannelsPage() {
     setSearchParams({ channelId: String(channelId) }, { replace: true })
   }, [setSearchParams])
 
+  useEffect(() => {
+    if (!isPopupMode || !window.channelPopup) {
+      return
+    }
+
+    return window.channelPopup.onChannelChange((channelId) => {
+      if (Number.isInteger(channelId) && channelId > 0) {
+        handleSelectChannel(channelId)
+      }
+    })
+  }, [handleSelectChannel, isPopupMode])
+
   // 알림에서 /channels?channelId=... 로 이동했을 때 이미 채널 화면에 머물러 있어도
   // 해당 채널로 전환한다. 내부 클릭도 같은 searchParam 을 쓰므로 값이 같을 때는 무시된다.
   useEffect(() => {
@@ -798,6 +815,36 @@ export function ChannelsPage() {
     handleSelectChannel(dm.channelId)
   }
 
+  async function handleOpenChannelPopup() {
+    if (!selectedChannel) return
+
+    try {
+      if (window.channelPopup) {
+        const opened = await window.channelPopup.open(selectedChannel.channelId)
+        if (!opened) {
+          throw new Error('채널 팝업 창을 열지 못했습니다.')
+        }
+        return
+      }
+
+      const popupUrl = `${window.location.origin}${window.location.pathname}#/channels/popup?channelId=${selectedChannel.channelId}`
+      const opened = window.open(
+        popupUrl,
+        'axis-channel-popup',
+        'popup=yes,width=1040,height=760',
+      )
+      if (!opened) {
+        throw new Error('팝업 창이 차단되었습니다. 팝업 차단을 해제해 주세요.')
+      }
+    } catch (error) {
+      setBannerError(
+        error instanceof Error && error.message
+          ? error.message
+          : '채널 팝업 창을 열지 못했습니다.',
+      )
+    }
+  }
+
   if (!currentUser) {
     return null
   }
@@ -840,6 +887,7 @@ export function ChannelsPage() {
           onEditMessage={handleEditMessage}
           onDeleteMessage={handleDeleteMessage}
           onOpenThread={handleOpenThread}
+          onOpenChannelPopup={isPopupMode ? undefined : () => void handleOpenChannelPopup()}
           onOpenEditChannelModal={() => setChannelModalMode('edit')}
           onDeleteChannel={() => void handleDeleteChannel()}
           onOpenNewDmModal={handleOpenNewDmModal}

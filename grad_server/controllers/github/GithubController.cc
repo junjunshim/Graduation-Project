@@ -361,7 +361,7 @@ void notifyGithubEvent(const orm::DbClientPtr &db,
         std::vector<std::string> emails;
         emails.reserve(recipients.size());
         for (const auto &row : recipients) {
-            const std::string email = row["email"].asString();
+            const std::string email = row["email"].as<std::string>();
             if (!email.empty()) {
                 emails.push_back(email);
             }

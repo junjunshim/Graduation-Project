@@ -31,6 +31,28 @@ bool app_utils::generateSecureToken(std::string &token) {
     return true;
 }
 
+bool app_utils::generateNumericCode(std::string &code, std::size_t length) {
+    code.clear();
+    if (length == 0) {
+        return false;
+    }
+
+    code.reserve(length);
+    unsigned char byte = 0;
+    while (code.size() < length) {
+        if (RAND_bytes(&byte, 1) != 1) {
+            code.clear();
+            return false;
+        }
+        // Reject the biased tail so every digit is uniformly distributed.
+        if (byte >= 250) {
+            continue;
+        }
+        code.push_back(static_cast<char>('0' + (byte % 10)));
+    }
+    return true;
+}
+
 std::string app_utils::sha256Hex(const std::string &value) {
     EVP_MD_CTX *ctx = EVP_MD_CTX_new();
     if (ctx == nullptr) {

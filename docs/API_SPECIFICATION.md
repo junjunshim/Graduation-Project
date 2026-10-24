@@ -41,7 +41,8 @@
 
 | 구분 | Http Method | API Path | 개발현황 | MD링크 |
 | :--- | :--- | :--- | :--- | :--- |
-| 회원가입 | Post | /api/users | 완료 | [link](api/Post/sign_in.md) |
+| 회원가입 이메일 인증 | Post | /api/users/email-verification/request, /api/users/email-verification/confirm | 완료 | [link](api/Post/signup_email_verification.md) |
+| 회원가입 | Post | /api/users/signup | 완료 | [link](api/Post/sign_in.md) |
 | 로그인 / 토큰 발급 | Post | /api/users/login | 완료 | [link](api/Post/login.md) |
 | 토큰 재발급 | Post | /api/users/refresh | 완료 | [link](api/Post/refresh.md) |
 | User 데이터 조회 | Get | /api/users | 완료 | [link](api/Get/user.md) |

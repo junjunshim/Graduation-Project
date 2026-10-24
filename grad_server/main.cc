@@ -326,6 +326,21 @@ int main() {
             const int resetMaxPerHour = custom.isMember("password_reset_max_per_hour")
                                             ? custom["password_reset_max_per_hour"].asInt()
                                             : 3;
+            const int signupCodeExpiryMinutes = custom.isMember("signup_verification_code_expire_minutes")
+                                                    ? custom["signup_verification_code_expire_minutes"].asInt()
+                                                    : 10;
+            const int signupResendCooldownSeconds = custom.isMember("signup_verification_resend_cooldown_seconds")
+                                                        ? custom["signup_verification_resend_cooldown_seconds"].asInt()
+                                                        : 60;
+            const int signupMaxPerHour = custom.isMember("signup_verification_max_per_hour")
+                                             ? custom["signup_verification_max_per_hour"].asInt()
+                                             : 5;
+            const int signupTokenExpiryMinutes = custom.isMember("signup_verification_token_expire_minutes")
+                                                     ? custom["signup_verification_token_expire_minutes"].asInt()
+                                                     : 15;
+            const int signupMaxAttempts = custom.isMember("signup_verification_max_attempts")
+                                              ? custom["signup_verification_max_attempts"].asInt()
+                                              : 5;
             const std::string mailFrom = custom.isMember("mail_from")
                                              ? custom["mail_from"].asString()
                                              : "Axis <no-reply@axisflow.team>";
@@ -333,6 +348,16 @@ int main() {
             custom["password_reset_expire_minutes"] = std::stoi(getEnv("PASSWORD_RESET_EXPIRE_MINUTES", std::to_string(resetExpiryMinutes)));
             custom["password_reset_cooldown_seconds"] = std::stoi(getEnv("PASSWORD_RESET_COOLDOWN_SECONDS", std::to_string(resetCooldownSeconds)));
             custom["password_reset_max_per_hour"] = std::stoi(getEnv("PASSWORD_RESET_MAX_PER_HOUR", std::to_string(resetMaxPerHour)));
+            custom["signup_verification_code_expire_minutes"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_CODE_EXPIRE_MINUTES", std::to_string(signupCodeExpiryMinutes)));
+            custom["signup_verification_resend_cooldown_seconds"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_RESEND_COOLDOWN_SECONDS", std::to_string(signupResendCooldownSeconds)));
+            custom["signup_verification_max_per_hour"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_MAX_PER_HOUR", std::to_string(signupMaxPerHour)));
+            custom["signup_verification_token_expire_minutes"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_TOKEN_EXPIRE_MINUTES", std::to_string(signupTokenExpiryMinutes)));
+            custom["signup_verification_max_attempts"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_MAX_ATTEMPTS", std::to_string(signupMaxAttempts)));
             custom["mail_provider"] = getEnv("MAIL_PROVIDER", custom.isMember("mail_provider") ? custom["mail_provider"].asString() : "resend");
             custom["mail_api_key"] = getEnv("MAIL_API_KEY", custom.isMember("mail_api_key") ? custom["mail_api_key"].asString() : "");
             custom["mail_from"] = getEnv("MAIL_FROM", mailFrom);

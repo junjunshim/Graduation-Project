@@ -613,17 +613,119 @@ export async function requestPasswordResetOnServer(email: string): Promise<Passw
   }
 }
 
+export type SignupVerificationRequestResult = {
+  status: 'success' | 'error'
+  message: string
+}
+
+export type SignupVerificationConfirmResult =
+  | {
+      status: 'success'
+      message: string
+      verificationToken: string
+      expiresInMinutes: number
+    }
+  | {
+      status: 'error'
+      message: string
+    }
+
+const SIGNUP_VERIFICATION_GENERIC_MESSAGE =
+  '인증번호를 보냈습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.'
+
+export async function requestSignupEmailVerificationOnServer(
+  email: string,
+): Promise<SignupVerificationRequestResult> {
+  const normalizedEmail = normalizeEmail(email)
+
+  try {
+    const response = await requestServerStatus('/users/email-verification/request', {
+      method: 'POST',
+      body: { email: normalizedEmail },
+      includeToken: false,
+    })
+
+    if (response.status === 'error') {
+      return {
+        status: 'error',
+        message: response.message ?? '인증번호 요청에 실패했습니다.',
+      }
+    }
+
+    return {
+      status: 'success',
+      message: response.message ?? SIGNUP_VERIFICATION_GENERIC_MESSAGE,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : '인증번호 요청에 실패했습니다.',
+    }
+  }
+}
+
+export async function confirmSignupEmailVerificationOnServer(
+  email: string,
+  code: string,
+): Promise<SignupVerificationConfirmResult> {
+  const normalizedEmail = normalizeEmail(email)
+  const normalizedCode = code.trim()
+
+  try {
+    const response = await apiRequest<unknown>('/users/email-verification/confirm', {
+      method: 'POST',
+      body: { email: normalizedEmail, code: normalizedCode },
+      includeToken: false,
+    })
+
+    if (!isServerStatusResponse(response)) {
+      throw new Error('서버 응답 형식이 올바르지 않습니다.')
+    }
+
+    if (response.status === 'error') {
+      return {
+        status: 'error',
+        message: response.message ?? '인증번호를 확인하지 못했습니다.',
+      }
+    }
+
+    const payload = response as typeof response & {
+      verification_token?: unknown
+      expires_in_minutes?: unknown
+    }
+    const verificationToken =
+      typeof payload.verification_token === 'string' ? payload.verification_token.trim() : ''
+    if (!verificationToken) {
+      throw new Error('서버가 이메일 인증 토큰을 반환하지 않았습니다.')
+    }
+
+    return {
+      status: 'success',
+      message: response.message ?? '이메일 인증이 완료되었습니다.',
+      verificationToken,
+      expiresInMinutes:
+        typeof payload.expires_in_minutes === 'number' ? payload.expires_in_minutes : 15,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : '인증번호를 확인하지 못했습니다.',
+    }
+  }
+}
+
 export async function signUpServerUser(payload: SignUpRequest) {
   const email = normalizeEmail(payload.email)
 
   try {
-    const response = await requestServerStatus('/users', {
+    const response = await requestServerStatus('/users/signup', {
       method: 'POST',
       body: {
         user_id: payload.userId.trim(),
         email,
         name: payload.name.trim(),
         password: payload.password,
+        verification_token: payload.verificationToken,
       },
       includeToken: false,
     })

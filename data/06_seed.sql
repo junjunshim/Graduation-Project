@@ -83,7 +83,7 @@ BEGIN
     v_samsung_admin_id := 'U-' || v_user_counter;
     v_user_counter := v_user_counter + 1;
 
-    PERFORM register_user(
+    PERFORM register_user_seed(
         v_samsung_admin_id,
         v_samsung_admin_email,
         v_samsung_admin_name,
@@ -102,11 +102,11 @@ BEGIN
     SELECT authority_id INTO v_viewer_role_id FROM role_authorities WHERE node_id = v_samsung_node_id AND role = 'VIEWER';
     SELECT authority_id INTO v_member_role_id FROM role_authorities WHERE node_id = v_samsung_node_id AND role = 'MEMBER';
 
-    PERFORM register_user('U-' || v_user_counter, 'samsung_audit@samsung.com', '삼성 준법감시관', v_default_password_hash);
+    PERFORM register_user_seed('U-' || v_user_counter, 'samsung_audit@samsung.com', '삼성 준법감시관', v_default_password_hash);
     PERFORM add_role(v_samsung_admin_email, 'samsung_audit@samsung.com', v_samsung_node_id, v_viewer_role_id);
     v_user_counter := v_user_counter + 1;
 
-    PERFORM register_user('U-' || v_user_counter, 'samsung_sec@samsung.com', '삼성 비서실장', v_default_password_hash);
+    PERFORM register_user_seed('U-' || v_user_counter, 'samsung_sec@samsung.com', '삼성 비서실장', v_default_password_hash);
     PERFORM add_role(v_samsung_admin_email, 'samsung_sec@samsung.com', v_samsung_node_id, v_member_role_id);
     v_user_counter := v_user_counter + 1;
 
@@ -120,7 +120,7 @@ BEGIN
         v_aff_ceo_email := v_aff_codes[a_idx] || '_ceo@samsung.com';
         v_aff_ceo_name := v_affiliates[a_idx] || ' 사장';
 
-        PERFORM register_user(
+        PERFORM register_user_seed(
             v_aff_ceo_id,
             v_aff_ceo_email,
             v_aff_ceo_name,
@@ -155,11 +155,11 @@ BEGIN
         -- 2-4. 계열사 직속 지원 실무자 배정 (비서관 MEMBER, 기획조정역 MEMBER)
         SELECT authority_id INTO v_member_role_id FROM role_authorities WHERE node_id = v_aff_node_id AND role = 'MEMBER';
 
-        PERFORM register_user('U-' || v_user_counter, v_aff_codes[a_idx] || '_secretary@samsung.com', v_affiliates[a_idx] || ' 대표 비서관', v_default_password_hash);
+        PERFORM register_user_seed('U-' || v_user_counter, v_aff_codes[a_idx] || '_secretary@samsung.com', v_affiliates[a_idx] || ' 대표 비서관', v_default_password_hash);
         PERFORM add_role(v_samsung_admin_email, v_aff_codes[a_idx] || '_secretary@samsung.com', v_aff_node_id, v_member_role_id);
         v_user_counter := v_user_counter + 1;
 
-        PERFORM register_user('U-' || v_user_counter, v_aff_codes[a_idx] || '_strategy@samsung.com', v_affiliates[a_idx] || ' 기획조정 매니저', v_default_password_hash);
+        PERFORM register_user_seed('U-' || v_user_counter, v_aff_codes[a_idx] || '_strategy@samsung.com', v_affiliates[a_idx] || ' 기획조정 매니저', v_default_password_hash);
         PERFORM add_role(v_samsung_admin_email, v_aff_codes[a_idx] || '_strategy@samsung.com', v_aff_node_id, v_member_role_id);
         v_user_counter := v_user_counter + 1;
 
@@ -173,7 +173,7 @@ BEGIN
             v_div_leader_email := v_aff_codes[a_idx] || '_div' || div_idx || '_leader@samsung.com';
             v_div_leader_name := v_affiliates[a_idx] || ' ' || v_divisions[div_idx] || ' 본부장';
 
-            PERFORM register_user(
+            PERFORM register_user_seed(
                 v_div_leader_id,
                 v_div_leader_email,
                 v_div_leader_name,
@@ -208,7 +208,7 @@ BEGIN
             -- 3-4. 본부 직속 PMO / 운영간사 배정 (MEMBER)
             SELECT authority_id INTO v_member_role_id FROM role_authorities WHERE node_id = v_div_node_id AND role = 'MEMBER';
 
-            PERFORM register_user('U-' || v_user_counter, v_aff_codes[a_idx] || '_div' || div_idx || '_pmo@samsung.com', v_affiliates[a_idx] || ' ' || v_divisions[div_idx] || ' PMO 매니저', v_default_password_hash);
+            PERFORM register_user_seed('U-' || v_user_counter, v_aff_codes[a_idx] || '_div' || div_idx || '_pmo@samsung.com', v_affiliates[a_idx] || ' ' || v_divisions[div_idx] || ' PMO 매니저', v_default_password_hash);
             PERFORM add_role(v_aff_ceo_email, v_aff_codes[a_idx] || '_div' || div_idx || '_pmo@samsung.com', v_div_node_id, v_member_role_id);
             v_user_counter := v_user_counter + 1;
 
@@ -222,7 +222,7 @@ BEGIN
                 v_dept_leader_email := v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_leader@samsung.com';
                 v_dept_leader_name := v_affiliates[a_idx] || ' ' || v_divisions[div_idx] || ' ' || v_depts[dept_idx] || '장';
 
-                PERFORM register_user(
+                PERFORM register_user_seed(
                     v_dept_leader_id,
                     v_dept_leader_email,
                     v_dept_leader_name,
@@ -257,7 +257,7 @@ BEGIN
                 -- 4-4. 부서 직속 행정 / 서무 매니저 배정 (MEMBER)
                 SELECT authority_id INTO v_member_role_id FROM role_authorities WHERE node_id = v_dept_node_id AND role = 'MEMBER';
 
-                PERFORM register_user('U-' || v_user_counter, v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_admin@samsung.com', v_affiliates[a_idx] || ' ' || v_depts[dept_idx] || ' 행정담당', v_default_password_hash);
+                PERFORM register_user_seed('U-' || v_user_counter, v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_admin@samsung.com', v_affiliates[a_idx] || ' ' || v_depts[dept_idx] || ' 행정담당', v_default_password_hash);
                 PERFORM add_role(v_div_leader_email, v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_admin@samsung.com', v_dept_node_id, v_member_role_id);
                 v_user_counter := v_user_counter + 1;
 
@@ -271,7 +271,7 @@ BEGIN
                     v_team_leader_email := v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_team' || team_idx || '_leader@samsung.com';
                     v_team_leader_name := v_affiliates[a_idx] || ' ' || v_depts[dept_idx] || ' ' || team_idx || '팀장';
 
-                    PERFORM register_user(
+                    PERFORM register_user_seed(
                         v_team_leader_id,
                         v_team_leader_email,
                         v_team_leader_name,
@@ -308,7 +308,7 @@ BEGIN
                     SELECT authority_id INTO v_viewer_role_id FROM role_authorities WHERE node_id = v_team_node_id AND role = 'VIEWER';
 
                     -- 1) 선임 실무자 (MEMBER)
-                    PERFORM register_user(
+                    PERFORM register_user_seed(
                         'U-' || v_user_counter,
                         v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_team' || team_idx || '_senior@samsung.com',
                         v_affiliates[a_idx] || ' ' || v_depts[dept_idx] || ' ' || team_idx || '팀 선임',
@@ -323,7 +323,7 @@ BEGIN
                     v_user_counter := v_user_counter + 1;
 
                     -- 2) 주니어 담당자 (MEMBER)
-                    PERFORM register_user(
+                    PERFORM register_user_seed(
                         'U-' || v_user_counter,
                         v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_team' || team_idx || '_junior@samsung.com',
                         v_affiliates[a_idx] || ' ' || v_depts[dept_idx] || ' ' || team_idx || '팀 담당',
@@ -338,7 +338,7 @@ BEGIN
                     v_user_counter := v_user_counter + 1;
 
                     -- 3) 팀 지원 / 인턴 (VIEWER)
-                    PERFORM register_user(
+                    PERFORM register_user_seed(
                         'U-' || v_user_counter,
                         v_aff_codes[a_idx] || '_div' || div_idx || '_dept' || dept_idx || '_team' || team_idx || '_intern@samsung.com',
                         v_affiliates[a_idx] || ' ' || v_depts[dept_idx] || ' ' || team_idx || '팀 인턴',

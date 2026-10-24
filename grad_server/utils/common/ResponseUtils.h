@@ -50,6 +50,9 @@ enum class DbErrorCode {
     PasswordResetTokenInvalid,  // P0511 재설정 토큰 없음·만료·사용됨
     PasswordPolicyViolation,    // P0512 비밀번호 정책 위반
     PasswordResetFailed,        // P0513 비밀번호 재설정 처리 실패
+    SignupVerificationInvalid,  // P0514 회원가입 이메일 인증 무효·만료
+    SignupVerificationFailed,   // P0515 회원가입 이메일 인증 처리 실패
+    SignupInputInvalid,         // P0516 회원가입 입력값 부적절
     ParentWorkItemNotFound,     // P0601 부모 work item 없음
     CreateWorkItemFailed,       // P0602 work item 생성 실패
     UpdateWorkItemNotFound,     // P0603 업데이트할 work item 없음

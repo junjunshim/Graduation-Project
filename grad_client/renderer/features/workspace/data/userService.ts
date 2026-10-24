@@ -1,7 +1,9 @@
 import type { SignInRequest, SignInResponse, SignUpRequest, WorkspaceDatabase } from '../model/types'
 import {
+  confirmSignupEmailVerificationOnServer,
   getCurrentServerUser,
   requestPasswordResetOnServer,
+  requestSignupEmailVerificationOnServer,
   signInServerUser,
   signOutServerUser,
   signUpServerUser,
@@ -26,6 +28,14 @@ export async function signUpUser(payload: SignUpRequest) {
 
 export function requestPasswordReset(email: string) {
   return requestPasswordResetOnServer(email)
+}
+
+export function requestSignupEmailVerification(email: string) {
+  return requestSignupEmailVerificationOnServer(email)
+}
+
+export function confirmSignupEmailVerification(email: string, code: string) {
+  return confirmSignupEmailVerificationOnServer(email, code)
 }
 
 export function signOutUser() {

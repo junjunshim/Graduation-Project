@@ -1,4 +1,5 @@
 #include "AuthController.h"
+#include "AuthInputUtils.h"
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
 #include <json/json.h>
@@ -78,7 +79,7 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
     }
     
     // 요청 바디에서 JSON 데이터 파싱
-    std::string email = (*jsonPtr)["email"].asString();
+    std::string email = normalizeAuthEmail((*jsonPtr)["email"].asString());
     std::string password = (*jsonPtr)["password"].asString();
     
     

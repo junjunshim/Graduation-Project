@@ -161,6 +161,9 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0511") != std::string::npos) return DbErrorCode::PasswordResetTokenInvalid;
     else if (errMsg.find("P0512") != std::string::npos) return DbErrorCode::PasswordPolicyViolation;
     else if (errMsg.find("P0513") != std::string::npos) return DbErrorCode::PasswordResetFailed;
+    else if (errMsg.find("P0514") != std::string::npos) return DbErrorCode::SignupVerificationInvalid;
+    else if (errMsg.find("P0515") != std::string::npos) return DbErrorCode::SignupVerificationFailed;
+    else if (errMsg.find("P0516") != std::string::npos) return DbErrorCode::SignupInputInvalid;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
@@ -421,6 +424,21 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e, con
         case DbErrorCode::PasswordResetFailed:{
             ret["message"] = "비밀번호 재설정 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
             ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::SignupVerificationInvalid:{
+            ret["message"] = "이메일 인증이 유효하지 않거나 만료되었습니다. 인증을 다시 진행해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::SignupVerificationFailed:{
+            ret["message"] = "회원가입 이메일 인증 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::SignupInputInvalid:{
+            ret["message"] = "회원가입 입력값을 다시 확인해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
             break;
         }
         case DbErrorCode::UserRegistrationFailed:{

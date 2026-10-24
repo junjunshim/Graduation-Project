@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_users_is_deleted ON users(is_deleted);
+-- 이메일은 대소문자와 앞뒤 공백을 정규화한 값으로 한 계정만 허용한다.
+CREATE UNIQUE INDEX IF NOT EXISTS unique_users_email_normalized ON users(lower(trim(email)));
 
 
 -- 3. 유저와 노드 간이 권한 매핑
@@ -140,6 +142,29 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_email
 CREATE UNIQUE INDEX IF NOT EXISTS unique_active_password_reset_token
     ON password_reset_tokens(user_email)
     WHERE used_at IS NULL;
+
+
+-- 6.2 회원가입 이메일 인증
+-- 인증번호는 bcrypt 해시로, 인증 완료 토큰은 SHA-256 해시로만 보관한다.
+CREATE TABLE IF NOT EXISTS signup_email_verifications (
+    verification_id SERIAL PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    code_hash TEXT NOT NULL,
+    code_expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    max_attempts INTEGER NOT NULL DEFAULT 5 CHECK (max_attempts > 0),
+    verified_at TIMESTAMP WITH TIME ZONE,
+    verification_token_hash CHAR(64) UNIQUE,
+    token_expires_at TIMESTAMP WITH TIME ZONE,
+    consumed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT check_signup_email_normalized CHECK (email = lower(trim(email)))
+);
+CREATE INDEX IF NOT EXISTS idx_signup_email_verifications_email
+    ON signup_email_verifications(email, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_active_signup_email_verification
+    ON signup_email_verifications(email)
+    WHERE consumed_at IS NULL;
 
 
 -- 7. 복구용 테이블 생성 (외래키 제약조건 없음)

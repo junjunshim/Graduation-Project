@@ -540,6 +540,73 @@
   padding-right: 3.45rem;
 }
 
+.inputWithAction {
+  padding-right: 7.6rem;
+}
+
+.inputActionButton {
+  position: absolute;
+  right: 0.45rem;
+  display: inline-flex;
+  min-width: 6.35rem;
+  height: 2.4rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--signup-primary) 10%, var(--signup-surface));
+  color: var(--signup-primary);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.inputActionButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--signup-primary) 16%, var(--signup-surface));
+  color: var(--signup-primary-strong);
+}
+
+.inputActionButton:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.verificationSuccess,
+.verificationMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  color: var(--signup-helper);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.verificationSuccess {
+  color: #1f8a64;
+}
+
+.inlineLinkButton {
+  color: var(--signup-primary);
+  font-size: inherit;
+  font-weight: 650;
+}
+
+.inlineLinkButton:hover:not(:disabled) {
+  color: var(--signup-primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.inlineLinkButton:disabled {
+  color: var(--signup-placeholder);
+  cursor: default;
+}
+
 .input::placeholder {
   color: var(--signup-placeholder);
   opacity: 1;
@@ -825,6 +892,16 @@
 
   .input {
     font-size: 0.98rem;
+  }
+
+  .inputWithAction {
+    padding-right: 7.2rem;
+  }
+
+  .inputActionButton {
+    min-width: 6rem;
+    padding-inline: 0.6rem;
+    font-size: 0.78rem;
   }
 
   .primaryButton {

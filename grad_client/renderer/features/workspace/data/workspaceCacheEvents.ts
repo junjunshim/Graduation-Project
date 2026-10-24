@@ -1,9 +1,13 @@
+import { invalidateQueryCache } from './queryCache.js'
+
 export const WORKSPACE_CACHE_UPDATED_EVENT = 'grad-client-workspace-cache-updated'
 export const WORKSPACE_CACHE_REFRESH_FAILED_EVENT = 'grad-client-workspace-cache-refresh-failed'
 export const RECURRING_CACHE_UPDATED_EVENT = 'grad-client-recurring-cache-updated'
 export const GITHUB_CACHE_UPDATED_EVENT = 'grad-client-github-cache-updated'
 
 export function notifyGithubCacheUpdated(nodeId?: number) {
+  invalidateQueryCache('github:')
+
   if (typeof window === 'undefined') {
     return
   }
@@ -59,6 +63,8 @@ export function notifyWorkspaceCacheUpdated() {
 }
 
 export function notifyRecurringCacheUpdated(nodeId?: number) {
+  invalidateQueryCache('recurring:')
+
   if (typeof window === 'undefined') {
     return
   }
@@ -158,6 +164,18 @@ export type LiveNotificationPayload = {
 }
 
 export function notifyLiveNotificationReceived(payload: LiveNotificationPayload) {
+  if (payload.sub_type === 'GITHUB' || payload.entity_type?.startsWith('GITHUB_')) {
+    invalidateQueryCache('github:')
+  }
+
+  if (
+    payload.entity_type === 'RECURRING_RULE' ||
+    payload.is_recurring_file === true ||
+    payload.link_url?.includes('view=schedules')
+  ) {
+    invalidateQueryCache('recurring:')
+  }
+
   if (typeof window === 'undefined') {
     return
   }
@@ -190,6 +208,18 @@ export type ChatRealtimeEventPayload = {
 }
 
 export function notifyChatRealtimeEvent(payload: ChatRealtimeEventPayload) {
+  const subType = payload.subType.toUpperCase()
+  if (subType !== 'CHANNEL_PRESENCE' && subType !== 'CHANNEL_PRESENCE_ERROR') {
+    const channelId = Number(
+      payload.data.channel_id ?? payload.data.channelId ?? 0,
+    )
+    invalidateQueryCache('chat:sidebar')
+    invalidateQueryCache(
+      channelId > 0 ? `chat:messages:${channelId}:` : 'chat:messages:',
+    )
+    invalidateQueryCache('chat:thread:')
+  }
+
   if (typeof window === 'undefined') {
     return
   }
@@ -229,6 +259,19 @@ export type WorkspaceLiveRefreshPayload = {
 }
 
 export function notifyWorkspaceLiveRefresh(payload: WorkspaceLiveRefreshPayload) {
+  const entityType = payload.entityType.toUpperCase()
+  if (entityType === 'WORK_ITEM' || entityType === 'COMMENT' || entityType === 'FILE') {
+    invalidateQueryCache('workItem:detail:')
+  }
+  if (
+    entityType === 'NODE' ||
+    entityType === 'ROLE' ||
+    entityType === 'AUTHORITY'
+  ) {
+    invalidateQueryCache('workspace:node:')
+    invalidateQueryCache('workspace:scope:')
+  }
+
   if (typeof window === 'undefined') {
     return
   }

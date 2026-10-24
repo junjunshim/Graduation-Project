@@ -2,6 +2,7 @@ import { apiRequest, getServerAccessToken } from './server/apiClient'
 import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
 import { readWorkspaceDb, writeServerWorkspaceDb } from './localStore'
+import { invalidateQueryCache } from './queryCache.js'
 import { waitForDownloadCompletion } from './downloadCompletion'
 import {
   deleteCachedFileContent,
@@ -93,6 +94,7 @@ export async function uploadWorkItemFile(workItemId: string, file: File): Promis
   } catch (err) {
     console.warn('[fileService] 업로드 후 캐시 무효화 실패:', err)
   }
+  invalidateQueryCache('workItem:detail:')
 }
 
 export async function deleteWorkItemFile(fileId: number): Promise<void> {
@@ -122,6 +124,7 @@ export async function deleteWorkItemFile(fileId: number): Promise<void> {
   } catch (err) {
     console.warn('[fileService] 로컬 캐시 삭제 반영 실패:', err)
   }
+  invalidateQueryCache('workItem:detail:')
 }
 
 export async function restoreWorkItemFile(fileId: number): Promise<void> {
@@ -151,6 +154,7 @@ export async function restoreWorkItemFile(fileId: number): Promise<void> {
   } catch (err) {
     console.warn('[fileService] 로컬 캐시 복구 반영 실패:', err)
   }
+  invalidateQueryCache('workItem:detail:')
 }
 
 export type FetchFileContentResult = {

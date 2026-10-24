@@ -12,6 +12,7 @@ import type {
 } from '../model/types'
 import { getWorkspaceTodayTimestamp, isWorkItemDueSoon } from '../model/workItemDue.js'
 import { getWorkspaceRevision, readWorkspaceDb } from './localStore.js'
+import { queryWithCache } from './queryCache.js'
 import {
   assignRoleOnServer,
   createSubNodeOnServer,
@@ -29,6 +30,8 @@ import {
 } from './serverWorkspace.js'
 
 const nodeIndexCache = new WeakMap<OrganizationNodeRecord[], Map<number, OrganizationNodeRecord>>()
+const WORKSPACE_NODE_CACHE_TTL_MS = 30_000
+const WORKSPACE_SCOPE_CACHE_TTL_MS = 30_000
 
 export function getAccessibleNodeIdsForUser(_userId: string, snapshot?: WorkspaceSnapshot) {
   const workspace = snapshot ?? readWorkspaceDb()
@@ -111,16 +114,29 @@ export function getOrgSnapshot(options?: { includeDeleted?: boolean }): Workspac
   return snapshot
 }
 
-export async function fetchNodeDetail(nodeId: number | string): Promise<WorkspaceSnapshot> {
-  await fetchNodeDetailOnServer(nodeId)
+export async function fetchNodeDetail(
+  nodeId: number | string,
+  options: { forceRefresh?: boolean } = {},
+): Promise<WorkspaceSnapshot> {
+  await queryWithCache(
+    `workspace:node:${String(nodeId)}`,
+    () => fetchNodeDetailOnServer(nodeId),
+    { ttlMs: WORKSPACE_NODE_CACHE_TTL_MS, forceRefresh: options.forceRefresh },
+  )
   return getOrgSnapshot()
 }
 
 export async function fetchWorkspaceDirectoryScope(options?: {
   includeDeleted?: boolean
+  forceRefresh?: boolean
 }): Promise<WorkspaceSnapshot> {
-  await loadWorkspaceDirectoryScopeOnServer()
-  return getOrgSnapshot(options)
+  const includeDeleted = options?.includeDeleted === true
+  await queryWithCache(
+    `workspace:scope:${includeDeleted ? 'all' : 'active'}`,
+    () => loadWorkspaceDirectoryScopeOnServer(),
+    { ttlMs: WORKSPACE_SCOPE_CACHE_TTL_MS, forceRefresh: options?.forceRefresh },
+  )
+  return getOrgSnapshot({ includeDeleted })
 }
 
 export function getWorkspaceSummary(userId?: string, snapshot?: WorkspaceSnapshot): WorkspaceSummary {

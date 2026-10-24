@@ -7,6 +7,7 @@ import {
   subscribeToWorkspaceCache,
   subscribeToLiveNotifications,
   subscribeToWorkspaceLiveRefresh,
+  notifyGithubCacheUpdated,
   notifyRecurringCacheUpdated,
 } from '../data/workspaceCacheEvents'
 import {
@@ -180,6 +181,17 @@ export function WorkspacePage() {
     // 상세 알림(HISTORY_ALL_VIEW 보유자) 수신 경로
     const unsubscribeLive = subscribeToLiveNotifications((payload) => {
       const notifNodeId = payload.node_id != null ? Number(payload.node_id) : null
+      const isGithubEvent =
+        payload.sub_type === 'GITHUB' || Boolean(payload.entity_type?.startsWith('GITHUB_'))
+
+      if (isGithubEvent) {
+        const currentNodeId = activeWorkspaceRootId ? Number(activeWorkspaceRootId) : null
+        if (notifNodeId === null || notifNodeId === currentNodeId) {
+          notifyGithubCacheUpdated(notifNodeId ?? currentNodeId ?? undefined)
+        }
+        return
+      }
+
       const isRecurringEvent =
         payload.entity_type === 'RECURRING_RULE' ||
         payload.is_recurring_file === true ||

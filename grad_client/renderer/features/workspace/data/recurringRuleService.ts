@@ -8,9 +8,11 @@ import { apiRequest } from './server/apiClient'
 import { optionalRecurringNumber } from '../model/recurringRuleValues'
 import { waitForDownloadCompletion } from './downloadCompletion'
 import { notifyRecurringCacheUpdated } from './workspaceCacheEvents'
+import { queryWithCache } from './queryCache.js'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
 const LOCAL_STORAGE_LOADED_NODES_KEY = 'grad_recurring_rules_loaded_nodes'
+const RECURRING_RULES_CACHE_TTL_MS = 60_000
 
 type ServerResponse<T> = {
   status: 'success' | 'error'
@@ -138,17 +140,29 @@ function snakeToCamelRule(item: any): RecurringRuleRecord {
 /**
  * 노드별 정기 일정 목록 조회
  */
-export async function fetchRecurringRules(nodeId: number, includeDeleted: boolean = false): Promise<RecurringRuleRecord[]> {
+export async function fetchRecurringRules(
+  nodeId: number,
+  includeDeleted: boolean = false,
+  options?: { forceRefresh?: boolean },
+): Promise<RecurringRuleRecord[]> {
   try {
-    const res = await apiRequest<ServerResponse<any[]>>(`/recurringRules?nodeId=${nodeId}${includeDeleted ? '&include_deleted=true' : ''}`)
-    if (res.status === 'success' && Array.isArray(res.data)) {
-      markRecurringRulesLoadedForNode(nodeId)
-      const parsed = res.data.map(snakeToCamelRule)
-      // 로컬 캐시 동기화
-      const currentAll = getLocalRecurringRules(undefined, true).filter((r) => r.ownerNodeId !== nodeId)
-      saveLocalRecurringRules([...currentAll, ...parsed])
-      return parsed
-    }
+    return await queryWithCache(
+      `recurring:${nodeId}:${includeDeleted ? 'all' : 'active'}`,
+      async () => {
+        const res = await apiRequest<ServerResponse<any[]>>(`/recurringRules?nodeId=${nodeId}${includeDeleted ? '&include_deleted=true' : ''}`)
+        if (res.status !== 'success' || !Array.isArray(res.data)) {
+          throw new Error(res.message || '정기 일정 목록 응답 형식이 올바르지 않습니다.')
+        }
+
+        const parsed = res.data.map(snakeToCamelRule)
+        // 로컬 캐시 동기화
+        const currentAll = getLocalRecurringRules(undefined, true).filter((r) => r.ownerNodeId !== nodeId)
+        saveLocalRecurringRules([...currentAll, ...parsed])
+        markRecurringRulesLoadedForNode(nodeId)
+        return parsed
+      },
+      { ttlMs: RECURRING_RULES_CACHE_TTL_MS, forceRefresh: options?.forceRefresh },
+    )
   } catch (error) {
     console.warn('[recurringRuleService] fetchRecurringRules fallback to local cache:', error)
   }
@@ -217,7 +231,7 @@ export async function createRecurringRule(
       }
 
       // 로컬 캐시 갱신
-      const updated = await fetchRecurringRules(req.ownerNodeId)
+      const updated = await fetchRecurringRules(req.ownerNodeId, false, { forceRefresh: true })
       const found = updated.find((r) => r.ruleId === createdRule.ruleId) ?? createdRule
       return { status: 'success', rule: found }
     }

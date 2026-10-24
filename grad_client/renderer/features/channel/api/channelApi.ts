@@ -5,6 +5,7 @@ import {
 } from '../../workspace/data/server/apiClient'
 import { isServerStatusResponse } from '../../workspace/data/server/apiTypes'
 import { getWorkspaceApiBaseUrl } from '../../workspace/data/server/workspaceMode'
+import { invalidateQueryCache, queryWithCache } from '../../workspace/data/queryCache.js'
 import type {
   ChannelParticipant,
   ChatMessage,
@@ -12,6 +13,32 @@ import type {
   DmChannelItem,
   WorkspaceChannelItem,
 } from '../model/channelTypes'
+
+const CHAT_SIDEBAR_CACHE_TTL_MS = 60_000
+const CHAT_MESSAGES_CACHE_TTL_MS = 30_000
+const CHAT_THREADS_CACHE_TTL_MS = 30_000
+
+export function invalidateChatSidebarCache() {
+  invalidateQueryCache('chat:sidebar')
+}
+
+export function invalidateChatMessagesCache(channelId?: number) {
+  invalidateQueryCache(
+    channelId && channelId > 0 ? `chat:messages:${channelId}:` : 'chat:messages:',
+  )
+}
+
+export function invalidateChatThreadsCache(parentMessageId?: number) {
+  invalidateQueryCache(
+    parentMessageId && parentMessageId > 0 ? `chat:thread:${parentMessageId}` : 'chat:thread:',
+  )
+}
+
+function invalidateChatAfterMessageMutation(channelId?: number) {
+  invalidateChatSidebarCache()
+  invalidateChatMessagesCache(channelId)
+  invalidateChatThreadsCache()
+}
 
 function extractDataArray(response: unknown): Array<Record<string, unknown>> {
   if (!response || typeof response !== 'object') {
@@ -200,7 +227,17 @@ export function normalizeDmChannel(raw: Record<string, unknown>): DmChannelItem 
   }
 }
 
-export async function fetchChatSidebar(): Promise<{
+export async function fetchChatSidebar(options: { forceRefresh?: boolean } = {}): Promise<{
+  workspaceChannels: WorkspaceChannelItem[]
+  dmChannels: DmChannelItem[]
+}> {
+  return queryWithCache('chat:sidebar', fetchChatSidebarFromServer, {
+    ttlMs: CHAT_SIDEBAR_CACHE_TTL_MS,
+    forceRefresh: options.forceRefresh,
+  })
+}
+
+async function fetchChatSidebarFromServer(): Promise<{
   workspaceChannels: WorkspaceChannelItem[]
   dmChannels: DmChannelItem[]
 }> {
@@ -259,7 +296,9 @@ export async function createWorkspaceChannel(
     throw new Error('생성된 채널 정보를 받지 못했습니다.')
   }
 
-  return normalizeWorkspaceChannel(found)
+  const channel = normalizeWorkspaceChannel(found)
+  invalidateChatSidebarCache()
+  return channel
 }
 
 export async function updateWorkspaceChannel(
@@ -288,7 +327,9 @@ export async function updateWorkspaceChannel(
     throw new Error('수정된 채널 정보를 받지 못했습니다.')
   }
 
-  return normalizeWorkspaceChannel(found)
+  const channel = normalizeWorkspaceChannel(found)
+  invalidateChatSidebarCache()
+  return channel
 }
 
 export async function deleteWorkspaceChannel(channelId: number): Promise<void> {
@@ -302,6 +343,9 @@ export async function deleteWorkspaceChannel(channelId: number): Promise<void> {
   if (isServerStatusResponse(response) && response.status === 'error') {
     throw new Error(response.message ?? '채널을 삭제하지 못했습니다.')
   }
+
+  invalidateChatSidebarCache()
+  invalidateChatMessagesCache(channelId)
 }
 
 export async function openOrCreateDmChannel(targetEmail: string): Promise<DmChannelItem> {
@@ -325,10 +369,26 @@ export async function openOrCreateDmChannel(targetEmail: string): Promise<DmChan
     throw new Error('다이렉트 메시지 채널 정보를 받지 못했습니다.')
   }
 
-  return normalizeDmChannel(found)
+  const channel = normalizeDmChannel(found)
+  invalidateChatSidebarCache()
+  return channel
 }
 
 export async function fetchChannelMessages(
+  channelId: number,
+  beforeMessageId?: number,
+  limit = 80,
+  options: { forceRefresh?: boolean } = {},
+): Promise<ChatMessage[]> {
+  const before = beforeMessageId && beforeMessageId > 0 ? beforeMessageId : 0
+  return queryWithCache(
+    `chat:messages:${channelId}:${limit}:${before}`,
+    () => fetchChannelMessagesFromServer(channelId, beforeMessageId, limit),
+    { ttlMs: CHAT_MESSAGES_CACHE_TTL_MS, forceRefresh: options.forceRefresh },
+  )
+}
+
+async function fetchChannelMessagesFromServer(
   channelId: number,
   beforeMessageId?: number,
   limit = 80,
@@ -353,7 +413,21 @@ export async function fetchChannelMessages(
     .sort((a, b) => a.messageId - b.messageId)
 }
 
-export async function fetchThreadMessages(parentMessageId: number): Promise<{
+export async function fetchThreadMessages(
+  parentMessageId: number,
+  options: { forceRefresh?: boolean } = {},
+): Promise<{
+  parent: ChatMessage | null
+  replies: ChatMessage[]
+}> {
+  return queryWithCache(
+    `chat:thread:${parentMessageId}`,
+    () => fetchThreadMessagesFromServer(parentMessageId),
+    { ttlMs: CHAT_THREADS_CACHE_TTL_MS, forceRefresh: options.forceRefresh },
+  )
+}
+
+async function fetchThreadMessagesFromServer(parentMessageId: number): Promise<{
   parent: ChatMessage | null
   replies: ChatMessage[]
 }> {
@@ -412,7 +486,9 @@ export async function sendChatMessage(
     throw new Error('전송된 메시지 정보를 받지 못했습니다.')
   }
 
-  return normalizeChatMessage(found)
+  const message = normalizeChatMessage(found)
+  invalidateChatAfterMessageMutation(channelId)
+  return message
 }
 
 export async function updateChatMessage(
@@ -439,7 +515,9 @@ export async function updateChatMessage(
     throw new Error('수정된 메시지 정보를 받지 못했습니다.')
   }
 
-  return normalizeChatMessage(found)
+  const message = normalizeChatMessage(found)
+  invalidateChatAfterMessageMutation()
+  return message
 }
 
 export async function deleteChatMessage(messageId: number): Promise<void> {
@@ -453,6 +531,8 @@ export async function deleteChatMessage(messageId: number): Promise<void> {
   if (isServerStatusResponse(response) && response.status === 'error') {
     throw new Error(response.message ?? '메시지를 삭제하지 못했습니다.')
   }
+
+  invalidateChatAfterMessageMutation()
 }
 
 export async function uploadChatMessageFile(
@@ -476,7 +556,9 @@ export async function uploadChatMessageFile(
         item.message_id !== undefined,
     ) ?? items[0]
 
-  return found ? normalizeChatMessage(found) : null
+  const message = found ? normalizeChatMessage(found) : null
+  invalidateChatAfterMessageMutation()
+  return message
 }
 
 async function fetchFileBlobFromServer(fileId: number, inline = false): Promise<Blob> {

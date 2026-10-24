@@ -116,11 +116,11 @@ export function WorkItemDetailPage() {
 
   // 서버 상세 API 호출
   const loadDetailFromServer = useCallback(
-    async (targetId: string) => {
+    async (targetId: string, options: { forceRefresh?: boolean } = {}) => {
       setServerLoading(true)
       setServerError(null)
       try {
-        const result = await fetchWorkItemDetail(targetId)
+        const result = await fetchWorkItemDetail(targetId, options)
         setComments(result.comments)
         setServerFiles(result.files)
         setServerActivities(result.activities ?? [])
@@ -168,7 +168,7 @@ export function WorkItemDetailPage() {
         setCommentInput('')
         setSelectedMentions([])
         // 댓글 재로드
-        await loadDetailFromServer(workItemId)
+        await loadDetailFromServer(workItemId, { forceRefresh: true })
 
         // 작성된 최신 댓글(맨 아래)로 부드럽게 스크롤
         setTimeout(() => {
@@ -563,7 +563,9 @@ export function WorkItemDetailPage() {
               className={styles.attachmentPanel}
               onContextMenu={(event) =>
                 openUploadContextMenu(event, item, async () => {
-                  const result = await fetchWorkItemDetail(item.workItemId)
+                  const result = await fetchWorkItemDetail(item.workItemId, {
+                    forceRefresh: true,
+                  })
                   setComments(result.comments)
                   setServerFiles(result.files)
                   setServerActivities(result.activities ?? [])
@@ -596,7 +598,7 @@ export function WorkItemDetailPage() {
                         onContextMenu={(event) =>
                           openFileContextMenu(event, file, async () => {
                             if (workItemId) {
-                              await loadDetailFromServer(workItemId)
+                              await loadDetailFromServer(workItemId, { forceRefresh: true })
                             }
                           })
                         }

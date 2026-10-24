@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { SearchField } from '../../../design-system/primitives/SearchField'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
@@ -23,6 +23,16 @@ export type ChannelSidebarProps = {
   onOpenNewDmModal: () => void
 }
 
+const CHANNEL_SIDEBAR_COLLAPSED_STORAGE_KEY = 'grad-client-channel-sidebar-collapsed'
+
+function readInitialSidebarCollapsed() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.localStorage.getItem(CHANNEL_SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
+}
+
 export const ChannelSidebar = memo(function ChannelSidebar({
   workspaceGroups,
   dmChannels,
@@ -34,6 +44,35 @@ export const ChannelSidebar = memo(function ChannelSidebar({
   const [searchQuery, setSearchQuery] = useState('')
   // 처음 진입할 때는 모든 워크스페이스 채널 그룹을 접힌 상태로 둔다.
   const [expandedNodes, setExpandedNodes] = useState<Record<number, boolean>>({})
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readInitialSidebarCollapsed)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    window.localStorage.setItem(
+      CHANNEL_SIDEBAR_COLLAPSED_STORAGE_KEY,
+      String(isSidebarCollapsed),
+    )
+  }, [isSidebarCollapsed])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== CHANNEL_SIDEBAR_COLLAPSED_STORAGE_KEY) {
+        return
+      }
+
+      setIsSidebarCollapsed(event.newValue === 'true')
+    }
+
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
 
@@ -75,14 +114,32 @@ export const ChannelSidebar = memo(function ChannelSidebar({
   }
 
   return (
-    <aside className={styles.sidebar} aria-label="채널 및 다이렉트 메시지 목록">
+    <aside
+      className={[styles.sidebar, isSidebarCollapsed ? styles.sidebarCollapsed : '']
+        .filter(Boolean)
+        .join(' ')}
+      aria-label="채널 및 다이렉트 메시지 목록"
+    >
       <div className={styles.searchSection}>
-        <SearchField
-          label="채널 또는 대화 상대 검색"
-          placeholder="채널 또는 대화 상대 검색"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
+        <div className={styles.searchRow}>
+          <SearchField
+            containerClassName={styles.searchField}
+            label="채널 또는 대화 상대 검색"
+            placeholder="채널 또는 대화 상대 검색"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+          <button
+            type="button"
+            className={styles.collapseButton}
+            onClick={() => setIsSidebarCollapsed(true)}
+            aria-label="채널 목록 접기"
+            aria-expanded={true}
+            title="채널 목록 접기"
+          >
+            <Icon name="chevronLeft" size={16} />
+          </button>
+        </div>
       </div>
 
       <div className={styles.scrollArea}>
@@ -248,6 +305,22 @@ export const ChannelSidebar = memo(function ChannelSidebar({
           </button>
         </section>
       </div>
+
+      {isSidebarCollapsed ? (
+        <div className={styles.collapsedRail}>
+          <button
+            type="button"
+            className={styles.collapsedExpandButton}
+            onClick={() => setIsSidebarCollapsed(false)}
+            aria-label="채널 목록 펼치기"
+            aria-expanded={false}
+            title="채널 목록 펼치기"
+          >
+            <Icon name="chevronRight" size={17} />
+          </button>
+          <span className={styles.collapsedRailLabel}>채널 목록</span>
+        </div>
+      ) : null}
     </aside>
   )
 })

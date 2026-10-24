@@ -7,11 +7,82 @@
   min-height: 0;
   border-right: 1px solid var(--line-default);
   background: var(--surface-panel);
+  transition:
+    flex-basis 160ms ease,
+    min-width 160ms ease,
+    max-width 160ms ease;
+}
+
+.sidebarCollapsed {
+  flex-basis: 3.5rem;
+  min-width: 3.5rem;
+  max-width: 3.5rem;
+}
+
+.sidebarCollapsed .searchSection,
+.sidebarCollapsed .scrollArea {
+  display: none;
 }
 
 .searchSection {
   padding: 0.85rem 0.9rem 0.65rem;
   border-bottom: 1px solid var(--line-default);
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.searchField {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.collapseButton,
+.collapsedExpandButton {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-xs);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--axis-motion-fast) ease;
+}
+
+.collapseButton:hover,
+.collapseButton:focus-visible,
+.collapsedExpandButton:hover,
+.collapsedExpandButton:focus-visible {
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+}
+
+.collapsedRail {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 0;
+  padding: 0.85rem 0;
+}
+
+.collapsedRailLabel {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  user-select: none;
 }
 
 .scrollArea {

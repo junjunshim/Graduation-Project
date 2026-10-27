@@ -585,7 +585,7 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
   const manageableWorkspaces = useMemo<ManageableWorkspaceOption[]>(() => {
     return workspaceGroups
       .filter((g) => g.canManage)
-      .map((g) => ({ nodeId: g.nodeId, nodeName: g.nodeName }))
+      .map((g) => ({ nodeId: g.nodeId, nodeName: g.nodeName, nodeType: g.nodeType }))
   }, [workspaceGroups])
 
   const selectedChannel = useMemo<ChannelItem | null>(() => {

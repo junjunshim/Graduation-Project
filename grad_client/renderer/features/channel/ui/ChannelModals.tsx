@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import type { UserRecord } from '../../workspace/model/types'
+import { WorkspaceSelectDropdown } from '../../workspace/components/WorkspaceSelectDropdown'
 import type { WorkspaceChannelItem } from '../model/channelTypes'
 import styles from './ChannelModals.module.css'
 
 export type ManageableWorkspaceOption = {
   nodeId: number
   nodeName: string
+  nodeType?: string
 }
 
 export type ChannelFormModalProps = {
@@ -121,21 +123,17 @@ export function ChannelFormModal({
 
         <form className={styles.form} onSubmit={(e) => void handleSubmit(e)}>
           {mode === 'create' ? (
-            <label className={styles.field}>
+            <div className={styles.field}>
               <span className={styles.fieldLabel}>워크스페이스</span>
-              <select
-                className={styles.select}
+              <WorkspaceSelectDropdown
+                options={manageableWorkspaces}
                 value={selectedNodeId}
                 disabled={isSubmitting}
-                onChange={(e) => setSelectedNodeId(Number(e.target.value))}
-              >
-                {manageableWorkspaces.map((ws) => (
-                  <option key={ws.nodeId} value={ws.nodeId}>
-                    {ws.nodeName}
-                  </option>
-                ))}
-              </select>
-            </label>
+                placeholder="워크스페이스를 선택하세요"
+                ariaLabel="채널을 생성할 워크스페이스 선택"
+                onChange={(nodeId) => setSelectedNodeId(nodeId)}
+              />
+            </div>
           ) : editingChannel ? (
             <div className={styles.field}>
               <span className={styles.fieldLabel}>소속 워크스페이스</span>

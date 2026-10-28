@@ -3,6 +3,7 @@
 #include <drogon/WebSocketController.h>
 #include <json/json.h>
 #include <array>
+#include <chrono>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -52,12 +53,16 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
   private:
     // 연결 1개당 유지하는 세션 상태. 인증 전에는 user_email 이 비어 있고 authenticated 가 false 다.
     struct WsSession {
+        std::string request_id;      // WebSocket 핸드셰이크 HTTP 요청의 상관 키
         std::string user_email;
         std::string client_id;
         std::string connection_id;   // github_branch_presence.connection_id
         bool authenticated = false;
         int repo_id = 0;             // 들어가 있는 방(방에 없으면 0)
         std::string branch;
+        // 마지막으로 저장소·권한·브랜치를 전부 확인한 시각. heartbeat 는 이 사이에는
+        // last_seen_at 만 가볍게 갱신하고, 주기가 지나면 upsert 로 전체 검증을 다시 한다.
+        std::chrono::steady_clock::time_point presence_checked_at{};
     };
 
     // 한 저장소(repo:{id}:branch:…)의 방들에 붙은 연결 중 accept 가 true 인 것만 모은다.
@@ -85,7 +90,7 @@ class GithubWebSocketController : public drogon::WebSocketController<GithubWebSo
     static ConnectionShard &getShard(const std::string &key);
 
     // JWT Access Token 을 검증하고 user_email 을 돌려준다. 실패하면 빈 문자열.
-    static std::string verifyAccessToken(const std::string &token);
+    static std::string verifyAccessToken(const std::string &token, const std::string &requestId = "");
 
     // 인증된 연결을 사용자 목록에 등록한다. 같은 client_id 의 기존 연결은 교체한다.
     static void registerConnection(const WebSocketConnectionPtr &wsConnPtr,

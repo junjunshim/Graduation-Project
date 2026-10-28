@@ -1,60 +1,77 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
-import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
 import { getCurrentUser } from '../../auth/api'
-import { WorkspaceFilesTab } from '../components/WorkspaceFilesTab'
-import { WorkspaceGithubTab } from '../components/WorkspaceGithubTab'
-import { WorkspaceMembersTab } from '../components/WorkspaceMembersTab'
-import { WorkspaceRolesTab } from '../components/WorkspaceRolesTab'
-import { WorkspaceSchedulesTab } from '../components/WorkspaceSchedulesTab'
-import { WorkspaceTasksTab } from '../components/WorkspaceTasksTab'
-import { WorkspaceTimelineTab } from '../components/WorkspaceTimelineTab'
 import { fetchNodeDetail, getOrgSnapshot } from '../data/orgService'
 import {
   subscribeToWorkspaceCache,
   subscribeToLiveNotifications,
+  subscribeToWorkspaceLiveRefresh,
+  notifyGithubCacheUpdated,
   notifyRecurringCacheUpdated,
 } from '../data/workspaceCacheEvents'
 import {
   getActiveWorkspaceRootId,
   getDefaultWorkspaceRootId,
+  setLastVisitedWorkspaceNodeId,
 } from '../data/workspaceDirectorySelection'
 import { readWorkspaceDb } from '../data/localStore'
 import { findDeletedAncestorNode } from '../model/nodeDeletion'
 import { showToast as showLiveToast } from '../../notification/data/toastEvents'
 import { getWorkspaceOverview } from '../queries/workspaceOverview'
 import { useWorkItemContextMenu } from '../components/useWorkItemContextMenu'
-import { WorkspaceOverviewTab } from '../components/WorkspaceOverviewTab'
+import {
+  canCreateWorkItem,
+} from '../model/effectiveAuthority'
+import {
+  type WorkspaceView,
+  getWorkspaceTabPermissions,
+} from '../model/workspaceTabModel'
+import {
+  loadWorkspaceFilesTab,
+  loadWorkspaceGithubTab,
+  loadWorkspaceMembersTab,
+  loadWorkspaceOverviewTab,
+  loadWorkspaceRolesTab,
+  loadWorkspaceSchedulesTab,
+  loadWorkspaceTasksTab,
+  loadWorkspaceTimelineTab,
+} from '../model/workspaceTabModules'
 import styles from './WorkspacePage.module.css'
 
-type WorkspaceView =
-  | 'overview'
-  | 'tasks'
-  | 'timeline'
-  | 'schedules'
-  | 'files'
-  | 'github'
-  | 'members'
-  | 'roles'
+const WorkspaceOverviewTab = lazy(() =>
+  loadWorkspaceOverviewTab().then((module) => ({ default: module.WorkspaceOverviewTab })),
+)
+const WorkspaceTimelineTab = lazy(() =>
+  loadWorkspaceTimelineTab().then((module) => ({ default: module.WorkspaceTimelineTab })),
+)
+const WorkspaceTasksTab = lazy(() =>
+  loadWorkspaceTasksTab().then((module) => ({ default: module.WorkspaceTasksTab })),
+)
+const WorkspaceSchedulesTab = lazy(() =>
+  loadWorkspaceSchedulesTab().then((module) => ({ default: module.WorkspaceSchedulesTab })),
+)
+const WorkspaceFilesTab = lazy(() =>
+  loadWorkspaceFilesTab().then((module) => ({ default: module.WorkspaceFilesTab })),
+)
+const WorkspaceGithubTab = lazy(() =>
+  loadWorkspaceGithubTab().then((module) => ({ default: module.WorkspaceGithubTab })),
+)
+const WorkspaceMembersTab = lazy(() =>
+  loadWorkspaceMembersTab().then((module) => ({ default: module.WorkspaceMembersTab })),
+)
+const WorkspaceRolesTab = lazy(() =>
+  loadWorkspaceRolesTab().then((module) => ({ default: module.WorkspaceRolesTab })),
+)
 
-type WorkspaceTab = {
-  label: string
-  to: string
-  view?: WorkspaceView
+function WorkspaceTabFallback() {
+  return (
+    <div className={styles.loadingStateContainer} role={'status'} aria-live={'polite'}>
+      <div className={styles.spinnerLarge} aria-hidden={'true'} />
+      <p className={styles.loadingStateText}>탭을 불러오는 중입니다...</p>
+    </div>
+  )
 }
-
-const workspaceTabs: WorkspaceTab[] = [
-  { label: '개요', to: '/workspace', view: 'overview' },
-  { label: '업무', to: '/workspace?view=tasks', view: 'tasks' },
-  { label: '타임라인', to: '/workspace?view=timeline', view: 'timeline' },
-  { label: '일정', to: '/workspace?view=schedules', view: 'schedules' },
-  { label: '파일', to: '/workspace?view=files', view: 'files' },
-  { label: 'GitHub', to: '/workspace?view=github', view: 'github' },
-  { label: '사용자', to: '/workspace?view=members', view: 'members' },
-  { label: '역할/권한', to: '/workspace?view=roles', view: 'roles' },
-  { label: '설정', to: '/settings' },
-]
 
 export function WorkspacePage() {
   const navigate = useNavigate()
@@ -89,6 +106,9 @@ export function WorkspacePage() {
     let isSubscribed = true
 
     if (activeWorkspaceRootId) {
+      if (currentUser?.userId) {
+        setLastVisitedWorkspaceNodeId(String(activeWorkspaceRootId), currentUser.userId)
+      }
       // 1. 초기 렌더링된 snapshot 기준으로 해당 노드가 캐시에 있는지 확인 (추가적인 getOrgSnapshot() 호출 생략)
       const hasNodeInSnapshot = snapshot.nodes.some(
         (node) => String(node.id) === String(activeWorkspaceRootId),
@@ -133,44 +153,65 @@ export function WorkspacePage() {
       }
     })
 
-    // 실시간 WebSocket 알림 수신 시 현재 열람 중인 노드 데이터 자동 최신화
-    const unsubscribeLive = subscribeToLiveNotifications((payload) => {
+    // 실시간 알림/갱신 신호를 받으면 현재 열람 중인 노드 데이터를 다시 조회한다.
+    const refreshActiveNode = (nodeId: number | null, isRecurringEvent: boolean) => {
       if (!isSubscribed || !activeWorkspaceRootId) return
 
-      const notifNodeId = payload.node_id != null ? Number(payload.node_id) : null
       const currentNodeId = Number(activeWorkspaceRootId)
+      // 알림의 소속 노드가 현재 보고 있는 노드와 일치할 때만 갱신한다.
+      if (nodeId !== currentNodeId) return
 
-      // 알림의 소속 노드가 현재 보고 있는 노드와 일치할 때
-      if (notifNodeId === currentNodeId) {
-        // 1. 일정 관련 알림 (일정 생성/수정/삭제/복구 또는 일정 전용 파일)인 경우:
-        //    일정 전용 캐시 갱신 브로드캐스트만 수행 (fetchNodeDetail 중복 호출 방지)
-        //    일정 파일은 노드 상세가 아닌 일정(정기 규칙) 조회로 목록을 구성하므로 반드시 이 경로로 갱신해야 한다.
-        const isRecurringEvent =
-          payload.entity_type === 'RECURRING_RULE' ||
-          payload.is_recurring_file === true ||
-          payload.link_url?.includes('view=schedules')
-
-        if (isRecurringEvent) {
-          notifyRecurringCacheUpdated(currentNodeId)
-        } else {
-          // 2. 일반 업무, 노드, 권한, 파일 등 일반 노드 활동인 경우에만 fetchNodeDetail 호출
-          fetchNodeDetail(activeWorkspaceRootId)
-            .then((latestSnapshot) => {
-              if (isSubscribed) {
-                setSnapshot(latestSnapshot)
-              }
-            })
-            .catch((err) => {
-              console.warn('[WorkspacePage] 실시간 알림 수신 후 자동 최신화 실패:', err)
-            })
-        }
+      // 일정 관련 변경은 일정 캐시만 갱신한다. (fetchNodeDetail 중복 호출 방지)
+      if (isRecurringEvent) {
+        notifyRecurringCacheUpdated(currentNodeId)
+        return
       }
+
+      fetchNodeDetail(activeWorkspaceRootId)
+        .then((latestSnapshot) => {
+          if (isSubscribed) {
+            setSnapshot(latestSnapshot)
+          }
+        })
+        .catch((err) => {
+          console.warn('[WorkspacePage] 실시간 알림 수신 후 자동 최신화 실패:', err)
+        })
+    }
+
+    // 상세 알림(HISTORY_ALL_VIEW 보유자) 수신 경로
+    const unsubscribeLive = subscribeToLiveNotifications((payload) => {
+      const notifNodeId = payload.node_id != null ? Number(payload.node_id) : null
+      const isGithubEvent =
+        payload.sub_type === 'GITHUB' || Boolean(payload.entity_type?.startsWith('GITHUB_'))
+
+      if (isGithubEvent) {
+        const currentNodeId = activeWorkspaceRootId ? Number(activeWorkspaceRootId) : null
+        if (notifNodeId === null || notifNodeId === currentNodeId) {
+          notifyGithubCacheUpdated(notifNodeId ?? currentNodeId ?? undefined)
+        }
+        return
+      }
+
+      const isRecurringEvent =
+        payload.entity_type === 'RECURRING_RULE' ||
+        payload.is_recurring_file === true ||
+        payload.link_url?.includes('view=schedules')
+      refreshActiveNode(notifNodeId, Boolean(isRecurringEvent))
+    })
+
+    // 상세 열람 권한이 없는 사용자도 화면을 최신 상태로 유지하기 위한 갱신 신호 경로
+    const unsubscribeRefresh = subscribeToWorkspaceLiveRefresh((payload) => {
+      refreshActiveNode(
+        payload.nodeId,
+        payload.isRecurringFile || payload.entityType === 'RECURRING_RULE',
+      )
     })
 
     return () => {
       isSubscribed = false
       unsubscribeCache()
       unsubscribeLive()
+      unsubscribeRefresh()
     }
   }, [activeWorkspaceRootId, reloadTrigger])
 
@@ -217,6 +258,19 @@ export function WorkspacePage() {
     [currentUserId, snapshot, activeWorkspaceRootId],
   )
   const { workItemContextMenu } = useWorkItemContextMenu()
+
+  // 스냅샷이 바뀌어 overview 가 null 이 되어도 훅 개수는 달라지면 안 되므로,
+  // 탭 권한 계산도 조기 반환보다 먼저 수행한다.
+  const currentNodeId = overview?.rootNode
+    ? overview.rootNode.id
+    : activeWorkspaceRootId
+      ? Number(activeWorkspaceRootId)
+      : 1
+
+  const tabPermissions = useMemo(
+    () => getWorkspaceTabPermissions(currentUserId, currentNodeId, snapshot),
+    [currentUserId, currentNodeId, snapshot],
+  )
 
   // 스코프 정보가 유실된 경우(역할 회수·내보내기 등) 진입점으로 돌려보낸다.
   if (!currentUser || !overview) {
@@ -291,14 +345,7 @@ export function WorkspacePage() {
     }
   }
 
-  const displayRoleMembers = overview.rootRoleMembers.length > 0
-    ? overview.rootRoleMembers
-    : overview.allRoleMembers && overview.allRoleMembers.length > 0
-      ? overview.allRoleMembers
-      : []
-  const visibleMembers = displayRoleMembers.slice(0, 4)
-  const totalMemberCount = overview.allRoleMembers ? overview.allRoleMembers.length : overview.rootRoleMembers.length
-  const extraMemberCount = Math.max(0, totalMemberCount - visibleMembers.length)
+  const isCurrentViewAllowed = tabPermissions[activeView] ?? true
 
   return (
     <section
@@ -318,114 +365,30 @@ export function WorkspacePage() {
         .join(' ')}
     >
       {workItemContextMenu}
-      <div className={styles.workspaceNavBar}>
-        <nav className={styles.workspaceTabs} aria-label="워크스페이스 보기">
-          {workspaceTabs.map((tab) => {
-            const isActive = tab.view === activeView
-            const targetTo =
-              workspaceRootParam && tab.to.startsWith('/workspace')
-                ? tab.to.includes('?')
-                  ? `${tab.to}&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                  : `${tab.to}?nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : tab.to
 
-            if (tab.view === 'tasks') {
-              const currentMode = requestedTaskMode ?? 'list'
-              const taskTabTargetTo = workspaceRootParam
-                ? `/workspace?view=tasks&mode=${currentMode}&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : `/workspace?view=tasks&mode=${currentMode}`
-              const listTo = workspaceRootParam
-                ? `/workspace?view=tasks&mode=list&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : '/workspace?view=tasks&mode=list'
-              const treeTo = workspaceRootParam
-                ? `/workspace?view=tasks&mode=tree&nodeId=${encodeURIComponent(workspaceRootParam)}`
-                : '/workspace?view=tasks&mode=tree'
-
-              return (
-                <div key={tab.label} className={styles.taskTabWrapper}>
-                  <Link
-                    to={taskTabTargetTo}
-                    className={[styles.tabLink, isActive ? styles.tabLinkActive : ''].filter(Boolean).join(' ')}
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    {tab.label}
-                  </Link>
-                  <div className={styles.taskSubmenu}>
-                    <Link
-                      to={listTo}
-                      className={[
-                        styles.taskSubmenuItem,
-                        isActive && requestedTaskMode === 'list' ? styles.taskSubmenuItemActive : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    >
-                      <Icon name="fileText" size={13} />
-                      <span>업무 목록</span>
-                    </Link>
-                    <Link
-                      to={treeTo}
-                      className={[
-                        styles.taskSubmenuItem,
-                        isActive && requestedTaskMode === 'tree' ? styles.taskSubmenuItemActive : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    >
-                      <Icon name="folder" size={13} />
-                      <span>업무 트리</span>
-                    </Link>
-                  </div>
-                </div>
-              )
-            }
-
-            return (
-              <Link
-                key={tab.label}
-                to={targetTo}
-                className={[styles.tabLink, isActive ? styles.tabLinkActive : ''].filter(Boolean).join(' ')}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                {tab.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className={styles.headerActions}>
-          <div
-            className={styles.memberStack}
-            aria-label="워크스페이스 멤버"
-            title={
-              overview.allRoleMembers && overview.allRoleMembers.length !== overview.rootRoleMembers.length
-                ? `직속 팀원 ${overview.rootRoleMembers.length}명 / 하위 포함 전체 ${totalMemberCount}명`
-                : `팀원 ${totalMemberCount}명`
-            }
+      {!isCurrentViewAllowed ? (
+        <div className={styles.tabAccessDeniedContainer} role="alert">
+          <Icon name="lock" size={44} />
+          <h2>접근 권한 제한</h2>
+          <p>
+            현재 워크스페이스에서 해당 탭을 조회할 수 있는 권한이 없습니다. 관리자에게 권한을 요청하거나 다른 탭을 이용해 주세요.
+          </p>
+          <button
+            type="button"
+            className={styles.secondaryAction}
+            onClick={() => {
+              const next = new URLSearchParams(searchParams)
+              next.delete('view')
+              navigate(`?${next.toString()}`)
+            }}
           >
-            {visibleMembers.map((member) => (
-              <span
-                key={`${member.assignmentId}-${member.userId}`}
-                data-member-name={member.name}
-              >
-                <UserAvatar name={member.name} userId={member.userId} size="medium" />
-                <span className={styles.memberName}>{member.name}</span>
-              </span>
-            ))}
-            {extraMemberCount > 0 ? <strong data-member-name={`외 ${extraMemberCount}명 (전체 ${totalMemberCount}명)`}>+{extraMemberCount}</strong> : null}
-          </div>
-
-          <button type="button" className={styles.secondaryAction}>
-            <Icon name="users" size={15} />
-            공유
-          </button>
-          <button type="button" className={styles.iconAction} aria-label="더보기">
-            <span className={styles.moreDots} aria-hidden="true" />
+            <Icon name="home" size={16} />
+            개요 탭으로 이동
           </button>
         </div>
-      </div>
-
-      {activeView === 'timeline' ? (
+      ) : (
+        <Suspense fallback={<WorkspaceTabFallback />}>
+          {activeView === 'timeline' ? (
         <WorkspaceTimelineTab
           workItems={overview.visibleWorkItems}
           nodes={overview.visibleNodes}
@@ -435,7 +398,11 @@ export function WorkspacePage() {
       ) : activeView === 'tasks' ? (
         <WorkspaceTasksTab
           key={[requestedTaskMode, requestedStatus ?? 'all-status', requestedSchedule ?? 'all-schedule'].join('-')}
-          createHref={overview.rootNode ? `/work-items/new?nodeId=${overview.rootNode.id}` : '/work-items/new'}
+          createHref={
+            overview.rootNode && currentUserId && canCreateWorkItem(currentUserId, overview.rootNode.id, snapshot)
+              ? `/work-items/new?nodeId=${overview.rootNode.id}`
+              : undefined
+          }
           workItems={overview.visibleWorkItems}
           deletedWorkItems={overview.deletedWorkItems}
           allWorkItems={overview.allWorkItems}
@@ -486,8 +453,10 @@ export function WorkspacePage() {
           currentUserId={currentUser.userId}
           currentUser={currentUser}
         />
-      ) : (
-        <WorkspaceOverviewTab overview={overview} snapshot={snapshot} currentUserId={currentUser.userId} />
+          ) : (
+            <WorkspaceOverviewTab overview={overview} snapshot={snapshot} currentUserId={currentUser.userId} />
+          )}
+        </Suspense>
       )}
     </section>
   )

@@ -7,7 +7,13 @@ import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
 import { useKoreanHolidays } from '../model/koreanHolidays'
 import type { RecurringCategory, RecurringRuleRecord } from '../model/recurringRuleTypes'
-import { fetchRecurringRules, fetchRecurringRuleDetail, getLocalRecurringRules, restoreRecurringRule } from '../data/recurringRuleService'
+import {
+  fetchRecurringRules,
+  fetchRecurringRuleDetail,
+  getLocalRecurringRules,
+  hasLoadedRecurringRulesForNode,
+  restoreRecurringRule,
+} from '../data/recurringRuleService'
 import { formatRepeatSummary, getNextOccurrenceInfo } from '../model/recurringSchedule'
 import { RecurringRuleModal } from './RecurringRuleModal'
 import { RecurringRuleDetailModal } from './RecurringRuleDetailModal'
@@ -76,8 +82,9 @@ export function WorkspaceSchedulesTab({
     return activeNodeId ? getLocalRecurringRules(activeNodeId, true) : []
   })
   const [isLoading, setIsLoading] = useState(() => {
-    const cached = activeNodeId ? getLocalRecurringRules(activeNodeId, true) : []
-    return Boolean(activeNodeId && cached.length === 0)
+    if (!activeNodeId) return false
+    const cached = getLocalRecurringRules(activeNodeId, true)
+    return cached.length === 0 && !hasLoadedRecurringRulesForNode(activeNodeId)
   })
   const [showDeletedSchedules, setShowDeletedSchedules] = useState(false)
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false)
@@ -116,7 +123,7 @@ export function WorkspaceSchedulesTab({
     [canManageRule, selectedRecurringRule],
   )
 
-  // 일정 생성은 DB create_recurring_rule 과 동일하게 노드의 WI_PERSONAL_CHANGE 가 필요하다.
+  // 일정 생성은 DB create_recurring_rule 과 동일하게 노드의 SCHEDULE_CHANGE 가 필요하다.
   const canCreateRule = useMemo(() => {
     const snapshot = getOrgSnapshot()
 
@@ -164,7 +171,7 @@ export function WorkspaceSchedulesTab({
     const cached = getLocalRecurringRules(targetNodeId, true)
     if (cached.length > 0) {
       setLoadedRecurringRules(cached)
-    } else {
+    } else if (!hasLoadedRecurringRulesForNode(targetNodeId)) {
       setIsLoading(true)
     }
 
@@ -182,7 +189,7 @@ export function WorkspaceSchedulesTab({
     if (activeNodeId) {
       const cached = getLocalRecurringRules(activeNodeId, true)
       setLoadedRecurringRules(cached)
-      if (cached.length === 0) {
+      if (cached.length === 0 && !hasLoadedRecurringRulesForNode(activeNodeId)) {
         setIsLoading(true)
       }
     }

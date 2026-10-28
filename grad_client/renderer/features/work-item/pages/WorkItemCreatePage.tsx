@@ -1,8 +1,11 @@
 import type { FormEvent } from 'react'
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
+import { getOrgSnapshot } from '../../workspace/data/orgService'
 import { createWorkItem } from '../../workspace/data/workItemService'
+import { canCreateWorkItem } from '../../workspace/model/effectiveAuthority'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import { WorkItemCreateSidebar } from '../components/WorkItemCreateSidebar'
 import { useWorkItemCreateForm } from '../hooks/useWorkItemCreateForm'
@@ -14,13 +17,45 @@ export function WorkItemCreatePage() {
   const [searchParams] = useSearchParams()
   const requestedNodeId = Number(searchParams.get('nodeId'))
   const initialNodeId = Number.isInteger(requestedNodeId) && requestedNodeId > 0 ? requestedNodeId : undefined
-  const currentUser = getCurrentUser()
+  const snapshot = getOrgSnapshot()
+  const currentUser = getCurrentUser(snapshot)
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId, initialNodeId, searchParams.get('parentWorkItemId') ?? undefined)
 
   if (!currentUser || !composer) {
     return null
+  }
+
+  // 특정 워크스페이스(nodeId)로 진입했으나 해당 노드에 업무 생성/배정 권한이 없는 경우 차단
+  if (initialNodeId) {
+    const hasPermissionForNode = canCreateWorkItem(currentUser.userId, initialNodeId, snapshot)
+    if (!hasPermissionForNode) {
+      const targetNode = snapshot.nodes.find((n) => n.id === initialNodeId)
+      return (
+        <div className={styles.page}>
+          <div className={styles.breadcrumbRow}>
+            <Link to={`/workspace?nodeId=${initialNodeId}&view=tasks`} className={styles.backLink}>
+              <span>←</span> 워크스페이스로 돌아가기
+            </Link>
+          </div>
+          <div className={styles.emptyCard}>
+            <Icon name="lock" size={36} className={styles.emptyIcon} />
+            <h2>업무 생성 권한이 없습니다</h2>
+            <p>
+              &apos;{targetNode?.name ?? '해당 워크스페이스'}&apos; 공간에 업무를 생성하거나 배정할 수 있는 권한이 없습니다.
+            </p>
+            <button
+              type="button"
+              className={styles.backLink}
+              onClick={() => navigate(`/workspace?nodeId=${initialNodeId}&view=tasks`)}
+            >
+              업무 탭으로 이동
+            </button>
+          </div>
+        </div>
+      )
+    }
   }
 
   const activeComposer = composer

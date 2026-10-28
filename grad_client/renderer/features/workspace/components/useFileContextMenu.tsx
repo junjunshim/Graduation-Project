@@ -7,7 +7,11 @@ import { WorkItemFileUpload } from './WorkItemFileUpload'
 import { WorkItemFileDownload } from './WorkItemFileDownload'
 import { WorkItemFileDelete } from './WorkItemFileDelete'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
-import { downloadRecurringRuleFile, deleteRecurringRuleFile, readCachedRecurringRules, restoreRecurringRuleFile, uploadRecurringRuleFile } from '../data/recurringRuleService'
+import { downloadRecurringRuleFile, deleteRecurringRuleFile, readCachedRecurringRules, restoreRecurringRuleFile, uploadRecurringRuleFile, fetchRecurringRuleFileContent } from '../data/recurringRuleService'
+import { fetchWorkItemFileContent } from '../data/fileService'
+import { isPreviewableFile } from '../model/filePreview'
+import { AiFileSummaryModal } from './AiFileSummaryModal'
+import { AiCredentialDialog } from '../../account/ui/AiCredentialDialog'
 import { showToast } from '../../notification/data/toastEvents'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
@@ -45,6 +49,13 @@ export function useFileContextMenu() {
     canChange: boolean
     onDeleted?: () => Promise<void>
   } | null>(null)
+  const [aiSummaryTarget, setAiSummaryTarget] = useState<{
+    file: UnifiedFileRecord
+    content: string
+    sourceLabel: string
+  } | null>(null)
+  const [isLoadingAiContent, setIsLoadingAiContent] = useState(false)
+  const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const [isUploadingRecurring, setIsUploadingRecurring] = useState(false)
@@ -250,6 +261,60 @@ export function useFileContextMenu() {
     }
   }
 
+  const handleAiSummary = async (file: UnifiedFileRecord) => {
+    setMenu(null)
+
+    if (!isPreviewableFile(file.originalFileName)) {
+      showToast({
+        title: 'AI 요약 불가',
+        content: '텍스트 또는 코드 형식의 파일만 AI 요약이 가능합니다.',
+        created_at: new Date().toISOString(),
+      })
+      return
+    }
+
+    setIsLoadingAiContent(true)
+    try {
+      let content = ''
+      let sourceLabel = '워크스페이스 파일'
+
+      if (file.fileType === 'recurring_rule') {
+        const fileId = file.fileId ?? file.id
+        const res = await fetchRecurringRuleFileContent(fileId)
+        content = res.content
+        const rule = readCachedRecurringRules().find((candidate) => candidate.ruleId === file.ruleId)
+        if (rule) {
+          sourceLabel = `일정: ${rule.title}`
+        }
+      } else {
+        const res = await fetchWorkItemFileContent(file.id, {
+          expectedFileName: file.originalFileName,
+          expectedUpdatedAt: (file as any).updatedAt ?? file.createdAt,
+        })
+        content = res.content
+        const snapshot = getOrgSnapshot()
+        const item = snapshot.workItems.find((candidate) => candidate.workItemId === file.workItemId)
+        if (item) {
+          sourceLabel = `업무: ${item.title}`
+        }
+      }
+
+      setAiSummaryTarget({
+        file,
+        content,
+        sourceLabel,
+      })
+    } catch (err) {
+      showToast({
+        title: '파일 읽기 실패',
+        content: err instanceof Error ? err.message : '파일 내용을 불러오지 못했습니다.',
+        created_at: new Date().toISOString(),
+      })
+    } finally {
+      setIsLoadingAiContent(false)
+    }
+  }
+
   const handleRecurringFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0]
     event.target.value = ''
@@ -351,6 +416,27 @@ export function useFileContextMenu() {
                       <Icon name="chevronDown" size={15} />
                       <span>다운로드</span>
                     </button>
+                    <button
+                      type="button"
+                      className={[
+                        styles.item,
+                        styles.aiItem,
+                        !isPreviewableFile(menu.file.originalFileName) ? styles.permissionDenied : '',
+                      ].join(' ')}
+                      role="menuitem"
+                      disabled={isLoadingAiContent || !isPreviewableFile(menu.file.originalFileName)}
+                      title={
+                        !isPreviewableFile(menu.file.originalFileName)
+                          ? '텍스트/코드 형식의 파일만 AI 요약이 가능합니다.'
+                          : 'AI를 통해 파일 내용을 요약 및 분석합니다.'
+                      }
+                      onClick={() => {
+                        if (menu.file) void handleAiSummary(menu.file)
+                      }}
+                    >
+                      <Icon name="sparkles" size={15} />
+                      <span>AI 요약</span>
+                    </button>
                     <div className={styles.separator} />
                     <button
                       type="button"
@@ -382,6 +468,27 @@ export function useFileContextMenu() {
                       disabledReason="파일 다운로드 권한이 없습니다."
                       onComplete={() => setMenu(null)}
                     />
+                    <button
+                      type="button"
+                      className={[
+                        styles.item,
+                        styles.aiItem,
+                        !isPreviewableFile(menu.file.originalFileName) ? styles.permissionDenied : '',
+                      ].join(' ')}
+                      role="menuitem"
+                      disabled={isLoadingAiContent || !isPreviewableFile(menu.file.originalFileName)}
+                      title={
+                        !isPreviewableFile(menu.file.originalFileName)
+                          ? '텍스트/코드 형식의 파일만 AI 요약이 가능합니다.'
+                          : 'AI를 통해 파일 내용을 요약 및 분석합니다.'
+                      }
+                      onClick={() => {
+                        if (menu.file) void handleAiSummary(menu.file)
+                      }}
+                    >
+                      <Icon name="sparkles" size={15} />
+                      <span>AI 요약</span>
+                    </button>
                     <div className={styles.separator} />
                     <WorkItemFileDelete
                       key={`delete-${menu.file.id}`}
@@ -482,6 +589,24 @@ export function useFileContextMenu() {
               setDeleteConfirmTarget(null)
             }
           }}
+        />
+      )}
+
+      {aiSummaryTarget && (
+        <AiFileSummaryModal
+          isOpen={Boolean(aiSummaryTarget)}
+          onClose={() => setAiSummaryTarget(null)}
+          fileName={aiSummaryTarget.file.originalFileName}
+          content={aiSummaryTarget.content}
+          sourceLabel={aiSummaryTarget.sourceLabel}
+          onOpenAiSettings={() => setIsAiSettingsOpen(true)}
+        />
+      )}
+
+      {isAiSettingsOpen && (
+        <AiCredentialDialog
+          isOpen={isAiSettingsOpen}
+          onClose={() => setIsAiSettingsOpen(false)}
         />
       )}
     </>

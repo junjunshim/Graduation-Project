@@ -1,19 +1,54 @@
 .page {
-  --signup-bg: #faf9fe;
-  --signup-surface: #ffffff;
-  --signup-ink: #10192f;
-  --signup-text: #182139;
-  --signup-muted: #66718a;
-  --signup-placeholder: #8792aa;
-  --signup-helper: #909aaf;
-  --signup-border: #e2e5ee;
-  --signup-primary: #5145ef;
-  --signup-primary-strong: #4338e7;
+  --signup-bg: #f4f2ec;
+  --signup-surface: #f7f6f2;
+  --signup-ink: #1c1b18;
+  --signup-text: #3f3b35;
+  --signup-muted: #6f6a61;
+  --signup-placeholder: #9a958b;
+  --signup-helper: #8a857b;
+  --signup-border: #e2ddd2;
+  --signup-primary: #7a5c43;
+  --signup-primary-strong: #694e37;
+  --signup-on-primary: #ffffff;
+  --signup-shadow-rgb: 122, 92, 67;
+  --signup-primary-shadow-rgb: 122, 92, 67;
+  --signup-glow-start: rgba(226, 221, 210, 0.7);
+  --signup-glow-end: rgba(247, 246, 242, 0.2);
+  --signup-wave-back-start: rgba(247, 246, 242, 0);
+  --signup-wave-back-end: rgba(235, 231, 222, 0.73);
+  --signup-wave-front-start: rgba(247, 246, 242, 0);
+  --signup-wave-front-end: rgba(241, 236, 230, 0.53);
+  --signup-dot-start: #d1bca7;
+  --signup-dot-end: #9d7f63;
   display: grid;
   min-height: 100vh;
   min-height: 100dvh;
   color: var(--signup-ink);
   background: var(--signup-bg);
+}
+
+:global([data-theme='white']) .page {
+  --signup-bg: #f8fafc;
+  --signup-surface: #ffffff;
+  --signup-ink: #0f172a;
+  --signup-text: #334155;
+  --signup-muted: #64748b;
+  --signup-placeholder: #94a3b8;
+  --signup-helper: #8492a6;
+  --signup-border: #e2e8f0;
+  --signup-primary: #0d766e;
+  --signup-primary-strong: #0f5b55;
+  --signup-on-primary: #ffffff;
+  --signup-shadow-rgb: 13, 118, 110;
+  --signup-primary-shadow-rgb: 13, 118, 110;
+  --signup-glow-start: rgba(204, 251, 241, 0.58);
+  --signup-glow-end: rgba(248, 250, 252, 0.16);
+  --signup-wave-back-start: rgba(248, 250, 252, 0);
+  --signup-wave-back-end: rgba(230, 244, 242, 0.62);
+  --signup-wave-front-start: rgba(248, 250, 252, 0);
+  --signup-wave-front-end: rgba(204, 251, 241, 0.34);
+  --signup-dot-start: #99d2cd;
+  --signup-dot-end: #5fb8ae;
 }
 
 :global([data-theme='dark']) .page {
@@ -27,6 +62,40 @@
   --signup-border: #3b3a54;
   --signup-primary: #766cf6;
   --signup-primary-strong: #5d50ed;
+  --signup-shadow-rgb: 117, 107, 245;
+  --signup-primary-shadow-rgb: 117, 107, 245;
+  --signup-glow-start: rgba(110, 98, 175, 0.3);
+  --signup-glow-end: rgba(60, 54, 88, 0.08);
+  --signup-wave-back-start: rgba(23, 23, 38, 0);
+  --signup-wave-back-end: rgba(73, 64, 110, 0.25);
+  --signup-wave-front-start: rgba(23, 23, 38, 0);
+  --signup-wave-front-end: rgba(45, 40, 69, 0.35);
+  --signup-dot-start: #9b92ec;
+  --signup-dot-end: #6f66c4;
+}
+
+:global([data-theme='navy']) .page {
+  --signup-bg: #0b1120;
+  --signup-surface: #111d32;
+  --signup-ink: #f8fafc;
+  --signup-text: #e2e8f0;
+  --signup-muted: #94a3b8;
+  --signup-placeholder: #64748b;
+  --signup-helper: #7c8ca3;
+  --signup-border: #243859;
+  --signup-primary: #38bdf8;
+  --signup-primary-strong: #0ea5e9;
+  --signup-on-primary: #071426;
+  --signup-shadow-rgb: 56, 189, 248;
+  --signup-primary-shadow-rgb: 14, 165, 233;
+  --signup-glow-start: rgba(56, 189, 248, 0.18);
+  --signup-glow-end: rgba(11, 17, 32, 0.04);
+  --signup-wave-back-start: rgba(11, 17, 32, 0);
+  --signup-wave-back-end: rgba(30, 73, 112, 0.28);
+  --signup-wave-front-start: rgba(11, 17, 32, 0);
+  --signup-wave-front-end: rgba(17, 43, 70, 0.45);
+  --signup-dot-start: #38bdf8;
+  --signup-dot-end: #0284c7;
 }
 
 .pageWithCustomChrome {
@@ -59,16 +128,10 @@
     var(--signup-bg);
 }
 
-:global([data-theme='dark']) .topGlow {
-  opacity: 0.18;
-}
-
-:global([data-theme='dark']) .waveBack {
-  opacity: 0.2;
-}
-
-:global([data-theme='dark']) .waveFront {
-  opacity: 0.14;
+:global([data-theme='navy']) .surface {
+  background:
+    radial-gradient(circle at 52% 44%, rgba(56, 189, 248, 0.1), transparent 38%),
+    var(--signup-bg);
 }
 
 .pageWithCustomChrome .surface {
@@ -91,7 +154,7 @@
   width: 40rem;
   height: 31rem;
   border-radius: 42% 58% 61% 39% / 62% 50% 50% 38%;
-  background: linear-gradient(135deg, rgba(205, 200, 255, 0.7), rgba(241, 239, 255, 0.2));
+  background: linear-gradient(135deg, var(--signup-glow-start), var(--signup-glow-end));
   transform: rotate(-10deg);
 }
 
@@ -107,13 +170,13 @@
 }
 
 .waveBack {
-  background: linear-gradient(145deg, rgba(245, 243, 255, 0), rgba(232, 229, 255, 0.73));
+  background: linear-gradient(145deg, var(--signup-wave-back-start), var(--signup-wave-back-end));
 }
 
 .waveFront {
   right: -21rem;
   bottom: -30rem;
-  background: linear-gradient(145deg, rgba(249, 248, 255, 0), rgba(216, 211, 255, 0.53));
+  background: linear-gradient(145deg, var(--signup-wave-front-start), var(--signup-wave-front-end));
 }
 
 .decorDot {
@@ -121,9 +184,9 @@
   width: 0.9rem;
   height: 0.9rem;
   border-radius: 50%;
-  background: linear-gradient(145deg, #c8c3ff, #aaa3f3);
+  background: linear-gradient(145deg, var(--signup-dot-start), var(--signup-dot-end));
   opacity: 0.75;
-  box-shadow: 0 0 18px rgba(105, 94, 235, 0.12);
+  box-shadow: 0 0 18px rgba(var(--signup-shadow-rgb), 0.12);
 }
 
 .dotOne {
@@ -155,29 +218,6 @@
   gap: 0.7rem;
 }
 
-.languageChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.72rem;
-  justify-content: center;
-  min-width: 9.3rem;
-  min-height: 2.9rem;
-  padding: 0 0.95rem;
-  border: 1px solid var(--signup-border);
-  border-radius: 0.7rem;
-  background: color-mix(in srgb, var(--signup-surface) 88%, transparent);
-  box-shadow: 0 8px 24px rgba(64, 53, 134, 0.03);
-  color: var(--signup-text);
-  font-size: 1.125rem;
-  font-weight: 600;
-  white-space: nowrap;
-  backdrop-filter: blur(14px);
-}
-
-.languageChip > svg {
-  color: var(--signup-muted);
-}
-
 .content {
   position: relative;
   z-index: 1;
@@ -198,10 +238,19 @@
 }
 
 .axisBrand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.axisLogoWrap {
   position: relative;
   display: block;
-  width: 7.875rem;
-  height: 2.47rem;
+  width: 3.75rem;
+  height: 3.75rem;
   flex: 0 0 auto;
   line-height: 0;
 }
@@ -219,16 +268,12 @@
   -webkit-user-drag: none;
 }
 
-.axisLogoDark {
-  display: none;
-}
-
-:global([data-theme='dark']) .axisLogoLight {
-  display: none;
-}
-
-:global([data-theme='dark']) .axisLogoDark {
-  display: block;
+.axisTitle {
+  color: var(--signup-ink);
+  font-size: 2rem;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.045em;
 }
 
 .heroTitle {
@@ -238,10 +283,6 @@
   font-weight: 750;
   line-height: 1.3;
   letter-spacing: -0.045em;
-}
-
-.heroTitle span {
-  color: var(--signup-primary);
 }
 
 .heroDescription {
@@ -254,8 +295,8 @@
 
 .illustrationWrap {
   width: 29.6rem;
-  margin: 2.05rem 0 0 -4.4rem;
-  aspect-ratio: 1079 / 656;
+  margin: 1.8rem 0 0 -2.8rem;
+  aspect-ratio: 1 / 1;
 }
 
 .illustration {
@@ -263,20 +304,15 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter:
-    saturate(0.82)
-    brightness(1.04)
-    drop-shadow(0 18px 24px rgba(70, 57, 180, 0.09));
+  filter: drop-shadow(0 18px 24px rgba(var(--signup-shadow-rgb), 0.12));
   pointer-events: none;
   user-select: none;
   -webkit-user-drag: none;
 }
 
-:global([data-theme='dark']) .illustration {
-  filter:
-    saturate(0.74)
-    brightness(0.82)
-    drop-shadow(0 20px 28px rgba(0, 0, 0, 0.2));
+:global([data-theme='dark']) .illustration,
+:global([data-theme='navy']) .illustration {
+  filter: drop-shadow(0 20px 28px rgba(0, 0, 0, 0.28));
 }
 
 .featureRow {
@@ -320,18 +356,48 @@
 }
 
 .featureIconPurple {
-  color: #6558ed;
-  background: #eeecff;
+  color: var(--signup-primary);
+  background: color-mix(in srgb, var(--signup-primary) 12%, var(--signup-surface));
 }
 
 .featureIconGreen {
   color: #27ae7c;
-  background: #e5f9f1;
+  background: color-mix(in srgb, #27ae7c 12%, var(--signup-surface));
 }
 
 .featureIconBlue {
   color: #3c83ee;
-  background: #e8f2ff;
+  background: color-mix(in srgb, #3c83ee 12%, var(--signup-surface));
+}
+
+:global([data-theme='white']) .featureIconPurple {
+  color: #0d766e;
+  background: #e6f4f2;
+}
+
+:global([data-theme='white']) .featureIconGreen {
+  color: #15803d;
+  background: #f0fdf4;
+}
+
+:global([data-theme='white']) .featureIconBlue {
+  color: #0369a1;
+  background: #f0f9ff;
+}
+
+:global([data-theme='beige']) .featureIconPurple {
+  color: #7a5c43;
+  background: #f1ece6;
+}
+
+:global([data-theme='beige']) .featureIconGreen {
+  color: #3d684d;
+  background: #edf3ee;
+}
+
+:global([data-theme='beige']) .featureIconBlue {
+  color: #455a75;
+  background: #eceff4;
 }
 
 :global([data-theme='dark']) .featureIconPurple {
@@ -346,6 +412,18 @@
   background: rgba(60, 131, 238, 0.16);
 }
 
+:global([data-theme='navy']) .featureIconPurple {
+  background: rgba(56, 189, 248, 0.14);
+}
+
+:global([data-theme='navy']) .featureIconGreen {
+  background: rgba(52, 211, 153, 0.14);
+}
+
+:global([data-theme='navy']) .featureIconBlue {
+  background: rgba(147, 197, 253, 0.14);
+}
+
 .signupCard {
   display: flex;
   width: 100%;
@@ -356,13 +434,18 @@
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 1.45rem;
   background: color-mix(in srgb, var(--signup-surface) 97%, transparent);
-  box-shadow: 0 20px 62px rgba(53, 45, 116, 0.07);
+  box-shadow: 0 20px 62px rgba(var(--signup-shadow-rgb), 0.08);
   backdrop-filter: blur(18px);
 }
 
 :global([data-theme='dark']) .signupCard {
   border-color: rgba(255, 255, 255, 0.07);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.23);
+}
+
+:global([data-theme='navy']) .signupCard {
+  border-color: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
 }
 
 .cardHeader h1 {
@@ -457,6 +540,73 @@
   padding-right: 3.45rem;
 }
 
+.inputWithAction {
+  padding-right: 7.6rem;
+}
+
+.inputActionButton {
+  position: absolute;
+  right: 0.45rem;
+  display: inline-flex;
+  min-width: 6.35rem;
+  height: 2.4rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--signup-primary) 10%, var(--signup-surface));
+  color: var(--signup-primary);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.inputActionButton:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--signup-primary) 16%, var(--signup-surface));
+  color: var(--signup-primary-strong);
+}
+
+.inputActionButton:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.verificationSuccess,
+.verificationMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  color: var(--signup-helper);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.verificationSuccess {
+  color: #1f8a64;
+}
+
+.inlineLinkButton {
+  color: var(--signup-primary);
+  font-size: inherit;
+  font-weight: 650;
+}
+
+.inlineLinkButton:hover:not(:disabled) {
+  color: var(--signup-primary-strong);
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.inlineLinkButton:disabled {
+  color: var(--signup-placeholder);
+  cursor: default;
+}
+
 .input::placeholder {
   color: var(--signup-placeholder);
   opacity: 1;
@@ -541,8 +691,8 @@
   margin-top: -0.5rem;
   border-radius: 0.58rem;
   background: linear-gradient(105deg, var(--signup-primary-strong), var(--signup-primary));
-  box-shadow: 0 12px 25px rgba(76, 61, 220, 0.17);
-  color: white;
+  box-shadow: 0 12px 25px rgba(var(--signup-primary-shadow-rgb), 0.2);
+  color: var(--signup-on-primary);
   font-size: 1.05rem;
   font-weight: 650;
   letter-spacing: -0.02em;
@@ -553,7 +703,7 @@
 }
 
 .primaryButton:hover:not(:disabled) {
-  box-shadow: 0 15px 30px rgba(76, 61, 220, 0.24);
+  box-shadow: 0 15px 30px rgba(var(--signup-primary-shadow-rgb), 0.28);
   transform: translateY(-1px);
 }
 
@@ -705,9 +855,13 @@
     padding: 1rem 0 1.75rem;
   }
 
-  .axisBrand {
-    width: 6.375rem;
-    height: 2rem;
+  .axisLogoWrap {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .axisTitle {
+    font-size: 1.65rem;
   }
 
   .signupCard {
@@ -738,6 +892,16 @@
 
   .input {
     font-size: 0.98rem;
+  }
+
+  .inputWithAction {
+    padding-right: 7.2rem;
+  }
+
+  .inputActionButton {
+    min-width: 6rem;
+    padding-inline: 0.6rem;
+    font-size: 0.78rem;
   }
 
   .primaryButton {
@@ -789,9 +953,9 @@
   }
 
   .illustrationWrap {
-    width: 25.5rem;
+    width: 23.5rem;
     margin-top: 0.75rem;
-    margin-left: -2.5rem;
+    margin-left: -1.75rem;
   }
 
   .featureRow {
@@ -837,9 +1001,13 @@
     padding-block: 0.6rem 1.25rem;
   }
 
-  .axisBrand {
-    width: 6.375rem;
-    height: 2rem;
+  .axisLogoWrap {
+    width: 3rem;
+    height: 3rem;
+  }
+
+  .axisTitle {
+    font-size: 1.65rem;
   }
 
   .signupCard {

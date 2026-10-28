@@ -3,8 +3,8 @@
   display: grid;
   place-items: center;
   padding: 32px;
-  color: var(--color-text-primary, #18202f);
-  background: var(--color-background, #f5f7fb);
+  color: var(--axis-text-primary);
+  background: var(--axis-surface-canvas);
 }
 
 .stateCard {
@@ -13,11 +13,11 @@
   justify-items: center;
   gap: 14px;
   padding: 40px;
-  border: 1px solid var(--color-border, #dce2eb);
+  border: 1px solid var(--axis-line-default);
   border-radius: 18px;
   text-align: center;
-  background: var(--color-surface, #ffffff);
-  box-shadow: 0 18px 50px rgb(25 40 70 / 10%);
+  background: var(--axis-surface-panel);
+  box-shadow: var(--axis-shadow-dialog);
 }
 
 .stateCard h1,
@@ -30,15 +30,15 @@
 }
 
 .stateCard p {
-  color: var(--color-text-secondary, #657086);
+  color: var(--axis-text-secondary);
   line-height: 1.6;
 }
 
 .spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid #d8e2f2;
-  border-top-color: #4f6fd8;
+  border: 3px solid var(--axis-surface-muted);
+  border-top-color: var(--axis-brand-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -48,10 +48,11 @@
   height: 32px;
   display: grid;
   place-items: center;
+  border: 1px solid var(--axis-status-danger-border);
   border-radius: 50%;
-  color: #9f2f2f;
+  color: var(--axis-status-danger);
   font-weight: 800;
-  background: #fdeaea;
+  background: var(--axis-status-danger-soft);
 }
 
 .actions {
@@ -74,14 +75,26 @@
 }
 
 .primaryAction {
-  color: #ffffff;
-  background: #4f6fd8;
+  color: var(--axis-text-on-brand);
+  background: var(--axis-brand-primary);
+}
+
+.primaryAction:hover,
+.primaryAction:focus-visible {
+  background: var(--axis-brand-primary-hover);
 }
 
 .secondaryAction {
-  color: inherit;
-  border-color: var(--color-border, #dce2eb);
-  background: transparent;
+  color: var(--axis-text-secondary);
+  border-color: var(--axis-line-default);
+  background: var(--axis-surface-panel);
+}
+
+.secondaryAction:hover,
+.secondaryAction:focus-visible {
+  border-color: var(--axis-line-strong);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-primary);
 }
 
 @keyframes spin {

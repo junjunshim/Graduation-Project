@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX idx_users_is_deleted ON users(is_deleted);
+-- 이메일은 대소문자와 앞뒤 공백을 정규화한 값으로 한 계정만 허용한다.
+CREATE UNIQUE INDEX IF NOT EXISTS unique_users_email_normalized ON users(lower(trim(email)));
 
 
 -- 3. 유저와 노드 간이 권한 매핑
@@ -122,6 +124,47 @@ CREATE TABLE IF NOT EXISTS user_refresh_tokens (
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+
+-- 6.1 비밀번호 재설정 토큰
+-- 링크에 들어가는 원문 토큰은 저장하지 않고 SHA-256 해시만 보관한다.
+-- 한 사용자에게 활성 토큰 하나만 허용하며, 재요청 시 기존 토큰을 먼저 소비 처리한다.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    reset_id SERIAL PRIMARY KEY,
+    user_email VARCHAR(100) NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+    token_hash CHAR(64) NOT NULL UNIQUE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_email
+    ON password_reset_tokens(user_email, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_active_password_reset_token
+    ON password_reset_tokens(user_email)
+    WHERE used_at IS NULL;
+
+
+-- 6.2 회원가입 이메일 인증
+-- 인증번호는 bcrypt 해시로, 인증 완료 토큰은 SHA-256 해시로만 보관한다.
+CREATE TABLE IF NOT EXISTS signup_email_verifications (
+    verification_id SERIAL PRIMARY KEY,
+    email VARCHAR(100) NOT NULL,
+    code_hash TEXT NOT NULL,
+    code_expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    max_attempts INTEGER NOT NULL DEFAULT 5 CHECK (max_attempts > 0),
+    verified_at TIMESTAMP WITH TIME ZONE,
+    verification_token_hash CHAR(64) UNIQUE,
+    token_expires_at TIMESTAMP WITH TIME ZONE,
+    consumed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT check_signup_email_normalized CHECK (email = lower(trim(email)))
+);
+CREATE INDEX IF NOT EXISTS idx_signup_email_verifications_email
+    ON signup_email_verifications(email, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS unique_active_signup_email_verification
+    ON signup_email_verifications(email)
+    WHERE consumed_at IS NULL;
 
 
 -- 7. 복구용 테이블 생성 (외래키 제약조건 없음)
@@ -464,4 +507,88 @@ CREATE TABLE IF NOT EXISTS github_handoff_codes (
 CREATE UNIQUE INDEX unique_github_handoff_code ON github_handoff_codes(code);
 CREATE INDEX idx_github_handoff_codes_expires_at ON github_handoff_codes(expires_at);
 CREATE INDEX idx_github_handoff_codes_user_email ON github_handoff_codes(user_email);
+
+-- 21. 채팅 채널 테이블 (워크스페이스 토픽 채널 & 1:1 DM 통합)
+CREATE TABLE IF NOT EXISTS chat_channels (
+    channel_id SERIAL PRIMARY KEY,
+    channel_type VARCHAR(20) NOT NULL CHECK (channel_type IN ('WORKSPACE', 'DM')),
+    owner_node_id INTEGER REFERENCES organization_nodes(node_id) ON DELETE CASCADE,
+    name VARCHAR(100),                     -- WORKSPACE 채널명 (예: '일반', '공지'), DM은 NULL 가능
+    description TEXT,                      -- 채널 설명/주제
+    is_default BOOLEAN NOT NULL DEFAULT FALSE, -- 워크스페이스 기본 '#일반' 채널 여부
+    dm_user1_id VARCHAR(50) REFERENCES users(user_id) ON DELETE CASCADE, -- DM 참여자 1 (사전순 작은 user_id)
+    dm_user2_id VARCHAR(50) REFERENCES users(user_id) ON DELETE CASCADE, -- DM 참여자 2 (사전순 큰 user_id)
+    created_by_user_id VARCHAR(50) REFERENCES users(user_id) ON DELETE SET NULL,
+    last_message_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT check_channel_type_fields CHECK (
+        (channel_type = 'WORKSPACE' AND owner_node_id IS NOT NULL AND name IS NOT NULL)
+        OR
+        (channel_type = 'DM' AND owner_node_id IS NULL AND dm_user1_id IS NOT NULL AND dm_user2_id IS NOT NULL)
+    )
+);
+
+-- 같은 워크스페이스 내 동일한 채널명 중복 방지 (소프트 삭제 제외)
+CREATE UNIQUE INDEX IF NOT EXISTS unique_workspace_channel_name
+    ON chat_channels(owner_node_id, lower(name))
+    WHERE channel_type = 'WORKSPACE' AND NOT is_deleted;
+
+-- 두 유저 간 1:1 DM 채널 중복 생성 방지 (LEAST/GREATEST 정규화 저장)
+CREATE UNIQUE INDEX IF NOT EXISTS unique_dm_user_pair
+    ON chat_channels(dm_user1_id, dm_user2_id)
+    WHERE channel_type = 'DM' AND NOT is_deleted;
+
+CREATE INDEX IF NOT EXISTS idx_chat_channels_node_id ON chat_channels(owner_node_id) WHERE NOT is_deleted;
+CREATE INDEX IF NOT EXISTS idx_chat_channels_default_node ON chat_channels(owner_node_id) WHERE channel_type = 'WORKSPACE' AND is_default AND NOT is_deleted;
+CREATE INDEX IF NOT EXISTS idx_chat_channels_dm_user1 ON chat_channels(dm_user1_id) WHERE channel_type = 'DM' AND NOT is_deleted;
+CREATE INDEX IF NOT EXISTS idx_chat_channels_dm_user2 ON chat_channels(dm_user2_id) WHERE channel_type = 'DM' AND NOT is_deleted;
+CREATE INDEX IF NOT EXISTS idx_chat_channels_last_message_at ON chat_channels(last_message_at DESC);
+
+-- 22. 채팅 메시지 테이블 (일반 메시지 및 1-depth 스레드 답글)
+CREATE TABLE IF NOT EXISTS chat_messages (
+    message_id SERIAL PRIMARY KEY,
+    channel_id INTEGER NOT NULL REFERENCES chat_channels(channel_id) ON DELETE CASCADE,
+    parent_message_id INTEGER REFERENCES chat_messages(message_id) ON DELETE CASCADE, -- NULL이면 메인 피드 메시지, 값이 있으면 스레드 답글
+    sender_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    content TEXT NOT NULL DEFAULT '',
+    is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_channel_main ON chat_messages(channel_id, message_id DESC) WHERE parent_message_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_messages_channel_live_main ON chat_messages(channel_id, message_id DESC) WHERE parent_message_id IS NULL AND NOT is_deleted;
+CREATE INDEX IF NOT EXISTS idx_chat_messages_parent_thread ON chat_messages(parent_message_id, message_id ASC) WHERE parent_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_chat_messages_sender ON chat_messages(sender_user_id);
+
+-- 23. 채팅 메시지 첨부파일 테이블
+CREATE TABLE IF NOT EXISTS chat_message_files (
+    file_id SERIAL PRIMARY KEY,
+    message_id INTEGER NOT NULL REFERENCES chat_messages(message_id) ON DELETE CASCADE,
+    channel_id INTEGER NOT NULL REFERENCES chat_channels(channel_id) ON DELETE CASCADE,
+    uploader_user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    original_file_name VARCHAR(255) NOT NULL,
+    stored_file_name VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    file_size BIGINT NOT NULL,
+    mime_type VARCHAR(100),
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_chat_files_message_id ON chat_message_files(message_id) WHERE NOT is_deleted;
+CREATE INDEX IF NOT EXISTS idx_chat_files_channel_id ON chat_message_files(channel_id) WHERE NOT is_deleted;
+
+-- 24. 채널별 사용자 읽음 상태(Unread 계산용) 테이블
+CREATE TABLE IF NOT EXISTS chat_channel_reads (
+    channel_id INTEGER NOT NULL REFERENCES chat_channels(channel_id) ON DELETE CASCADE,
+    user_id VARCHAR(50) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    last_read_message_id INTEGER NOT NULL DEFAULT 0,
+    last_read_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (channel_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_chat_reads_user_id ON chat_channel_reads(user_id);
 

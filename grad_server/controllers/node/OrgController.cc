@@ -80,8 +80,8 @@ static void handleNodeMove(const HttpRequestPtr &req,
     };
 
     // [실패 콜백] DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-    auto failure = [callback](const orm::DrogonDbException &e) {
-        Json::Value ret = parseDbError(e);
+    auto failure = [callback, req](const orm::DrogonDbException &e) {
+        Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
         // HTTP 상태 코드 추출
         auto status = static_cast<HttpStatusCode>(ret["http_code"].asInt());
         // JSON 응답에서 http_code 필드를 제거
@@ -175,9 +175,9 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -242,9 +242,9 @@ void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -313,9 +313,9 @@ void OrgController::updateNode(const HttpRequestPtr &req, std::function<void(con
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e){
+        [callback, req](const orm::DrogonDbException &e){
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -383,9 +383,9 @@ void OrgController::deleteNode(const HttpRequestPtr &req, std::function<void(con
             closeNodeSessionsAsync(node_id);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -463,9 +463,9 @@ void OrgController::getActivities(const HttpRequestPtr &req, std::function<void(
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -528,8 +528,8 @@ void OrgController::getNodeDetail(const HttpRequestPtr &req, std::function<void(
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -576,8 +576,8 @@ void OrgController::restoreNode(const HttpRequestPtr &req, std::function<void(co
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 

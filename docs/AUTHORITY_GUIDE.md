@@ -9,7 +9,7 @@
 > **포맷 규격**: 32자리 2진수 문자열 (Big-Endian 표기, `Bit 31`이 맨 앞, `Bit 0`이 맨 끝)  
 > 예시: `"00000000111100111110111101111111"` (MANAGER 권한)
 >
-> `Bit 18`·`Bit 19`·`Bit 25`~`Bit 30`·`Bit 7` 은 예약(항상 `0`), `DENY` 는 최상위 `Bit 31` 에 고정입니다.
+> `Bit 25`~`Bit 30`·`Bit 7` 은 예약(항상 `0`), `DENY` 는 최상위 `Bit 31` 에 고정입니다.
 
 ```
 Bit:  31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
@@ -31,8 +31,8 @@ Bit:  31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7
       │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  └────────────────────────────────────────────── ROLE_CHANGE
       │  │  │  │  │  │  │  │  │  │  │  │  │  │  │  └───────────────────────────────────────────────── FILE_VIEW
       │  │  │  │  │  │  │  │  │  │  │  │  │  │  └──────────────────────────────────────────────────── FILE_CHANGE
-      │  │  │  │  │  │  │  │  │  │  │  │  │  └─────────────────────────────────────────────────────── (Bit 18 Reserved)
-      │  │  │  │  │  │  │  │  │  │  │  │  └────────────────────────────────────────────────────────── (Bit 19 Reserved)
+      │  │  │  │  │  │  │  │  │  │  │  │  │  └─────────────────────────────────────────────────────── SCHEDULE_VIEW
+      │  │  │  │  │  │  │  │  │  │  │  │  └────────────────────────────────────────────────────────── SCHEDULE_CHANGE
       │  │  │  │  │  │  │  │  │  │  │  └───────────────────────────────────────────────────────────── HISTORY_PERSONAL_VIEW
       │  │  │  │  │  │  │  │  │  │  └──────────────────────────────────────────────────────────────── HISTORY_ALL_VIEW
       │  │  │  │  │  │  │  │  │  └─────────────────────────────────────────────────────────────────── GITHUB_VIEW
@@ -71,7 +71,8 @@ Bit:  31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16 15 14 13 12 11 10  9  8  7
 | **15** | `ROLE_CHANGE` | 역할/인원 | 노드의 커스텀 역할을 생성하고 역할별 32비트 권한을 설정/수정 가능 | `NODE_ADD_ROLE` (Bit 14) |
 | **16** | `FILE_VIEW` | 파일/첨부 | 업무에 첨부된 파일을 조회하고 다운로드 가능 | `WI_PUBLIC_VIEW` (Bit 4) |
 | **17** | `FILE_CHANGE` | 파일/첨부 | 업무에 파일을 새로 업로드하거나 삭제 가능 | `FILE_VIEW` (Bit 16) |
-| *18*, *19* | *RESERVED* | - | 예약 비트 (항상 `0`) — 향후 외부 연동(통합) 확장용 | - |
+| **18** | `SCHEDULE_VIEW` | 정기 일정 | 워크스페이스의 정기 반복 일정과 루틴 캘린더를 조회 가능 | `NODE_INFO_VIEW` (Bit 0) |
+| **19** | `SCHEDULE_CHANGE` | 정기 일정 | 정기 일정 규칙을 새로 생성하거나 주기 및 체크리스트 편집/삭제 가능 | `SCHEDULE_VIEW` (Bit 18) + `NODE_INFO_VIEW` (Bit 0) |
 | **20** | `HISTORY_PERSONAL_VIEW` | 히스토리 | 본인이 변경한 활동/수정 이력을 조회 가능 | `NODE_INFO_VIEW` (Bit 0) |
 | **21** | `HISTORY_ALL_VIEW` | 히스토리 | 노드 내 모든 인원의 변경/활동 전체 이력을 조회 가능 | `HISTORY_PERSONAL_VIEW` (Bit 20) + `NODE_MEMBERS_VIEW` (Bit 1) |
 | **22** | `GITHUB_VIEW` | 통합(GitHub) | 연결된 저장소의 구조·브랜치·커밋·파일 조회, 실시간 편집 세션 접속 | `NODE_INFO_VIEW` (Bit 0) |
@@ -94,6 +95,8 @@ graph TD
     Bit0 --> Bit4["WI_PUBLIC_VIEW (Bit 4)"]
     Bit0 --> Bit12["NODE_INFO_CHANGE (Bit 12)"]
     Bit0 --> Bit13["NODE_SUB_CREATE (Bit 13)"]
+    Bit0 --> Bit18["SCHEDULE_VIEW (Bit 18)"]
+    Bit18 --> Bit19["SCHEDULE_CHANGE (Bit 19)"]
     Bit0 --> Bit20["HISTORY_PERSONAL_VIEW (Bit 20)"]
     Bit0 --> Bit22["GITHUB_VIEW (Bit 22)"]
     Bit22 --> Bit23["GITHUB_CHANGE (Bit 23)"]
@@ -124,6 +127,8 @@ graph TD
 ### 🔴 규칙 1: 상위 권한 OFF $\rightarrow$ 모든 하위 권한 자동 OFF (Cascade Disable)
 - **`NODE_INFO_VIEW (Bit 0)` 해제 시**:
   - 노드 자체를 볼 수 없으므로 `Bit 1` ~ `Bit 24`의 모든 권한이 **자동으로 OFF** 됩니다.
+- **`SCHEDULE_VIEW (Bit 18)` 해제 시**:
+  - `SCHEDULE_CHANGE (Bit 19)`가 **자동으로 OFF** 됩니다.
 - **`NODE_MEMBERS_VIEW (Bit 1)` 해제 시**:
   - 멤버/구성원을 식별할 수 없으므로 `NODE_ADD_ROLE (Bit 14)`, `ROLE_CHANGE (Bit 15)`, `WI_ASSIGN (Bit 10)`, `WI_OTHERS_DETAIL_VIEW (Bit 5)`, `WI_OTHERS_CHANGE (Bit 11)`, `HISTORY_ALL_VIEW (Bit 21)`가 **자동으로 OFF** 됩니다.
 - **`WI_PUBLIC_VIEW (Bit 4)` 해제 시**:
@@ -140,6 +145,8 @@ graph TD
 ---
 
 ### 🟢 규칙 2: 하위 권한 ON $\rightarrow$ 필수 선행(상위) 권한 자동 ON (Cascade Enable)
+- **`SCHEDULE_CHANGE (Bit 19)` 활성화 시**:
+  - `SCHEDULE_VIEW (Bit 18)`, `NODE_INFO_VIEW (Bit 0)`가 **자동으로 ON** 되어야 합니다.
 - **`ROLE_CHANGE (Bit 15)` 활성화 시**:
   - `NODE_ADD_ROLE (Bit 14)`, `NODE_MEMBERS_VIEW (Bit 1)`, `NODE_INFO_VIEW (Bit 0)`가 **자동으로 ON** 되어야 합니다.
 - **`WI_HIDDEN_VIEW (Bit 6)` 활성화 시**:
@@ -172,11 +179,11 @@ graph TD
 ## 4. 기본 역할(Role Defaults) 비트마스크 표준값
 
 | 역할 이름 | 32비트 비트마스크 문자열 | 16진수(Hex) | 포함된 주요 권한 |
-| :--- | :---: | :---: | :--- |
+| :--- | :--- :--- | :---: | :--- |
 | **`ADMIN`** | `01111111111111111111111111111111` | `0x7FFFFFFF` | `DENY` 제외 **모든 권한 보유** (예약 비트 포함, 비트 0~30 전체 ON) |
-| **`MANAGER`** | `00000000111100111110111101111111` | `0x00F3EF7F` | 전체 업무 관리, 멤버/역할/권한 관리(`ROLE_CHANGE` 포함), 전체 활동 로그, GitHub 조회·편집 (`NODE_INFO_CHANGE`, `GITHUB_REPO_MANAGE` 제외) |
-| **`MEMBER`** | `00000000111100110000001101110111` | `0x00F30377` | 본인 업무 생성/변경, 타인 업무 상세/전체 이력 조회, 파일 다운/업로드, GitHub 조회·편집 |
-| **`VIEWER`** | `00000000011100010000000000110011` | `0x00710033` | 노드 멤버/공개 및 타인 업무 상세/파일/개인 및 전체 이력 조회, GitHub 조회 (읽기 전용) |
+| **`MANAGER`** | `00000000111111111110111101111111` | `0x00FFEF7F` | 전체 업무 관리, 정기 일정 조회/편집(`SCHEDULE_CHANGE`), 멤버/역할/권한 관리(`ROLE_CHANGE`), 전체 활동 로그, GitHub 조회·편집 (`NODE_INFO_CHANGE`, `GITHUB_REPO_MANAGE` 제외) |
+| **`MEMBER`** | `00000000111111110000001101110111` | `0x00FF0377` | 본인 업무 생성/변경, 정기 일정 조회/편집(`SCHEDULE_CHANGE`), 타인 업무 상세/전체 이력 조회, 파일 다운/업로드, GitHub 조회·편집 |
+| **`VIEWER`** | `00000000011101010000000000110011` | `0x00750033` | 노드 멤버/공개 및 타인 업무 상세/정기 일정 조회(`SCHEDULE_VIEW`)/파일/개인 및 전체 이력 조회, GitHub 조회 (읽기 전용) |
 
 ---
 

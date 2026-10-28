@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../../design-system/primitives/Button'
@@ -151,48 +151,21 @@ function DendroBranchConnectors({
   const svgHeight = 100
 
   useLayoutEffect(() => {
+    let frameId: number | null = null
+
     function updateCurves() {
       const container = containerRef.current
       if (!container) return
 
-      const containerRect = container.getBoundingClientRect()
-      if (containerRect.width === 0) return
-
-      // 부모 카드 요소 찾기 (바로 상위의 dendroSubTree 또는 dendroTopDownRoot)
-      const parentSubTree = container.parentElement?.closest(`.${styles.dendroSubTree}, .${styles.dendroTopDownRoot}`)
-      const parentCard = (parentSubTree?.querySelector(`:scope > .${styles.dendroNodeCardWrapper} > .${styles.dendroCard}`) ||
-        parentSubTree?.querySelector(`:scope > .${styles.rootCardWrapper} > .${styles.rootCard}`)) as HTMLElement | null
+      const containerWidth = container.offsetWidth
+      if (containerWidth === 0) return
 
       const childCols = Array.from(container.querySelectorAll(`:scope > .${styles.dendroChildCol}`)) as HTMLElement[]
       if (childCols.length === 0) return
 
-      // 자식 카드들의 위치 추출
-      const childCardCenters: number[] = []
-      childCols.forEach((col) => {
-        const childCard = (col.querySelector(`:scope > .${styles.dendroSubTree} > .${styles.dendroNodeCardWrapper} > .${styles.dendroCard}`) ||
-          col.querySelector(`.${styles.dendroCard}`)) as HTMLElement | null
-        
-        let childX = col.offsetLeft + col.offsetWidth / 2
-        if (childCard) {
-          const childRect = childCard.getBoundingClientRect()
-          const childCenterScreen = childRect.left + childRect.width / 2
-          const relativeRatio = (childCenterScreen - containerRect.left) / containerRect.width
-          childX = relativeRatio * container.offsetWidth
-        }
-        childCardCenters.push(childX)
-      })
-
-      // 부모 카드의 연결선 출발점 (X좌표):
-      // 자식들이 1개 이상 있을 때 첫 번째 자식 중심과 마지막 자식 중심의 정중앙 또는 부모 카드의 화면 중심
-      let parentX = container.offsetWidth / 2
-      if (parentCard) {
-        const parentRect = parentCard.getBoundingClientRect()
-        const parentCenterScreen = parentRect.left + parentRect.width / 2
-        const relativeRatio = (parentCenterScreen - containerRect.left) / containerRect.width
-        parentX = relativeRatio * container.offsetWidth
-      } else if (childCardCenters.length > 0) {
-        parentX = (childCardCenters[0] + childCardCenters[childCardCenters.length - 1]) / 2
-      }
+      // 부모 카드는 행 중앙에 고정되어 있으므로 화면 좌표 재측정 없이 offset만 사용한다.
+      const childCardCenters = childCols.map((col) => col.offsetLeft + col.offsetWidth / 2)
+      const parentX = containerWidth / 2
       const parentY = 0
 
       const newPaths: string[] = []
@@ -205,36 +178,37 @@ function DendroBranchConnectors({
         newPaths.push(path)
       })
 
-      setPaths(newPaths)
+      setPaths((previousPaths) =>
+        previousPaths.length === newPaths.length
+        && previousPaths.every((path, index) => path === newPaths[index])
+          ? previousPaths
+          : newPaths,
+      )
     }
 
-    updateCurves()
-    const startTime = performance.now()
-    let animFrameId: number
-    const animateCurves = (now: number) => {
-      updateCurves()
-      if (now - startTime < 450) {
-        animFrameId = requestAnimationFrame(animateCurves)
-      }
+    function scheduleUpdate() {
+      if (frameId !== null) return
+      frameId = requestAnimationFrame(() => {
+        frameId = null
+        updateCurves()
+      })
     }
-    animFrameId = requestAnimationFrame(animateCurves)
 
+    scheduleUpdate()
     const containerEl = containerRef.current
     let resizeObserver: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined' && containerEl) {
-      resizeObserver = new ResizeObserver(() => {
-        updateCurves()
-      })
+      resizeObserver = new ResizeObserver(scheduleUpdate)
       resizeObserver.observe(containerEl)
       const subTree = containerEl.closest(`.${styles.dendroSubTree}`) || containerEl.closest(`.${styles.dendroTopDownRoot}`)
       if (subTree) resizeObserver.observe(subTree)
     }
 
-    window.addEventListener('resize', updateCurves)
+    window.addEventListener('resize', scheduleUpdate)
     return () => {
-      cancelAnimationFrame(animFrameId)
+      if (frameId !== null) cancelAnimationFrame(frameId)
       if (resizeObserver) resizeObserver.disconnect()
-      window.removeEventListener('resize', updateCurves)
+      window.removeEventListener('resize', scheduleUpdate)
     }
   }, [childrenCount, containerRef, triggerKey])
 
@@ -396,7 +370,7 @@ function TreeNodeCard({
                 )}
                 {item.children.map((child) => (
                   <div key={child.id} className={styles.dendroChildCol}>
-                    <TreeNodeCard
+                    <MemoizedTreeNodeCard
                       item={child}
                       depth={depth + 1}
                       favoriteIds={favoriteIds}
@@ -419,6 +393,8 @@ function TreeNodeCard({
     </div>
   )
 }
+
+const MemoizedTreeNodeCard = memo(TreeNodeCard)
 
 function HierarchyView({
   root,
@@ -495,6 +471,36 @@ function HierarchyView({
   // 카드 자체를 누르고 드래그해도 정상적으로 캔버스를 끌 수 있도록 허용
   const isDraggingRef = useRef(false)
   const dragStartPosRef = useRef({ x: 0, y: 0 })
+  const panFrameRef = useRef<number | null>(null)
+  const pendingPanRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (panFrameRef.current !== null) window.cancelAnimationFrame(panFrameRef.current)
+    }
+  }, [])
+
+  const schedulePan = (nextPan: { x: number; y: number }) => {
+    pendingPanRef.current = nextPan
+    if (panFrameRef.current !== null) return
+
+    panFrameRef.current = window.requestAnimationFrame(() => {
+      panFrameRef.current = null
+      const pendingPan = pendingPanRef.current
+      pendingPanRef.current = null
+      if (pendingPan) setPan(pendingPan)
+    })
+  }
+
+  const flushPan = () => {
+    if (panFrameRef.current !== null) {
+      window.cancelAnimationFrame(panFrameRef.current)
+      panFrameRef.current = null
+    }
+    const pendingPan = pendingPanRef.current
+    pendingPanRef.current = null
+    if (pendingPan) setPan(pendingPan)
+  }
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return // 좌클릭만
@@ -522,13 +528,14 @@ function HierarchyView({
       isDraggingRef.current = true
     }
 
-    setPan({
+    schedulePan({
       x: panStartRef.current.panX + dx,
       y: panStartRef.current.panY + dy,
     })
   }
 
   const handleMouseUp = () => {
+    flushPan()
     setIsPanning(false)
   }
 
@@ -542,7 +549,7 @@ function HierarchyView({
   }, [])
 
   // 카드 좌클릭 시: 마우스를 잡고 캔버스를 끈(드래그) 경우에는 포커싱 취소, 순수한 클릭일 때만 상단 중앙으로 포커싱 이동
-  const handleCardClick = (e: React.MouseEvent<HTMLElement>) => {
+  const handleCardClick = useCallback((e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation()
 
     // 드래그해서 캔버스를 움직인 경우 클릭 액션 방지
@@ -573,7 +580,7 @@ function HierarchyView({
     transitionTimerRef.current = window.setTimeout(() => {
       setIsTransitioning(false)
     }, 350)
-  }
+  }, [])
 
   return (
     <div
@@ -708,7 +715,7 @@ function HierarchyView({
                   />
                   {branches.map((branch) => (
                     <div key={branch.id} className={styles.dendroChildCol}>
-                      <TreeNodeCard
+                      <MemoizedTreeNodeCard
                         item={branch}
                         depth={1}
                         favoriteIds={favoriteIds}
@@ -1186,31 +1193,46 @@ export function WorkspaceEntryPage() {
     }
   }, [paramRootId])
 
-  const sortedRootOptions = [...chooserDirectory.rootOptions].sort((a, b) => {
-    const aFav = favoriteIds.has(a.id) ? 1 : 0
-    const bFav = favoriteIds.has(b.id) ? 1 : 0
-    return bFav - aFav
-  })
+  const sortedRootOptions = useMemo(
+    () =>
+      [...chooserDirectory.rootOptions].sort((a, b) => {
+        const aFav = favoriteIds.has(a.id) ? 1 : 0
+        const bFav = favoriteIds.has(b.id) ? 1 : 0
+        return bFav - aFav
+      }),
+    [chooserDirectory.rootOptions, favoriteIds],
+  )
 
-  const hierarchyBranches = hierarchyRoot ? hierarchyRoot.children : []
-  const scopedListItems = hierarchyRoot
-    ? visibleDirectory.listItems.filter(
-        (item) => item.rootId === hierarchyRoot.id || item.id === hierarchyRoot.id,
-      )
-    : visibleDirectory.listItems
+  const hierarchyBranches = useMemo(
+    () => (hierarchyRoot ? hierarchyRoot.children : []),
+    [hierarchyRoot],
+  )
+  const scopedListItems = useMemo(
+    () =>
+      hierarchyRoot
+        ? visibleDirectory.listItems.filter(
+            (item) => item.rootId === hierarchyRoot.id || item.id === hierarchyRoot.id,
+          )
+        : visibleDirectory.listItems,
+    [hierarchyRoot, visibleDirectory.listItems],
+  )
 
   // 즐겨찾기된 워크스페이스가 목록의 맨 앞에 우선 배치되도록 정렬
-  const filteredListRows = [...scopedListItems].sort((a, b) => {
-    const aFav = favoriteIds.has(a.id) ? 1 : 0
-    const bFav = favoriteIds.has(b.id) ? 1 : 0
-    return bFav - aFav
-  })
+  const filteredListRows = useMemo(
+    () =>
+      [...scopedListItems].sort((a, b) => {
+        const aFav = favoriteIds.has(a.id) ? 1 : 0
+        const bFav = favoriteIds.has(b.id) ? 1 : 0
+        return bFav - aFav
+      }),
+    [favoriteIds, scopedListItems],
+  )
 
   const listPageCount = Math.max(1, Math.ceil(filteredListRows.length / WORKSPACE_LIST_PAGE_SIZE))
   const listPageStart = (currentPage - 1) * WORKSPACE_LIST_PAGE_SIZE
-  const visibleListRows = filteredListRows.slice(
-    listPageStart,
-    listPageStart + WORKSPACE_LIST_PAGE_SIZE,
+  const visibleListRows = useMemo(
+    () => filteredListRows.slice(listPageStart, listPageStart + WORKSPACE_LIST_PAGE_SIZE),
+    [filteredListRows, listPageStart],
   )
 
   function handleViewChange(nextView: 'hierarchy' | 'list') {
@@ -1286,6 +1308,8 @@ export function WorkspaceEntryPage() {
     if (hierarchyBranches.length > 0) {
       setCollapsedIds(collectAllCollapsibleIds(hierarchyBranches))
     }
+    // Only reset when the hierarchy root changes so cache refreshes keep the user's collapse state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hierarchyRoot?.id])
 
   function toggleCollapse(id: string) {
@@ -1374,6 +1398,7 @@ export function WorkspaceEntryPage() {
     canRestore: boolean
     restoreBlockedByParent: boolean
     isItemDeleted: boolean
+    isUserNode: boolean
   } | null>(null)
 
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -1418,15 +1443,16 @@ export function WorkspaceEntryPage() {
         : false
     const canRestore = Boolean(targetNode) && !restoreBlockedByParent && canRestoreByAuthority
 
-    // 권한이 있는 경우 컨텍스트 메뉴 표시 (화면 벗어남 방지)
+    // 권한에 따라 비활성화 표시하되 메뉴 높이와 화면 벗어남 방지
     const menuWidth = 220
     const canEdit = Boolean(canDelete && targetNode?.nodeType !== 'USER')
     const canMove = Boolean(currentUser && !isItemDeleted && targetNode?.nodeType !== 'USER'
       && hasDirectAuthorityBit(currentUser.userId, parsedNodeId, 12, snapshot))
+    const isUserNode = targetNode?.nodeType === 'USER'
+    // 휴지통 모드가 아닐 때: 열기, 즐겨찾기, (트리접기/펼치기 2개), 하위생성, 수정(비User), 이전(비User), 삭제
     const rowCount = isItemDeleted ? 1 : 2 + (item.children?.length ? 2 : 0)
-      + Number(canCreateSub) + Number(canEdit) + Number(canMove) + Number(canDelete)
-    const separatorCount = isItemDeleted ? 0 : Number(Boolean(item.children?.length))
-      + Number(canCreateSub || canEdit || canMove) + Number(canDelete)
+      + 1 + (isUserNode ? 0 : 2) + 1
+    const separatorCount = isItemDeleted ? 0 : (item.children?.length ? 1 : 0) + 2
     const menuHeight = rowCount * 42 + separatorCount * 12 + 16
     const x = Math.max(10, Math.min(e.clientX, window.innerWidth - menuWidth - 10))
     const y = Math.max(10, Math.min(e.clientY, window.innerHeight - menuHeight - 10))
@@ -1442,6 +1468,7 @@ export function WorkspaceEntryPage() {
       canRestore,
       restoreBlockedByParent,
       isItemDeleted,
+      isUserNode,
     })
   }
 
@@ -1705,57 +1732,100 @@ export function WorkspaceEntryPage() {
               ) : null}
 
               {/* 워크스페이스 관리 작업 */}
-              {contextMenu.canCreateSub || contextMenu.canEdit || contextMenu.canMove ? (
-                <div className={styles.contextMenuDivider} role="separator" />
-              ) : null}
-              {contextMenu.canCreateSub ? (
-                <button
-                  type="button"
-                  className={styles.contextMenuItem}
-                  onClick={() => {
-                    const item = contextMenu.item
-                    setContextMenu(null)
-                    navigate(`/setup/sub-node?parentNodeId=${encodeURIComponent(item.id)}`)
-                  }}
-                >
-                  <Icon name="plus" size={15} />
-                  <span>하위 워크스페이스 생성</span>
-                </button>
+              <div className={styles.contextMenuDivider} role="separator" />
+              <button
+                type="button"
+                className={[
+                  styles.contextMenuItem,
+                  contextMenu.canCreateSub ? '' : styles.contextMenuItemDisabled,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                disabled={!contextMenu.canCreateSub}
+                title={contextMenu.canCreateSub ? '하위 워크스페이스 생성' : '하위 워크스페이스 생성 권한이 없습니다.'}
+                onClick={() => {
+                  if (!contextMenu.canCreateSub) return
+                  const item = contextMenu.item
+                  setContextMenu(null)
+                  navigate(`/setup/sub-node?parentNodeId=${encodeURIComponent(item.id)}`)
+                }}
+              >
+                <Icon name="plus" size={15} />
+                <span>하위 워크스페이스 생성</span>
+              </button>
+
+              {!contextMenu.isUserNode ? (
+                <>
+                  <button
+                    type="button"
+                    className={[
+                      styles.contextMenuItem,
+                      contextMenu.canEdit ? '' : styles.contextMenuItemDisabled,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    disabled={!contextMenu.canEdit}
+                    title={contextMenu.canEdit ? '워크스페이스 수정' : '워크스페이스 정보 변경 권한이 없습니다.'}
+                    onClick={() => {
+                      if (!contextMenu.canEdit) return
+                      navigate(`/setup/top-node?editNodeId=${encodeURIComponent(contextMenu.item.id)}`)
+                      setContextMenu(null)
+                    }}
+                  >
+                    <Icon name="pencil" size={15} />
+                    <span>워크스페이스 수정</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={[
+                      styles.contextMenuItem,
+                      contextMenu.canMove ? '' : styles.contextMenuItemDisabled,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    disabled={!contextMenu.canMove}
+                    title={contextMenu.canMove ? '워크스페이스 이전' : '워크스페이스 이전 권한이 없습니다.'}
+                    onClick={() => {
+                      if (!contextMenu.canMove) return
+                      navigate(`/workspace/move?nodeId=${encodeURIComponent(contextMenu.item.id)}`)
+                      setContextMenu(null)
+                    }}
+                  >
+                    <Icon name="orgChart" size={15} />
+                    <span>워크스페이스 이전</span>
+                  </button>
+                </>
               ) : null}
 
-              {contextMenu.canEdit ? (
-                <button type="button" className={styles.contextMenuItem} onClick={() => {
-                  navigate(`/setup/top-node?editNodeId=${encodeURIComponent(contextMenu.item.id)}`)
-                  setContextMenu(null)
-                }}><Icon name="pencil" size={15} /><span>워크스페이스 수정</span></button>
-              ) : null}
-              {contextMenu.canMove ? (
-                <button type="button" className={styles.contextMenuItem} onClick={() => {
-                  navigate(`/workspace/move?nodeId=${encodeURIComponent(contextMenu.item.id)}`)
-                  setContextMenu(null)
-                }}><Icon name="orgChart" size={15} /><span>워크스페이스 이전</span></button>
-              ) : null}
+              <div className={styles.contextMenuDivider} role="separator" />
 
+              <button
+                type="button"
+                className={[
+                  styles.contextMenuItem,
+                  contextMenu.canDelete ? '' : styles.contextMenuItemDisabled,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                disabled={!contextMenu.canDelete}
+                title={
+                  contextMenu.canDelete
+                    ? '이 워크스페이스와 하위 워크스페이스를 휴지통으로 이동합니다.'
+                    : '워크스페이스 삭제 권한이 없습니다.'
+                }
+                onClick={() => {
+                  if (!contextMenu.canDelete) return
+                  const item = contextMenu.item
+                  setContextMenu(null)
+                  openDeleteModal(item)
+                }}
+              >
+                <Icon name="trash" size={15} />
+                <span>워크스페이스 삭제</span>
+              </button>
             </>
           )}
-
-          {contextMenu.canDelete ? <div className={styles.contextMenuDivider} role="separator" /> : null}
-
-          {contextMenu.canDelete ? (
-            <button
-              type="button"
-              className={styles.contextMenuItem}
-              title="이 워크스페이스와 하위 워크스페이스를 휴지통으로 이동합니다."
-              onClick={() => {
-                const item = contextMenu.item
-                setContextMenu(null)
-                openDeleteModal(item)
-              }}
-            >
-              <Icon name="trash" size={15} />
-              <span>워크스페이스 삭제</span>
-            </button>
-          ) : null}
         </div>
       ) : null}
 

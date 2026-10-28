@@ -69,7 +69,7 @@
   --workspace-ink: var(--axis-text-primary);
   --workspace-line: var(--axis-line-default);
   --workspace-soft-line: color-mix(in srgb, var(--axis-line-default) 58%, transparent);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 100%;
   box-sizing: border-box;
@@ -179,28 +179,28 @@
 .memberStack > strong::after {
   content: attr(data-member-name);
   position: absolute;
-  bottom: calc(100% + 0.48rem);
-  left: 50%;
-  z-index: 20;
+  top: calc(100% + 0.48rem);
+  right: 0;
+  z-index: 50;
   width: max-content;
-  max-width: 12rem;
+  max-width: 14rem;
   padding: 0.34rem 0.52rem;
   border: 1px solid var(--line-default);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
+  box-shadow: var(--axis-shadow-popover, 0 4px 12px rgba(0, 0, 0, 0.1));
   color: var(--text-primary);
   font-size: 0.74rem;
   font-weight: 700;
   line-height: 1.2;
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%);
   white-space: nowrap;
 }
 
 .memberStack > span:hover,
 .memberStack > strong:hover {
-  z-index: 21;
+  z-index: 51;
   border-color: var(--line-strong);
   background: var(--surface-hover);
   color: var(--workspace-ink);
@@ -361,6 +361,54 @@
 
 .tabLinkActive:hover::after {
   background: var(--workspace-brand);
+}
+
+.tabLinkDisabled {
+  color: var(--axis-text-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.tabLinkDisabled:hover {
+  background: transparent;
+  color: var(--axis-text-muted);
+  border-color: transparent;
+}
+
+.tabLockIcon {
+  margin-left: 0.25rem;
+  opacity: 0.7;
+}
+
+.tabAccessDeniedContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 380px;
+  height: 100%;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--axis-text-muted);
+  background: var(--axis-surface-panel);
+  border: 1px dashed var(--axis-line-default);
+  border-radius: var(--axis-radius-surface);
+  gap: 14px;
+}
+
+.tabAccessDeniedContainer h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--axis-text-primary);
+}
+
+.tabAccessDeniedContainer p {
+  margin: 0;
+  max-width: 28rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--axis-text-secondary);
 }
 
 .taskTabWrapper {

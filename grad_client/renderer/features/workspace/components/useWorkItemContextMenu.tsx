@@ -5,6 +5,7 @@ import { Icon } from '../../../design-system/primitives/Icon'
 import { getCurrentUser } from '../../auth/api'
 import { getCascadeWorkItemSummary } from '../data/cascadeWorkItemHelper'
 import { getOrgSnapshot } from '../data/orgService'
+import { canCreateWorkItem, canViewWorkItemDetail } from '../model/effectiveAuthority'
 import { getWorkItemPermissions } from '../model/workItemPermission'
 import { WorkItemFavoriteButton } from './WorkItemFavoriteButton'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
@@ -41,7 +42,7 @@ export function useWorkItemContextMenu() {
   }, [menu])
   const menuPermissions = useMemo(() => {
     if (!menu) {
-      return { canEdit: false, canDelete: false, canRestore: false }
+      return { canEdit: false, canDelete: false, canRestore: false, canCreate: false, canViewDetail: false }
     }
 
     const snapshot = getOrgSnapshot()
@@ -49,10 +50,20 @@ export function useWorkItemContextMenu() {
     const targetItem = snapshot.workItems.find((candidate) => candidate.workItemId === menu.id)
 
     if (!targetItem) {
-      return { canEdit: false, canDelete: false, canRestore: false }
+      return { canEdit: false, canDelete: false, canRestore: false, canCreate: false, canViewDetail: false }
     }
 
-    return getWorkItemPermissions(targetItem, currentUserId, snapshot)
+    const basePermissions = getWorkItemPermissions(targetItem, currentUserId, snapshot)
+    const canCreate = currentUserId
+      ? canCreateWorkItem(currentUserId, targetItem.ownerNodeId, snapshot)
+      : false
+    const canViewDetail = canViewWorkItemDetail(currentUserId, targetItem, snapshot)
+
+    return {
+      ...basePermissions,
+      canCreate,
+      canViewDetail,
+    }
   }, [menu])
 
   function onWorkItemContextMenu(event: MouseEvent, targetWorkItemId?: string) {
@@ -78,26 +89,56 @@ export function useWorkItemContextMenu() {
       {menu
         ? createPortal(
             <div ref={ref} className={styles.menu} style={{ left: menu.x, top: menu.y }} role="menu" aria-label="업무 메뉴" onContextMenu={(event) => event.preventDefault()}>
-              <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}`)}>
+              <button
+                type="button"
+                className={[styles.item, menuPermissions.canViewDetail ? '' : styles.permissionDenied].join(' ')}
+                role="menuitem"
+                disabled={!menuPermissions.canViewDetail}
+                title={menuPermissions.canViewDetail ? '상세페이지 이동' : '다른 사용자의 업무 상세 내용을 조회할 권한이 없습니다.'}
+                onClick={() => {
+                  if (menuPermissions.canViewDetail) openPage(`/work-items/${menu.id}`)
+                }}
+              >
                 <Icon name="arrowRight" size={15} /><span>상세페이지 이동</span>
               </button>
-              {menuPermissions.canEdit ? (
-                <button type="button" className={styles.item} role="menuitem" onClick={() => openPage(`/work-items/${menu.id}/edit`)}>
-                  <Icon name="pencil" size={15} /><span>업무 수정</span>
-                </button>
-              ) : null}
-              <button type="button" className={styles.item} role="menuitem" onClick={() => createChild(menu.id)}>
+
+              <button
+                type="button"
+                className={[styles.item, menuPermissions.canEdit ? '' : styles.permissionDenied].join(' ')}
+                role="menuitem"
+                disabled={!menuPermissions.canEdit}
+                title={menuPermissions.canEdit ? '업무 수정' : '업무를 수정할 권한이 없습니다.'}
+                onClick={() => {
+                  if (menuPermissions.canEdit) openPage(`/work-items/${menu.id}/edit`)
+                }}
+              >
+                <Icon name="pencil" size={15} /><span>업무 수정</span>
+              </button>
+
+              <button
+                type="button"
+                className={[styles.item, menuPermissions.canCreate ? '' : styles.permissionDenied].join(' ')}
+                role="menuitem"
+                disabled={!menuPermissions.canCreate}
+                title={menuPermissions.canCreate ? '하위 업무 생성' : '업무를 생성할 권한이 없습니다.'}
+                onClick={() => {
+                  if (menuPermissions.canCreate) createChild(menu.id)
+                }}
+              >
                 <Icon name="plus" size={15} /><span>하위 업무 생성하기</span>
               </button>
+
               <WorkItemFavoriteButton workItemId={menu.id} menu onToggle={() => setMenu(null)} />
-              {menuPermissions.canDelete ? (
-                <>
+
               <div className={styles.separator} />
               <button
                 type="button"
-                className={styles.deleteItem}
+                className={[styles.deleteItem, menuPermissions.canDelete ? '' : styles.permissionDenied].join(' ')}
                 role="menuitem"
+                disabled={!menuPermissions.canDelete}
+                title={menuPermissions.canDelete ? '업무 삭제' : '업무를 삭제할 권한이 없습니다.'}
                 onClick={() => {
+                  if (!menuPermissions.canDelete) return
                   const snapshot = getOrgSnapshot()
                   const summary = getCascadeWorkItemSummary(
                     menu.id,
@@ -124,8 +165,6 @@ export function useWorkItemContextMenu() {
                 <Icon name="trash" size={15} />
                 <span>업무 삭제</span>
               </button>
-                </>
-              ) : null}
             </div>,
             document.body,
           )

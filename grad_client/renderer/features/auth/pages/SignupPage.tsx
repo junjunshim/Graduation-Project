@@ -3,12 +3,22 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
 import { useBodyScrollSurface } from '../../../app/chrome/useBodyScrollSurface'
-import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
-import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
+import { AxisMark } from '../../../design-system/primitives/AxisMark'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { useTheme } from '../../../design-system/theme/ThemeContext'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
-import signupHeroUrl from '../assets/signup-collaboration-hero.png'
-import { getCurrentUser, signUp } from '../api'
+import {
+  confirmSignupEmailVerification,
+  getCurrentUser,
+  requestSignupEmailVerification,
+  signUp,
+} from '../api'
+import { getAuthIllustrationUrl } from '../model/authAssets'
+import {
+  getEmailValidationError,
+  getPasswordValidationError,
+  normalizeEmailInput,
+} from '../model/authValidation'
 import styles from './SignupPage.module.css'
 
 const initialForm = {
@@ -18,22 +28,30 @@ const initialForm = {
   password: '',
 }
 
-type Feedback = {
-  message: string
-}
+const RESEND_COOLDOWN_SECONDS = 60
 
-type ErrorField = 'userId' | 'email' | 'name' | 'password' | 'all' | null
+type VerificationStage = 'email' | 'code' | 'verified'
+type Feedback = { message: string }
+type ErrorField = 'userId' | 'email' | 'code' | 'name' | 'password' | 'all' | null
 
 export function SignupPage() {
   const navigate = useNavigate()
+  const { themeMode } = useTheme()
   const currentUser = getCurrentUser()
   const hasCustomTitleBar = hasCustomWindowControls()
   const [form, setForm] = useState(initialForm)
+  const [verificationStage, setVerificationStage] = useState<VerificationStage>('email')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [verificationToken, setVerificationToken] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
+  const [requestingCode, setRequestingCode] = useState(false)
+  const [confirmingCode, setConfirmingCode] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [errorField, setErrorField] = useState<ErrorField>(null)
   const mountedRef = useRef(true)
+  const codeInputRef = useRef<HTMLInputElement>(null)
 
   useBodyScrollSurface(hasCustomTitleBar ? 'auth' : undefined)
 
@@ -45,12 +63,145 @@ export function SignupPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (resendCooldown <= 0) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setResendCooldown((current) => Math.max(0, current - 1))
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
+  }, [resendCooldown])
+
+  useEffect(() => {
+    if (verificationStage === 'code') {
+      codeInputRef.current?.focus()
+    }
+  }, [verificationStage])
+
   if (currentUser) {
     return <Navigate to="/dashboard" replace />
   }
 
+  const isBusy = submitting || requestingCode || confirmingCode
+  const canEditDetails = verificationStage === 'verified' && !isBusy
+
+  function resetVerification() {
+    setVerificationStage('email')
+    setVerificationCode('')
+    setVerificationToken('')
+    setResendCooldown(0)
+    setFeedback(null)
+    setErrorField(null)
+  }
+
+  async function handleRequestCode() {
+    if (requestingCode || submitting) {
+      return
+    }
+
+    setFeedback(null)
+    setErrorField(null)
+
+    const emailError = getEmailValidationError(form.email)
+    if (emailError) {
+      setFeedback({ message: emailError })
+      setErrorField('email')
+      return
+    }
+
+    const normalizedEmail = normalizeEmailInput(form.email)
+    setRequestingCode(true)
+
+    try {
+      const response = await requestSignupEmailVerification(normalizedEmail)
+
+      if (!mountedRef.current) {
+        return
+      }
+
+      if (response.status === 'error') {
+        setFeedback({ message: response.message })
+        setErrorField('email')
+        return
+      }
+
+      setForm((current) => ({ ...current, email: normalizedEmail }))
+      setVerificationStage('code')
+      setVerificationCode('')
+      setVerificationToken('')
+      setResendCooldown(RESEND_COOLDOWN_SECONDS)
+    } catch {
+      if (mountedRef.current) {
+        setFeedback({ message: '인증번호 요청 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.' })
+        setErrorField('email')
+      }
+    } finally {
+      if (mountedRef.current) {
+        setRequestingCode(false)
+      }
+    }
+  }
+
+  async function handleConfirmCode() {
+    if (confirmingCode || submitting) {
+      return
+    }
+
+    setFeedback(null)
+    setErrorField(null)
+
+    const code = verificationCode.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setFeedback({ message: '이메일로 받은 6자리 인증번호를 입력해 주세요.' })
+      setErrorField('code')
+      return
+    }
+
+    setConfirmingCode(true)
+
+    try {
+      const response = await confirmSignupEmailVerification(form.email, code)
+
+      if (!mountedRef.current) {
+        return
+      }
+
+      if (response.status === 'error') {
+        setFeedback({ message: response.message })
+        setErrorField('code')
+        return
+      }
+
+      setVerificationToken(response.verificationToken)
+      setVerificationStage('verified')
+      setResendCooldown(0)
+    } catch {
+      if (mountedRef.current) {
+        setFeedback({ message: '인증번호 확인 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.' })
+        setErrorField('code')
+      }
+    } finally {
+      if (mountedRef.current) {
+        setConfirmingCode(false)
+      }
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (verificationStage === 'email') {
+      await handleRequestCode()
+      return
+    }
+
+    if (verificationStage === 'code') {
+      await handleConfirmCode()
+      return
+    }
 
     if (submitting) {
       return
@@ -58,6 +209,13 @@ export function SignupPage() {
 
     setFeedback(null)
     setErrorField(null)
+
+    if (!verificationToken) {
+      resetVerification()
+      setFeedback({ message: '이메일 인증을 다시 진행해 주세요.' })
+      setErrorField('all')
+      return
+    }
 
     const userIdTrimmed = form.userId.trim()
     if (!userIdTrimmed) {
@@ -75,26 +233,6 @@ export function SignupPage() {
       return
     }
 
-    const emailTrimmed = form.email.trim()
-    if (!emailTrimmed) {
-      setFeedback({ message: '이메일 주소를 입력해 주세요.' })
-      setErrorField('email')
-      return
-    }
-
-    if (emailTrimmed.length > 100) {
-      setFeedback({ message: '이메일 주소는 최대 100자까지 입력할 수 있습니다.' })
-      setErrorField('email')
-      return
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(emailTrimmed)) {
-      setFeedback({ message: '올바른 이메일 형식을 입력해 주세요. (예: user@example.com)' })
-      setErrorField('email')
-      return
-    }
-
     const nameTrimmed = form.name.trim()
     if (!nameTrimmed) {
       setFeedback({ message: '닉네임을 입력해 주세요.' })
@@ -108,30 +246,9 @@ export function SignupPage() {
       return
     }
 
-    if (!form.password) {
-      setFeedback({ message: '비밀번호를 입력해 주세요.' })
-      setErrorField('password')
-      return
-    }
-
-    if (form.password.length < 8) {
-      setFeedback({ message: '비밀번호는 최소 8자 이상이어야 합니다.' })
-      setErrorField('password')
-      return
-    }
-
-    if (form.password.length > 64) {
-      setFeedback({ message: '비밀번호는 최대 64자까지 입력할 수 있습니다.' })
-      setErrorField('password')
-      return
-    }
-
-    const hasLetter = /[a-zA-Z]/.test(form.password)
-    const hasNumber = /\d/.test(form.password)
-    const hasSpecial = /[@$!%*#?&~^_\-+=[\]{}|:;.,<>/?]/.test(form.password)
-
-    if (!hasLetter || !hasNumber || !hasSpecial) {
-      setFeedback({ message: '비밀번호는 영문, 숫자, 특수문자를 모두 포함해야 합니다.' })
+    const passwordError = getPasswordValidationError(form.password)
+    if (passwordError) {
+      setFeedback({ message: passwordError })
       setErrorField('password')
       return
     }
@@ -140,10 +257,11 @@ export function SignupPage() {
 
     try {
       const response = await signUp({
-        userId: form.userId.trim(),
-        email: form.email.trim(),
-        name: form.name.trim(),
+        userId: userIdTrimmed,
+        email: form.email,
+        name: nameTrimmed,
         password: form.password,
+        verificationToken,
       })
 
       if (!mountedRef.current) {
@@ -162,7 +280,13 @@ export function SignupPage() {
         const msg = response.message || '가입 정보를 다시 확인해 주세요.'
         setFeedback({ message: msg })
 
-        if (msg.includes('아이디') || msg.toLowerCase().includes('user_id') || msg.toLowerCase().includes('userid')) {
+        if (msg.includes('이메일 인증')) {
+          setVerificationStage('email')
+          setVerificationCode('')
+          setVerificationToken('')
+          setResendCooldown(0)
+          setErrorField('email')
+        } else if (msg.includes('아이디') || msg.toLowerCase().includes('user_id') || msg.toLowerCase().includes('userid')) {
           setErrorField('userId')
         } else if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
           setErrorField('email')
@@ -213,35 +337,21 @@ export function SignupPage() {
         <header className={styles.utilityBar}>
           <div className={styles.utilityActions}>
             {!hasCustomTitleBar ? <ThemeToggle compact /> : null}
-            <div className={styles.languageChip}>
-              <Icon name="globe" size={20} />
-              <span lang="ko">한국어</span>
-            </div>
           </div>
         </header>
 
         <div className={styles.content}>
           <aside className={styles.visualPanel} aria-label="Axis 소개">
-            <span className={styles.axisBrand} role="img" aria-label="Axis">
-              <img
-                src={axisLogoLightUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoLight}`}
-              />
-              <img
-                src={axisLogoDarkUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoDark}`}
-              />
+            <span className={styles.axisBrand}>
+              <span className={styles.axisLogoWrap}>
+                <AxisMark size={52} className={styles.axisLogo} />
+              </span>
+              <span className={styles.axisTitle}>Axis</span>
             </span>
 
             <p className={styles.heroTitle}>
               함께 일하는
-              <br />더 나은 방법, <span>Axis</span>
+              <br />더 나은 방법
             </p>
             <p className={styles.heroDescription}>
               업무 관리부터 협업까지,
@@ -250,7 +360,7 @@ export function SignupPage() {
 
             <div className={styles.illustrationWrap} aria-hidden="true">
               <img
-                src={signupHeroUrl}
+                src={getAuthIllustrationUrl('signup', themeMode)}
                 alt=""
                 draggable={false}
                 className={styles.illustration}
@@ -283,43 +393,12 @@ export function SignupPage() {
             <header className={styles.cardHeader}>
               <h1 id="signup-heading">회원가입</h1>
               <p>
-                Axis 서비스를 이용하기 위해
+                이메일 인증을 마친 뒤
                 <br />회원 정보를 입력해 주세요.
               </p>
             </header>
 
-            <form className={styles.form} onSubmit={handleSubmit} aria-busy={submitting} noValidate>
-              <div className={styles.field}>
-                <label htmlFor="signup-userid" className={styles.label}>
-                  아이디
-                </label>
-                <div
-                  className={[
-                    styles.inputShell,
-                    errorField === 'userId' || errorField === 'all' ? styles.inputShellError : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                >
-                  <Icon name="user" size={21} className={styles.fieldIcon} aria-hidden="true" />
-                  <input
-                    id="signup-userid"
-                    autoComplete="username"
-                    required
-                    disabled={submitting}
-                    maxLength={30}
-                    value={form.userId}
-                    onChange={(event) => {
-                      setFeedback(null)
-                      setErrorField(null)
-                      setForm((current) => ({ ...current, userId: event.target.value }))
-                    }}
-                    className={styles.input}
-                    placeholder="사용자 아이디를 입력하세요"
-                  />
-                </div>
-              </div>
-
+            <form className={styles.form} onSubmit={handleSubmit} aria-busy={isBusy} noValidate>
               <div className={styles.field}>
                 <label htmlFor="signup-email" className={styles.label}>
                   이메일
@@ -338,16 +417,127 @@ export function SignupPage() {
                     type="email"
                     autoComplete="email"
                     required
-                    disabled={submitting}
+                    disabled={isBusy || verificationStage !== 'email'}
                     maxLength={100}
                     value={form.email}
                     onChange={(event) => {
                       setFeedback(null)
                       setErrorField(null)
                       setForm((current) => ({ ...current, email: event.target.value }))
+                      if (verificationStage !== 'email') {
+                        resetVerification()
+                      }
+                    }}
+                    className={`${styles.input} ${styles.inputWithAction}`}
+                    placeholder="이메일 주소를 입력하세요"
+                  />
+                  {verificationStage === 'email' ? (
+                    <button
+                      type="button"
+                      className={styles.inputActionButton}
+                      onClick={handleRequestCode}
+                      disabled={isBusy}
+                    >
+                      {requestingCode ? '전송 중...' : '인증번호 받기'}
+                    </button>
+                  ) : null}
+                </div>
+
+                {verificationStage === 'verified' ? (
+                  <div className={styles.verificationSuccess}>
+                    <Icon name="checkCircle" size={17} aria-hidden="true" />
+                    <span>이메일 인증이 완료되었습니다.</span>
+                    <button type="button" className={styles.inlineLinkButton} onClick={resetVerification} disabled={isBusy}>
+                      이메일 변경
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {verificationStage === 'code' ? (
+                <div className={styles.field}>
+                  <label htmlFor="signup-code" className={styles.label}>
+                    인증번호
+                  </label>
+                  <div
+                    className={[
+                      styles.inputShell,
+                      errorField === 'code' || errorField === 'all' ? styles.inputShellError : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                  >
+                    <Icon name="checkCircle" size={21} className={styles.fieldIcon} aria-hidden="true" />
+                    <input
+                      ref={codeInputRef}
+                      id="signup-code"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      required
+                      disabled={isBusy}
+                      maxLength={6}
+                      value={verificationCode}
+                      onChange={(event) => {
+                        setFeedback(null)
+                        setErrorField(null)
+                        setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))
+                      }}
+                      className={`${styles.input} ${styles.inputWithAction}`}
+                      placeholder="6자리 인증번호"
+                    />
+                    <button
+                      type="button"
+                      className={styles.inputActionButton}
+                      onClick={handleConfirmCode}
+                      disabled={isBusy}
+                    >
+                      {confirmingCode ? '확인 중...' : '확인'}
+                    </button>
+                  </div>
+                  <div className={styles.verificationMeta}>
+                    <span>메일이 오지 않았나요?</span>
+                    <button
+                      type="button"
+                      className={styles.inlineLinkButton}
+                      onClick={handleRequestCode}
+                      disabled={isBusy || resendCooldown > 0}
+                    >
+                      {resendCooldown > 0 ? `재전송 (${resendCooldown}초)` : '인증번호 재전송'}
+                    </button>
+                    <button type="button" className={styles.inlineLinkButton} onClick={resetVerification} disabled={isBusy}>
+                      이메일 변경
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className={styles.field}>
+                <label htmlFor="signup-userid" className={styles.label}>
+                  아이디
+                </label>
+                <div
+                  className={[
+                    styles.inputShell,
+                    errorField === 'userId' || errorField === 'all' ? styles.inputShellError : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  <Icon name="user" size={21} className={styles.fieldIcon} aria-hidden="true" />
+                  <input
+                    id="signup-userid"
+                    autoComplete="username"
+                    required
+                    disabled={!canEditDetails}
+                    maxLength={30}
+                    value={form.userId}
+                    onChange={(event) => {
+                      setFeedback(null)
+                      setErrorField(null)
+                      setForm((current) => ({ ...current, userId: event.target.value }))
                     }}
                     className={styles.input}
-                    placeholder="이메일 주소를 입력하세요"
+                    placeholder="사용자 아이디를 입력하세요"
                   />
                 </div>
               </div>
@@ -369,7 +559,7 @@ export function SignupPage() {
                     id="signup-name"
                     autoComplete="name"
                     required
-                    disabled={submitting}
+                    disabled={!canEditDetails}
                     maxLength={50}
                     value={form.name}
                     onChange={(event) => {
@@ -401,7 +591,7 @@ export function SignupPage() {
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
                     required
-                    disabled={submitting}
+                    disabled={!canEditDetails}
                     maxLength={64}
                     value={form.password}
                     onChange={(event) => {
@@ -417,7 +607,7 @@ export function SignupPage() {
                     type="button"
                     className={styles.passwordToggle}
                     onClick={() => setShowPassword((current) => !current)}
-                    disabled={submitting}
+                    disabled={!canEditDetails}
                     aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 표시'}
                     aria-pressed={showPassword}
                   >
@@ -438,8 +628,12 @@ export function SignupPage() {
                 </div>
               ) : null}
 
-              <button type="submit" className={styles.primaryButton} disabled={submitting}>
-                {submitting ? '가입 중...' : '회원가입'}
+              <button type="submit" className={styles.primaryButton} disabled={!canEditDetails || submitting}>
+                {submitting
+                  ? '가입 중...'
+                  : verificationStage === 'verified'
+                    ? '회원가입'
+                    : '이메일 인증을 완료해 주세요'}
               </button>
             </form>
 

@@ -27,6 +27,7 @@ import {
 } from '../../workspace/model/labels'
 import type { ActivityRecord, WorkItemCommentRecord, WorkItemFileRecord, WorkItemRecord } from '../../workspace/model/types'
 import { getWorkItemTag } from '../../workspace/model/workItemTags'
+import { canViewWorkItemDetail } from '../../workspace/model/effectiveAuthority'
 import { getWorkItemPermissions } from '../../workspace/model/workItemPermission'
 import { applyProgressWeight, getChildProgressAverage } from '../../workspace/model/workItemProgress'
 import { getSelectedWorkItemDetail } from '../../workspace/queries/selectedWorkItemDetail'
@@ -115,11 +116,11 @@ export function WorkItemDetailPage() {
 
   // 서버 상세 API 호출
   const loadDetailFromServer = useCallback(
-    async (targetId: string) => {
+    async (targetId: string, options: { forceRefresh?: boolean } = {}) => {
       setServerLoading(true)
       setServerError(null)
       try {
-        const result = await fetchWorkItemDetail(targetId)
+        const result = await fetchWorkItemDetail(targetId, options)
         setComments(result.comments)
         setServerFiles(result.files)
         setServerActivities(result.activities ?? [])
@@ -167,7 +168,7 @@ export function WorkItemDetailPage() {
         setCommentInput('')
         setSelectedMentions([])
         // 댓글 재로드
-        await loadDetailFromServer(workItemId)
+        await loadDetailFromServer(workItemId, { forceRefresh: true })
 
         // 작성된 최신 댓글(맨 아래)로 부드럽게 스크롤
         setTimeout(() => {
@@ -211,7 +212,10 @@ export function WorkItemDetailPage() {
     })
 
     try {
-      const res = await fetchWorkItemFileContent(file.id)
+      const res = await fetchWorkItemFileContent(file.id, {
+        expectedFileName: file.originalFileName,
+        expectedUpdatedAt: (file as any).updatedAt ?? file.createdAt,
+      })
       setViewerModal((prev) => ({
         ...prev,
         content: res.content,
@@ -339,6 +343,23 @@ export function WorkItemDetailPage() {
 
   // 훅 호출이 모두 끝난 지점이므로 여기서는 안전하게 조기 반환할 수 있다.
   if (!detail || !currentUser) return null
+
+  // 타인의 업무인데 WI_OTHERS_DETAIL_VIEW 권한이 없으면 접근 차단
+  const canViewDetail = canViewWorkItemDetail(currentUser.userId, detail.item, snapshot)
+  if (!canViewDetail) {
+    return (
+      <section className={styles.page}>
+        <div className={styles.emptyState}>
+          <Icon name="lock" size={36} />
+          <h2>업무 상세 조회 권한이 없습니다.</h2>
+          <p>다른 사용자의 업무 상세 내용이나 댓글을 열람할 수 있는 권한이 없습니다.</p>
+          <Link to={`/workspace?view=tasks&nodeId=${encodeURIComponent(detail.ownerNode.id)}`} className={styles.editButton}>
+            업무 목록으로 돌아가기
+          </Link>
+        </div>
+      </section>
+    )
+  }
 
   const { item, ownerNode, ownerUser, parentWorkItem, childWorkItems } = detail
   const backLinkTo = `/workspace?view=tasks&nodeId=${encodeURIComponent(ownerNode.id)}`
@@ -542,7 +563,9 @@ export function WorkItemDetailPage() {
               className={styles.attachmentPanel}
               onContextMenu={(event) =>
                 openUploadContextMenu(event, item, async () => {
-                  const result = await fetchWorkItemDetail(item.workItemId)
+                  const result = await fetchWorkItemDetail(item.workItemId, {
+                    forceRefresh: true,
+                  })
                   setComments(result.comments)
                   setServerFiles(result.files)
                   setServerActivities(result.activities ?? [])
@@ -575,7 +598,7 @@ export function WorkItemDetailPage() {
                         onContextMenu={(event) =>
                           openFileContextMenu(event, file, async () => {
                             if (workItemId) {
-                              await loadDetailFromServer(workItemId)
+                              await loadDetailFromServer(workItemId, { forceRefresh: true })
                             }
                           })
                         }

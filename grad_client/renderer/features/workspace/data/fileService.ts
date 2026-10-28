@@ -2,17 +2,44 @@ import { apiRequest, getServerAccessToken } from './server/apiClient'
 import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
 import { readWorkspaceDb, writeServerWorkspaceDb } from './localStore'
+import { invalidateQueryCache } from './queryCache.js'
 import { waitForDownloadCompletion } from './downloadCompletion'
+import {
+  deleteCachedFileContent,
+  getCachedFileContent,
+  setCachedFileContent,
+} from './fileContentCache'
 
-export type CachedFileItem = {
-  fileId: number
-  fileName: string
-  content: string
-  lastModified?: string
-  cachedAt: number
-}
+export type { CachedFileItem } from './fileContentCache'
 
 const FILE_CACHE_PREFIX = 'grad-file-cache-'
+let legacyFileCacheCleanupScheduled = false
+
+function cleanupLegacyFileCacheStorage() {
+  if (
+    legacyFileCacheCleanupScheduled ||
+    typeof window === 'undefined' ||
+    typeof window.localStorage === 'undefined'
+  ) {
+    return
+  }
+
+  legacyFileCacheCleanupScheduled = true
+  globalThis.setTimeout(() => {
+    try {
+      const legacyKeys: string[] = []
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const key = window.localStorage.key(index)
+        if (key?.startsWith(FILE_CACHE_PREFIX)) {
+          legacyKeys.push(key)
+        }
+      }
+      legacyKeys.forEach((key) => window.localStorage.removeItem(key))
+    } catch {
+      // A storage failure must not affect file viewing.
+    }
+  }, 0)
+}
 
 export async function downloadWorkItemFile(fileId: number, fileName: string): Promise<void> {
   const blob = await apiRequest<Blob>(`/workItems/files/download?file_id=${fileId}`, {
@@ -56,6 +83,18 @@ export async function uploadWorkItemFile(workItemId: string, file: File): Promis
   if (response.status === 'error') {
     throw new Error(response.message || '파일을 등록하지 못했습니다.')
   }
+
+  // 새로 등록된 파일의 ID가 반환된 경우, 로컬에 남아있을 수 있는 이전 캐시를 즉시 무효화
+  try {
+    const rawData = (response as { data?: Array<{ file_id?: number }> }).data
+    if (Array.isArray(rawData) && rawData.length > 0 && typeof rawData[0]?.file_id === 'number') {
+      const newFileId = rawData[0].file_id
+      await deleteCachedFileContent(newFileId)
+    }
+  } catch (err) {
+    console.warn('[fileService] 업로드 후 캐시 무효화 실패:', err)
+  }
+  invalidateQueryCache('workItem:detail:')
 }
 
 export async function deleteWorkItemFile(fileId: number): Promise<void> {
@@ -85,6 +124,7 @@ export async function deleteWorkItemFile(fileId: number): Promise<void> {
   } catch (err) {
     console.warn('[fileService] 로컬 캐시 삭제 반영 실패:', err)
   }
+  invalidateQueryCache('workItem:detail:')
 }
 
 export async function restoreWorkItemFile(fileId: number): Promise<void> {
@@ -114,24 +154,7 @@ export async function restoreWorkItemFile(fileId: number): Promise<void> {
   } catch (err) {
     console.warn('[fileService] 로컬 캐시 복구 반영 실패:', err)
   }
-}
-
-function getCachedFile(fileId: number): CachedFileItem | null {
-  try {
-    const raw = localStorage.getItem(`${FILE_CACHE_PREFIX}${fileId}`)
-    if (!raw) return null
-    return JSON.parse(raw) as CachedFileItem
-  } catch {
-    return null
-  }
-}
-
-function setCachedFile(item: CachedFileItem): void {
-  try {
-    localStorage.setItem(`${FILE_CACHE_PREFIX}${item.fileId}`, JSON.stringify(item))
-  } catch (err) {
-    console.warn('[fileService] 캐시 저장 실패:', err)
-  }
+  invalidateQueryCache('workItem:detail:')
 }
 
 export type FetchFileContentResult = {
@@ -140,6 +163,13 @@ export type FetchFileContentResult = {
   lastModified?: string
 }
 
+export type FetchFileContentOptions = {
+  expectedFileName?: string
+  expectedUpdatedAt?: string
+  bypassCache?: boolean
+}
+
+
 /**
  * 서버에서 파일 내용을 가져옵니다.
  * 이전에 다운로드한 기록이 있다면 If-Modified-Since 헤더를 전송하여
@@ -147,8 +177,21 @@ export type FetchFileContentResult = {
  */
 export async function fetchWorkItemFileContent(
   fileId: number,
+  options?: FetchFileContentOptions,
 ): Promise<FetchFileContentResult> {
-  const cached = getCachedFile(fileId)
+  cleanupLegacyFileCacheStorage()
+  const cached = await getCachedFileContent(fileId)
+
+  // 캐시된 파일명 또는 예상 수정시각이 불일치하면 이전 파일 캐시로 간주하고 무효화
+  const isCacheInvalid =
+    options?.bypassCache ||
+    (cached && options?.expectedFileName && cached.fileName !== `file_${fileId}` && cached.fileName !== options.expectedFileName)
+
+  if (isCacheInvalid && cached) {
+    await deleteCachedFileContent(fileId)
+  }
+
+  const validCache = isCacheInvalid ? null : cached
   const token = getServerAccessToken()
   const baseUrl = getWorkspaceApiBaseUrl()
   const path = 'workItems/files/download'
@@ -158,8 +201,9 @@ export async function fetchWorkItemFileContent(
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }
-  if (cached?.lastModified) {
-    headers['If-Modified-Since'] = cached.lastModified
+  // 유효한 캐시가 있고 expectedUpdatedAt이 일치하거나 지정되지 않은 경우에만 If-Modified-Since 사용
+  if (validCache?.lastModified && (!options?.expectedUpdatedAt || validCache.lastModified === options.expectedUpdatedAt)) {
+    headers['If-Modified-Since'] = validCache.lastModified
   }
 
   try {
@@ -169,11 +213,11 @@ export async function fetchWorkItemFileContent(
     })
 
     // 304 Not Modified: 서버에 변경사항 없음 -> 로컬 캐시 즉시 반환
-    if (response.status === 304 && cached) {
+    if (response.status === 304 && validCache) {
       return {
-        content: cached.content,
+        content: validCache.content,
         fromCache: true,
-        lastModified: cached.lastModified,
+        lastModified: validCache.lastModified,
       }
     }
 
@@ -182,11 +226,11 @@ export async function fetchWorkItemFileContent(
     }
 
     const textContent = await response.text()
-    const serverLastModified = response.headers.get('Last-Modified') || new Date().toISOString()
+    const serverLastModified = response.headers.get('Last-Modified') || options?.expectedUpdatedAt || new Date().toISOString()
 
-    setCachedFile({
+    await setCachedFileContent({
       fileId,
-      fileName: `file_${fileId}`,
+      fileName: options?.expectedFileName || `file_${fileId}`,
       content: textContent,
       lastModified: serverLastModified,
       cachedAt: Date.now(),
@@ -199,10 +243,11 @@ export async function fetchWorkItemFileContent(
     }
   } catch (error) {
     // 네트워크 오류 등으로 실패했지만 기존 캐시가 있다면 캐시 반환
-    if (cached) {
+    if (validCache) {
       console.warn('[fileService] 네트워크 요청 실패, 캐시 반환:', error)
-      return { content: cached.content, fromCache: true, lastModified: cached.lastModified }
+      return { content: validCache.content, fromCache: true, lastModified: validCache.lastModified }
     }
     throw error
   }
 }
+

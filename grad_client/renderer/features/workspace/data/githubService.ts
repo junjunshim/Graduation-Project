@@ -1,6 +1,21 @@
 import { ApiClientError, apiRequest } from './server/apiClient.js'
 import { isServerStatusResponse, parseServerContextItems, type ServerStatusResponse } from './server/apiTypes.js'
 import { notifyGithubCacheUpdated } from './workspaceCacheEvents.js'
+import { invalidateQueryCache, queryWithCache } from './queryCache.js'
+
+const GITHUB_REPOSITORY_CACHE_TTL_MS = 60_000
+const GITHUB_BRANCH_CACHE_TTL_MS = 60_000
+const GITHUB_TREE_CACHE_TTL_MS = 30_000
+const GITHUB_COMMITS_CACHE_TTL_MS = 30_000
+
+function cacheKeyPart(value: string | number) {
+  return encodeURIComponent(String(value))
+}
+
+/** 수동 새로고침 시 GitHub 조회 캐시를 모두 버린다. */
+export function invalidateGithubQueryCache() {
+  invalidateQueryCache('github:')
+}
 
 export type GithubRepository = {
   repo_id: number
@@ -191,15 +206,24 @@ export function saveLocalRepositories(repos: GithubRepository[]) {
 }
 
 /** 노드에 연결된 저장소 목록 */
-export async function fetchRepositories(nodeId: number): Promise<GithubRepository[]> {
+export async function fetchRepositories(
+  nodeId: number,
+  options?: { forceRefresh?: boolean },
+): Promise<GithubRepository[]> {
   try {
-    const response = await apiRequest<unknown>(`/github/repos?node_id=${encodeURIComponent(String(nodeId))}`)
-    const list = allItems<GithubRepository>(response, '저장소 목록을 불러오지 못했습니다.')
-    // 로컬 캐시 덮어쓰기 (현재 노드에 해당하는 저장소들을 새 목록으로 완전 교체)
-    const currentOtherNodes = getLocalRepositories().filter((r) => r.node_id !== nodeId)
-    saveLocalRepositories([...currentOtherNodes, ...list])
-    markNodeCached(nodeId)
-    return list
+    return await queryWithCache(
+      `github:repos:${cacheKeyPart(nodeId)}`,
+      async () => {
+        const response = await apiRequest<unknown>(`/github/repos?node_id=${encodeURIComponent(String(nodeId))}`)
+        const list = allItems<GithubRepository>(response, '저장소 목록을 불러오지 못했습니다.')
+        // 로컬 캐시 덮어쓰기 (현재 노드에 해당하는 저장소들을 새 목록으로 완전 교체)
+        const currentOtherNodes = getLocalRepositories().filter((r) => r.node_id !== nodeId)
+        saveLocalRepositories([...currentOtherNodes, ...list])
+        markNodeCached(nodeId)
+        return list
+      },
+      { ttlMs: GITHUB_REPOSITORY_CACHE_TTL_MS, forceRefresh: options?.forceRefresh },
+    )
   } catch (error) {
     const cached = getLocalRepositories(nodeId)
     if (cached.length > 0 || hasCachedRepositories(nodeId)) {
@@ -285,11 +309,14 @@ export function saveLocalTree(repoId: number, branch: string, path: string = '',
 }
 
 /** 디렉터리 한 단계(파일 내용 제외, lazy) */
-export async function fetchRepositoryTree(input: {
-  repoId: number
-  branch: string
-  path?: string
-}): Promise<GithubTreeEntry[]> {
+export async function fetchRepositoryTree(
+  input: {
+    repoId: number
+    branch: string
+    path?: string
+  },
+  options?: { forceRefresh?: boolean },
+): Promise<GithubTreeEntry[]> {
   const query = new URLSearchParams({ repo_id: String(input.repoId) })
 
   if (input.branch) {
@@ -301,12 +328,19 @@ export async function fetchRepositoryTree(input: {
   }
 
   try {
-    const response = await apiRequest<unknown>(`/github/repos/tree?${query.toString()}`)
-    const list = allItems<GithubTreeEntry>(response, '저장소 구조를 불러오지 못했습니다.')
-    if (input.branch) {
-      saveLocalTree(input.repoId, input.branch, input.path ?? '', list)
-    }
-    return list
+    const path = input.path ?? ''
+    return await queryWithCache(
+      `github:tree:${cacheKeyPart(input.repoId)}:${cacheKeyPart(input.branch)}:${cacheKeyPart(path)}`,
+      async () => {
+        const response = await apiRequest<unknown>(`/github/repos/tree?${query.toString()}`)
+        const list = allItems<GithubTreeEntry>(response, '저장소 구조를 불러오지 못했습니다.')
+        if (input.branch) {
+          saveLocalTree(input.repoId, input.branch, path, list)
+        }
+        return list
+      },
+      { ttlMs: GITHUB_TREE_CACHE_TTL_MS, forceRefresh: options?.forceRefresh },
+    )
   } catch (error) {
     if (input.branch) {
       const cached = getLocalTree(input.repoId, input.branch, input.path ?? '')
@@ -406,12 +440,21 @@ export function saveLocalCommits(repoId: number, branch: string, commits: Github
 }
 
 /** 등록 브랜치 + 원격 브랜치 + 접속자 */
-export async function fetchBranches(repoId: number): Promise<GithubBranch[]> {
+export async function fetchBranches(
+  repoId: number,
+  options?: { forceRefresh?: boolean },
+): Promise<GithubBranch[]> {
   try {
-    const response = await apiRequest<unknown>(`/github/repos/branches?repo_id=${encodeURIComponent(String(repoId))}`)
-    const list = allItems<GithubBranch>(response, '브랜치 목록을 불러오지 못했습니다.')
-    saveLocalBranches(repoId, list)
-    return list
+    return await queryWithCache(
+      `github:branches:${cacheKeyPart(repoId)}`,
+      async () => {
+        const response = await apiRequest<unknown>(`/github/repos/branches?repo_id=${encodeURIComponent(String(repoId))}`)
+        const list = allItems<GithubBranch>(response, '브랜치 목록을 불러오지 못했습니다.')
+        saveLocalBranches(repoId, list)
+        return list
+      },
+      { ttlMs: GITHUB_BRANCH_CACHE_TTL_MS, forceRefresh: options?.forceRefresh },
+    )
   } catch (error) {
     const cached = getLocalBranches(repoId)
     if (cached.length > 0) {
@@ -429,7 +472,7 @@ export async function fetchRepositoryCommits(input: {
   repoId: number
   branch: string
   limit?: number
-}): Promise<GithubCommit[]> {
+}, options?: { forceRefresh?: boolean }): Promise<GithubCommit[]> {
   const query = new URLSearchParams({ repo_id: String(input.repoId) })
 
   if (input.branch) {
@@ -441,12 +484,18 @@ export async function fetchRepositoryCommits(input: {
   }
 
   try {
-    const response = await apiRequest<unknown>(`/github/repos/commits?${query.toString()}`)
-    const list = allItems<GithubCommit>(response, '커밋 기록을 불러오지 못했습니다.')
-    if (input.branch) {
-      saveLocalCommits(input.repoId, input.branch, list)
-    }
-    return list
+    return await queryWithCache(
+      `github:commits:${cacheKeyPart(input.repoId)}:${cacheKeyPart(input.branch)}:${cacheKeyPart(input.limit ?? 'default')}`,
+      async () => {
+        const response = await apiRequest<unknown>(`/github/repos/commits?${query.toString()}`)
+        const list = allItems<GithubCommit>(response, '커밋 기록을 불러오지 못했습니다.')
+        if (input.branch) {
+          saveLocalCommits(input.repoId, input.branch, list)
+        }
+        return list
+      },
+      { ttlMs: GITHUB_COMMITS_CACHE_TTL_MS, forceRefresh: options?.forceRefresh },
+    )
   } catch (error) {
     if (input.branch) {
       const cached = getLocalCommits(input.repoId, input.branch)

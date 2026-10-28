@@ -1,7 +1,420 @@
 -- 컨트롤러에서 사용될 users 관련 함수 생성
 
--- UserController::register_user
-CREATE OR REPLACE FUNCTION register_user(
+-- 비밀번호 정책은 회원가입·프로필 변경·비밀번호 재설정이 같은 규칙을 쓰도록 DB 에서도 강제한다.
+-- 클라이언트 검증은 사용자 안내용이고, 최종 판단은 이 함수가 한다.
+CREATE OR REPLACE FUNCTION validate_password_strength(
+    p_password TEXT
+) RETURNS VOID AS $$
+BEGIN
+    IF p_password IS NULL OR p_password = '' THEN
+        RAISE EXCEPTION '[P0512] Password is required'
+        USING ERRCODE = 'P0512';
+    END IF;
+
+    IF char_length(p_password) < 8 OR char_length(p_password) > 64 THEN
+        RAISE EXCEPTION '[P0512] Password must be between 8 and 64 characters'
+        USING ERRCODE = 'P0512';
+    END IF;
+
+    IF p_password !~ '[A-Za-z]'
+       OR p_password !~ '[0-9]'
+       OR p_password !~ '[@$!%*#?&~^_+=\[\]{}|:;.,<>/?-]' THEN
+        RAISE EXCEPTION '[P0512] Password must contain letters, numbers, and special characters'
+        USING ERRCODE = 'P0512';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- 회원가입 입력은 공개 API 뿐 아니라 DB 함수에서도 같은 규칙으로 검증한다.
+CREATE OR REPLACE FUNCTION validate_signup_user_id(
+    p_user_id users.user_id%TYPE
+) RETURNS VOID AS $$
+DECLARE
+    v_user_id TEXT := trim(p_user_id);
+BEGIN
+    IF v_user_id IS NULL OR v_user_id !~ '^[A-Za-z0-9][A-Za-z0-9_-]{3,29}$' THEN
+        RAISE EXCEPTION '[P0516] Invalid signup input: user_id'
+        USING ERRCODE = 'P0516';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION validate_signup_name(
+    p_name users.name%TYPE
+) RETURNS VOID AS $$
+DECLARE
+    v_name TEXT := trim(p_name);
+BEGIN
+    IF v_name IS NULL OR char_length(v_name) < 1 OR char_length(v_name) > 50 THEN
+        RAISE EXCEPTION '[P0516] Invalid signup input: name'
+        USING ERRCODE = 'P0516';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION normalize_signup_email(
+    p_email users.email%TYPE
+) RETURNS users.email%TYPE AS $$
+DECLARE
+    v_email TEXT := lower(trim(p_email));
+BEGIN
+    IF v_email IS NULL
+       OR char_length(v_email) = 0
+       OR char_length(v_email) > 100
+       OR v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' THEN
+        RAISE EXCEPTION '[P0516] Invalid signup input: email'
+        USING ERRCODE = 'P0516';
+    END IF;
+    RETURN v_email;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- AuthController::requestPasswordReset
+-- 계정 존재 여부는 API 응답에 노출하지 않는다. 이 함수는 메일을 실제로 보낼 수 있는
+-- 경우에만 requested=true 를 반환하고, 없거나 쿨다운 중이면 false 를 반환한다.
+CREATE OR REPLACE FUNCTION request_password_reset_token(
+    p_email users.email%TYPE,
+    p_token_hash TEXT,
+    p_expiry_minutes INTEGER DEFAULT 30,
+    p_cooldown_seconds INTEGER DEFAULT 60,
+    p_max_per_hour INTEGER DEFAULT 3
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_user users%ROWTYPE;
+    v_last_created TIMESTAMP WITH TIME ZONE;
+    v_recent_count BIGINT := 0;
+BEGIN
+    IF p_token_hash !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION '[P0513] Invalid password reset token hash'
+        USING ERRCODE = 'P0513';
+    END IF;
+
+    -- 같은 사용자에 대한 동시 요청을 직렬화한다. 없는 계정은 잠글 행이 없으므로
+    -- 바로 일반 응답으로 돌아가고, 외부 API 는 항상 같은 성공 메시지를 반환한다.
+    SELECT * INTO v_user
+    FROM users
+    WHERE lower(email) = lower(trim(p_email)) AND is_deleted = FALSE
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'PASSWORD_RESET_REQUEST',
+            'requested', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    SELECT MAX(created_at),
+           COUNT(*) FILTER (
+               WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '1 hour'
+           )
+    INTO v_last_created, v_recent_count
+    FROM password_reset_tokens
+    WHERE user_email = v_user.email;
+
+    IF (v_last_created IS NOT NULL
+        AND v_last_created > CURRENT_TIMESTAMP - make_interval(secs => GREATEST(p_cooldown_seconds, 0)))
+       OR v_recent_count >= GREATEST(p_max_per_hour, 0) THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'PASSWORD_RESET_REQUEST',
+            'requested', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    -- 새 링크를 발급하면 이전 링크는 즉시 무효화한다(활성 토큰 1개 정책).
+    UPDATE password_reset_tokens
+    SET used_at = CURRENT_TIMESTAMP
+    WHERE user_email = v_user.email AND used_at IS NULL;
+
+    INSERT INTO password_reset_tokens (user_email, token_hash, expires_at)
+    VALUES (
+        v_user.email,
+        lower(p_token_hash),
+        CURRENT_TIMESTAMP + make_interval(mins => GREATEST(p_expiry_minutes, 1))
+    );
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'PASSWORD_RESET_REQUEST',
+        'requested', TRUE,
+        'email', v_user.email,
+        'name', v_user.name
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0513' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0513] Failed to request password reset: %', SQLERRM
+            USING ERRCODE = 'P0513';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- AuthController::confirmPasswordReset
+-- 토큰을 원자적으로 소비하고 비밀번호를 변경한 뒤 모든 기존 세션을 폐기한다.
+CREATE OR REPLACE FUNCTION consume_password_reset_token(
+    p_token_hash TEXT,
+    p_new_password TEXT
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_token password_reset_tokens%ROWTYPE;
+    v_user users%ROWTYPE;
+BEGIN
+    IF p_token_hash !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION '[P0511] Invalid password reset token'
+        USING ERRCODE = 'P0511';
+    END IF;
+
+    SELECT * INTO v_token
+    FROM password_reset_tokens
+    WHERE token_hash = lower(trim(p_token_hash))
+    FOR UPDATE;
+
+    IF NOT FOUND OR v_token.used_at IS NOT NULL OR v_token.expires_at <= CURRENT_TIMESTAMP THEN
+        RAISE EXCEPTION '[P0511] Password reset token is invalid, used, or expired'
+        USING ERRCODE = 'P0511';
+    END IF;
+
+    SELECT * INTO v_user
+    FROM users
+    WHERE email = v_token.user_email AND is_deleted = FALSE
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0511] Password reset user is unavailable'
+        USING ERRCODE = 'P0511';
+    END IF;
+
+    PERFORM validate_password_strength(p_new_password);
+
+    UPDATE users
+    SET password_hash = crypt(p_new_password, gen_salt('bf', 10)),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = v_user.user_id;
+
+    PERFORM revoke_user_sessions(v_user.email);
+    RETURN TRUE;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0511' OR SQLSTATE 'P0512' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0513] Failed to consume password reset token: %', SQLERRM
+            USING ERRCODE = 'P0513';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- 비밀번호가 바뀌면 앱·VSCode 확장 세션과 아직 살아 있는 재설정 링크를 함께 폐기한다.
+CREATE OR REPLACE FUNCTION revoke_user_sessions(
+    p_email users.email%TYPE
+) RETURNS VOID AS $$
+BEGIN
+    DELETE FROM user_refresh_tokens WHERE user_email = p_email;
+    DELETE FROM github_extension_tokens WHERE user_email = p_email;
+    UPDATE password_reset_tokens
+    SET used_at = COALESCE(used_at, CURRENT_TIMESTAMP)
+    WHERE user_email = p_email AND used_at IS NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- SignupVerificationController::requestSignupEmailVerification
+-- 가입 여부와 무관하게 같은 응답을 돌려주고, 계정 단위 쿨다운과 시간당 횟수만 적용한다.
+CREATE OR REPLACE FUNCTION request_signup_email_verification(
+    p_email users.email%TYPE,
+    p_code TEXT,
+    p_expiry_minutes INTEGER DEFAULT 10,
+    p_cooldown_seconds INTEGER DEFAULT 60,
+    p_max_per_hour INTEGER DEFAULT 5,
+    p_max_attempts INTEGER DEFAULT 5
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_email users.email%TYPE := normalize_signup_email(p_email);
+    v_last_created TIMESTAMP WITH TIME ZONE;
+    v_recent_count BIGINT := 0;
+    v_expiry_minutes INTEGER := GREATEST(COALESCE(p_expiry_minutes, 10), 1);
+    v_cooldown_seconds INTEGER := GREATEST(COALESCE(p_cooldown_seconds, 60), 0);
+    v_max_per_hour INTEGER := GREATEST(COALESCE(p_max_per_hour, 5), 0);
+    v_max_attempts INTEGER := GREATEST(COALESCE(p_max_attempts, 5), 1);
+BEGIN
+    IF p_code IS NULL OR p_code !~ '^[0-9]{6}$' THEN
+        RAISE EXCEPTION '[P0516] Invalid signup input: verification code'
+        USING ERRCODE = 'P0516';
+    END IF;
+
+    -- 같은 이메일의 요청/확인/가입이 겹쳐도 하나씩 처리한다.
+    PERFORM pg_advisory_xact_lock(hashtextextended('signup-email:' || v_email, 0));
+
+    DELETE FROM signup_email_verifications
+    WHERE email = v_email
+      AND created_at < CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      AND (consumed_at IS NOT NULL OR code_expires_at <= CURRENT_TIMESTAMP);
+
+    SELECT MAX(created_at),
+           COUNT(*) FILTER (WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '1 hour')
+    INTO v_last_created, v_recent_count
+    FROM signup_email_verifications
+    WHERE email = v_email;
+
+    IF (v_last_created IS NOT NULL
+        AND v_last_created > CURRENT_TIMESTAMP - make_interval(secs => v_cooldown_seconds))
+       OR v_recent_count >= v_max_per_hour THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'SIGNUP_EMAIL_VERIFICATION_REQUEST',
+            'requested', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    -- 새 인증번호를 발급하면 이전 인증번호와 인증 완료 토큰을 모두 폐기한다.
+    UPDATE signup_email_verifications
+    SET consumed_at = CURRENT_TIMESTAMP
+    WHERE email = v_email AND consumed_at IS NULL;
+
+    INSERT INTO signup_email_verifications (
+        email,
+        code_hash,
+        code_expires_at,
+        max_attempts
+    )
+    VALUES (
+        v_email,
+        crypt(p_code, gen_salt('bf', 10)),
+        CURRENT_TIMESTAMP + make_interval(mins => v_expiry_minutes),
+        v_max_attempts
+    );
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'SIGNUP_EMAIL_VERIFICATION_REQUEST',
+        'requested', TRUE,
+        'email', v_email,
+        'expires_in_minutes', v_expiry_minutes
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0516' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0515] Failed to request signup email verification'
+            USING ERRCODE = 'P0515';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- SignupVerificationController::confirmSignupEmailVerification
+-- 잘못된 인증번호도 예외를 던지지 않고 시도 횟수를 남긴 뒤 verified=false 로 응답한다.
+CREATE OR REPLACE FUNCTION confirm_signup_email_verification(
+    p_email users.email%TYPE,
+    p_code TEXT,
+    p_token_hash TEXT,
+    p_token_expiry_minutes INTEGER DEFAULT 15
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_email users.email%TYPE := normalize_signup_email(p_email);
+    v_verification signup_email_verifications%ROWTYPE;
+    v_attempts INTEGER;
+    v_token_expiry_minutes INTEGER := GREATEST(COALESCE(p_token_expiry_minutes, 15), 1);
+    v_is_match BOOLEAN := FALSE;
+BEGIN
+    IF p_code IS NULL OR p_code !~ '^[0-9]{6}$' THEN
+        RAISE EXCEPTION '[P0516] Invalid signup input: verification code'
+        USING ERRCODE = 'P0516';
+    END IF;
+
+    IF p_token_hash IS NULL OR lower(trim(p_token_hash)) !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION '[P0516] Invalid signup input: verification token hash'
+        USING ERRCODE = 'P0516';
+    END IF;
+
+    PERFORM pg_advisory_xact_lock(hashtextextended('signup-email:' || v_email, 0));
+
+    SELECT * INTO v_verification
+    FROM signup_email_verifications
+    WHERE email = v_email AND consumed_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'SIGNUP_EMAIL_VERIFICATION',
+            'verified', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    IF v_verification.code_expires_at <= CURRENT_TIMESTAMP
+       OR v_verification.attempts >= v_verification.max_attempts THEN
+        UPDATE signup_email_verifications
+        SET consumed_at = COALESCE(consumed_at, CURRENT_TIMESTAMP)
+        WHERE verification_id = v_verification.verification_id;
+
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'SIGNUP_EMAIL_VERIFICATION',
+            'verified', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    v_attempts := v_verification.attempts + 1;
+    v_is_match := (v_verification.code_hash = crypt(p_code, v_verification.code_hash));
+
+    IF NOT v_is_match THEN
+        UPDATE signup_email_verifications
+        SET attempts = v_attempts,
+            consumed_at = CASE
+                WHEN v_attempts >= v_verification.max_attempts THEN CURRENT_TIMESTAMP
+                ELSE consumed_at
+            END
+        WHERE verification_id = v_verification.verification_id;
+
+        RETURN QUERY
+        SELECT jsonb_build_object(
+            'type', 'SIGNUP_EMAIL_VERIFICATION',
+            'verified', FALSE
+        )::jsonb AS out_data;
+        RETURN;
+    END IF;
+
+    UPDATE signup_email_verifications
+    SET attempts = v_attempts,
+        verified_at = CURRENT_TIMESTAMP,
+        verification_token_hash = lower(trim(p_token_hash)),
+        token_expires_at = CURRENT_TIMESTAMP + make_interval(mins => v_token_expiry_minutes)
+    WHERE verification_id = v_verification.verification_id;
+
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'SIGNUP_EMAIL_VERIFICATION',
+        'verified', TRUE,
+        'expires_in_minutes', v_token_expiry_minutes
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0516' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0515] Failed to confirm signup email verification'
+            USING ERRCODE = 'P0515';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- 06_seed.sql 전용. 공개 가입 경로는 register_user_verified 만 사용한다.
+CREATE OR REPLACE FUNCTION register_user_seed(
     p_user_id users.user_id%TYPE,
     p_email users.email%TYPE,
     p_name users.name%TYPE,
@@ -10,16 +423,22 @@ CREATE OR REPLACE FUNCTION register_user(
 DECLARE
     v_new_node_id organization_nodes.node_id%TYPE;
     v_hashed_password TEXT;
+    v_email users.email%TYPE := lower(trim(p_email));
 BEGIN
     -- 0. 사용자 중복 체크
     IF EXISTS (SELECT 1 FROM users WHERE user_id = p_user_id) THEN
-        RAISE EXCEPTION '[P0510] User ID already exists: %', p_user_id
+        RAISE EXCEPTION '[P0510] User ID already exists'
         USING ERRCODE = 'P0510';
     END IF;
 
-    IF EXISTS (SELECT 1 FROM users WHERE email = p_email) THEN
-        RAISE EXCEPTION '[P0501] Email already exists: %', p_email
+    IF EXISTS (SELECT 1 FROM users WHERE lower(trim(email)) = v_email) THEN
+        RAISE EXCEPTION '[P0501] Email already exists'
         USING ERRCODE = 'P0501';
+    END IF;
+
+    -- 사전 해시된 시드/마이그레이션 값은 원문을 알 수 없으므로 정책 검사를 건너뛴다.
+    IF p_password_hash NOT LIKE '$2a$%' AND p_password_hash NOT LIKE '$2b$%' THEN
+        PERFORM validate_password_strength(p_password_hash);
     END IF;
 
     -- 0-1. 비밀번호 단방향 Bcrypt 솔팅 해시 암호화 (이미 해시된 문자열이 아니면 crypt 처리)
@@ -31,7 +450,7 @@ BEGIN
 
     -- 1. 유저 생성
     INSERT INTO users (user_id, email, name, password_hash)
-    VALUES (p_user_id, p_email, p_name, v_hashed_password);
+    VALUES (p_user_id, v_email, p_name, v_hashed_password);
 
     -- 2. 개인 전용 노드 생성
     INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
@@ -66,8 +485,106 @@ BEGIN
         WHEN SQLSTATE 'P0501' OR SQLSTATE 'P0510' THEN
         RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0502] Error occurred while registering user: %', SQLERRM
+        RAISE EXCEPTION '[P0502] Error occurred while registering user'
         USING ERRCODE = 'P0502';
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- UserController::registerUser
+-- 이메일 인증 완료 토큰을 소비한 뒤에만 계정을 만든다. 비밀번호는 항상 평문 입력을 받아
+-- DB 에서 정책 검사와 bcrypt 해싱을 수행하므로 사전 해시 우회가 불가능하다.
+CREATE OR REPLACE FUNCTION register_user_verified(
+    p_verification_token_hash TEXT,
+    p_user_id users.user_id%TYPE,
+    p_email users.email%TYPE,
+    p_name users.name%TYPE,
+    p_password users.password_hash%TYPE
+) RETURNS BOOLEAN AS $$
+DECLARE
+    v_user_id users.user_id%TYPE := trim(p_user_id);
+    v_name users.name%TYPE := trim(p_name);
+    v_email users.email%TYPE := normalize_signup_email(p_email);
+    v_verification signup_email_verifications%ROWTYPE;
+    v_new_node_id organization_nodes.node_id%TYPE;
+    v_hashed_password TEXT;
+BEGIN
+    IF p_verification_token_hash IS NULL
+       OR lower(trim(p_verification_token_hash)) !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION '[P0514] Signup email verification is invalid or expired'
+        USING ERRCODE = 'P0514';
+    END IF;
+
+    PERFORM validate_signup_user_id(v_user_id);
+    PERFORM validate_signup_name(v_name);
+    PERFORM validate_password_strength(p_password);
+
+    PERFORM pg_advisory_xact_lock(hashtextextended('signup-email:' || v_email, 0));
+    PERFORM pg_advisory_xact_lock(hashtextextended('signup-user-id:' || v_user_id, 0));
+
+    SELECT * INTO v_verification
+    FROM signup_email_verifications
+    WHERE verification_token_hash = lower(trim(p_verification_token_hash))
+    FOR UPDATE;
+
+    IF NOT FOUND
+       OR v_verification.consumed_at IS NOT NULL
+       OR v_verification.verified_at IS NULL
+       OR v_verification.token_expires_at IS NULL
+       OR v_verification.token_expires_at <= CURRENT_TIMESTAMP
+       OR v_verification.email <> v_email THEN
+        RAISE EXCEPTION '[P0514] Signup email verification is invalid or expired'
+        USING ERRCODE = 'P0514';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM users WHERE user_id = v_user_id) THEN
+        RAISE EXCEPTION '[P0510] User ID already exists'
+        USING ERRCODE = 'P0510';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM users WHERE lower(trim(email)) = v_email) THEN
+        RAISE EXCEPTION '[P0501] Email already exists'
+        USING ERRCODE = 'P0501';
+    END IF;
+
+    v_hashed_password := crypt(p_password, gen_salt('bf', 10));
+
+    INSERT INTO users (user_id, email, name, password_hash)
+    VALUES (v_user_id, v_email, v_name, v_hashed_password);
+
+    INSERT INTO organization_nodes (node_type, parent_node_id, name, path)
+    VALUES ('USER', NULL, v_name || ' 개인공간', '{}'::INTEGER[])
+    RETURNING node_id INTO v_new_node_id;
+
+    UPDATE organization_nodes
+    SET path = ARRAY[v_new_node_id]
+    WHERE node_id = v_new_node_id;
+
+    UPDATE users
+    SET personal_node_id = v_new_node_id
+    WHERE user_id = v_user_id;
+
+    PERFORM default_node_authority(v_new_node_id);
+    INSERT INTO role_assignments (user_id, node_id, role_id)
+    SELECT v_user_id, v_new_node_id, authority_id FROM role_authorities
+    WHERE node_id = v_new_node_id AND is_top_role;
+
+    UPDATE signup_email_verifications
+    SET consumed_at = CURRENT_TIMESTAMP
+    WHERE verification_id = v_verification.verification_id;
+
+    RETURN TRUE;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0501'
+          OR SQLSTATE 'P0510'
+          OR SQLSTATE 'P0512'
+          OR SQLSTATE 'P0514'
+          OR SQLSTATE 'P0516' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0502] Error occurred while registering user'
+            USING ERRCODE = 'P0502';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -82,33 +599,36 @@ CREATE OR REPLACE FUNCTION login_user (
 RETURNS BOOLEAN AS $$
 DECLARE
     v_user_password_hash users.password_hash%TYPE;
-    v_is_match BOOLEAN;
+    v_is_match BOOLEAN := FALSE;
+    -- 계정이 없을 때도 동일한 bcrypt 비용을 수행해 계정 존재 여부가 응답 시간으로 드러나지 않게 한다.
+    v_dummy_password_hash CONSTANT users.password_hash%TYPE := '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
 BEGIN
     -- 1. 이메일 존재 여부 확인 및 패스워드 해시값 검증
     SELECT password_hash INTO v_user_password_hash
     FROM users
-    WHERE email = p_email AND is_deleted = FALSE;
+    WHERE lower(trim(email)) = lower(trim(p_email)) AND is_deleted = FALSE;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION '[P0503] Email not found: %', p_email
-        USING ERRCODE = 'P0503';
-    END IF;
-
-    -- Bcrypt 해시 검증 (crypt(입력비번, 저장된해시) = 저장된해시) 또는 레거시 평문 일치 호환
-    IF v_user_password_hash LIKE '$2a$%' OR v_user_password_hash LIKE '$2b$%' THEN
-        v_is_match := (v_user_password_hash = crypt(p_password_hash, v_user_password_hash));
+        PERFORM crypt(p_password_hash, v_dummy_password_hash);
     ELSE
-        v_is_match := (v_user_password_hash = p_password_hash);
+        -- Bcrypt 해시 검증 (crypt(입력비번, 저장된해시) = 저장된해시) 또는 레거시 평문 일치 호환
+        IF v_user_password_hash LIKE '$2a$%' OR v_user_password_hash LIKE '$2b$%' THEN
+            v_is_match := (v_user_password_hash = crypt(p_password_hash, v_user_password_hash));
+        ELSE
+            PERFORM crypt(p_password_hash, v_dummy_password_hash);
+            v_is_match := (v_user_password_hash = p_password_hash);
+        END IF;
     END IF;
 
     IF NOT v_is_match THEN
-        RAISE EXCEPTION '[P0504] Incorrect password for email: %', p_email
+        -- 이메일 미존재와 비밀번호 불일치를 같은 오류로 처리하고 이메일을 메시지에 남기지 않는다.
+        RAISE EXCEPTION '[P0504] Invalid credentials'
         USING ERRCODE = 'P0504';
     END IF;
 
     -- 2. 로그인 성공 시 리프레시 토큰 저장 (업sert)
     INSERT INTO user_refresh_tokens (user_email, refresh_token, expires_at) 
-    VALUES (p_email, p_refresh_token, p_refresh_expiry)
+    VALUES (lower(trim(p_email)), p_refresh_token, p_refresh_expiry)
     ON CONFLICT (user_email) DO UPDATE SET
         refresh_token = EXCLUDED.refresh_token,
         expires_at = EXCLUDED.expires_at;
@@ -116,11 +636,11 @@ BEGIN
     RETURN TRUE;
 
     EXCEPTION
-        WHEN SQLSTATE 'P0503' OR SQLSTATE 'P0504' THEN
-        RAISE;
+        WHEN SQLSTATE 'P0504' THEN
+            RAISE;
         WHEN OTHERS THEN
-        RAISE EXCEPTION '[P0505] Error occurred during login: %', SQLERRM
-        USING ERRCODE = 'P0505';
+            RAISE EXCEPTION '[P0505] Error occurred during login: %', SQLERRM
+            USING ERRCODE = 'P0505';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -270,6 +790,11 @@ BEGIN
     END IF;
 
     -- 3. 유저 정보 갱신 (NULL이거나 빈값 전송 시 기존값 유지, 비밀번호는 crypt 처리)
+    IF p_password_hash IS NOT NULL AND p_password_hash <> ''
+       AND p_password_hash NOT LIKE '$2a$%' AND p_password_hash NOT LIKE '$2b$%' THEN
+        PERFORM validate_password_strength(p_password_hash);
+    END IF;
+
     UPDATE users
     SET
         name = COALESCE(NULLIF(p_name, ''), name),
@@ -283,6 +808,11 @@ BEGIN
         END,
         updated_at = CURRENT_TIMESTAMP
     WHERE user_id = v_target_id;
+
+    -- 비밀번호 변경은 기존 로그인 세션과 남아 있는 재설정 링크를 즉시 폐기한다.
+    IF p_password_hash IS NOT NULL AND p_password_hash <> '' THEN
+        PERFORM revoke_user_sessions(p_target_email);
+    END IF;
 
     -- 4. 활동 피드 기록 (이름이 바뀐 경우에만 기록)
     IF p_name IS NOT NULL AND p_name <> '' AND p_name <> v_old_name THEN

@@ -28,7 +28,7 @@ export type ShellTopActionsHeading =
       type: 'page'
       title: string
       titleDetail?: string
-      subtitle: string
+      subtitle?: string
     }
   | {
       type: 'workItem'
@@ -52,6 +52,7 @@ type ShellTopActionsProps = {
   currentUser: {
     name: string
     userId: string
+    email?: string
   }
   heading: ShellTopActionsHeading
   inset?: 'standard' | 'wide'
@@ -107,7 +108,7 @@ export function ShellTopActions({
               <span className={styles.shellPageTitleDetail}>{heading.titleDetail}</span>
             ) : null}
           </h1>
-          <p className={styles.shellSubtitle}>{heading.subtitle}</p>
+          {heading.subtitle ? <p className={styles.shellSubtitle}>{heading.subtitle}</p> : null}
         </div>
       ) : heading.type === 'workItem' ? (
         <div className={styles.workItemHeading}>
@@ -162,6 +163,7 @@ export function ShellTopActions({
             <UserMenuPopover
               userId={currentUser.userId}
               name={currentUser.name}
+              email={currentUser.email}
               buttonClassName={styles.shellProfileButton}
             />
           </div>

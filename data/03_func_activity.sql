@@ -247,6 +247,7 @@ CREATE OR REPLACE FUNCTION notify_activity_event()
 RETURNS TRIGGER AS $$
 DECLARE
     v_recipients JSONB;
+    v_refresh_recipients JSONB;
     v_payload JSONB;
     v_work_item_id VARCHAR(50) := NULL;
     v_is_hidden BOOLEAN := FALSE;
@@ -286,16 +287,17 @@ BEGIN
         END IF;
     END IF;
 
-    -- 1. 해당 노드에 대해 HISTORY_ALL_VIEW 권한을 가진 사용자 목록 및 업무 조회 가능 여부(can_view_work_items) 추출
-    -- 본인(actor)은 알림 수신 대상에서 제외
-    -- 숨김 업무(hidden = TRUE)인 경우, WI_HIDDEN_VIEW 권한이 없는 사용자는 알림 대상에서 완전 제외
+    -- 1. 수신자 계산 (한 번의 후보 스캔으로 상세 알림/갱신 신호 대상을 함께 계산)
+    --    - 상세 알림: HISTORY_ALL_VIEW 보유자 (기존 동작 유지)
+    --    - 갱신 신호: 노드를 볼 수 있는 멤버 전체. 상세 권한이 없어도 화면은 최신화되어야 한다.
+    --    - 업무/댓글/파일은 WI_PUBLIC_VIEW, 숨김 업무는 WI_HIDDEN_VIEW 를 따른다.
+    --    - 본인(actor)은 두 목록 모두에서 제외
     WITH candidate_users AS (
         SELECT DISTINCT u.user_id, u.email
         FROM role_assignments ra
         JOIN users u ON ra.user_id = u.user_id
         WHERE u.is_deleted = FALSE
           AND u.user_id != NEW.actor_user_id
-          -- 해당 노드이거나 상위 조상 노드에 배정된 사용자
           AND (
               ra.node_id = NEW.node_id
               OR EXISTS (
@@ -305,32 +307,60 @@ BEGIN
               )
           )
     ),
-    authorized_recipients AS (
-        SELECT 
+    evaluated AS (
+        SELECT
             cu.email,
             cu.user_id,
-            check_authority_with_override(cu.user_id, NEW.node_id, 'WI_PUBLIC_VIEW') AS can_view_work_items
+            check_authority_with_override(cu.user_id, NEW.node_id, 'HISTORY_ALL_VIEW') AS can_view_history,
+            check_authority_with_override(cu.user_id, NEW.node_id, 'WI_PUBLIC_VIEW') AS can_view_work_items,
+            CASE
+                WHEN v_is_hidden IS NOT TRUE THEN TRUE
+                ELSE check_authority_with_override(cu.user_id, NEW.node_id, 'WI_HIDDEN_VIEW')
+            END AS can_view_hidden
         FROM candidate_users cu
-        WHERE check_authority_with_override(cu.user_id, NEW.node_id, 'HISTORY_ALL_VIEW') = TRUE
-          AND (
-              v_is_hidden IS NOT TRUE
-              OR check_authority_with_override(cu.user_id, NEW.node_id, 'WI_HIDDEN_VIEW') = TRUE
-          )
+    ),
+    classified AS (
+        SELECT
+            e.email,
+            e.user_id,
+            e.can_view_work_items,
+            (
+                e.can_view_history
+                AND (v_is_hidden IS NOT TRUE OR e.can_view_hidden)
+            ) AS is_detail_recipient,
+            (
+                (v_is_hidden IS NOT TRUE OR e.can_view_hidden)
+                AND (
+                    NOT (
+                        NEW.entity_type IN ('WORK_ITEM', 'COMMENT', 'FILE')
+                        AND v_is_recurring_file = FALSE
+                    )
+                    OR e.can_view_work_items
+                )
+            ) AS is_refresh_candidate
+        FROM evaluated e
     )
-    SELECT COALESCE(
-        jsonb_agg(
-            jsonb_build_object(
-                'email', ar.email,
-                'user_id', ar.user_id,
-                'can_view_work_items', ar.can_view_work_items
-            )
+    SELECT
+        COALESCE(
+            jsonb_agg(
+                jsonb_build_object(
+                    'email', c.email,
+                    'user_id', c.user_id,
+                    'can_view_work_items', c.can_view_work_items
+                )
+            ) FILTER (WHERE c.is_detail_recipient),
+            '[]'::jsonb
         ),
-        '[]'::jsonb
-    ) INTO v_recipients
-    FROM authorized_recipients ar;
+        -- 갱신 신호는 상세 알림을 받는 사람에게는 보내지 않는다. 페이로드도 이메일 배열로 압축한다.
+        COALESCE(
+            jsonb_agg(c.email) FILTER (WHERE c.is_refresh_candidate AND NOT c.is_detail_recipient),
+            '[]'::jsonb
+        )
+    INTO v_recipients, v_refresh_recipients
+    FROM classified c;
 
-    -- 2. 대상 수신자가 1명 이상 있을 때만 pg_notify 실행
-    IF jsonb_array_length(v_recipients) > 0 THEN
+    -- 2. 상세 알림 또는 갱신 신호를 받을 대상이 1명 이상 있을 때만 pg_notify 실행
+    IF jsonb_array_length(v_recipients) > 0 OR jsonb_array_length(v_refresh_recipients) > 0 THEN
         BEGIN
 
             v_payload := jsonb_build_object(
@@ -348,7 +378,8 @@ BEGIN
                 'old_value', NEW.old_value,
                 'new_value', NEW.new_value,
                 'created_at', to_char(NEW.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-                'recipients', v_recipients
+                'recipients', v_recipients,
+                'refresh_recipients', v_refresh_recipients
             );
 
             PERFORM pg_notify('activity_notification_channel', v_payload::TEXT);

@@ -2,12 +2,17 @@ import { formatWorkspaceMonthDay } from '../../workspace/model/formatters'
 import { getRecurringCategoryLabel, getWorkItemStatusLabel } from '../../workspace/model/labels'
 import { formatRepeatSummary, getNextOccurrenceInfo } from '../../workspace/model/recurringSchedule'
 import type { WorkItemRecord } from '../../workspace/model/types'
+import { getWorkItemTag } from '../../workspace/model/workItemTags'
 import type { DashboardRecurringRule, DashboardWorkItem } from './dashboardTypes'
 import type {
+  DashboardActivityChartSeries,
+  DashboardChartPeriod,
   DashboardDateRange,
   DashboardMetrics,
   DashboardSchedule,
+  DashboardTableTaskRow,
   DashboardTaskAccent,
+  DashboardTaskFilter,
   DashboardTaskRow,
   DashboardWeekBoard,
   DashboardWeekDay,
@@ -21,7 +26,6 @@ export const WEEK_DAY_COUNT = 7
 
 /** '3일 이내 마감' 기준 */
 const DUE_SOON_DAYS = 3
-
 
 /** 같은 날 이벤트는 그날 마감 → 그날 시작 순으로 보여준다. */
 const EVENT_TONE_ORDER: Record<'due' | 'start', number> = {
@@ -141,17 +145,41 @@ export function formatWeekRangeLabel(startKey: string, endKey: string) {
   return `${start.getMonth() + 1}월 ${start.getDate()}일 ~ ${end.getMonth() + 1}월 ${end.getDate()}일`
 }
 
+/** 시안 스타일의 '10.12 – 10.18' 주간 점 표기 라벨 */
+export function formatWeekDotRangeLabel(startKey: string, endKey: string) {
+  const start = parseDateKey(startKey)
+  const end = parseDateKey(endKey)
+
+  if (!start || !end) {
+    return `${startKey} – ${endKey}`
+  }
+
+  return `${pad(start.getMonth() + 1)}.${pad(start.getDate())} – ${pad(end.getMonth() + 1)}.${pad(end.getDate())}`
+}
+
 function formatMonthDay(value?: string) {
   const dateKey = readDateKey(value)
   return dateKey ? formatWorkspaceMonthDay(dateKey) : null
 }
 
+function formatShortDotDate(value?: string) {
+  const dateKey = readDateKey(value)
+  if (!dateKey) return '미정'
+  const parsed = parseDateKey(dateKey)
+  if (!parsed) return '미정'
+  return `${pad(parsed.getMonth() + 1)}.${pad(parsed.getDate())}`
+}
+
 /** 업무가 차지하는 기간(일자~마감). 한쪽만 있으면 그 날짜 하루로 본다. */
 function getWorkItemRange(item: WorkItemRecord) {
-  const startKey = readDateKey(item.startDate) ?? readDateKey(item.dueDate) ?? readDateKey(item.createdAt)
-  const dueKey = readDateKey(item.dueDate) ?? readDateKey(item.startDate) ?? readDateKey(item.createdAt)
+  const rawStart = readDateKey(item.startDate) ?? readDateKey(item.dueDate) ?? readDateKey(item.createdAt)
+  const rawDue = readDateKey(item.dueDate) ?? readDateKey(item.startDate) ?? readDateKey(item.createdAt)
 
-  return { startKey, dueKey }
+  if (rawStart && rawDue && rawStart > rawDue) {
+    return { startKey: rawDue, dueKey: rawStart }
+  }
+
+  return { startKey: rawStart, dueKey: rawDue }
 }
 
 /** 업무 기간(일자~마감)에 해당 날짜가 포함되는지. 업무 일정 패널에 보이는 기준과 같다. */
@@ -165,10 +193,23 @@ function isWorkItemOnDate(item: WorkItemRecord, dateKey: string) {
   return startKey !== null && dueKey !== null && startKey <= dateKey && dueKey >= dateKey
 }
 
+/** 업무 기간이 [rangeStartKey, rangeEndKey] 구간과 겹치는지 확인한다. */
+function isWorkItemOverlappingRange(item: WorkItemRecord, rangeStartKey: string, rangeEndKey: string) {
+  if (item.isDeleted) {
+    return false
+  }
+
+  const { startKey, dueKey } = getWorkItemRange(item)
+  if (!startKey || !dueKey) {
+    return false
+  }
+
+  return startKey <= rangeEndKey && dueKey >= rangeStartKey
+}
+
 function isDone(item: WorkItemRecord) {
   return item.status === 'done'
 }
-
 
 export function buildMetrics(
   workItems: WorkItemRecord[],
@@ -221,6 +262,149 @@ export function buildMetrics(
   }
 }
 
+function buildYTicks(values: number[]): number[] {
+  const maxVal = Math.max(0, ...values)
+  const step = Math.max(4, Math.ceil(maxVal / 3 / 2) * 2)
+  return [0, step, step * 2, step * 3]
+}
+
+/**
+ * 대시보드 상단 우측 '업무 활동' 라인 차트 데이터를 기간 탭('1d' | '1w' | '1m' | '6m')에 맞춰 생성한다.
+ * 모든 기간 탭에서 두 개 꺾은선은 일관되게 '진행 중'(in-progress) vs '완료'(done) 업무 건수를 표시한다.
+ */
+export function buildActivityChartSeries(
+  workItems: DashboardWorkItem[],
+  today: Date,
+  period: DashboardChartPeriod,
+): DashboardActivityChartSeries {
+  const visibleItems = workItems.filter((item) => !item.isDeleted)
+
+  if (period === '1d') {
+    // 최근 7일(D-6 ~ 오늘) 일별 진행 중 vs 완료 추이
+    const days = Array.from({ length: 7 }, (_, index) => addDays(today, -(6 - index)))
+    const labels = days.map((date, index) =>
+      index === 6 ? '오늘' : `${pad(date.getMonth() + 1)}.${pad(date.getDate())}`,
+    )
+
+    const currentValues: number[] = []
+    const previousValues: number[] = []
+
+    days.forEach((date) => {
+      const dateKey = toDateKey(date)
+      const onDateItems = visibleItems.filter((item) => isWorkItemOnDate(item, dateKey))
+      currentValues.push(onDateItems.filter((item) => item.status === 'in-progress').length)
+      previousValues.push(onDateItems.filter((item) => item.status === 'done').length)
+    })
+
+    return {
+      period,
+      title: '일간 업무 활동',
+      currentLabel: '진행 중',
+      previousLabel: '완료',
+      labels,
+      currentValues,
+      previousValues,
+      yTicks: buildYTicks([...currentValues, ...previousValues]),
+    }
+  }
+
+  if (period === '1m') {
+    const labels = ['1주', '2주', '3주', '4주', '5주']
+    const year = today.getFullYear()
+    const month = today.getMonth()
+    const lastDay = new Date(year, month + 1, 0).getDate()
+
+    const currentValues: number[] = []
+    const previousValues: number[] = []
+
+    for (let weekIndex = 0; weekIndex < 5; weekIndex += 1) {
+      const startDay = weekIndex * 7 + 1
+      if (startDay > lastDay) {
+        currentValues.push(0)
+        previousValues.push(0)
+        continue
+      }
+      const endDay = Math.min(lastDay, (weekIndex + 1) * 7)
+      const rangeStart = toDateKey(new Date(year, month, startDay))
+      const rangeEnd = toDateKey(new Date(year, month, endDay))
+      const overlapping = visibleItems.filter((item) =>
+        isWorkItemOverlappingRange(item, rangeStart, rangeEnd),
+      )
+      currentValues.push(overlapping.filter((item) => item.status === 'in-progress').length)
+      previousValues.push(overlapping.filter((item) => item.status === 'done').length)
+    }
+
+    return {
+      period,
+      title: '월간 업무 활동',
+      currentLabel: '진행 중',
+      previousLabel: '완료',
+      labels,
+      currentValues,
+      previousValues,
+      yTicks: buildYTicks([...currentValues, ...previousValues]),
+    }
+  }
+
+  if (period === '6m') {
+    const months = Array.from({ length: 6 }, (_, index) => addMonths(today, -(5 - index)))
+    const labels = months.map((date) => `${date.getMonth() + 1}월`)
+
+    const currentValues: number[] = []
+    const previousValues: number[] = []
+
+    months.forEach((monthDate) => {
+      const year = monthDate.getFullYear()
+      const month = monthDate.getMonth()
+      const lastDay = new Date(year, month + 1, 0).getDate()
+      const rangeStart = toDateKey(new Date(year, month, 1))
+      const rangeEnd = toDateKey(new Date(year, month, lastDay))
+
+      const overlapping = visibleItems.filter((item) =>
+        isWorkItemOverlappingRange(item, rangeStart, rangeEnd),
+      )
+      currentValues.push(overlapping.filter((item) => item.status === 'in-progress').length)
+      previousValues.push(overlapping.filter((item) => item.status === 'done').length)
+    })
+
+    return {
+      period,
+      title: '6개월 업무 추이',
+      currentLabel: '진행 중',
+      previousLabel: '완료',
+      labels,
+      currentValues,
+      previousValues,
+      yTicks: buildYTicks([...currentValues, ...previousValues]),
+    }
+  }
+
+  // 기본: '1w' (이번 주 월~일 요일별 진행 중 vs 완료 업무 수)
+  const labels = ['월', '화', '수', '목', '금', '토', '일']
+  const thisWeek = getWeekWindow(today)
+
+  const currentValues: number[] = []
+  const previousValues: number[] = []
+
+  for (let index = 0; index < 7; index += 1) {
+    const dateKey = toDateKey(addDays(thisWeek.start, index))
+    const onDateItems = visibleItems.filter((item) => isWorkItemOnDate(item, dateKey))
+    currentValues.push(onDateItems.filter((item) => item.status === 'in-progress').length)
+    previousValues.push(onDateItems.filter((item) => item.status === 'done').length)
+  }
+
+  return {
+    period: '1w',
+    title: '주간 업무 활동',
+    currentLabel: '진행 중',
+    previousLabel: '완료',
+    labels,
+    currentValues,
+    previousValues,
+    yTicks: buildYTicks([...currentValues, ...previousValues]),
+  }
+}
+
 function resolveEventTone(item: WorkItemRecord, dateKey: string): 'due' | 'start' {
   return readDateKey(item.dueDate) === dateKey ? 'due' : 'start'
 }
@@ -243,6 +427,90 @@ function compareByDue(left: WorkItemRecord, right: WorkItemRecord) {
   const leftKey = readDateKey(left.dueDate) ?? '9999-12-31'
   const rightKey = readDateKey(right.dueDate) ?? '9999-12-31'
   return leftKey.localeCompare(rightKey) || left.title.localeCompare(right.title, 'ko')
+}
+
+/**
+ * 업무 일정 테이블용 행 리스트 빌더.
+ * 보고 있는 주(weekStart ~ weekEnd)에 기간이 걸치거나 해당 주에 시작/마감하는 업무를 중복 없이 반환한다.
+ * 필터가 'overdue' 또는 'unscheduled'일 때는 전체 지연/마감미정 업무도 함께 보여준다.
+ */
+export function buildWeekTaskTableRows(
+  workItems: DashboardWorkItem[],
+  weekStart: Date,
+  today: Date,
+  filter: DashboardTaskFilter = 'all',
+): DashboardTableTaskRow[] {
+  const todayKey = toDateKey(today)
+  const weekStartKey = toDateKey(weekStart)
+  const weekEndKey = toDateKey(addDays(weekStart, 6))
+
+  const statusOrder: Record<WorkItemRecord['status'], number> = {
+    'in-progress': 0,
+    todo: 1,
+    done: 2,
+  }
+
+  return workItems
+    .filter((item) => !item.isDeleted)
+    .filter((item) => {
+      const startKey = readDateKey(item.startDate)
+      const dueKey = readDateKey(item.dueDate)
+      const isOverdue = item.status !== 'done' && dueKey !== null && dueKey < todayKey
+      const isUnscheduled = dueKey === null
+
+      if (filter === 'overdue') {
+        return isOverdue
+      }
+      if (filter === 'unscheduled') {
+        return isUnscheduled && item.status !== 'done'
+      }
+      if (filter === 'in-progress' && item.status !== 'in-progress') {
+        return false
+      }
+      if (filter === 'todo' && item.status !== 'todo') {
+        return false
+      }
+      if (filter === 'done' && item.status !== 'done') {
+        return false
+      }
+
+      // 주간 범위에 걸치거나 시작/마감일이 주간에 포함되는 업무
+      const rawStart = startKey ?? dueKey
+      const rawEnd = dueKey ?? startKey
+      if (!rawStart || !rawEnd) {
+        return false
+      }
+      const itemStart = rawStart <= rawEnd ? rawStart : rawEnd
+      const itemEnd = rawStart <= rawEnd ? rawEnd : rawStart
+      return itemStart <= weekEndKey && itemEnd >= weekStartKey
+    })
+    .sort((left, right) => {
+      const statusDiff = statusOrder[left.status] - statusOrder[right.status]
+      if (statusDiff !== 0) return statusDiff
+      return compareByDue(left, right)
+    })
+    .map((item) => {
+      const dueKey = readDateKey(item.dueDate)
+      const tag = getWorkItemTag(item)
+      const categoryLabel = tag?.label ?? (item.category?.trim() || '일반 업무')
+      const isOverdue = item.status !== 'done' && dueKey !== null && dueKey < todayKey
+      const isUnscheduled = dueKey === null
+      const isDueToday = dueKey === todayKey
+
+      return {
+        workItemId: item.workItemId,
+        title: item.title,
+        categoryLabel,
+        nodeId: item.ownerNodeId,
+        nodeTitle: item.nodeTitle?.trim() || '개인 워크스페이스',
+        status: item.status,
+        statusLabel: isOverdue ? '지연' : item.status === 'todo' ? '대기' : getWorkItemStatusLabel(item.status),
+        dueDateShort: formatShortDotDate(item.dueDate),
+        isOverdue,
+        isUnscheduled,
+        isDueToday,
+      }
+    })
 }
 
 /**
@@ -331,11 +599,24 @@ export function buildWeekBoard(
   }
 }
 
+function formatRuleTimeRange(startTime?: string | null, durationMinutes?: number | null): string {
+  const match = startTime?.match(/^(\d{1,2}):(\d{2})/)
+  const startLabel = match ? `${match[1].padStart(2, '0')}:${match[2]}` : '09:00'
+  const duration = durationMinutes && durationMinutes > 0 ? durationMinutes : 60
+  const [hour, minute] = startLabel.split(':').map(Number)
+  const endTotal = hour * 60 + minute + duration
+  const endHour = Math.floor(endTotal / 60) % 24
+  const endMinute = endTotal % 60
+  return `${startLabel} – ${pad(endHour)}:${pad(endMinute)}`
+}
+
 export function buildScheduleCards(
   rules: DashboardRecurringRule[],
   today: Date,
   limit?: number,
 ): DashboardSchedule[] {
+  const todayKey = toDateKey(today)
+
   return rules
     .filter((rule) => rule.isActive && !rule.isDeleted)
     .map((rule) => ({ rule, occurrence: getNextOccurrenceInfo(rule, today) }))
@@ -347,18 +628,36 @@ export function buildScheduleCards(
       return leftTime - rightTime
     })
     .slice(0, limit)
-    .map((entry) => ({
-      ruleId: entry.rule.ruleId,
-      title: entry.rule.title,
-      description: entry.rule.description?.trim() ?? '',
-      category: entry.rule.category,
-      categoryLabel: getRecurringCategoryLabel(entry.rule.category),
-      nodeTitle: entry.rule.nodeTitle,
-      dateLabel: entry.occurrence.nextDate
-        ? SCHEDULE_DATE_FORMATTER.format(entry.occurrence.nextDate)
-        : entry.occurrence.dateString,
-      repeatLabel: formatRepeatSummary(entry.rule),
-    }))
+    .map((entry) => {
+      const nextDate = entry.occurrence.nextDate ?? today
+      const nextDateKey = toDateKey(nextDate)
+      const isToday = nextDateKey === todayKey
+      const monthDayLabel = `${pad(nextDate.getMonth() + 1)}.${pad(nextDate.getDate())}`
+      const monthShort = `${nextDate.getMonth() + 1}월`
+      const dayNumber = String(nextDate.getDate())
+      const weekdayShort = WEEKDAY_LABELS[nextDate.getDay()]
+      const rangeText = formatRuleTimeRange(entry.rule.startTime, entry.rule.durationMinutes)
+      const timeRangeLabel = isToday ? `오늘 ${rangeText}` : `${monthDayLabel} · ${rangeText}`
+
+      return {
+        ruleId: entry.rule.ruleId,
+        title: entry.rule.title,
+        description: entry.rule.description?.trim() ?? '',
+        category: entry.rule.category,
+        categoryLabel: getRecurringCategoryLabel(entry.rule.category),
+        nodeTitle: entry.rule.nodeTitle,
+        dateLabel: entry.occurrence.nextDate
+          ? SCHEDULE_DATE_FORMATTER.format(entry.occurrence.nextDate)
+          : entry.occurrence.dateString,
+        repeatLabel: formatRepeatSummary(entry.rule),
+        monthDayLabel,
+        monthShort,
+        dayNumber,
+        weekdayShort,
+        isToday,
+        timeRangeLabel,
+      }
+    })
 }
 
 /** 좌우 화살표: 보고 있는 주를 한 주씩 이동시킨다. */

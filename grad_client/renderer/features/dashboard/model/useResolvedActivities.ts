@@ -1,14 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ActivityRecord, WorkItemRecord } from '../../workspace/model/types'
 import type { RecurringRuleRecord } from '../../workspace/model/recurringRuleTypes'
 import { fetchRecurringRules } from '../../workspace/data/recurringRuleService'
 import { subscribeToRecurringCache } from '../../workspace/data/workspaceCacheEvents'
-import { isLegacyScheduleCandidate, resolveActivityEntity } from './resolveActivityEntity'
+import {
+  buildWorkItemIdSet,
+  isLegacyScheduleCandidateWithIds,
+  resolveActivityEntities,
+} from './resolveActivityEntity'
 
 export function useResolvedActivities(activities: ActivityRecord[], workItems: WorkItemRecord[]) {
   const [rules, setRules] = useState<RecurringRuleRecord[]>([])
-  const candidateKey = activities.filter((activity) => isLegacyScheduleCandidate(activity, workItems))
-    .map((activity) => `${activity.nodeId}:${activity.id}:${activity.entityId}`).sort().join(',')
+  const workItemIds = useMemo(() => buildWorkItemIdSet(workItems), [workItems])
+  const candidateKey = useMemo(
+    () =>
+      activities
+        .filter((activity) => isLegacyScheduleCandidateWithIds(activity, workItemIds))
+        .map((activity) => `${activity.nodeId}:${activity.id}:${activity.entityId}`)
+        .sort()
+        .join(','),
+    [activities, workItemIds],
+  )
 
   useEffect(() => {
     let disposed = false
@@ -28,5 +40,8 @@ export function useResolvedActivities(activities: ActivityRecord[], workItems: W
     return () => { disposed = true; unsubscribe() }
   }, [candidateKey])
 
-  return activities.map((activity) => resolveActivityEntity(activity, rules, workItems))
+  return useMemo(
+    () => resolveActivityEntities(activities, rules, workItems),
+    [activities, rules, workItems],
+  )
 }

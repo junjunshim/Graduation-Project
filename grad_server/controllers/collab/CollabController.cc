@@ -15,7 +15,6 @@
 #include <filesystem>
 #include <mutex>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -32,10 +31,6 @@ constexpr int kTicketTtlSeconds = 60;
 
 // collab ↔ backend 내부 인증 헤더. 두 컨테이너만 아는 값이고 외부에 노출하지 않는다.
 constexpr char kInternalTokenHeader[] = "X-Internal-Token";
-
-// 협업 편집의 쓰기 권한. 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE(bit 23) 를 쓴다.
-// VIEWER 는 read-only 티켓을, MEMBER 이상은 can_write=true 티켓을 받는다.
-constexpr char kWriteAuthority[] = "GITHUB_CHANGE";
 
 // 세션 권한 재확인 한 요청에 담을 수 있는 최대 세션 수. collab 은 "방 수 × 사용자 수"를
 // 한 번에 보내므로 정상 사용에서는 닿지 않는다 — 비정상 입력 방어용 상한이다.
@@ -69,8 +64,8 @@ HttpResponsePtr errorResponse(const std::string &code, const std::string &messag
     return makeJsonResponse(ret, httpCode);
 }
 
-HttpResponsePtr dbErrorResponse(const orm::DrogonDbException &e) {
-    Json::Value ret = parseDbError(e);
+HttpResponsePtr dbErrorResponse(const orm::DrogonDbException &e, const std::string &requestId) {
+    Json::Value ret = parseDbError(e, requestId);
     auto httpCode = static_cast<HttpStatusCode>(ret["http_code"].asInt());
     ret.removeMember("http_code");
     return makeJsonResponse(ret, httpCode);
@@ -104,32 +99,54 @@ std::string requesterEmail(const HttpRequestPtr &req) {
 // 경로(티켓 소비·작업 경로 해석)라, GitHub 의 git 작업(clone/fetch/push)과 자리를 겨루지 않게
 // 별도 차선으로 센다 — git 이 도는 동안 파일을 못 열면 안 된다.
 void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
-                std::function<HttpResponsePtr()> &&work) {
+                std::function<HttpResponsePtr()> &&work,
+                std::string requestId) {
     auto cb = std::make_shared<std::function<void(const HttpResponsePtr &)>>(std::move(callback));
-    std::thread worker([cb, work = std::move(work)]() {
-        auto &limiter = WorkerLimiter::instance();
+    auto &limiter = WorkerLimiter::instance();
+    auto task = [cb, work = std::move(work), requestId, &limiter]() {
         HttpResponsePtr resp;
 
         if (!limiter.acquire(WorkerLimiter::Lane::Internal)) {
-            LOG_WARN << "collab 내부 API 동시 한도 초과 — 요청을 거부합니다 (internal="
-                     << limiter.internalRunning() << ", waiting=" << limiter.waiting() << ")";
+            LOG_WARN << "[COLLAB] event=worker.limit " << app_utils::requestIdTag(requestId)
+                     << " lane=internal running=" << limiter.internalRunning()
+                     << " waiting=" << limiter.waiting();
             resp = errorResponse("503", "서버가 붐빕니다. 잠시 뒤 다시 시도해 주세요.", k503ServiceUnavailable);
             resp->addHeader("Retry-After", "2");
         } else {
             try {
                 resp = work();
             } catch (const orm::DrogonDbException &e) {
-                resp = dbErrorResponse(e);
+                resp = dbErrorResponse(e, requestId);
             } catch (const std::exception &e) {
-                LOG_ERROR << "collab 핸들러 실패: " << e.what();
+                LOG_ERROR << "[COLLAB] event=handler.failed " << app_utils::requestIdTag(requestId)
+                          << " error=" << app_utils::sanitizeLogValue(e.what(), 1024);
                 resp = errorResponse("500", "서버 처리 중 오류가 발생했습니다.", k500InternalServerError);
             }
             limiter.release(WorkerLimiter::Lane::Internal);
         }
 
         app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
-    });
-    worker.detach();
+    };
+
+    if (!limiter.submit(WorkerLimiter::Lane::Internal, std::move(task))) {
+        LOG_WARN << "[COLLAB] event=worker.limit " << app_utils::requestIdTag(requestId)
+                 << " lane=internal running=" << limiter.internalRunning()
+                 << " waiting=" << limiter.waiting();
+        auto resp = errorResponse("503", "서버가 붐빕니다. 잠시 후 다시 시도해 주세요.", k503ServiceUnavailable);
+        resp->addHeader("Retry-After", "2");
+        app().getLoop()->queueInLoop([cb, resp]() { (*cb)(resp); });
+    }
+}
+
+void runOffLoop(std::function<void(const HttpResponsePtr &)> &&callback,
+                std::function<HttpResponsePtr()> &&work) {
+    runOffLoop(std::move(callback), std::move(work), std::string());
+}
+
+void runOffLoop(const HttpRequestPtr &req,
+                std::function<void(const HttpResponsePtr &)> &&callback,
+                std::function<HttpResponsePtr()> &&work) {
+    runOffLoop(std::move(callback), std::move(work), app_utils::requestIdOf(req));
 }
 
 // 내부 토큰 / 시간 / 난수
@@ -297,42 +314,24 @@ void CollabController::issueTicket(const HttpRequestPtr &req,
     const std::string requester = requesterEmail(req);
     const int repoId = (*jsonPtr)["repo_id"].asInt();
 
-    runOffLoop(std::move(callback), [requester, repoId]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [requester, repoId]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
-        // 1) 저장소가 연결돼 있고 요청자가 그 노드를 볼 수 있어야 한다.
-        //    없으면 P0801, 권한이 없으면 P0103 을 DB 함수가 던진다.
-        Json::Value repo;
-        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)",
+        // 1) 요청자·저장소·노드·보기 권한을 DB 함수 하나가 검증하고,
+        //    세션에 담을 이름과 쓰기 권한까지 함께 돌려준다.
+        Json::Value context;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_collab_ticket_context($1, $2)",
                                        requester, repoId),
-                       repo)) {
+                       context)) {
             return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
         }
-        const int nodeId = repo["node_id"].asInt();
+        const int nodeId = context["node_id"].asInt();
+        const bool canWrite = context["can_write"].as<bool>();
 
-        // 1-1) 노드가 삭제되었으면(그 서브트리까지 연쇄 소프트 딜리트) 세션을 열 이유가 없다.
-        //      접속 등록(P0815)이 최종 방어선이지만, 여기서 먼저 막아 문서 소켓이 붙을 기회를 주지 않는다.
-        if (db->execSqlSync("SELECT 1 FROM organization_nodes WHERE node_id = $1 AND is_deleted = FALSE",
-                            nodeId)
-                .empty()) {
-            return errorResponse("P0815", "워크스페이스가 삭제되어 협업 세션을 열 수 없습니다.", k404NotFound);
-        }
-
-        // 2) 세션에 담을 이름과 쓰기 권한을 한 번에 읽는다.
-        //    권한은 브랜치 생성/삭제·커밋·push 와 같은 GITHUB_CHANGE 를 기준으로 한다.
-        auto rows = db->execSqlSync(
-            "SELECT u.name, check_authority_with_override(u.user_id, $2, $3) AS can_write "
-            "FROM users u WHERE u.email = $1 AND u.is_deleted = FALSE",
-            requester, nodeId, std::string(kWriteAuthority));
-        if (rows.empty()) {
-            return errorResponse("P0001", "요청자 계정을 찾을 수 없습니다.", k401Unauthorized);
-        }
-        const bool canWrite = rows[0]["can_write"].as<bool>();
-
-        // 3) 티켓 발급 (TTL 60초·1회용). 저장소 정보는 여기서 확정하고 collab 에게 넘긴다.
+        // 2) 티켓 발급 (TTL 60초·1회용). 저장소 정보는 여기서 확정하고 collab 에게 넘긴다.
         CollabTicket ticket;
         ticket.userEmail = requester;
-        ticket.userName = rows[0]["name"].as<std::string>();
+        ticket.userName = context["name"].as<std::string>();
         ticket.repoId = repoId;
         ticket.nodeId = nodeId;
         ticket.canWrite = canWrite;
@@ -413,38 +412,24 @@ void CollabController::resolvePath(const HttpRequestPtr &req,
     const int repoId = (*jsonPtr)["repo_id"].asInt();
     const std::string branch = (*jsonPtr)["branch"].asString();
 
-    runOffLoop(std::move(callback), [repoId, branch]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [repoId, branch]() -> HttpResponsePtr {
         auto db = app().getDbClient();
 
-        // 2) 저장소 + 브랜치를 한 번에 읽는다. 기본 브랜치도 github_branches 행이 있으므로
-        //    (create_github_repository 가 등록해 둔다) 여기서 함께 조회된다.
+        // 2) 저장소·브랜치·노드 생존과 경로 슬러그를 DB 함수가 한 번에 검증한다.
         //    행이 없으면 "등록되지 않은 브랜치"이고 collab 은 그 브랜치를 열 수 없다.
-        auto rows = db->execSqlSync(
-            "SELECT r.node_id, r.local_path, r.default_branch, b.worktree_path, "
-            "       github_branch_slug(b.name) AS branch_slug "
-            "FROM github_repositories r "
-            "JOIN github_branches b ON b.repo_id = r.repo_id "
-            "  AND b.name = $2 AND b.is_deleted = FALSE "
-            "WHERE r.repo_id = $1 AND r.is_deleted = FALSE",
-            repoId, branch);
-        if (rows.empty()) {
+        Json::Value context;
+        if (!singleRow(db->execSqlSync(
+                           "SELECT * FROM get_collab_worktree_context($1, $2)",
+                           repoId, branch),
+                       context)) {
             return errorResponse("P0801", "등록되지 않은 저장소 또는 브랜치입니다: " + branch, k404NotFound);
         }
 
-        const auto &row = rows[0];
-        const std::string localPath = row["local_path"].as<std::string>();
-        const std::string defaultBranch = row["default_branch"].as<std::string>();
-        const std::string worktreePath = row["worktree_path"].as<std::string>();
-        const std::string branchSlug = row["branch_slug"].as<std::string>();
-        const int nodeId = row["node_id"].as<int>();
-
-        // 2-1) 노드가 삭제된 저장소는 열 수 없다. 접속 등록(P0815)과 같은 이유다 —
-        //      캐시가 비워진 뒤 다시 붙는 세션이 옛 경로로 방을 여는 것을 막는다.
-        if (db->execSqlSync("SELECT 1 FROM organization_nodes WHERE node_id = $1 AND is_deleted = FALSE",
-                            nodeId)
-                .empty()) {
-            return errorResponse("P0815", "워크스페이스가 삭제되어 브랜치를 열 수 없습니다.", k404NotFound);
-        }
+        const std::string localPath = context["local_path"].as<std::string>();
+        const std::string defaultBranch = context["default_branch"].as<std::string>();
+        const std::string worktreePath = context["worktree_path"].as<std::string>();
+        const std::string branchSlug = context["branch_slug"].as<std::string>();
+        const int nodeId = context["node_id"].as<int>();
 
         std::string localRel;
         std::string worktreeRel;
@@ -603,7 +588,7 @@ void CollabController::recheckPermissions(const HttpRequestPtr &req,
     writer["indentation"] = "";
     const std::string sessionsJson = Json::writeString(writer, sessions);
 
-    runOffLoop(std::move(callback), [sessionsJson]() -> HttpResponsePtr {
+    runOffLoop(req, std::move(callback), [sessionsJson]() -> HttpResponsePtr {
         auto db = app().getDbClient();
         auto rows = db->execSqlSync("SELECT * FROM get_collab_session_permissions($1::JSONB)", sessionsJson);
 

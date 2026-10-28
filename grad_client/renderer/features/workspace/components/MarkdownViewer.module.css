@@ -1,6 +1,6 @@
 .markdownRoot {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  color: var(--text-primary, #f1f5f9);
+  font-family: var(--font-sans);
+  color: var(--axis-text-primary, #1C1B18);
   line-height: 1.65;
   font-size: 0.88rem;
   max-width: 800px;
@@ -12,8 +12,8 @@
   font-weight: 800;
   margin: 1.2rem 0 0.8rem 0;
   padding-bottom: 0.4rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--text-primary, #ffffff);
+  border-bottom: 1px solid var(--axis-line-default, #E2DDD2);
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .h2 {
@@ -21,31 +21,33 @@
   font-weight: 750;
   margin: 1.4rem 0 0.6rem 0;
   padding-bottom: 0.3rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text-primary, #ffffff);
+  border-bottom: 1px solid var(--axis-line-default, #E2DDD2);
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .h3 {
   font-size: 1.02rem;
   font-weight: 700;
   margin: 1.1rem 0 0.4rem 0;
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .h4 {
   font-size: 0.92rem;
   font-weight: 700;
   margin: 0.9rem 0 0.3rem 0;
+  color: var(--axis-text-secondary, #5C5850);
 }
 
 .paragraph {
   margin: 0.6rem 0;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .hr {
   height: 1px;
   border: 0;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--axis-line-default, #E2DDD2);
   margin: 1.4rem 0;
 }
 
@@ -53,17 +55,18 @@
   padding: 0.15rem 0.4rem;
   margin: 0 0.2rem;
   font-size: 0.82rem;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--axis-surface-muted, #EBE7DE);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
   border-radius: var(--radius-xs, 4px);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: #e2e8f0;
+  color: var(--axis-brand-primary, #7A5C43);
 }
 
 .codeBlockWrapper {
   position: relative;
   margin: 1rem 0;
-  background: #090d16;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--axis-surface-panel, #F7F6F2);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
   border-radius: var(--radius-md, 6px);
   overflow: hidden;
 }
@@ -75,7 +78,7 @@
   font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--axis-text-muted, #878278);
 }
 
 .codeBlock {
@@ -85,7 +88,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.8rem;
   line-height: 1.45;
-  color: #f8fafc;
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .tableWrapper {
@@ -103,26 +106,26 @@
 .table th,
 .table td {
   padding: 0.55rem 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
   text-align: left;
 }
 
 .table th {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--axis-surface-muted, #EBE7DE);
   font-weight: 750;
-  color: #ffffff;
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .table td {
-  background: rgba(255, 255, 255, 0.02);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--axis-surface-panel, #F7F6F2);
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .ul,
 .ol {
   margin: 0.6rem 0;
   padding-left: 1.4rem;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .ul li,

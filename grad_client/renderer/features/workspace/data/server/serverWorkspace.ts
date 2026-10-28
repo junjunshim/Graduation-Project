@@ -45,8 +45,15 @@ import { normalizeServerContext } from './contextAdapter.js'
 import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
 import { setCurrentSessionUserId } from '../session.js'
-import { notifyLiveNotificationReceived, notifyWorkspaceCacheRefreshFailed } from '../workspaceCacheEvents.js'
+import { clearCachedFileContents } from '../fileContentCache.js'
+import {
+  notifyChatRealtimeEvent,
+  notifyLiveNotificationReceived,
+  notifyWorkspaceCacheRefreshFailed,
+  notifyWorkspaceLiveRefresh,
+} from '../workspaceCacheEvents.js'
 import { pruneFavoriteWorkspaceIds } from '../workspaceDirectorySelection.js'
+import { createCoalescedTask } from './coalescedTask.js'
 
 type ServerOperationError = {
   status: 'error'
@@ -156,10 +163,19 @@ function applyNodeSubtreeDeletionLocally(nodeId: number, isDeleted: boolean) {
  * 새로 생긴 노드의 역할이나 하위 노드 범위는 로컬에서 추정할 수 없다.
  * 진입점과 동일한 경량 스코프(/context/scope)를 다시 받아 노드 트리를 서버 기준으로 맞춘다.
  */
+const WORKSPACE_TREE_REFRESH_DELAY_MS = 50
+const workspaceTreeRefreshTask = createCoalescedTask(
+  () => loadWorkspaceDirectoryScopeOnServer(),
+  {
+    delayMs: WORKSPACE_TREE_REFRESH_DELAY_MS,
+    onError: (err) => {
+      console.warn('[WebSocket] 워크스페이스 트리 동기화 실패:', err)
+    },
+  },
+)
+
 function refreshWorkspaceTreeFromServer() {
-  void loadWorkspaceDirectoryScopeOnServer().catch((err) => {
-    console.warn('[WebSocket] 워크스페이스 트리 동기화 실패:', err)
-  })
+  workspaceTreeRefreshTask.schedule()
 }
 
 /**
@@ -199,10 +215,17 @@ function getCurrentServerEmail() {
   return normalizeEmail(getServerSessionEmail() ?? '')
 }
 
-function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDatabase): WorkspaceDatabase {
+function mergeServerUpdates(
+  current: WorkspaceDatabase,
+  updates: WorkspaceDatabase,
+  options?: { authoritativeNodeIds?: Iterable<number> },
+): WorkspaceDatabase {
   // 노드별 업무 재구성: updates에 노드가 들어온 경우, 해당 노드의 업무는 updates의 업무로 완전히 교체(Replace)
   // updates에 포함된 노드 ID 목록
-  const updatedNodeIds = new Set(updates.nodes.map((n) => n.id))
+  const updatedNodeIds = new Set<number>(updates.nodes.map((n) => n.id))
+  for (const nodeId of options?.authoritativeNodeIds ?? []) {
+    updatedNodeIds.add(nodeId)
+  }
 
   // 1. 노드: updates에 있는 노드로 교체/추가
   const nodesById = new Map(current.nodes.map((node) => [node.id, node]))
@@ -238,22 +261,35 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
 
   // 6. 파일: updates의 노드 업무 파일로 교체 (파일 ID 및 workItemId 기준 중복 방지)
   const updatedWorkItemIds = new Set(updates.workItems.map((w) => w.workItemId))
+  const removedWorkItemIds = new Set(
+    current.workItems
+      .filter((item) => updatedNodeIds.has(item.ownerNodeId) && !updatedWorkItemIds.has(item.workItemId))
+      .map((item) => item.workItemId),
+  )
   const filesById = new Map((current.files ?? []).map((f) => [f.id, f]))
-  if (updatedWorkItemIds.size > 0) {
-    ;(current.files ?? []).forEach((f) => {
-      if (updatedWorkItemIds.has(f.workItemId)) {
+  if (updatedWorkItemIds.size > 0 || removedWorkItemIds.size > 0) {
+    const currentFiles = current.files ?? []
+    currentFiles.forEach((f) => {
+      if (updatedWorkItemIds.has(f.workItemId) || removedWorkItemIds.has(f.workItemId)) {
         filesById.delete(f.id)
       }
     })
   }
-  ;(updates.files ?? []).forEach((f) => filesById.set(f.id, f))
+  const updatedFiles = updates.files ?? []
+  updatedFiles.forEach((f) => filesById.set(f.id, f))
   const files = Array.from(filesById.values())
 
-  // 7. 활동 및 멘션 병합
-  const mentionsById = new Map((current.mentions ?? []).map((m) => [m.id, m]))
-  const activitiesById = new Map((current.activities ?? []).map((act) => [act.id, act]))
-  ;(updates.mentions ?? []).forEach((m) => mentionsById.set(m.id, m))
-  ;(updates.activities ?? []).forEach((act) => activitiesById.set(act.id, act))
+  // 7. 활동: 노드 상세 응답은 해당 노드의 권위 데이터이므로, 응답에 없는 활동은 캐시에서도 제거한다.
+  const activities = [
+    ...(current.activities ?? []).filter((act) => !updatedNodeIds.has(act.nodeId)),
+    ...(updates.activities ?? []),
+  ]
+
+  // 8. 멘션: 업무 교체로 사라진 업무의 멘션만 정리한다. 그 외 멘션은 알림 이력이므로 보존한다.
+  const mentions = [
+    ...(current.mentions ?? []).filter((mention) => !removedWorkItemIds.has(mention.workItemId)),
+    ...(updates.mentions ?? []),
+  ]
 
   const nodes = Array.from(nodesById.values())
 
@@ -264,8 +300,8 @@ function mergeServerUpdates(current: WorkspaceDatabase, updates: WorkspaceDataba
     roles,
     workItems,
     authorities,
-    mentions: Array.from(mentionsById.values()),
-    activities: Array.from(activitiesById.values()),
+    mentions,
+    activities,
     files,
     counters: {
       node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
@@ -388,14 +424,31 @@ export async function loadWorkspaceDirectoryScopeOnServer(email = getCurrentServ
   const current = readWorkspaceDb()
   const { workspace: updates } = normalizeServerContext(items, email, { referenceWorkspace: current })
 
-  // 소프트 딜리트 및 휴지통 복구를 지원하기 위해, 기존 업무(workItems)와 파일(files)은 캐시에서 임의 삭제하지 않고 그대로 보존
+  // /context/scope 는 접근 가능한 노드 전체를 권위 데이터로 반환한다.
+  // 응답에서 사라진 노드의 업무/파일/활동은 서버에서 더 이상 이 사용자의 스코프가 아니므로 함께 제거한다.
+  // 살아있는 노드(삭제되어 is_deleted=true 로 내려오는 노드 포함)의 기존 업무/파일은 노드 상세 조회가 교체한다.
+  const visibleNodeIds = new Set(updates.nodes.map((node) => node.id))
+  const removedWorkItemIds = new Set(
+    current.workItems
+      .filter((item) => !visibleNodeIds.has(item.ownerNodeId))
+      .map((item) => item.workItemId),
+  )
+  const workItems = current.workItems.filter(
+    (item) => visibleNodeIds.has(item.ownerNodeId) && !removedWorkItemIds.has(item.workItemId),
+  )
+  const files = (current.files ?? []).filter((file) => !removedWorkItemIds.has(file.workItemId))
+  const activities = (current.activities ?? []).filter((activity) => visibleNodeIds.has(activity.nodeId))
+  const mentions = (current.mentions ?? []).filter((mention) => !removedWorkItemIds.has(mention.workItemId))
+
   const updatedDb: WorkspaceDatabase = {
     ...current,
     nodes: updates.nodes,
     roles: updates.roles,
     authorities: updates.authorities ?? [],
-    workItems: current.workItems,
-    files: current.files,
+    workItems,
+    files,
+    activities,
+    mentions,
     counters: {
       ...current.counters,
       node: Math.max(0, ...updates.nodes.map((node) => node.id), ...current.nodes.map((n) => n.id)) + 1,
@@ -444,7 +497,8 @@ export async function fetchNodeDetailOnServer(nodeId: number | string) {
     console.warn('[WorkspaceAdapter] 노드 상세 항목 정규화 이슈:', issues)
   }
 
-  const merged = mergeServerUpdates(current, normalized)
+  // Treat the requested node as authoritative even if the response omits the node record itself.
+  const merged = mergeServerUpdates(current, normalized, { authoritativeNodeIds: [parsedId] })
   writeServerWorkspaceDb(merged)
   return merged
 }
@@ -482,6 +536,7 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
     }
 
     shouldRollbackSession = true
+    await clearCachedFileContents()
     setServerSession({
       ...tokens,
       email,
@@ -521,17 +576,156 @@ export async function signInServerUser(payload: SignInRequest): Promise<SignInRe
   }
 }
 
+export type PasswordResetRequestResult = {
+  status: 'success' | 'error'
+  message: string
+}
+
+const PASSWORD_RESET_GENERIC_MESSAGE =
+  '입력한 이메일이 등록되어 있다면 재설정 안내를 보냈습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.'
+
+export async function requestPasswordResetOnServer(email: string): Promise<PasswordResetRequestResult> {
+  const normalizedEmail = normalizeEmail(email)
+
+  try {
+    const response = await requestServerStatus('/users/password-reset/request', {
+      method: 'POST',
+      body: { email: normalizedEmail },
+      includeToken: false,
+    })
+
+    if (response.status === 'error') {
+      return {
+        status: 'error',
+        message: response.message ?? '비밀번호 재설정 요청에 실패했습니다.',
+      }
+    }
+
+    return {
+      status: 'success',
+      message: PASSWORD_RESET_GENERIC_MESSAGE,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : '비밀번호 재설정 요청에 실패했습니다.',
+    }
+  }
+}
+
+export type SignupVerificationRequestResult = {
+  status: 'success' | 'error'
+  message: string
+}
+
+export type SignupVerificationConfirmResult =
+  | {
+      status: 'success'
+      message: string
+      verificationToken: string
+      expiresInMinutes: number
+    }
+  | {
+      status: 'error'
+      message: string
+    }
+
+const SIGNUP_VERIFICATION_GENERIC_MESSAGE =
+  '인증번호를 보냈습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.'
+
+export async function requestSignupEmailVerificationOnServer(
+  email: string,
+): Promise<SignupVerificationRequestResult> {
+  const normalizedEmail = normalizeEmail(email)
+
+  try {
+    const response = await requestServerStatus('/users/email-verification/request', {
+      method: 'POST',
+      body: { email: normalizedEmail },
+      includeToken: false,
+    })
+
+    if (response.status === 'error') {
+      return {
+        status: 'error',
+        message: response.message ?? '인증번호 요청에 실패했습니다.',
+      }
+    }
+
+    return {
+      status: 'success',
+      message: response.message ?? SIGNUP_VERIFICATION_GENERIC_MESSAGE,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : '인증번호 요청에 실패했습니다.',
+    }
+  }
+}
+
+export async function confirmSignupEmailVerificationOnServer(
+  email: string,
+  code: string,
+): Promise<SignupVerificationConfirmResult> {
+  const normalizedEmail = normalizeEmail(email)
+  const normalizedCode = code.trim()
+
+  try {
+    const response = await apiRequest<unknown>('/users/email-verification/confirm', {
+      method: 'POST',
+      body: { email: normalizedEmail, code: normalizedCode },
+      includeToken: false,
+    })
+
+    if (!isServerStatusResponse(response)) {
+      throw new Error('서버 응답 형식이 올바르지 않습니다.')
+    }
+
+    if (response.status === 'error') {
+      return {
+        status: 'error',
+        message: response.message ?? '인증번호를 확인하지 못했습니다.',
+      }
+    }
+
+    const payload = response as typeof response & {
+      verification_token?: unknown
+      expires_in_minutes?: unknown
+    }
+    const verificationToken =
+      typeof payload.verification_token === 'string' ? payload.verification_token.trim() : ''
+    if (!verificationToken) {
+      throw new Error('서버가 이메일 인증 토큰을 반환하지 않았습니다.')
+    }
+
+    return {
+      status: 'success',
+      message: response.message ?? '이메일 인증이 완료되었습니다.',
+      verificationToken,
+      expiresInMinutes:
+        typeof payload.expires_in_minutes === 'number' ? payload.expires_in_minutes : 15,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : '인증번호를 확인하지 못했습니다.',
+    }
+  }
+}
+
 export async function signUpServerUser(payload: SignUpRequest) {
   const email = normalizeEmail(payload.email)
 
   try {
-    const response = await requestServerStatus('/users', {
+    const response = await requestServerStatus('/users/signup', {
       method: 'POST',
       body: {
         user_id: payload.userId.trim(),
         email,
         name: payload.name.trim(),
         password: payload.password,
+        verification_token: payload.verificationToken,
       },
       includeToken: false,
     })
@@ -571,6 +765,7 @@ export function signOutServerUser() {
   clearServerSession()
   clearServerWorkspaceDb()
   setCurrentSessionUserId(null)
+  void clearCachedFileContents()
 }
 
 export async function deleteNodeOnServer(nodeId: number) {
@@ -1403,6 +1598,12 @@ let reconnectAttempts = 0
 let isIntentionalDisconnect = false
 const MAX_RECONNECT_DELAY_MS = 30_000
 
+// 채널 참여자 presence. 마지막으로 보고 있는 채널을 기억해 재연결 시 다시 join 한다.
+let activePresenceChannelId: number | null = null
+let socketPresenceChannelId: number | null = null
+let presenceJoinRequestId = 0
+const notifiedChatMessageIds = new Set<number>()
+
 // 앱 실행 단위로 고유한 연결 식별자. 재연결 시 서버가 같은 클라이언트의 이전 연결만 교체할 수 있게 한다.
 const WS_CLIENT_ID = 'client-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
 const INITIAL_RECONNECT_DELAY_MS = 1_000
@@ -1414,6 +1615,158 @@ export function getNotificationWebSocketUrl(): string {
   urlObj.protocol = wsProtocol
   urlObj.pathname = `${urlObj.pathname.replace(/\/+$/, '')}/notification/ws`
   return urlObj.toString()
+}
+
+// 채널을 보고 있는 동안 서버에 참여자로 등록한다. 이미 연결된 소켓이 있으면 바로 신호를 보낸다.
+export async function joinChannelPresence(channelId: number) {
+  if (!Number.isFinite(channelId) || channelId <= 0) {
+    return
+  }
+
+  activePresenceChannelId = channelId
+  const requestId = ++presenceJoinRequestId
+
+  try {
+    const socket = await connectNotificationWebSocket()
+    if (requestId !== presenceJoinRequestId || activePresenceChannelId !== channelId) {
+      return
+    }
+    if (socket.readyState !== WebSocket.OPEN || socketPresenceChannelId === channelId) {
+      return
+    }
+
+    socket.send(JSON.stringify({ type: 'CHANNEL_JOIN', channel_id: channelId }))
+    socketPresenceChannelId = channelId
+  } catch (error) {
+    console.warn('[WebSocket] 채널 참여자 등록에 실패했습니다.', error)
+  }
+}
+
+// 채널 화면을 벗어나면 참여자 목록에서 빠진다. 소켓이 아직 연결 중이면 서버 방에도 들어가지 않았으므로 보내지 않는다.
+export function leaveChannelPresence() {
+  const channelId = activePresenceChannelId
+  activePresenceChannelId = null
+  presenceJoinRequestId += 1
+
+  if (!channelId) {
+    return
+  }
+
+  if (notificationSocket && notificationSocket.readyState === WebSocket.OPEN) {
+    try {
+      notificationSocket.send(JSON.stringify({ type: 'CHANNEL_LEAVE', channel_id: channelId }))
+    } catch {
+      // ignore
+    }
+  }
+
+  socketPresenceChannelId = null
+}
+
+function asChatAttachmentNames(files: unknown): string[] {
+  if (!Array.isArray(files)) {
+    return []
+  }
+
+  return files
+    .map((file) => {
+      if (!file || typeof file !== 'object') {
+        return ''
+      }
+      const record = file as Record<string, unknown>
+      return String(record.original_file_name ?? record.originalFileName ?? '').trim()
+    })
+    .filter((name) => name.length > 0)
+}
+
+// CHAT WebSocket 은 채널 화면이 열려 있지 않아도 전역으로 들어온다. 이 신호를 벨/토스트용
+// 알람으로 복제하되, 발신자 본인과 현재 열고 있는 채널은 제외한다.
+function notifyChatMessageAsInbox(subType: string, data: Record<string, unknown>) {
+  if (subType !== 'MESSAGE_CREATED' && subType !== 'MESSAGE_FILE_ADDED') {
+    return
+  }
+
+  const currentEmail = getCurrentServerEmail()
+  if (!currentEmail) {
+    return
+  }
+
+  const channelId = Number(data.channel_id ?? 0)
+  const messageId = Number(data.message_id ?? 0)
+  if (!Number.isFinite(channelId) || channelId <= 0 || !Number.isFinite(messageId) || messageId <= 0) {
+    return
+  }
+  if (activePresenceChannelId === channelId) {
+    return
+  }
+
+  const senderEmail = normalizeEmail(String(data.sender_email ?? ''))
+  if (!senderEmail || senderEmail === currentEmail) {
+    return
+  }
+
+  const content = typeof data.content === 'string' ? data.content : ''
+  const attachmentNames = asChatAttachmentNames(data.files)
+  const attachmentCount = attachmentNames.length
+  const hasText = content.trim().length > 0
+
+  // 파일은 메시지 생성 뒤 별도 업로드 이벤트로 도착한다. 빈 메시지 생성은 보류하고,
+  // 첫 파일이 붙었을 때 같은 notification_key 로 알람을 만든다.
+  if (subType === 'MESSAGE_CREATED' && !hasText && attachmentCount === 0) {
+    return
+  }
+  if (subType === 'MESSAGE_FILE_ADDED' && (hasText || attachmentCount === 0)) {
+    return
+  }
+  if (notifiedChatMessageIds.has(messageId)) {
+    return
+  }
+
+  const channelType = String(data.channel_type ?? '').toUpperCase()
+  const parentValue = Number(data.parent_message_id ?? 0)
+  const parentMessageId = Number.isFinite(parentValue) && parentValue > 0 ? parentValue : null
+  const ownerNodeId = Number(data.owner_node_id ?? 0)
+  const channelName = typeof data.channel_name === 'string' ? data.channel_name : null
+  const actorName = String(data.sender_name ?? data.sender_email ?? '사용자')
+  const createdAt = typeof data.created_at === 'string' ? data.created_at : new Date().toISOString()
+  const title = parentMessageId
+    ? '스레드 답글'
+    : channelType === 'DM'
+      ? '다이렉트 메시지'
+      : '채널 메시지'
+
+  // 벨 목록은 notification_key 로 중복을 막지만 토스트는 수신 즉시 표시한다. 같은 메시지의
+  // 파일 추가 이벤트가 여러 번 와도 토스트가 반복되지 않도록 여기서 먼저 기억한다.
+  notifiedChatMessageIds.add(messageId)
+  if (notifiedChatMessageIds.size > 500) {
+    const oldest = notifiedChatMessageIds.values().next().value
+    if (oldest != null) {
+      notifiedChatMessageIds.delete(oldest)
+    }
+  }
+
+  notifyLiveNotificationReceived({
+    notification_key: `chat:${messageId}`,
+    sub_type: 'CHAT_MESSAGE',
+    entity_type: 'CHAT_MESSAGE',
+    entity_id: String(messageId),
+    action: 'inserted',
+    node_id: channelType === 'WORKSPACE' && ownerNodeId > 0 ? ownerNodeId : undefined,
+    actor_user_id: String(data.sender_user_id ?? senderEmail),
+    actor_name: actorName,
+    title,
+    content,
+    channel_id: channelId,
+    channel_type: channelType,
+    channel_name: channelName,
+    parent_message_id: parentMessageId,
+    attachment_count: attachmentCount,
+    attachment_names: attachmentNames,
+    link_url: `/channels?channelId=${channelId}`,
+    is_read: false,
+    created_at: createdAt,
+    can_view_detail: true,
+  })
 }
 
 function scheduleWebSocketReconnect() {
@@ -1542,6 +1895,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
       const wsUrl = getNotificationWebSocketUrl()
       const socket = new WebSocket(wsUrl)
       notificationSocket = socket
+      socketPresenceChannelId = null
 
       const timeoutId = setTimeout(() => {
         if (!isHandshakeComplete) {
@@ -1573,6 +1927,19 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         }
         console.info('[WebSocket] 실시간 알림 서버 연결 성공')
         startHeartbeat(socket)
+
+        // 재연결이면 이전 연결의 서버 방 상태가 사라졌으므로 마지막 채널에 다시 들어간다.
+        if (activePresenceChannelId) {
+          try {
+            socket.send(
+              JSON.stringify({ type: 'CHANNEL_JOIN', channel_id: activePresenceChannelId }),
+            )
+            socketPresenceChannelId = activePresenceChannelId
+          } catch {
+            // ignore
+          }
+        }
+
         resolve(socket)
       }
 
@@ -1613,11 +1980,49 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
             return
           }
 
+          if (payload && payload.type === 'CHAT') {
+            const subType = typeof payload.sub_type === 'string' ? payload.sub_type : ''
+            const chatData =
+              payload.data && typeof payload.data === 'object'
+                ? (payload.data as Record<string, unknown>)
+                : (payload as Record<string, unknown>)
+            notifyChatRealtimeEvent({ subType, data: chatData })
+            notifyChatMessageAsInbox(subType, chatData)
+            return
+          }
+          if (payload && payload.type === 'WORKSPACE_REFRESH') {
+            const data =
+              payload.data && typeof payload.data === 'object'
+                ? (payload.data as Record<string, unknown>)
+                : ({} as Record<string, unknown>)
+            const nodeIdValue = Number(data.node_id ?? 0)
+            const entityType = typeof data.entity_type === 'string' ? data.entity_type : ''
+            const action = typeof data.action === 'string' ? data.action : ''
+
+            notifyWorkspaceLiveRefresh({
+              nodeId: nodeIdValue > 0 ? nodeIdValue : null,
+              entityType,
+              entityId: typeof data.entity_id === 'string' ? data.entity_id : '',
+              action,
+              isRecurringFile: Boolean(data.is_recurring_file),
+            })
+
+            // 노드 생성/수정/복구는 물론 삭제도 트리 전체를 다시 받아 캐시에서 제거한다.
+            if (
+              isWorkspaceStructureNotification({ entity_type: entityType, action }) ||
+              (entityType === 'NODE' && action === 'deleted')
+            ) {
+              refreshWorkspaceTreeFromServer()
+            }
+            return
+          }
+
           if (payload && payload.type === 'NOTIFICATION') {
             const data = payload.data || payload
 
             // 1. 전역 라이브 알림 이벤트 발송 (Toast 및 Bell 헤더 팝오버용)
             notifyLiveNotificationReceived({
+              notification_key: typeof data.notification_key === 'string' ? data.notification_key : undefined,
               notification_id: data.notification_id || data.mention_id,
               node_id: data.node_id,
               entity_type: data.entity_type || (payload.sub_type === 'MENTION' ? 'COMMENT' : undefined),
@@ -1638,6 +2043,14 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
               is_read: Boolean(data.is_read),
               created_at: data.created_at || new Date().toISOString(),
               can_view_detail: data.can_view_detail !== false,
+              repo_id: Number.isFinite(Number(data.repo_id)) ? Number(data.repo_id) : undefined,
+              repo_full_name: typeof data.repo_full_name === 'string' ? data.repo_full_name : undefined,
+              branch: typeof data.branch === 'string' ? data.branch : undefined,
+              commit_sha: typeof data.commit_sha === 'string' ? data.commit_sha : undefined,
+              commit_message: typeof data.commit_message === 'string' ? data.commit_message : undefined,
+              pushed_commit_count: Number.isFinite(Number(data.pushed_commit_count))
+                ? Number(data.pushed_commit_count)
+                : undefined,
             })
 
             // 2. 삭제 활동(action === 'deleted')인 경우, 서버 재호출 없이 로컬 캐시에서 즉시 제거하여 유령 데이터 소멸
@@ -1667,16 +2080,19 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
                     }
                   })
 
+                  const targetWorkItemIds = new Set<string>()
                   currentDb.workItems.forEach((item) => {
-                    if (targetNodeIds.has(item.ownerNodeId) && !item.isDeleted) {
+                    if (!targetNodeIds.has(item.ownerNodeId)) return
+
+                    targetWorkItemIds.add(item.workItemId)
+                    if (!item.isDeleted) {
                       item.isDeleted = true
                       isModified = true
                     }
                   })
 
                   ;(currentDb.files ?? []).forEach((file) => {
-                    const owner = currentDb.workItems.find((item) => item.workItemId === file.workItemId)
-                    if (owner && targetNodeIds.has(owner.ownerNodeId) && !file.isDeleted) {
+                    if (targetWorkItemIds.has(file.workItemId) && !file.isDeleted) {
                       file.isDeleted = true
                       isModified = true
                     }
@@ -1730,6 +2146,7 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
         console.info(`[WebSocket] 실시간 알림 서버 연결 종료 (코드: ${event.code})`)
         if (notificationSocket === socket) {
           notificationSocket = null
+          socketPresenceChannelId = null
         }
 
         if (!isHandshakeComplete) {
@@ -1761,6 +2178,9 @@ export function connectNotificationWebSocket(token?: string | null): Promise<Web
 
 export function disconnectNotificationWebSocket() {
   isIntentionalDisconnect = true
+  workspaceTreeRefreshTask.cancel()
+  activePresenceChannelId = null
+  socketPresenceChannelId = null
   stopHeartbeat()
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)

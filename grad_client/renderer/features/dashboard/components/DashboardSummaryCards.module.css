@@ -1,202 +1,179 @@
-/* 좌우 폭을 아래 일정 패널과 동일하게 맞춘다 (5 : 7, 같은 간격) */
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 1.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.95rem;
   align-items: stretch;
+  min-width: 0;
 }
 
 .card {
   display: flex;
-  align-items: center;
-  gap: 1.15rem;
-  min-width: 0;
-  padding: 1.1rem 1.35rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--axis-radius-panel);
-}
-
-.progressCard {
-  background: var(--axis-status-info-soft);
-  border-color: var(--axis-status-info-border);
-}
-
-.dueCard {
-  background: var(--axis-status-warning-soft);
-  border-color: var(--axis-status-warning-border);
-}
-
-.iconBox {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 3.1rem;
-  height: 3.1rem;
-  border: 1px solid var(--line-default);
-  border-radius: var(--axis-radius-surface);
-  background: var(--surface-panel);
-}
-
-.iconBox[data-tone='info'] {
-  color: var(--axis-status-info);
-  border-color: var(--axis-status-info-border);
-}
-
-.iconBox[data-tone='warning'] {
-  color: var(--axis-status-warning);
-  border-color: var(--axis-status-warning-border);
-}
-
-.primary {
-  display: grid;
-  flex: 0 0 auto;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.label {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 0.86rem;
-  font-weight: 600;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.label[data-tone='info'] {
-  color: var(--axis-status-info);
-}
-
-.label[data-tone='danger'] {
-  color: var(--axis-status-danger);
-}
-
-.valueRow {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: space-between;
   gap: 0.7rem;
   min-width: 0;
-}
-
-.value,
-.dueValue,
-.overdueValue,
-.countValue,
-.rateValue {
-  color: var(--text-primary);
-  font-size: 1.75rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-  white-space: nowrap;
-}
-
-.dueValue,
-.overdueValue {
-  color: var(--axis-status-danger);
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.3rem 0.7rem;
-  border: 1px solid transparent;
-  border-radius: var(--axis-radius-pill);
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-panel);
   background: var(--surface-panel);
-  font-size: 0.79rem;
-  font-weight: 600;
-  white-space: nowrap;
 }
 
-.pill[data-tone='info'] {
-  color: var(--axis-status-info);
-  border-color: var(--axis-status-info-border);
+.accentCard {
+  background: var(--axis-brand-primary-soft);
+  border-color: var(--axis-brand-border);
 }
 
-.pill[data-tone='warning'] {
-  color: var(--axis-status-warning);
-  border-color: var(--axis-status-warning-border);
-}
-
-.divider {
-  flex: 0 0 auto;
-  align-self: stretch;
-  width: 1px;
-  margin: 0.1rem 0.25rem;
-  background: var(--line-default);
-}
-
-.rate {
-  display: grid;
-  flex: 1 1 auto;
-  gap: 0.3rem;
-  min-width: 0;
-}
-
-.rateRow {
+.cardHeader {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
 }
 
-.progressTrack {
-  position: relative;
-  display: block;
-  flex: 1 1 auto;
-  height: 0.5rem;
-  min-width: 4rem;
-  border-radius: var(--axis-radius-pill);
-  background: var(--axis-surface-muted);
-  overflow: hidden;
-}
-
-.progressFill {
-  display: block;
-  height: 100%;
-  border-radius: var(--axis-radius-pill);
-  background: var(--axis-status-info);
-}
-
-.rateCaption {
-  flex: 0 0 auto;
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  white-space: nowrap;
-}
-
-.count {
+.iconCircle {
   display: grid;
   flex: 0 0 auto;
-  gap: 0.35rem;
-  min-width: 0;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--axis-radius-pill);
+  border: 1px solid var(--axis-brand-border);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
 }
 
-/* 4개 지표를 카드 폭에 맞춰 같은 간격으로 끝에서 끝까지 배치한다. */
-.stats {
+.iconCircle[data-tone='success'] {
+  border-color: var(--axis-status-success-border);
+  background: var(--axis-status-success-soft);
+  color: var(--axis-status-success);
+}
+
+.iconCircle[data-tone='warning'] {
+  border-color: var(--axis-status-warning-border);
+  background: var(--axis-status-warning-soft);
+  color: var(--axis-status-warning);
+}
+
+.iconCircle[data-tone='danger'] {
+  border-color: var(--axis-status-danger-border);
+  background: var(--axis-status-danger-soft);
+  color: var(--axis-status-danger);
+}
+
+.titleGroup {
   display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.15rem;
+  flex-direction: column;
+  gap: 0.14rem;
   min-width: 0;
 }
 
-.count .label {
-  white-space: nowrap;
+.cardTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
-@media (max-width: 1180px) {
+.cardSubtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.mainValue {
+  margin-top: 0.1rem;
+  color: var(--text-primary);
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.cardFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.48rem;
+  min-width: 0;
+}
+
+.caption {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.segmentTrack {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.24rem;
+  align-items: center;
+}
+
+.segmentTrack[data-size='short'] {
+  grid-template-columns: repeat(5, minmax(0, 1.8rem));
+  justify-content: start;
+  gap: 0.32rem;
+}
+
+.segmentBlock {
+  display: block;
+  height: 0.56rem;
+  border: 1px solid color-mix(in srgb, var(--text-secondary) 28%, var(--line-default));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--surface-panel) 70%, var(--axis-surface-muted));
+}
+
+.segmentBlock[data-filled='true'] {
+  border-color: var(--axis-brand-primary);
+  background: var(--axis-brand-primary);
+}
+
+.segmentTrack[data-tone='success'] .segmentBlock[data-filled='true'] {
+  border-color: var(--axis-status-success);
+  background: var(--axis-status-success);
+}
+
+.segmentTrack[data-tone='warning'] .segmentBlock[data-filled='true'] {
+  border-color: var(--axis-status-warning);
+  background: var(--axis-status-warning);
+}
+
+.overdueFooter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: auto;
+  padding-top: 0.15rem;
+}
+
+.actionPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.34rem 0.85rem;
+  border: 1px solid var(--axis-brand-primary);
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--axis-motion-fast) ease;
+}
+
+.actionPill:hover,
+.actionPill:focus-visible {
+  filter: brightness(0.95);
+}
+
+@media (max-width: 680px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
-  }
-
-  .card {
-    flex-wrap: wrap;
-  }
-
-  .divider {
-    display: none;
   }
 }

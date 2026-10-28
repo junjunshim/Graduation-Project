@@ -15,6 +15,7 @@ import {
   getLocalRepositories,
   getLocalTree,
   hasCachedRepositories,
+  invalidateGithubQueryCache,
   type GithubBranch,
   type GithubCommit,
   type GithubFileContent,
@@ -148,6 +149,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   const [previewFile, setPreviewFile] = useState<GithubFileContent | null>(null)
   const [isLoadingFile, setIsLoadingFile] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
+  const [commitRefreshToken, setCommitRefreshToken] = useState(0)
 
   // VSCode 핸드오프
   const [isOpeningVscode, setIsOpeningVscode] = useState(false)
@@ -155,6 +157,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
   // 브랜치 비교에 쓰려고 최신 값을 ref 로도 들고 있는다(콜백 재생성 방지).
   const currentBranchRef = useRef('')
+  const selectedRepoIdRef = useRef<number | null>(null)
   const fileRequestId = useRef(0)
   const commitRequestId = useRef(0)
 
@@ -164,6 +167,10 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   useEffect(() => {
     currentBranchRef.current = currentBranch
   }, [currentBranch])
+
+  useEffect(() => {
+    selectedRepoIdRef.current = selectedRepoId
+  }, [selectedRepoId])
 
   const selectedRepository = useMemo(
     () => repositories.find((repository) => repository.repo_id === selectedRepoId) ?? null,
@@ -177,7 +184,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
   const sortedEntries = useMemo(() => sortEntries(entries), [entries])
 
-  const reloadRepositories = useCallback(async () => {
+  const reloadRepositories = useCallback(async (forceRefresh: boolean = false) => {
     const isCached = hasCachedRepositories(nodeId)
     const cached = getLocalRepositories(nodeId)
     if (!isCached && cached.length === 0) {
@@ -186,7 +193,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
     setReposError(null)
 
     try {
-      const list = await fetchRepositories(nodeId)
+      const list = await fetchRepositories(nodeId, { forceRefresh })
       setRepositories(list)
       setSelectedRepoId((current) => {
         if (current !== null && list.some((repository) => repository.repo_id === current)) {
@@ -223,16 +230,13 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
     }
 
     void reloadRepositories()
-
-    const unsub = subscribeToGithubCache((evt) => {
-      if (!evt.nodeId || evt.nodeId === nodeId) {
-        void reloadRepositories()
-      }
-    })
-    return () => unsub()
   }, [nodeId, reloadRepositories])
 
-  const reloadBranches = useCallback(async (repoId: number, preferred?: string) => {
+  const reloadBranches = useCallback(async (
+    repoId: number,
+    preferred?: string,
+    forceRefresh: boolean = false,
+  ) => {
     setDetailError(null)
 
     const cached = getLocalBranches(repoId)
@@ -245,7 +249,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
     }
 
     try {
-      const list = await fetchBranches(repoId)
+      const list = await fetchBranches(repoId, { forceRefresh })
       const next = pickBranch(list, preferred)
       const previous = currentBranchRef.current
 
@@ -330,7 +334,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   }, [selectedRepoId, currentBranch, currentPath, detailRefreshToken])
 
   // 커밋 그래프는 브랜치 단위로 읽는다. 브랜치가 바뀌면 통째로 다시 그린다.
-  const reloadCommits = useCallback(async () => {
+  const reloadCommits = useCallback(async (forceRefresh: boolean = false) => {
     if (selectedRepoId === null || !currentBranch) {
       setCommits([])
       setCommitsError(null)
@@ -349,7 +353,10 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
     setCommitsError(null)
 
     try {
-      const list = await fetchRepositoryCommits({ repoId: selectedRepoId, branch: currentBranch })
+      const list = await fetchRepositoryCommits(
+        { repoId: selectedRepoId, branch: currentBranch },
+        { forceRefresh },
+      )
 
       // 브랜치를 빠르게 바꾸면 먼저 보낸 요청이 나중에 도착할 수 있다. 최신 요청만 반영한다.
       if (requestId === commitRequestId.current) {
@@ -371,7 +378,23 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
   useEffect(() => {
     void reloadCommits()
-  }, [reloadCommits])
+  }, [reloadCommits, commitRefreshToken])
+
+  useEffect(() => {
+    const unsub = subscribeToGithubCache((evt) => {
+      if (!evt.nodeId || evt.nodeId === nodeId) {
+        void reloadRepositories()
+
+        const repoId = selectedRepoIdRef.current
+        if (repoId !== null) {
+          void reloadBranches(repoId, currentBranchRef.current || undefined)
+          setDetailRefreshToken((token) => token + 1)
+          setCommitRefreshToken((token) => token + 1)
+        }
+      }
+    })
+    return () => unsub()
+  }, [nodeId, reloadRepositories, reloadBranches])
 
   const handleSelectRepository = (repoId: number) => {
     if (repoId === selectedRepoId) {
@@ -415,9 +438,10 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
     // 새로고침은 캐시를 버리는 동작이다. 열려 있는 파일도 다음 클릭에서 서버 검증을 다시 거친다.
     fileCache.current.clear()
+    invalidateGithubQueryCache()
 
-    await reloadBranches(selectedRepoId, currentBranchRef.current || undefined)
-    void reloadCommits()
+    await reloadBranches(selectedRepoId, currentBranchRef.current || undefined, true)
+    void reloadCommits(true)
     setDetailRefreshToken((token) => token + 1)
   }
 
@@ -574,7 +598,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
             <Button
               variant="icon"
               aria-label="저장소 목록 새로고침"
-              onClick={() => void reloadRepositories()}
+              onClick={() => void reloadRepositories(true)}
               disabled={isLoadingRepos}
             >
               <Icon name="rotateCcw" size={15} />
@@ -696,7 +720,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
             <Button
               variant="icon"
               aria-label="커밋 기록 새로고침"
-              onClick={() => void reloadCommits()}
+              onClick={() => void reloadCommits(true)}
               disabled={isLoadingCommits}
             >
               <Icon name="rotateCcw" size={15} />

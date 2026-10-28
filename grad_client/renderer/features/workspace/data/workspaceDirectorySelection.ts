@@ -1,8 +1,30 @@
 const ACTIVE_WORKSPACE_ROOT_KEY = 'grad-client-active-workspace-root'
 const DEFAULT_WORKSPACE_ROOT_KEY = 'grad-client-default-workspace-root'
+const LAST_VISITED_WORKSPACE_NODE_KEY = 'grad-client-last-visited-workspace-node'
 
 function getUserStorageKey(baseKey: string, userId: string | undefined) {
   return userId ? `${baseKey}:${userId}` : null
+}
+
+export function getLastVisitedWorkspaceNodeId(userId?: string): string | null {
+  const storageKey = getUserStorageKey(LAST_VISITED_WORKSPACE_NODE_KEY, userId)
+  if (typeof window === 'undefined' || !storageKey) {
+    return null
+  }
+  return window.sessionStorage.getItem(storageKey)
+}
+
+export function setLastVisitedWorkspaceNodeId(nodeId: string, userId?: string) {
+  const storageKey = getUserStorageKey(LAST_VISITED_WORKSPACE_NODE_KEY, userId)
+  if (typeof window === 'undefined' || !storageKey) {
+    return
+  }
+  const current = window.sessionStorage.getItem(storageKey)
+  if (current === nodeId) {
+    return
+  }
+  window.sessionStorage.setItem(storageKey, nodeId)
+  window.dispatchEvent(new CustomEvent('grad-client-workspace-visited', { detail: { nodeId } }))
 }
 
 export function getDefaultWorkspaceRootId(userId?: string) {

@@ -38,6 +38,7 @@ const currentUser = getCurrentUser()
 | 이메일 입력 | `form.email` 상태 업데이트 |
 | 비밀번호 입력 | `form.password` 상태 업데이트 |
 | 로그인 | `signIn` API 호출 및 응답 대기 |
+| 비밀번호 찾기 | 이메일 재설정 안내 모달 표시 |
 
 ## 클릭 후 이동 페이지
 | 메뉴 | 이동 | MD링크 |
@@ -45,6 +46,7 @@ const currentUser = getCurrentUser()
 | 회원가입 | 회원가입 페이지 | [link](signup.md) |
 | 로그인 성공 | 대시보드 페이지 | [link](dashboard.md) |
 | 로그인 실패 | 현재 페이지 유지 (`feedback` 상태) | - |
+| 비밀번호 찾기 | 비밀번호 재설정 안내 | [link](password_reset.md) |
 
 ## 전체 흐름
 
@@ -85,7 +87,7 @@ import { enterDemoWorkspace, getCurrentUser, signIn } from '../api'
 
 ### 4. 응답 처리
 - **성공** : 성공 응답 수신 시 `useNavigate` 를 사용하여 대시보드로 이동
-- **실패** : `setFeedback` 을 통해 사용자에게 메시지 노출 및 로딩 상태 해제
+- **실패** : 이메일 미존재와 비밀번호 불일치를 구분하지 않고 `이메일 또는 비밀번호가 올바르지 않습니다.` 메시지를 노출한 뒤 로딩 상태를 해제합니다. 계정 존재 여부를 추론할 수 없도록 두 입력 필드를 함께 오류 상태로 표시합니다.
 <br><br/>
 ### 5. 데모 기능
 ```typescript

@@ -2,6 +2,7 @@
 
 #include "CollabClient.h"
 #include "GithubWebSocketController.h"
+#include "NotificationWebSocketController.h"
 
 #include <drogon/drogon.h>
 
@@ -80,6 +81,10 @@ void api::notifyAuthorityChangedAsync(int node_id)
     {
         return;
     }
+
+    // 채널 목록도 권한에서 파생되므로, 대상 사용자에게 사이드바 재조회를 알린다.
+    // (대상 계산은 DB가 하고, 전송은 알림 소켓이 맡는다.)
+    NotificationWebSocketController::notifyChannelAccessChangedAsync(node_id);
 
     std::thread worker([node_id]() {
         try

@@ -1462,8 +1462,8 @@ $$ LANGUAGE plpgsql;
 -- 그래서 (1) 여기서 경로만 모으고 → (2) 서버가 디스크에서 지우고 → (3) purge_expired_deleted_data 로
 -- 행을 지운다. 지우지 못한 항목은 (3) 이 넘겨받아 행을 남기므로 다음 회차에 자동으로 다시 시도된다.
 --
--- ref_type: 'FILE' = 업무 첨부 파일, 'RECURRING_FILE' = 정기 일정 첨부 파일, 'REPO' = 저장소 clone/worktree
---           (ref_id 는 각각 file_id, file_id, repo_id)
+-- ref_type: 'FILE' = 업무 첨부 파일, 'RECURRING_FILE' = 정기 일정 첨부 파일, 'CHAT_FILE' = 채팅 첨부 파일,
+--           'REPO' = 저장소 clone/worktree (ref_id 는 각각 file_id, file_id, file_id, repo_id)
 -- 노드·업무·규칙 자체는 물리 파일이 없어 여기서 나오지 않는다 — 그 행 삭제만 purge_expired_deleted_data 가 한다.
 CREATE OR REPLACE FUNCTION list_expired_deleted_paths()
 RETURNS TABLE (ref_type VARCHAR(16), ref_id INTEGER, path TEXT) AS $$
@@ -1525,6 +1525,30 @@ BEGIN
     WHERE r.is_deleted = TRUE
       AND r.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
       AND f.file_path IS NOT NULL AND f.file_path <> '';
+
+    -- 4. 15일 지난 채팅 첨부 파일의 실제 물리 경로(uploads/channels)
+    --    (1) 파일만 삭제된 경우, (2) 채널이 삭제된 경우, (3) 노드가 삭제된 경우를 모두 모은다.
+    RETURN QUERY
+    SELECT 'CHAT_FILE'::VARCHAR(16), f.file_id, f.file_path
+    FROM chat_message_files f
+    WHERE f.is_deleted = TRUE
+      AND f.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
+      AND f.file_path IS NOT NULL AND f.file_path <> ''
+    UNION
+    SELECT 'CHAT_FILE'::VARCHAR(16), f.file_id, f.file_path
+    FROM chat_message_files f
+    JOIN chat_channels c ON c.channel_id = f.channel_id
+    WHERE c.is_deleted = TRUE
+      AND c.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
+      AND f.file_path IS NOT NULL AND f.file_path <> ''
+    UNION
+    SELECT 'CHAT_FILE'::VARCHAR(16), f.file_id, f.file_path
+    FROM chat_message_files f
+    JOIN chat_channels c ON c.channel_id = f.channel_id
+    JOIN organization_nodes n ON n.node_id = c.owner_node_id
+    WHERE n.is_deleted = TRUE
+      AND n.updated_at < (CURRENT_TIMESTAMP - INTERVAL '15 days')
+      AND f.file_path IS NOT NULL AND f.file_path <> '';
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1534,7 +1558,7 @@ $$ LANGUAGE plpgsql;
 -- 디스크에서 지운 **뒤에** 부른다.
 --
 -- p_failed_*: 서버가 디스크에서 지우지 못한 경로의 id 목록(쉼표로 이은 1,2,3 형태. 없으면 빈 문자열).
--- 업무 첨부·저장소·정기 일정 첨부가 각각 다른 표를 보므로 목록을 따로 받는다. 그 id 가 걸린 행은 남긴다 —
+-- 업무 첨부·저장소·정기 일정 첨부·채팅 첨부가 각각 다른 표를 보므로 목록을 따로 받는다. 그 id 가 걸린 행은 남긴다 —
 -- 남겨야 다음 회차에도 그 경로를 알 수 있다.
 --
 -- CASCADE 주의: 노드를 지우면 그 아래 저장소 행과 정기 일정(규칙 → 첨부) 행이, 규칙을 지우면 첨부·체크리스트가,
@@ -1543,13 +1567,15 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION purge_expired_deleted_data(
     p_failed_file_ids TEXT DEFAULT '',
     p_failed_repo_ids TEXT DEFAULT '',
-    p_failed_recurring_file_ids TEXT DEFAULT ''
-) RETURNS TABLE (purged_files INTEGER, purged_recurring_files INTEGER, purged_rules INTEGER, purged_work_items INTEGER, purged_repos INTEGER, purged_nodes INTEGER) AS $$
+    p_failed_recurring_file_ids TEXT DEFAULT '',
+    p_failed_chat_file_ids TEXT DEFAULT ''
+) RETURNS TABLE (purged_files INTEGER, purged_recurring_files INTEGER, purged_rules INTEGER, purged_work_items INTEGER, purged_repos INTEGER, purged_nodes INTEGER, purged_chat_files INTEGER, purged_chat_messages INTEGER, purged_channels INTEGER) AS $$
 DECLARE
     -- 빈 문자열은 "실패 없음"이다. string_to_array 는 빈 입력을 빈 배열로 주지 않으므로 NULLIF 로 갈라낸다.
     v_failed_files INTEGER[] := COALESCE(string_to_array(NULLIF(p_failed_file_ids, ''), ',')::INTEGER[], '{}'::INTEGER[]);
     v_failed_repos INTEGER[] := COALESCE(string_to_array(NULLIF(p_failed_repo_ids, ''), ',')::INTEGER[], '{}'::INTEGER[]);
     v_failed_recurring_files INTEGER[] := COALESCE(string_to_array(NULLIF(p_failed_recurring_file_ids, ''), ',')::INTEGER[], '{}'::INTEGER[]);
+    v_failed_chat_files INTEGER[] := COALESCE(string_to_array(NULLIF(p_failed_chat_file_ids, ''), ',')::INTEGER[], '{}'::INTEGER[]);
     -- 1번(list)과 3번(purge) 사이에 15일 경계를 갓 넘긴 행이 생기면, 그 행은 경로를 모은 적이 없는데 지워질 수
     -- 있다(디스크에 파일이 남는다). 그래서 행 삭제 기준을 1시간 더 뒤로 미뤄, purge 가 지우는 행이 항상
     -- list_expired_deleted_paths 가 이미 경로를 모아둔 행의 부분집합이 되게 한다.
@@ -1560,6 +1586,9 @@ DECLARE
     v_items INTEGER := 0;
     v_repos INTEGER := 0;
     v_nodes INTEGER := 0;
+    v_chat_files INTEGER := 0;
+    v_chat_messages INTEGER := 0;
+    v_channels INTEGER := 0;
 BEGIN
     -- 1. 15일 지난 파일 행 영구 삭제 (지우지 못한 파일 행은 남긴다 — 남겨야 경로를 다시 알 수 있다)
     WITH doomed AS (
@@ -1593,6 +1622,62 @@ BEGIN
         RETURNING 1
     )
     SELECT count(*)::INTEGER INTO v_rules FROM doomed;
+
+    -- 1-4. 15일 지난 채팅 첨부 파일 행 영구 삭제 (지우지 못한 파일 행은 남긴다)
+    WITH doomed AS (
+        DELETE FROM chat_message_files
+        WHERE is_deleted = TRUE
+          AND updated_at < v_boundary
+          AND NOT (file_id = ANY(v_failed_chat_files))
+        RETURNING 1
+    )
+    SELECT count(*)::INTEGER INTO v_chat_files FROM doomed;
+
+    -- 1-5. 15일 지난 채팅 답글 행 영구 삭제
+    WITH doomed AS (
+        DELETE FROM chat_messages m
+        WHERE m.is_deleted = TRUE
+          AND m.updated_at < v_boundary
+          AND m.parent_message_id IS NOT NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM chat_message_files f
+              WHERE f.message_id = m.message_id AND f.file_id = ANY(v_failed_chat_files)
+          )
+        RETURNING 1
+    )
+    SELECT v_chat_messages + count(*)::INTEGER INTO v_chat_messages FROM doomed;
+
+    -- 1-6. 15일 지난 채팅 부모 메시지 행 영구 삭제
+    --    살아 있는 답글이 있으면 지우지 않는다 — ON DELETE CASCADE 가 답글을 함께 지워버린다.
+    WITH doomed AS (
+        DELETE FROM chat_messages m
+        WHERE m.is_deleted = TRUE
+          AND m.updated_at < v_boundary
+          AND m.parent_message_id IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM chat_messages r WHERE r.parent_message_id = m.message_id
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM chat_message_files f
+              WHERE f.message_id = m.message_id AND f.file_id = ANY(v_failed_chat_files)
+          )
+        RETURNING 1
+    )
+    SELECT v_chat_messages + count(*)::INTEGER INTO v_chat_messages FROM doomed;
+
+    -- 1-7. 15일 지난 채팅 채널 행 영구 삭제 (메시지·읽음 상태는 ON DELETE CASCADE)
+    --    채팅 첨부를 지우지 못한 채널은 남긴다 — 지우면 그 파일 행이 CASCADE 로 사라져 경로를 잃는다.
+    WITH doomed AS (
+        DELETE FROM chat_channels c
+        WHERE c.is_deleted = TRUE
+          AND c.updated_at < v_boundary
+          AND NOT EXISTS (
+              SELECT 1 FROM chat_message_files f
+              WHERE f.channel_id = c.channel_id AND f.file_id = ANY(v_failed_chat_files)
+          )
+        RETURNING 1
+    )
+    SELECT count(*)::INTEGER INTO v_channels FROM doomed;
 
     -- 2. 15일 지난 업무 행 영구 삭제 (댓글·멘션·파일 행은 ON DELETE CASCADE 로 함께 삭제)
     --    파일을 지우지 못한 업무는 남긴다 — 지우면 그 파일 행이 CASCADE 로 딸려 사라져 경로를 잃는다.
@@ -1633,11 +1718,19 @@ BEGIN
               SELECT rr.owner_node_id FROM recurring_rules rr
               JOIN recurring_rule_files f ON f.rule_id = rr.rule_id
               WHERE f.file_id = ANY(v_failed_recurring_files)
+              UNION
+              -- 채팅 첨부를 지우지 못했으면 그 채널의 노드도 남긴다 — 노드를 지우면
+              -- chat_channels → chat_message_files 가 CASCADE 로 함께 사라져 경로를 잃는다.
+              SELECT c.owner_node_id FROM chat_channels c
+              JOIN chat_message_files f ON f.channel_id = c.channel_id
+              WHERE c.owner_node_id IS NOT NULL
+                AND f.file_id = ANY(v_failed_chat_files)
           )
         RETURNING 1
     )
     SELECT count(*)::INTEGER INTO v_nodes FROM doomed;
 
-    RETURN QUERY SELECT v_files, v_recurring_files, v_rules, v_items, v_repos, v_nodes;
+    RETURN QUERY SELECT v_files, v_recurring_files, v_rules, v_items, v_repos, v_nodes,
+                        v_chat_files, v_chat_messages, v_channels;
 END;
 $$ LANGUAGE plpgsql;

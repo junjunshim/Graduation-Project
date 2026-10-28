@@ -5,7 +5,16 @@ import styles from './TaskFilterDropdown.module.css'
 
 type Option = { value: string; label: string; icon?: ReactNode }
 
-export function TaskFilterDropdown({ label, value, options, onChange, hideLabel = false, className }: {
+export function TaskFilterDropdown({
+  label,
+  value,
+  options,
+  onChange,
+  hideLabel = false,
+  className,
+  disabled = false,
+  title,
+}: {
   label: string
   value: string
   options: Option[]
@@ -13,6 +22,8 @@ export function TaskFilterDropdown({ label, value, options, onChange, hideLabel 
   /** 라벨을 화면에서는 감추고 스크린리더에만 남긴다 (툴바처럼 좁은 곳) */
   hideLabel?: boolean
   className?: string
+  disabled?: boolean
+  title?: string
 }) {
   const id = useId()
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -25,6 +36,7 @@ export function TaskFilterDropdown({ label, value, options, onChange, hideLabel 
   }
 
   function open() {
+    if (disabled) return
     const rect = triggerRef.current?.getBoundingClientRect()
     if (!rect) return
     const below = window.innerHeight - rect.bottom - 12
@@ -39,6 +51,12 @@ export function TaskFilterDropdown({ label, value, options, onChange, hideLabel 
       maxHeight,
     })
   }
+
+  useEffect(() => {
+    if (disabled && position) {
+      close()
+    }
+  }, [disabled, position])
 
   useEffect(() => {
     if (!position) return
@@ -66,13 +84,20 @@ export function TaskFilterDropdown({ label, value, options, onChange, hideLabel 
       <button
         ref={triggerRef}
         type="button"
+        disabled={disabled}
+        title={title}
         className={[styles.trigger, className].filter(Boolean).join(' ')}
         aria-labelledby={`${id}-label ${id}-value`}
         aria-haspopup="listbox"
         aria-expanded={Boolean(position)}
         aria-controls={position ? id : undefined}
-        onClick={() => position ? close() : open()}
+        onClick={() => {
+          if (disabled) return
+          if (position) close()
+          else open()
+        }}
         onKeyDown={(event) => {
+          if (disabled) return
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
             open()

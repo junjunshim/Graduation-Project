@@ -77,6 +77,12 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
     /** 디렉터리별 조회 결과 캐시. 키는 `branch|path` — 브랜치가 바뀌면 통째로 버린다(§12.3). */
     private readonly cache = new Map<string, RepoTreeEntry[]>();
 
+    /**
+     * 캐시 세대. 무효화·새로고침 때마다 올린다 — 조회가 끝난 시점에 세대가 달라졌다면
+     * 그 결과는 이미 지난 상태이므로 캐시에 쓰지 않는다(늦게 도착한 응답이 새 목록을 덮는 것을 막는다).
+     */
+    private generation = 0;
+
     /** 뷰에 띄울 안내 문구. 세션 없음이면 연결 안내, 조회 실패면 사유(§15.12). */
     private message: string | undefined = NO_SESSION_MESSAGE;
 
@@ -127,13 +133,17 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
             return cached;
         }
 
+        const generation = this.generation;
         try {
             const entries = await apiRequest<RepoTreeEntry[]>(
                 `/github/repos/tree?repo_id=${session.repoId}` +
                     `&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(path)}`
             );
             const list = sortEntries(Array.isArray(entries) ? entries : []);
-            this.cache.set(key, list);
+            // 조회 중에 무효화·새로고침이 있었으면 이 결과는 이미 지난 상태다 — 캐시에 남기지 않는다.
+            if (generation === this.generation) {
+                this.cache.set(key, list);
+            }
             this.setMessage(undefined);
             return list;
         } catch (error) {
@@ -153,6 +163,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
 
     /** 세션·브랜치가 바뀌었을 때: 캐시를 버리고 트리와 뷰 문구를 다시 그린다. */
     public onSessionChanged(): void {
+        this.generation += 1;
         this.cache.clear();
         this.message = getCurrentBranch() ? undefined : NO_SESSION_MESSAGE;
         this.updateViewChrome();
@@ -161,6 +172,7 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
 
     /** 뷰 타이틀의 새로 고침(§15.3 `$(refresh)`). 캐시를 버리면 펼친 디렉터리부터 다시 조회한다. */
     public refresh(): void {
+        this.generation += 1;
         this.cache.clear();
         this.changeEmitter.fire();
     }
@@ -176,6 +188,9 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
             return;
         }
 
+        // 진행 중인 조회가 끝나도 그 결과를 캐시에 남기지 않는다 — 무효화 이후 상태가 아니다.
+        this.generation += 1;
+
         const keys = new Set<string>();
         for (const path of paths) {
             const slash = path.lastIndexOf('/');
@@ -184,16 +199,13 @@ export class RepoTreeProvider implements vscode.TreeDataProvider<RepoTreeEntry> 
             keys.add(`${branch}|${path}`);
         }
 
-        let changed = false;
         for (const key of keys) {
-            if (this.cache.delete(key)) {
-                changed = true;
-            }
+            this.cache.delete(key);
         }
 
-        if (changed) {
-            this.changeEmitter.fire();
-        }
+        // 캐시에 없던 경로여도 뷰가 이미 들고 있는 항목은 다시 그려야 한다
+        // (조회가 진행 중이어서 아직 캐시에 없었을 수 있다).
+        this.changeEmitter.fire();
     }
 
     public dispose(): void {
@@ -221,6 +233,14 @@ export function repoResourceUri(repoId: number, branch: string, path: string): v
     return vscode.Uri.parse(`${REPO_TREE_SCHEME}://${repoId}/${branchSlug(branch)}/${encodedPath}`);
 }
 
+/** 현재 Repository 뷰의 provider. Changes 뷰의 되돌리기처럼 파일 존재 자체를 바꾸는 작업이 쓴다. */
+let activeProvider: RepoTreeProvider | undefined;
+
+/** 경로의 부모 목록을 다시 조회한다. Changes 뷰에서 되돌리기(untracked 삭제·추적 파일 복구) 뒤에 부른다. */
+export function invalidateRepoTreePaths(paths: readonly string[]): void {
+    activeProvider?.invalidatePaths(paths);
+}
+
 /**
  * Repository 뷰를 만들고 등록한다(§15.2, §15.3).
  * 세션·브랜치 변경은 repoSession 이벤트로 받아 provider 가 스스로 다시 그린다.
@@ -230,6 +250,7 @@ export function createRepoTreeView(context: vscode.ExtensionContext): {
     provider: RepoTreeProvider;
 } {
     const provider = new RepoTreeProvider();
+    activeProvider = provider;
     const view = vscode.window.createTreeView(VIEW_FILES, {
         treeDataProvider: provider,
         showCollapseAll: true

@@ -1,0 +1,23 @@
+# 이미지 빌드에 필요 없는 대용량/생성 파일
+.git
+.github
+.antigravitycli
+.vscode
+.env
+.env.*
+docs
+assets
+grad_client
+grad_vscode
+p2p-code-share
+data
+*.log
+
+# 백엔드 로컬 빌드/저장소
+grad_server/build
+grad_server/test
+grad_server/repository
+
+# collab 로컬 의존성/빌드 결과
+grad_collab/node_modules
+grad_collab/dist

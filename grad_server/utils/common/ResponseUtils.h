@@ -4,6 +4,7 @@
 #include <drogon/drogon.h>
 #include <drogon/orm/Result.h>
 #include <drogon/orm/Exception.h>
+#include "LogContext.h"
 
 // DB 에러 코드를 나타내는 Enum 클래스
 enum class DbErrorCode {
@@ -41,12 +42,17 @@ enum class DbErrorCode {
     DeleteRoleDefinitionFailed, // P0421 역할 정의 삭제 실패
     EmailAlreadyExists,         // P0501 이미 존재하는 이메일
     UserRegistrationFailed,     // P0502 사용자 등록 실패
-    EmailNotFound,              // P0503 이메일 찾을 수 없음
-    IncorrectPassword,          // P0504 비밀번호 틀림
+    InvalidCredentials,         // P0503/P0504 로그인 실패(계정 존재 여부 비노출)
     LoginFailed,                // P0505 로그인 실패
     DeleteUserError,            // P0506 사용자 삭제 실패
     GetUserProfileFailed,       // P0507 사용자 프로필 조회 실패
     UserIdAlreadyExists,        // P0510 이미 존재하는 유저 ID
+    PasswordResetTokenInvalid,  // P0511 재설정 토큰 없음·만료·사용됨
+    PasswordPolicyViolation,    // P0512 비밀번호 정책 위반
+    PasswordResetFailed,        // P0513 비밀번호 재설정 처리 실패
+    SignupVerificationInvalid,  // P0514 회원가입 이메일 인증 무효·만료
+    SignupVerificationFailed,   // P0515 회원가입 이메일 인증 처리 실패
+    SignupInputInvalid,         // P0516 회원가입 입력값 부적절
     ParentWorkItemNotFound,     // P0601 부모 work item 없음
     CreateWorkItemFailed,       // P0602 work item 생성 실패
     UpdateWorkItemNotFound,     // P0603 업데이트할 work item 없음
@@ -95,6 +101,12 @@ enum class DbErrorCode {
     PathAlreadyExists,          // P0813 파일·디렉터리가 이미 있음
     PathNotFound,               // P0814 파일·디렉터리를 찾을 수 없음
     NodeDeletedForRepo,         // P0815 연결된 노드(워크스페이스)가 삭제되어 저장소를 쓸 수 없음
+    ChannelNotFound,            // P0901 존재하지 않거나 삭제된 채널
+    ChannelNameDuplicate,       // P0902 워크스페이스 내 동일한 채널명 중복
+    CannotDeleteDefaultChannel, // P0903 기본(#일반) 채널 삭제 불가
+    CannotDmSelf,               // P0904 본인 이메일로 DM 생성 불가
+    ChatMessageNotFound,        // P0905 채팅 메시지 또는 첨부파일을 찾을 수 없음
+    ChatOperationFailed,        // P0906 채널/메시지 처리 실패
     Unknown                     // 알 수 없는 에러
 };
 
@@ -102,10 +114,12 @@ enum class DbErrorCode {
 namespace app_utils {
     // DB 결과를 프론트엔드 응답용 JSON으로 변환하는 공통 함수
     Json::Value parseIntegratedDataResult(const drogon::orm::Result &result);
+    // DB 결과에서 HTTP 응답 데이터와 실시간 WebSocket 알림(target_email 포함)을 분리하여 발송 및 반환하는 함수
+    Json::Value parseAndDispatchChatResult(const drogon::orm::Result &result);
     // 문자열 에러 메시지에서 Enum으로 변환하는 헬퍼 함수
     DbErrorCode parseDbErrorCode(const std::string &errMsg);
     // DB 에러 발생 시 Json::Value 반환하는 함수
-    Json::Value parseDbError(const drogon::orm::DrogonDbException &e);
+    Json::Value parseDbError(const drogon::orm::DrogonDbException &e, const std::string &requestId = "");
     // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
     bool sendNotificationFromDbResult(const drogon::orm::Result &result, const std::string &message = "", const Json::Value &extra = Json::Value());
 }

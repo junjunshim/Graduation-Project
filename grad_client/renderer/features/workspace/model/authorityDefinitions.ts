@@ -139,7 +139,27 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     prerequisites: [16, 4, 0],
   },
 
-  // 3-1. GitHub 통합 (Bit 22 ~ 24)
+  // 3-1. 정기 일정/루틴 (Bit 18 ~ 19)
+  {
+    bit: 18,
+    key: 'SCHEDULE_VIEW',
+    label: '정기 일정 조회',
+    category: 'work',
+    categoryLabel: '정기 일정 및 루틴',
+    description: '워크스페이스의 정기 반복 일정과 루틴 캘린더를 조회합니다.',
+    prerequisites: [0],
+  },
+  {
+    bit: 19,
+    key: 'SCHEDULE_CHANGE',
+    label: '정기 일정 생성/편집',
+    category: 'work',
+    categoryLabel: '정기 일정 및 루틴',
+    description: '정기 일정 규칙을 새로 생성하거나 주기 및 체크리스트를 편집/삭제합니다.',
+    prerequisites: [18, 0],
+  },
+
+  // 3-2. GitHub 통합 (Bit 22 ~ 24)
   {
     bit: 22,
     key: 'GITHUB_VIEW',
@@ -228,6 +248,35 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
     prerequisites: [20, 1, 0],
   },
 
+  // 6-1. 채널 및 소통 (Bit 25 ~ 27)
+  {
+    bit: 25,
+    key: 'CHANNEL_VIEW',
+    label: '채널 조회 및 열람',
+    category: 'space',
+    categoryLabel: '채널 및 소통',
+    description: '워크스페이스 내 채널 목록과 메시지/스레드/첨부파일을 열람합니다.',
+    prerequisites: [0],
+  },
+  {
+    bit: 26,
+    key: 'CHANNEL_CHAT',
+    label: '채널 메시지 작성',
+    category: 'space',
+    categoryLabel: '채널 및 소통',
+    description: '워크스페이스 채널에 메시지 및 스레드 답글을 작성하고 파일을 첨부합니다.',
+    prerequisites: [25, 0],
+  },
+  {
+    bit: 27,
+    key: 'CHANNEL_MANAGE',
+    label: '채널 생성 및 관리',
+    category: 'space',
+    categoryLabel: '채널 및 소통',
+    description: '워크스페이스 내 새 채널을 생성·수정·삭제하고 타인의 부적절한 메시지를 삭제합니다.',
+    prerequisites: [26, 25, 0],
+  },
+
   // 7. 특수 제어 (절대 거부)
   {
     bit: AUTHORITY_DENY_BIT,
@@ -242,9 +291,9 @@ export const AUTHORITY_BITS: AuthorityBitInfo[] = [
 
 export const DEFAULT_ROLE_AUTHORITIES: Record<StandardRoleName, string> = {
   ADMIN: '01111111111111111111111111111111',
-  MANAGER: '00000000111100111110111101111111',
-  MEMBER: '00000000111100110000001101110111',
-  VIEWER: '00000000011100010000000000110011',
+  MANAGER: '00001110111111111110111101111111',
+  MEMBER: '00000110111111110000001101110111',
+  VIEWER: '00000010011101010000000000110011',
 }
 
 export type AuthorityPreset = {
@@ -258,20 +307,20 @@ export const AUTHORITY_PRESETS: AuthorityPreset[] = [
   {
     id: 'manager',
     label: '관리자형 (Manager)',
-    description: '공간/역할/업무 전체 관리 및 모든 이력 조회',
-    bitmask: '00000000111100111110111101111111',
+    description: '공간/역할/업무/채널 전체 관리 및 모든 이력 조회',
+    bitmask: '00001110111100111110111101111111',
   },
   {
     id: 'member',
     label: '일반 멤버형 (Member)',
-    description: '본인 업무 생성/수정, 타인 업무 상세/전체 이력 조회 및 파일 관리',
-    bitmask: '00000000111100110000001101110111',
+    description: '본인 업무 생성/수정, 채널 소통, 타인 업무 상세/전체 이력 조회 및 파일 관리',
+    bitmask: '00000110111100110000001101110111',
   },
   {
     id: 'viewer',
     label: '읽기 전용형 (Viewer)',
-    description: '노드 멤버/업무 상세/파일/이력 조회',
-    bitmask: '00000000011100010000000000110011',
+    description: '노드 멤버/업무 상세/채널/파일/이력 조회',
+    bitmask: '00000010011100010000000000110011',
   },
   {
     id: 'clear',

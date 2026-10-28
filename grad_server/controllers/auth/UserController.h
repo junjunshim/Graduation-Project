@@ -15,7 +15,7 @@ class UserController : public drogon::HttpController<UserController>
     // METHOD_ADD(UserController::your_method_name, "/{1}/{2}/list", Get); // path is /api/UserController/{arg1}/{arg2}/list
     // ADD_METHOD_TO(UserController::your_method_name, "/absolute/path/{1}/{2}/list", Get); // path is /absolute/path/{arg1}/{arg2}/list
 
-    ADD_METHOD_TO(UserController::createUser, "/api/users", Post);
+    ADD_METHOD_TO(UserController::createUser, "/api/users/signup", Post);
     ADD_METHOD_TO(UserController::getUser, "/api/users", Get, "JwtFilter");
     ADD_METHOD_TO(UserController::updateUser, "/api/users", Patch, "JwtFilter");
     ADD_METHOD_TO(UserController::deleteUser, "/api/users", Delete, "JwtFilter");

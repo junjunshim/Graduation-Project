@@ -122,6 +122,16 @@ export function getShellPageMeta(pathname: string, hasOrgContext: boolean, searc
     }
   }
 
+  if (pathname === '/channels') {
+    return {
+      section: 'Channels',
+      title: '채널',
+      description: '워크스페이스 팀 채널과 이메일 기반 1:1 다이렉트 메시지로 실시간 소통합니다.',
+      actionLabel: '워크스페이스',
+      actionTo: '/workspace/select',
+    }
+  }
+
   if (pathname === '/calendar') {
     return {
       section: 'Calendar',

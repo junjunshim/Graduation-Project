@@ -30,7 +30,8 @@ add_executable(${PROJECT_NAME} main.cc)
 # and comment out the following lines
 find_package(Drogon CONFIG REQUIRED)
 find_package(PostgreSQL REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon ${PostgreSQL_LIBRARIES})
+find_package(OpenSSL REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon ${PostgreSQL_LIBRARIES} OpenSSL::Crypto)
 target_include_directories(${PROJECT_NAME} PRIVATE ${PostgreSQL_INCLUDE_DIRS})
 
 # ##############################################################################
@@ -52,7 +53,8 @@ aux_source_directory(controllers/notification CTL_NOTIFICATION_SRC)
 aux_source_directory(controllers/recurring CTL_RECURRING_SRC)
 aux_source_directory(controllers/github CTL_GITHUB_SRC)
 aux_source_directory(controllers/collab CTL_COLLAB_SRC)
-set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC} ${CTL_RECURRING_SRC} ${CTL_GITHUB_SRC} ${CTL_COLLAB_SRC})
+aux_source_directory(controllers/channel CTL_CHANNEL_SRC)
+set(CTL_SRC ${CTL_AUTH_SRC} ${CTL_NODE_SRC} ${CTL_WORK_SRC} ${CTL_ROLE_SRC} ${CTL_CONTEXT_SRC} ${CTL_NOTIFICATION_SRC} ${CTL_RECURRING_SRC} ${CTL_GITHUB_SRC} ${CTL_COLLAB_SRC} ${CTL_CHANNEL_SRC})
 
 aux_source_directory(filters/auth FILTER_SRC)
 aux_source_directory(plugins PLUGIN_SRC)
@@ -66,6 +68,7 @@ set(MODEL_SRC ${MODEL_AUTH_SRC} ${MODEL_NODE_SRC} ${MODEL_WORK_SRC} ${MODEL_ROLE
 aux_source_directory(utils/common UTIL_SRC)
 aux_source_directory(utils/git UTIL_GIT_SRC)
 aux_source_directory(utils/collab UTIL_COLLAB_SRC)
+aux_source_directory(utils/mail UTIL_MAIL_SRC)
 
 drogon_create_views(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/views
                     ${CMAKE_CURRENT_BINARY_DIR})
@@ -88,6 +91,7 @@ target_include_directories(${PROJECT_NAME}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/recurring
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/github
                                    ${CMAKE_CURRENT_SOURCE_DIR}/controllers/collab
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/controllers/channel
                                    ${CMAKE_CURRENT_SOURCE_DIR}/filters/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/auth
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/node
@@ -95,7 +99,8 @@ target_include_directories(${PROJECT_NAME}
                                    ${CMAKE_CURRENT_SOURCE_DIR}/models/role
                                    ${CMAKE_CURRENT_SOURCE_DIR}/utils/common
                                    ${CMAKE_CURRENT_SOURCE_DIR}/utils/git
-                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/collab)
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/collab
+                                   ${CMAKE_CURRENT_SOURCE_DIR}/utils/mail)
 target_sources(${PROJECT_NAME}
                PRIVATE
                ${SRC_DIR}
@@ -105,7 +110,8 @@ target_sources(${PROJECT_NAME}
                ${MODEL_SRC}
                ${UTIL_SRC}
                ${UTIL_GIT_SRC}
-               ${UTIL_COLLAB_SRC})
+               ${UTIL_COLLAB_SRC}
+               ${UTIL_MAIL_SRC})
 # ##############################################################################
 # uncomment the following line for dynamically loading views 
 # set_property(TARGET ${PROJECT_NAME} PROPERTY ENABLE_EXPORTS ON)

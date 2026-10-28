@@ -3,31 +3,25 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { WindowTitleBar } from '../../../app/chrome/WindowTitleBar'
 import { hasCustomWindowControls } from '../../../app/chrome/windowControls'
 import { useBodyScrollSurface } from '../../../app/chrome/useBodyScrollSurface'
-import axisLogoDarkUrl from '../../../design-system/assets/axis-logo-dark.png'
-import axisLogoLightUrl from '../../../design-system/assets/axis-logo-light.png'
+import { AxisMark } from '../../../design-system/primitives/AxisMark'
 import { Icon } from '../../../design-system/primitives/Icon'
+import { useTheme } from '../../../design-system/theme/ThemeContext'
 import { ThemeToggle } from '../../../design-system/theme/ThemeToggle'
 import { getCurrentUser, signIn } from '../api'
+import { getAuthIllustrationUrl } from '../model/authAssets'
+import { readRememberedEmail, saveRememberedEmail } from '../model/rememberedEmail'
 import styles from './LoginPage.module.css'
-
-const REMEMBERED_EMAIL_KEY = 'axis-remembered-login-email'
+import { PasswordResetDialog } from './PasswordResetDialog'
 
 type Feedback = {
   tone: 'error' | 'info'
   message: string
 }
 
-function readRememberedEmail() {
-  if (typeof window === 'undefined') {
-    return ''
-  }
-
-  return window.localStorage.getItem(REMEMBERED_EMAIL_KEY) ?? ''
-}
-
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { themeMode } = useTheme()
   const currentUser = getCurrentUser()
   const hasCustomTitleBar = hasCustomWindowControls()
   const rememberedEmail = readRememberedEmail()
@@ -35,6 +29,7 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(Boolean(rememberedEmail))
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [passwordResetOpen, setPasswordResetOpen] = useState(false)
   const [errorField, setErrorField] = useState<'email' | 'password' | 'all' | null>(null)
   const [syncPhase, setSyncPhase] = useState<'auth' | 'ws' | 'sync' | 'parse'>('auth')
   const [feedback, setFeedback] = useState<Feedback | null>(() => {
@@ -91,16 +86,10 @@ export function LoginPage() {
       })
 
       if (response.status === 'error') {
-        const msg = response.message || '로그인에 실패했습니다.'
+        const msg = response.message || '이메일 또는 비밀번호가 올바르지 않습니다.'
         setFeedback({ tone: 'error', message: msg })
-
-        if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
-          setErrorField('email')
-        } else if (msg.includes('비밀번호') || msg.toLowerCase().includes('password')) {
-          setErrorField('password')
-        } else {
-          setErrorField('all')
-        }
+        // 로그인 실패 메시지로 어느 입력값이 틀렸는지 추론해 표시하지 않는다.
+        setErrorField('all')
         return
       }
 
@@ -113,11 +102,7 @@ export function LoginPage() {
       // 4. 워크스페이스 데이터 준비 완료
       setSyncPhase('parse')
 
-      if (rememberEmail) {
-        window.localStorage.setItem(REMEMBERED_EMAIL_KEY, form.email.trim())
-      } else {
-        window.localStorage.removeItem(REMEMBERED_EMAIL_KEY)
-      }
+      saveRememberedEmail(emailTrimmed, rememberEmail)
 
       navigate('/dashboard', { replace: true })
     } catch (error) {
@@ -126,20 +111,14 @@ export function LoginPage() {
         tone: 'error',
         message: msg,
       })
-      if (msg.includes('이메일') || msg.toLowerCase().includes('email')) {
-        setErrorField('email')
-      } else if (msg.includes('비밀번호') || msg.toLowerCase().includes('password')) {
-        setErrorField('password')
-      } else {
-        setErrorField('all')
-      }
+      setErrorField('all')
     } finally {
       setSubmitting(false)
     }
   }
 
   function handlePasswordHelp() {
-    setFeedback({ tone: 'info', message: '비밀번호 재설정은 워크스페이스 관리자에게 문의해 주세요.' })
+    setPasswordResetOpen(true)
   }
 
   return (
@@ -190,30 +169,16 @@ export function LoginPage() {
         <header className={styles.utilityBar}>
           <div className={styles.utilityActions}>
             {!hasCustomTitleBar ? <ThemeToggle compact /> : null}
-            <div className={styles.languageChip}>
-              <Icon name="globe" size={20} />
-              <span lang="ko">한국어</span>
-            </div>
           </div>
         </header>
 
         <div className={styles.content}>
           <section className={styles.brandPanel} aria-labelledby="login-hero-title">
-            <span className={styles.axisBrand} role="img" aria-label="Axis">
-              <img
-                src={axisLogoLightUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoLight}`}
-              />
-              <img
-                src={axisLogoDarkUrl}
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`${styles.axisLogo} ${styles.axisLogoDark}`}
-              />
+            <span className={styles.axisBrand}>
+              <span className={styles.axisLogoWrap}>
+                <AxisMark size={64} className={styles.axisLogo} />
+              </span>
+              <span className={styles.axisTitle}>Axis</span>
             </span>
 
             <h1 id="login-hero-title" className={styles.heroTitle}>
@@ -229,8 +194,8 @@ export function LoginPage() {
 
             <div className={styles.illustrationWrap}>
               <img
-                src="./images/axis-workspace-illustration.png"
-                alt="업무 카드와 협업 도구가 어우러진 3D 일러스트"
+                src={getAuthIllustrationUrl('login', themeMode)}
+                alt="팀원들이 함께 협업하는 모습을 표현한 일러스트"
                 className={styles.illustration}
                 draggable={false}
               />
@@ -370,6 +335,12 @@ export function LoginPage() {
           <span>개인정보처리방침</span>
         </footer>
       </div>
+
+      <PasswordResetDialog
+        isOpen={passwordResetOpen}
+        initialEmail={form.email}
+        onClose={() => setPasswordResetOpen(false)}
+      />
     </main>
   )
 }

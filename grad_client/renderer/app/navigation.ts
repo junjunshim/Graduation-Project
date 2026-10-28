@@ -29,7 +29,6 @@ export const navigationItems: NavigationItem[] = [
     to: '/channels',
     label: '채널',
     icon: 'messageCircle',
-    disabled: true,
   },
   {
     to: '/calendar',

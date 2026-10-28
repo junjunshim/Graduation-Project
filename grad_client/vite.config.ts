@@ -5,6 +5,34 @@ import react from '@vitejs/plugin-react'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/')
+
+          if (
+            normalizedId.includes('/node_modules/react/') ||
+            normalizedId.includes('/node_modules/react-dom/') ||
+            normalizedId.includes('/node_modules/scheduler/')
+          ) {
+            return 'react-vendor'
+          }
+
+          if (
+            normalizedId.includes('/node_modules/react-router/') ||
+            normalizedId.includes('/node_modules/react-router-dom/') ||
+            normalizedId.includes('/node_modules/@remix-run/') ||
+            normalizedId.includes('/node_modules/use-sync-external-store/')
+          ) {
+            return 'router-vendor'
+          }
+
+          return undefined
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     electron({

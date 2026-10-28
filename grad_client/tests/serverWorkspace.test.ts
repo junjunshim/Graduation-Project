@@ -11,10 +11,14 @@ import {
   fetchRoleDefinitionDeletionPreviewOnServer,
   fetchRoleRemovalPreviewOnServer,
   isWorkspaceStructureNotification,
+  requestPasswordResetOnServer,
   removeRoleOnServer,
   signInServerUser,
 } from '../renderer/features/workspace/data/server/serverWorkspace.js'
-import { readWorkspaceDb } from '../renderer/features/workspace/data/localStore.js'
+import {
+  clearServerWorkspaceDb,
+  readWorkspaceDb,
+} from '../renderer/features/workspace/data/localStore.js'
 import { fetchNodeMovePreview, moveNode } from '../renderer/features/workspace/data/nodeMoveService.js'
 
 type MemoryStorageOptions = {
@@ -344,6 +348,46 @@ test('server login stores both tokens before loading and preserving the document
   }
 })
 
+test('server login returns the generic unauthorized message and keeps no session', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  clearServerWorkspaceDb()
+  const originalFetch = globalThis.fetch
+  let requestCount = 0
+
+  globalThis.fetch = async (input, init) => {
+    requestCount += 1
+    assert.equal(requestCount, 1)
+    assert.match(getRequestPath(input), /\/users\/login$/)
+    assert.deepEqual(JSON.parse(String(init?.body)), {
+      email: 'user@example.com',
+      password: 'wrong-password',
+    })
+
+    return jsonResponse(
+      { status: 'error', message: '이메일 또는 비밀번호가 올바르지 않습니다.' },
+      401,
+    )
+  }
+
+  try {
+    const response = await signInServerUser({
+      email: 'user@example.com',
+      password: 'wrong-password',
+    })
+
+    assert.deepEqual(response, {
+      status: 'error',
+      message: '이메일 또는 비밀번호가 올바르지 않습니다.',
+    })
+    assert.equal(requestCount, 1)
+    assertEmptyServerState()
+  } finally {
+    globalThis.fetch = originalFetch
+    clearServerWorkspaceDb()
+    restoreWindow()
+  }
+})
+
 test('server login rolls back tokens and all context caches when initial context parsing fails', async () => {
   const restoreWindow = installWindow(createMemoryStorage())
   const originalFetch = globalThis.fetch
@@ -474,6 +518,34 @@ function captureCall(
     body: typeof rawBody === 'string' ? (JSON.parse(rawBody) as Record<string, unknown>) : undefined,
   })
 }
+
+test('비밀번호 재설정 요청은 이메일을 정규화하고 인증 토큰 없이 보낸다', async () => {
+  const restoreWindow = installWindow(createMemoryStorage())
+  const originalFetch = globalThis.fetch
+  const calls: CapturedCall[] = []
+
+  globalThis.fetch = async (input, init) => {
+    captureCall(calls, input, init)
+    assert.equal(new Headers(init?.headers).get('Authorization'), null)
+    return jsonResponse({ status: 'success' })
+  }
+
+  try {
+    const result = await requestPasswordResetOnServer('  USER@Example.com ')
+
+    assert.deepEqual(result, {
+      status: 'success',
+      message: '입력한 이메일이 등록되어 있다면 재설정 안내를 보냈습니다. 메일이 보이지 않으면 스팸함을 확인해 주세요.',
+    })
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].pathname, '/api/users/password-reset/request')
+    assert.equal(calls[0].method, 'POST')
+    assert.deepEqual(calls[0].body, { email: 'user@example.com' })
+  } finally {
+    globalThis.fetch = originalFetch
+    restoreWindow()
+  }
+})
 
 const roleRemovalPreviewPayload = {
   type: 'ROLE_REMOVAL_PREVIEW',

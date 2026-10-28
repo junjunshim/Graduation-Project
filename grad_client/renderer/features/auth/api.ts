@@ -1,6 +1,9 @@
 import {
+  confirmSignupEmailVerification as confirmSignupEmailVerificationUser,
   getCurrentUser as getCurrentUserWorkspace,
   getNextGeneratedUserId,
+  requestPasswordReset as requestPasswordResetUser,
+  requestSignupEmailVerification as requestSignupEmailVerificationUser,
   signInUser,
   signOutUser,
   signUpUser,
@@ -21,6 +24,18 @@ export function signUp(payload: SignUpRequest) {
 
 export function signOut() {
   signOutUser()
+}
+
+export function requestPasswordReset(email: string) {
+  return requestPasswordResetUser(email)
+}
+
+export function requestSignupEmailVerification(email: string) {
+  return requestSignupEmailVerificationUser(email)
+}
+
+export function confirmSignupEmailVerification(email: string, code: string) {
+  return confirmSignupEmailVerificationUser(email, code)
 }
 
 export function getSuggestedUserId() {

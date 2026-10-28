@@ -9,6 +9,7 @@
 #include <vector>
 #include "NotificationWebSocketController.h"
 #include "GitRunner.h"
+#include "LogContext.h"
 #include "WorkerLimiter.h"
 
 namespace {
@@ -156,6 +157,7 @@ void purgeExpiredDeletedData() {
 
     std::vector<int> failedFileIds;           // 업무 첨부를 못 지웠다 — 이 행은 남긴다
     std::vector<int> failedRecurringFileIds;  // 정기 일정 첨부를 못 지웠다 — 이 행도 남긴다
+    std::vector<int> failedChatFileIds;       // 채팅 첨부를 못 지웠다 — 이 행은 남긴다
     std::vector<int> failedRepoIds;           // clone/worktree 를 못 지웠다 — 이 행은 남긴다
     int removed = 0;                          // 실제로 지운 경로 수(로그용)
 
@@ -165,6 +167,8 @@ void purgeExpiredDeletedData() {
             failedFileIds.push_back(refId);
         } else if (refType == "RECURRING_FILE") {
             failedRecurringFileIds.push_back(refId);
+        } else if (refType == "CHAT_FILE") {
+            failedChatFileIds.push_back(refId);
         } else {
             failedRepoIds.push_back(refId);
         }
@@ -206,10 +210,12 @@ void purgeExpiredDeletedData() {
     };
     dedupe(failedFileIds);
     dedupe(failedRecurringFileIds);
+    dedupe(failedChatFileIds);
     dedupe(failedRepoIds);
 
-    auto purged = db->execSqlSync("SELECT * FROM purge_expired_deleted_data($1, $2, $3)", joinIds(failedFileIds),
-                                  joinIds(failedRepoIds), joinIds(failedRecurringFileIds));
+    auto purged = db->execSqlSync("SELECT * FROM purge_expired_deleted_data($1, $2, $3, $4)",
+                                  joinIds(failedFileIds), joinIds(failedRepoIds),
+                                  joinIds(failedRecurringFileIds), joinIds(failedChatFileIds));
 
     int purgedFiles = 0;
     int purgedRecurringFiles = 0;
@@ -217,6 +223,9 @@ void purgeExpiredDeletedData() {
     int purgedItems = 0;
     int purgedRepos = 0;
     int purgedNodes = 0;
+    int purgedChatFiles = 0;
+    int purgedChatMessages = 0;
+    int purgedChannels = 0;
     for (const auto &row : purged) {  // 집계 한 줄이라 반복은 한 번뿐이다
         purgedFiles = row["purged_files"].as<int>();
         purgedRecurringFiles = row["purged_recurring_files"].as<int>();
@@ -224,14 +233,19 @@ void purgeExpiredDeletedData() {
         purgedItems = row["purged_work_items"].as<int>();
         purgedRepos = row["purged_repos"].as<int>();
         purgedNodes = row["purged_nodes"].as<int>();
+        purgedChatFiles = row["purged_chat_files"].as<int>();
+        purgedChatMessages = row["purged_chat_messages"].as<int>();
+        purgedChannels = row["purged_channels"].as<int>();
     }
 
     LOG_INFO << "[Scheduler] 15-day expired cleanup finished. Removed paths: " << removed
              << ", purged rows: files=" << purgedFiles << " recurring_files=" << purgedRecurringFiles
              << " rules=" << purgedRules << " work_items=" << purgedItems << " repos=" << purgedRepos
-             << " nodes=" << purgedNodes
+             << " nodes=" << purgedNodes << " chat_files=" << purgedChatFiles
+             << " chat_messages=" << purgedChatMessages << " channels=" << purgedChannels
              << ", 보류(다음 회차 재시도): files=" << failedFileIds.size()
-             << " recurring_files=" << failedRecurringFileIds.size() << " repos=" << failedRepoIds.size();
+             << " recurring_files=" << failedRecurringFileIds.size()
+             << " chat_files=" << failedChatFileIds.size() << " repos=" << failedRepoIds.size();
 }
 
 }  // namespace
@@ -241,6 +255,7 @@ int main() {
     try {
         std::filesystem::create_directories("./uploads/work_items");
         std::filesystem::create_directories("./uploads/recurring_rules");
+        std::filesystem::create_directories("./uploads/channels");
         // 서버 로컬 저장소 루트(저장소 clone + 브랜치 worktree).
         // docker-compose 의 repository_data 볼륨이 이 위치에 붙는다(uploads 와 같은 CWD 기준 규칙).
         std::filesystem::create_directories("./repository");
@@ -298,6 +313,55 @@ int main() {
             custom["access_token_expiry"]  = std::stoi(getEnv("ACCESS_TOKEN_EXPIRY", std::to_string(custom["access_token_expiry"].asInt())));
             custom["refresh_token_expiry"] = std::stoi(getEnv("REFRESH_TOKEN_EXPIRY", std::to_string(custom["refresh_token_expiry"].asInt())));
 
+            // 비밀번호 재설정 링크와 메일 발송 설정. API 키는 서버 환경변수로만 주입한다.
+            const std::string resetBaseUrl = custom.isMember("password_reset_base_url")
+                                                 ? custom["password_reset_base_url"].asString()
+                                                 : "https://axisflow.team";
+            const int resetExpiryMinutes = custom.isMember("password_reset_expire_minutes")
+                                               ? custom["password_reset_expire_minutes"].asInt()
+                                               : 30;
+            const int resetCooldownSeconds = custom.isMember("password_reset_cooldown_seconds")
+                                                 ? custom["password_reset_cooldown_seconds"].asInt()
+                                                 : 60;
+            const int resetMaxPerHour = custom.isMember("password_reset_max_per_hour")
+                                            ? custom["password_reset_max_per_hour"].asInt()
+                                            : 3;
+            const int signupCodeExpiryMinutes = custom.isMember("signup_verification_code_expire_minutes")
+                                                    ? custom["signup_verification_code_expire_minutes"].asInt()
+                                                    : 10;
+            const int signupResendCooldownSeconds = custom.isMember("signup_verification_resend_cooldown_seconds")
+                                                        ? custom["signup_verification_resend_cooldown_seconds"].asInt()
+                                                        : 60;
+            const int signupMaxPerHour = custom.isMember("signup_verification_max_per_hour")
+                                             ? custom["signup_verification_max_per_hour"].asInt()
+                                             : 5;
+            const int signupTokenExpiryMinutes = custom.isMember("signup_verification_token_expire_minutes")
+                                                     ? custom["signup_verification_token_expire_minutes"].asInt()
+                                                     : 15;
+            const int signupMaxAttempts = custom.isMember("signup_verification_max_attempts")
+                                              ? custom["signup_verification_max_attempts"].asInt()
+                                              : 5;
+            const std::string mailFrom = custom.isMember("mail_from")
+                                             ? custom["mail_from"].asString()
+                                             : "Axis <no-reply@axisflow.team>";
+            custom["password_reset_base_url"] = getEnv("PASSWORD_RESET_BASE_URL", resetBaseUrl);
+            custom["password_reset_expire_minutes"] = std::stoi(getEnv("PASSWORD_RESET_EXPIRE_MINUTES", std::to_string(resetExpiryMinutes)));
+            custom["password_reset_cooldown_seconds"] = std::stoi(getEnv("PASSWORD_RESET_COOLDOWN_SECONDS", std::to_string(resetCooldownSeconds)));
+            custom["password_reset_max_per_hour"] = std::stoi(getEnv("PASSWORD_RESET_MAX_PER_HOUR", std::to_string(resetMaxPerHour)));
+            custom["signup_verification_code_expire_minutes"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_CODE_EXPIRE_MINUTES", std::to_string(signupCodeExpiryMinutes)));
+            custom["signup_verification_resend_cooldown_seconds"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_RESEND_COOLDOWN_SECONDS", std::to_string(signupResendCooldownSeconds)));
+            custom["signup_verification_max_per_hour"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_MAX_PER_HOUR", std::to_string(signupMaxPerHour)));
+            custom["signup_verification_token_expire_minutes"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_TOKEN_EXPIRE_MINUTES", std::to_string(signupTokenExpiryMinutes)));
+            custom["signup_verification_max_attempts"] = std::stoi(getEnv(
+                "SIGNUP_VERIFICATION_MAX_ATTEMPTS", std::to_string(signupMaxAttempts)));
+            custom["mail_provider"] = getEnv("MAIL_PROVIDER", custom.isMember("mail_provider") ? custom["mail_provider"].asString() : "resend");
+            custom["mail_api_key"] = getEnv("MAIL_API_KEY", custom.isMember("mail_api_key") ? custom["mail_api_key"].asString() : "");
+            custom["mail_from"] = getEnv("MAIL_FROM", mailFrom);
+
             // 브랜치 worktree 회수 설정. config.json 에 없으면 기본값을 쓰고 env 가 있으면 덮어쓴다.
             //  - worktree_idle_days   : 이 일수보다 오래 안 쓴 브랜치의 작업 디렉터리를 회수한다(0 이면 유휴 회수 없음).
             //  - worktree_max_per_repo: 저장소 하나가 들고 있을 작업 디렉터리 수 상한(기본 브랜치는 세지 않는다, 0 이면 무제한).
@@ -353,18 +417,38 @@ int main() {
 
     // 6. CORS 허용 설정 (모든 도메인 및 포트 허용)
     drogon::app().registerPostHandlingAdvice([](const drogon::HttpRequestPtr &req, const drogon::HttpResponsePtr &resp) {
+        const std::string requestId = app_utils::ensureRequestId(req);
+        resp->addHeader(app_utils::kRequestIdHeader, requestId);
         resp->addHeader("Access-Control-Allow-Origin", "*"); // 모든 도메인 허용
         resp->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
-        resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+        resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Request-ID");
+        // 브라우저가 오류 응답에서도 요청 ID를 읽어 CS 문의에 쓸 수 있게 노출한다.
+        resp->addHeader("Access-Control-Expose-Headers", "X-Request-ID");
+
+        const int status = static_cast<int>(resp->statusCode());
+        if (status >= static_cast<int>(drogon::k400BadRequest)) {
+            std::string actor = "-";
+            const std::string userEmail = req->attributes()->get<std::string>("user_email");
+            if (!userEmail.empty()) {
+                actor = app_utils::maskEmail(userEmail);
+            }
+            LOG_WARN << "[HTTP] event=http.error " << app_utils::requestIdTag(requestId)
+                     << " method=" << req->methodString()
+                     << " path=" << app_utils::sanitizeLogValue(std::string(req->path()), 512)
+                     << " status=" << status << " user=" << actor;
+        }
     });
 
-    // 7. OPTIONS 요청(Preflight) 처리를 위한 간단한 처리
+    // 7. 요청 ID + OPTIONS 요청(Preflight) 처리
     drogon::app().registerPreRoutingAdvice([](const drogon::HttpRequestPtr &req, drogon::AdviceCallback &&acb, drogon::AdviceChainCallback &&accb) {
+        const std::string requestId = app_utils::ensureRequestId(req);
         if (req->method() == drogon::Options) {
             auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->addHeader(app_utils::kRequestIdHeader, requestId);
             resp->addHeader("Access-Control-Allow-Origin", "*");
             resp->addHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
-            resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+            resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Request-ID");
+            resp->addHeader("Access-Control-Expose-Headers", "X-Request-ID");
             resp->setStatusCode(drogon::k200OK);
             acb(resp);
             return;

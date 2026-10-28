@@ -9,6 +9,7 @@ import { optionalRecurringNumber } from '../model/recurringRuleValues'
 import { waitForDownloadCompletion } from './downloadCompletion'
 import { notifyRecurringCacheUpdated } from './workspaceCacheEvents'
 import { queryWithCache } from './queryCache.js'
+import { refreshNodesAfterCommittedMutation } from './server/serverWorkspace'
 
 const LOCAL_STORAGE_RECURRING_KEY = 'grad_recurring_rules_cache'
 const LOCAL_STORAGE_LOADED_NODES_KEY = 'grad_recurring_rules_loaded_nodes'
@@ -86,6 +87,28 @@ function saveLocalRecurringRules(rules: RecurringRuleRecord[]) {
   } catch {
     // ignore
   }
+}
+
+function findRecurringRuleByFileId(fileId: number) {
+  return getLocalRecurringRules(undefined, true).find((rule) =>
+    (rule.files ?? []).some((file) => file.fileId === fileId),
+  )
+}
+
+function saveRecurringRuleFileState(ruleId: number, fileId: number, isDeleted: boolean) {
+  const current = getLocalRecurringRules(undefined, true)
+  saveLocalRecurringRules(
+    current.map((rule) => {
+      if (rule.ruleId !== ruleId) return rule
+
+      return {
+        ...rule,
+        files: (rule.files ?? []).map((file) =>
+          file.fileId === fileId ? { ...file, isDeleted } : file,
+        ),
+      }
+    }),
+  )
 }
 
 function snakeToCamelRule(item: any): RecurringRuleRecord {
@@ -233,6 +256,8 @@ export async function createRecurringRule(
       // 로컬 캐시 갱신
       const updated = await fetchRecurringRules(req.ownerNodeId, false, { forceRefresh: true })
       const found = updated.find((r) => r.ruleId === createdRule.ruleId) ?? createdRule
+      notifyRecurringCacheUpdated(req.ownerNodeId)
+      await refreshNodesAfterCommittedMutation([req.ownerNodeId])
       return { status: 'success', rule: found }
     }
     return { status: 'error', message: res.message || '정기 일정을 생성하지 못했습니다.' }
@@ -294,6 +319,7 @@ export async function updateRecurringRule(
       const current = getLocalRecurringRules(undefined, true)
       saveLocalRecurringRules(current.map((r) => (r.ruleId === req.ruleId ? updated : r)))
       notifyRecurringCacheUpdated(updated.ownerNodeId)
+      await refreshNodesAfterCommittedMutation([updated.ownerNodeId])
       return { status: 'success', rule: updated }
     }
     return { status: 'error', message: res.message || '정기 일정을 수정하지 못했습니다.' }
@@ -317,6 +343,7 @@ export async function deleteRecurringRule(ruleId: number): Promise<{ status: 'su
         current.map((r) => (r.ruleId === ruleId ? { ...r, isDeleted: true } : r)),
       )
       notifyRecurringCacheUpdated(target?.ownerNodeId)
+      await refreshNodesAfterCommittedMutation([target?.ownerNodeId])
       return { status: 'success' }
     }
     return { status: 'error', message: res.message || '삭제에 실패했습니다.' }
@@ -388,6 +415,24 @@ export async function uploadRecurringRuleFile(
         // ignore
       }
 
+      const ownerNodeId = getLocalRecurringRules(undefined, true).find(
+        (rule) => rule.ruleId === ruleId,
+      )?.ownerNodeId
+      saveLocalRecurringRules(
+        getLocalRecurringRules(undefined, true).map((rule) =>
+          rule.ruleId === ruleId
+            ? {
+                ...rule,
+                files: [
+                  ...(rule.files ?? []).filter((file) => file.fileId !== uploadedFile.fileId),
+                  uploadedFile,
+                ],
+              }
+            : rule,
+        ),
+      )
+      notifyRecurringCacheUpdated(ownerNodeId)
+
       return { status: 'success', file: uploadedFile }
     }
     return { status: 'error', message: res.message || '파일 업로드에 실패했습니다.' }
@@ -407,6 +452,11 @@ export async function deleteRecurringRuleFile(
       method: 'DELETE',
     })
     if (res.status === 'success') {
+      const rule = findRecurringRuleByFileId(fileId)
+      if (rule) {
+        saveRecurringRuleFileState(rule.ruleId, fileId, true)
+      }
+      notifyRecurringCacheUpdated(rule?.ownerNodeId)
       return { status: 'success' }
     }
     return { status: 'error', message: res.message || '파일 삭제에 실패했습니다.' }
@@ -433,6 +483,7 @@ export async function restoreRecurringRule(
         current.map((r) => (r.ruleId === ruleId ? { ...r, isDeleted: false } : r)),
       )
       notifyRecurringCacheUpdated(target?.ownerNodeId)
+      await refreshNodesAfterCommittedMutation([target?.ownerNodeId])
       return { status: 'success' }
     }
     return { status: 'error', message: res.message || '정기 일정 복구에 실패했습니다.' }
@@ -452,6 +503,11 @@ export async function restoreRecurringRuleFile(
       method: 'PATCH',
     })
     if (res.status === 'success') {
+      const rule = findRecurringRuleByFileId(fileId)
+      if (rule) {
+        saveRecurringRuleFileState(rule.ruleId, fileId, false)
+      }
+      notifyRecurringCacheUpdated(rule?.ownerNodeId)
       return { status: 'success' }
     }
     return { status: 'error', message: res.message || '정기 일정 파일 복구에 실패했습니다.' }

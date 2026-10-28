@@ -167,7 +167,7 @@ export function WorkspacePage() {
         return
       }
 
-      fetchNodeDetail(activeWorkspaceRootId)
+      fetchNodeDetail(activeWorkspaceRootId, { forceRefresh: true })
         .then((latestSnapshot) => {
           if (isSubscribed) {
             setSnapshot(latestSnapshot)

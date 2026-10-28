@@ -3,7 +3,9 @@ import { isServerStatusResponse } from './server/apiTypes'
 import { getWorkspaceApiBaseUrl } from './server/workspaceMode.js'
 import { readWorkspaceDb, writeServerWorkspaceDb } from './localStore'
 import { invalidateQueryCache } from './queryCache.js'
+import { refreshNodesAfterCommittedMutation } from './server/serverWorkspace'
 import { waitForDownloadCompletion } from './downloadCompletion'
+import type { WorkItemFileRecord } from '../model/types'
 import {
   deleteCachedFileContent,
   getCachedFileContent,
@@ -14,6 +16,65 @@ export type { CachedFileItem } from './fileContentCache'
 
 const FILE_CACHE_PREFIX = 'grad-file-cache-'
 let legacyFileCacheCleanupScheduled = false
+
+function getWorkItemOwnerNodeId(workItemId: string) {
+  const normalizedId = workItemId.trim()
+  if (!normalizedId) return undefined
+
+  return readWorkspaceDb().workItems.find((item) => item.workItemId === normalizedId)?.ownerNodeId
+}
+
+function getFileOwnerNodeId(fileId: number) {
+  const file = (readWorkspaceDb().files ?? []).find((item) => item.id === fileId)
+  if (!file) return undefined
+
+  return getWorkItemOwnerNodeId(file.workItemId)
+}
+
+async function refreshWorkspaceAfterFileMutation(nodeId?: number) {
+  if (nodeId === undefined) return
+  await refreshNodesAfterCommittedMutation([nodeId])
+}
+
+function mergeUploadedWorkItemFile(
+  rawResponse: unknown,
+  workItemId: string,
+  file: File,
+): number | null {
+  const rawData = (rawResponse as { data?: unknown }).data
+  const rawFile = Array.isArray(rawData) ? rawData[0] : rawData
+  if (!rawFile || typeof rawFile !== 'object') return null
+
+  const record = rawFile as Record<string, unknown>
+  const fileId = Number(record.file_id ?? record.fileId)
+  if (!Number.isFinite(fileId) || fileId <= 0) return null
+
+  const currentDb = readWorkspaceDb()
+  const uploaderEmail = String(record.uploader_email ?? record.uploaderEmail ?? '')
+  const uploader = currentDb.users.find((user) => user.email === uploaderEmail)
+  const uploadedFile: WorkItemFileRecord = {
+    id: fileId,
+    workItemId: String(record.work_item_id ?? record.workItemId ?? workItemId),
+    uploaderUserId: String(record.uploader_user_id ?? record.uploaderUserId ?? uploader?.userId ?? ''),
+    uploaderName: String(record.uploader_name ?? record.uploaderName ?? uploader?.name ?? ''),
+    uploaderEmail: String(uploaderEmail || uploader?.email || ''),
+    originalFileName: String(record.original_file_name ?? record.originalFileName ?? file.name),
+    fileSize: Number(record.file_size ?? record.fileSize ?? file.size),
+    mimeType: (record.mime_type ?? record.mimeType ?? file.type) as string | null,
+    isDeleted: false,
+    createdAt: String(record.created_at ?? record.createdAt ?? new Date().toISOString()),
+  }
+
+  writeServerWorkspaceDb({
+    ...currentDb,
+    files: [
+      ...(currentDb.files ?? []).filter((existing) => existing.id !== fileId),
+      uploadedFile,
+    ],
+  })
+
+  return fileId
+}
 
 function cleanupLegacyFileCacheStorage() {
   if (
@@ -84,20 +145,22 @@ export async function uploadWorkItemFile(workItemId: string, file: File): Promis
     throw new Error(response.message || '파일을 등록하지 못했습니다.')
   }
 
+  const uploadedFileId = mergeUploadedWorkItemFile(response, workItemId, file)
+
   // 새로 등록된 파일의 ID가 반환된 경우, 로컬에 남아있을 수 있는 이전 캐시를 즉시 무효화
   try {
-    const rawData = (response as { data?: Array<{ file_id?: number }> }).data
-    if (Array.isArray(rawData) && rawData.length > 0 && typeof rawData[0]?.file_id === 'number') {
-      const newFileId = rawData[0].file_id
-      await deleteCachedFileContent(newFileId)
+    if (uploadedFileId !== null) {
+      await deleteCachedFileContent(uploadedFileId)
     }
   } catch (err) {
     console.warn('[fileService] 업로드 후 캐시 무효화 실패:', err)
   }
   invalidateQueryCache('workItem:detail:')
+  await refreshWorkspaceAfterFileMutation(getWorkItemOwnerNodeId(workItemId))
 }
 
 export async function deleteWorkItemFile(fileId: number): Promise<void> {
+  const ownerNodeId = getFileOwnerNodeId(fileId)
   const response = await apiRequest<unknown>('/workItems/files', {
     method: 'DELETE',
     body: { file_id: fileId },
@@ -125,9 +188,11 @@ export async function deleteWorkItemFile(fileId: number): Promise<void> {
     console.warn('[fileService] 로컬 캐시 삭제 반영 실패:', err)
   }
   invalidateQueryCache('workItem:detail:')
+  await refreshWorkspaceAfterFileMutation(ownerNodeId)
 }
 
 export async function restoreWorkItemFile(fileId: number): Promise<void> {
+  const ownerNodeId = getFileOwnerNodeId(fileId)
   const response = await apiRequest<unknown>('/workItems/files/restore', {
     method: 'PATCH',
     body: { file_id: fileId },
@@ -155,6 +220,7 @@ export async function restoreWorkItemFile(fileId: number): Promise<void> {
     console.warn('[fileService] 로컬 캐시 복구 반영 실패:', err)
   }
   invalidateQueryCache('workItem:detail:')
+  await refreshWorkspaceAfterFileMutation(ownerNodeId)
 }
 
 export type FetchFileContentResult = {

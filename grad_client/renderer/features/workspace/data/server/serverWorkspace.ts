@@ -44,6 +44,7 @@ import { collectNodeSubtreeIds } from '../../model/nodeDeletion.js'
 import { normalizeServerContext } from './contextAdapter.js'
 import { getWorkspaceApiBaseUrl } from './workspaceMode.js'
 import { clearServerWorkspaceDb, readWorkspaceDb, writeServerWorkspaceDb } from '../localStore.js'
+import { invalidateQueryCache } from '../queryCache.js'
 import { setCurrentSessionUserId } from '../session.js'
 import { clearCachedFileContents } from '../fileContentCache.js'
 import {
@@ -92,7 +93,9 @@ function normalizeEmail(email: string) {
 // 스코프 전체를 다시 불러오는 /context/init 은 변경과 무관한 노드/업무/파일까지 전부 갱신해
 // 응답 크기와 화면 흔들림이 커지므로, 변경이 발생한 노드 단위로 좁혀서 동기화한다.
 // 대상 노드를 특정할 수 없을 때만 기존처럼 스코프 전체를 다시 불러온다.
-async function refreshNodesAfterCommittedMutation(nodeIds: Array<number | string | undefined>) {
+export async function refreshNodesAfterCommittedMutation(
+  nodeIds: Array<number | string | undefined>,
+) {
   const targetNodeIds = Array.from(
     new Set(
       nodeIds.filter((nodeId): nodeId is number | string => {
@@ -103,6 +106,9 @@ async function refreshNodesAfterCommittedMutation(nodeIds: Array<number | string
     ),
   )
 
+  invalidateQueryCache('workspace:node:')
+  invalidateQueryCache('workspace:scope:')
+
   try {
     if (targetNodeIds.length === 0) {
       await loadServerWorkspace()
@@ -112,7 +118,15 @@ async function refreshNodesAfterCommittedMutation(nodeIds: Array<number | string
     for (const nodeId of targetNodeIds) {
       await fetchNodeDetailOnServer(nodeId)
     }
-  } catch {
+  } catch (error) {
+    console.warn('[WorkspaceAdapter] node refresh failed; retrying with full workspace:', error)
+    try {
+      await loadServerWorkspace()
+      return
+    } catch (fallbackError) {
+      console.warn('[WorkspaceAdapter] full workspace refresh failed:', fallbackError)
+    }
+
     notifyWorkspaceCacheRefreshFailed(
       '변경은 서버에 반영되었지만 최신 데이터를 다시 불러오지 못했습니다. 같은 변경을 다시 제출하지 말고 “다시 시도”로 데이터를 새로고침해 주세요.',
     )
@@ -215,6 +229,9 @@ function getCurrentServerEmail() {
   return normalizeEmail(getServerSessionEmail() ?? '')
 }
 
+const latestNodeDetailRequestByKey = new Map<string, number>()
+let nodeDetailRequestSequence = 0
+
 function mergeServerUpdates(
   current: WorkspaceDatabase,
   updates: WorkspaceDatabase,
@@ -307,6 +324,25 @@ function mergeServerUpdates(
       node: Math.max(0, ...nodes.map((node) => node.id)) + 1,
       role: Math.max(0, ...roles.map((role) => role.id)) + 1,
     },
+  }
+}
+
+function mergeCommittedContextResponse(response: unknown) {
+  if (!isServerStatusResponse(response) || response.status !== 'success') {
+    return
+  }
+
+  try {
+    const items = parseServerContextItems((response as ServerContextResponse).data)
+    if (items.length === 0) return
+
+    const current = readWorkspaceDb()
+    const { workspace } = normalizeServerContext(items, getCurrentServerEmail(), {
+      referenceWorkspace: current,
+    })
+    writeServerWorkspaceDb(mergeServerUpdates(current, workspace))
+  } catch (error) {
+    console.warn('[WorkspaceAdapter] committed response merge failed:', error)
   }
 }
 
@@ -475,6 +511,10 @@ export async function fetchNodeDetailOnServer(nodeId: number | string) {
     return readWorkspaceDb()
   }
 
+  const requestKey = `${getCurrentServerEmail()}::${parsedId}`
+  const requestId = ++nodeDetailRequestSequence
+  latestNodeDetailRequestByKey.set(requestKey, requestId)
+
   const response = await apiRequest<unknown>(`/org/nodes?node_id=${parsedId}`)
 
   if (!isServerStatusResponse(response)) {
@@ -483,6 +523,10 @@ export async function fetchNodeDetailOnServer(nodeId: number | string) {
 
   if (response.status === 'error') {
     throw new Error(response.message ?? '노드 상세 정보를 불러오지 못했습니다.')
+  }
+
+  if (latestNodeDetailRequestByKey.get(requestKey) !== requestId) {
+    return readWorkspaceDb()
   }
 
   const items = parseServerContextItems((response as ServerContextResponse).data)
@@ -1165,6 +1209,7 @@ export async function createWorkItemOnServer(payload: CreateWorkItemRequest) {
       return { status: 'error' as const, message: response.message ?? '업무를 생성하지 못했습니다.' }
     }
 
+    mergeCommittedContextResponse(response)
     await refreshNodesAfterCommittedMutation([payload.ownerNodeId])
     return { status: 'success' as const, workItemId: payload.workItemId }
   }, '업무를 생성하지 못했습니다.')
@@ -1204,6 +1249,7 @@ export async function updateWorkItemOnServer(payload: UpdateWorkItemRequest) {
       return { status: 'error' as const, message: response.message ?? '업무를 수정하지 못했습니다.' }
     }
 
+    mergeCommittedContextResponse(response)
     const cachedWorkItems = readWorkspaceDb().workItems
     const cachedOwnerNodeId = cachedWorkItems.find(
       (item) => item.workItemId === payload.workItemId,

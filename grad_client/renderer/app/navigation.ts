@@ -35,9 +35,4 @@ export const navigationItems: NavigationItem[] = [
     label: '캘린더',
     icon: 'calendar',
   },
-  {
-    to: '/settings',
-    label: '설정',
-    icon: 'gear',
-  },
 ]

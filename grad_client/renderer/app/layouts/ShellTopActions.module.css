@@ -270,11 +270,6 @@
   color: var(--text-primary);
 }
 
-.shellSearchBox {
-  width: clamp(14rem, 24vw, 22rem);
-  max-width: 100%;
-}
-
 .shellActionButtons {
   display: flex;
   align-items: center;
@@ -329,11 +324,6 @@
   .shellGreeting {
     min-height: auto;
     white-space: normal;
-  }
-
-  .shellSearchBox {
-    width: 100%;
-    max-width: none;
   }
 
   .shellActionButtons {

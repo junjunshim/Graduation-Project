@@ -1,8 +1,7 @@
 // 각 페이지의 상단 액션(알림, 프로필 등) 관리
-import { type ReactNode, useState } from 'react'
+import { type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../design-system/primitives/Icon'
-import { SearchField } from '../../design-system/primitives/SearchField'
 import { UserMenuPopover } from '../../features/account/ui/UserMenuPopover'
 import { NotificationPopover } from '../../features/notification/ui/NotificationPopover'
 import styles from './ShellTopActions.module.css'
@@ -65,8 +64,6 @@ export function ShellTopActions({
   inset = 'standard',
   actions,
 }: ShellTopActionsProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-
   const shellTopActionsClassName = [
     styles.shellTopActions,
     inset === 'wide' ? styles.shellTopActionsWide : styles.shellTopActionsStandard,
@@ -146,14 +143,6 @@ export function ShellTopActions({
         </div>
       ) : heading.type !== 'workItem' ? (
         <div className={styles.shellTopActionControls}>
-          <SearchField
-            containerClassName={styles.shellSearchBox}
-            label="Search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search"
-          />
-
           <div className={styles.shellActionButtons}>
             <NotificationPopover
               userId={currentUser.userId}

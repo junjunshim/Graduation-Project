@@ -244,8 +244,6 @@ npm run package
 - `npm run package`: 타입 검사, 린트, 프로덕션 번들 생성
 - VS Code에서 F5를 실행하면 Extension Development Host로 확장을 확인할 수 있습니다.
 
-VS Code Marketplace는 기본적으로 `README.md`를 확장 설명으로 사용합니다. 이 문서를 배포 설명으로 사용하려면 패키징 단계에서 `README.extension.md`를 README로 지정하거나 `README.md`로 복사한 뒤 VSIX를 생성하세요.
-
 ```bash
 npx @vscode/vsce package
 ```

@@ -51,6 +51,7 @@ import {
 } from '../ui/ChannelModals'
 import { ChannelSidebar, type WorkspaceGroup } from '../ui/ChannelSidebar'
 import { ChannelThreadPanel } from '../ui/ChannelThreadPanel'
+import { ConfirmDeleteModal } from '../../workspace/components/ConfirmDeleteModal'
 import styles from './ChannelsPage.module.css'
 
 const CHANNEL_SIDEBAR_REFRESH_DELAY_MS = 120
@@ -135,6 +136,7 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
   const [modalInitialNodeId, setModalInitialNodeId] = useState<number | undefined>(undefined)
   const [isNewDmModalOpen, setIsNewDmModalOpen] = useState(false)
   const [bannerError, setBannerError] = useState<string | null>(null)
+  const [deleteChannelTarget, setDeleteChannelTarget] = useState<WorkspaceChannelItem | null>(null)
 
   const selectedChannelIdRef = useRef<number | null>(selectedChannelId)
   selectedChannelIdRef.current = selectedChannelId
@@ -781,7 +783,7 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
     }
   }
 
-  async function handleDeleteChannel() {
+  function handleDeleteChannel() {
     if (
       !selectedChannel ||
       selectedChannel.channelType !== 'WORKSPACE' ||
@@ -790,14 +792,14 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
       return
     }
 
-    const confirmed = window.confirm(
-      `#${selectedChannel.name} 채널을 삭제하시겠습니까? 채널 내 대화 내역에 더 이상 접근할 수 없습니다.`,
-    )
-    if (!confirmed) return
+    setDeleteChannelTarget(selectedChannel)
+  }
 
+  async function handleConfirmDeleteChannel() {
+    if (!deleteChannelTarget) return
     try {
-      await deleteWorkspaceChannel(selectedChannel.channelId)
-      removeCachedChannelMessages(selectedChannel.channelId)
+      await deleteWorkspaceChannel(deleteChannelTarget.channelId)
+      removeCachedChannelMessages(deleteChannelTarget.channelId)
       setSelectedChannelId(null)
       await loadSidebar()
     } catch (error) {
@@ -934,6 +936,18 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
         onClose={() => setIsNewDmModalOpen(false)}
         onStartDm={handleStartDm}
       />
+
+      {deleteChannelTarget ? (
+        <ConfirmDeleteModal
+          isOpen={true}
+          title="채널 삭제"
+          itemName={`#${deleteChannelTarget.name}`}
+          itemTypeLabel="채널"
+          warningText="삭제된 채널과 대화 내역에는 더 이상 접근할 수 없습니다."
+          onClose={() => setDeleteChannelTarget(null)}
+          onConfirm={handleConfirmDeleteChannel}
+        />
+      ) : null}
     </div>
   )
 }

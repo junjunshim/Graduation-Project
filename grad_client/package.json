@@ -2,6 +2,7 @@
   "name": "grad_client",
   "private": true,
   "version": "0.0.0",
+  "author": "junjunshim",
   "type": "module",
   "scripts": {
     "dev": "vite",

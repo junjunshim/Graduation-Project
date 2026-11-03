@@ -45,6 +45,7 @@ registerChannelPopupHandlers()
 
 function createWindow() {
   win = new BrowserWindow({
+    title: 'Axis',
     autoHideMenuBar: true,
     frame: !isWindows,
     webPreferences: {

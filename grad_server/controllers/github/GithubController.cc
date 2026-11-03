@@ -2335,10 +2335,23 @@ void GithubController::deleteBranch(const HttpRequestPtr &req, std::function<voi
             return errorResponse("400", "기본 브랜치는 삭제할 수 없습니다: " + name, k400BadRequest);
         }
 
-        // 1) 접속자가 있으면 거부한다 (P0809). 작업 중인 사용자를 강제로 밀어내지 않는다.
+        // 1) 요청자 본인을 제외한 접속자가 있으면 거부한다 (P0809).
+        //    삭제 요청자는 현재 브랜치에 접속해 있을 수밖에 없으므로, 그 외 사용자가 있을 때만 막는다.
         const Json::Value presence = target["presence"];
-        if (presence.isArray() && !presence.empty()) {
-            return errorResponse("P0809", "이 브랜치에서 작업 중인 사용자가 있습니다.", k409Conflict, presence);
+        Json::Value otherPresence(Json::arrayValue);
+        if (presence.isArray()) {
+            const std::string requesterLower = lowerCopy(trim(requester));
+            for (const auto &person : presence) {
+                const std::string email =
+                    lowerCopy(trim(person["email"].isString() ? person["email"].asString() : ""));
+                if (email != requesterLower) {
+                    otherPresence.append(person);
+                }
+            }
+        }
+        if (!otherPresence.empty()) {
+            return errorResponse("P0809", "이 브랜치에서 작업 중인 다른 사용자가 있습니다.", k409Conflict,
+                                 otherPresence);
         }
 
         const std::string worktreePath = target["worktree_path"].asString();

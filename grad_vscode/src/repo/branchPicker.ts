@@ -296,7 +296,7 @@ async function requestDeleteBranch(session: RepoSession, branch: string, force: 
         }
 
         if (error instanceof ApiError && error.code === 'P0809') {
-            void vscode.window.showWarningMessage(`'${branch}' 브랜치에서 작업 중인 사용자가 있습니다.`, {
+            void vscode.window.showWarningMessage(`'${branch}' 브랜치에서 작업 중인 다른 사용자가 있습니다.`, {
                 modal: true,
                 detail: describePresence(error.data)
             });

@@ -228,7 +228,7 @@
   align-items: center;
   width: min(100%, 62rem);
   margin: 0 auto;
-  padding: 0.65rem 0 1rem;
+  padding: 0.65rem 0 0;
 }
 
 .brandPanel {
@@ -324,6 +324,7 @@
   min-height: 44.25rem;
   flex-direction: column;
   padding: 4rem 3rem 2.7rem;
+  align-self: end;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 1.4rem;
   background: var(--login-surface);
@@ -637,25 +638,6 @@
   font-size: 1.05rem;
 }
 
-.footer {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
-  min-height: 1.5rem;
-  color: var(--login-muted);
-  font-size: 0.9rem;
-}
-
-.footerDivider {
-  width: 1px;
-  height: 0.8rem;
-  background: var(--login-border);
-}
-
 @media (max-width: 1180px) {
   .content {
     grid-template-columns: minmax(20rem, 22rem) minmax(27rem, 30rem);
@@ -679,7 +661,7 @@
     gap: 1.7rem;
     justify-content: center;
     width: 100%;
-    padding: 2rem 0 2.5rem;
+    padding: 2rem 0 0;
   }
 
   .brandPanel {
@@ -700,7 +682,7 @@
 
 @media (max-width: 640px) {
   .surface {
-    padding: 1.1rem 1rem 1.4rem;
+    padding: 1.1rem 1rem 1rem;
     border-radius: 0;
   }
 
@@ -723,7 +705,7 @@
 
   .content {
     gap: 1.35rem;
-    padding: 1.5rem 0 2rem;
+    padding: 1.5rem 0 0;
   }
 
   .axisLogoWrap {
@@ -783,16 +765,6 @@
     margin-top: 1.45rem;
   }
 
-  .footer {
-    gap: 0.65rem 0.9rem;
-    font-size: 0.75rem;
-  }
-}
-
-@media (min-width: 981px) and (min-height: 851px) {
-  .content {
-    transform: translateY(-1.25rem);
-  }
 }
 
 @media (max-width: 390px) {
@@ -805,19 +777,15 @@
     gap: 0.85rem;
   }
 
-  .footerDivider {
-    display: none;
-  }
 }
 
 @media (min-width: 981px) and (max-height: 850px) {
   .surface {
     padding-top: 1.4rem;
-    padding-bottom: 1.25rem;
   }
 
   .content {
-    padding-block: 0.5rem;
+    padding-block: 0.5rem 0;
   }
 
   .heroTitle {
@@ -856,12 +824,11 @@
 @media (max-width: 980px) and (max-height: 720px) {
   .surface {
     padding-top: 1rem;
-    padding-bottom: 1rem;
   }
 
   .content {
     gap: 0.5rem;
-    padding-block: 1rem 1.5rem;
+    padding-block: 1rem 0;
   }
 
   .axisLogoWrap {
@@ -982,3 +949,4 @@
     transform: scale(1);
   }
 }
+

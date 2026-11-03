@@ -13,6 +13,7 @@ import {
   requestSignupEmailVerification,
   signUp,
 } from '../api'
+import { AuthLegalFooter } from '../components/AuthLegalFooter'
 import { getAuthIllustrationUrl } from '../model/authAssets'
 import {
   getEmailValidationError,
@@ -662,13 +663,7 @@ export function SignupPage() {
           </section>
         </div>
 
-        <footer className={styles.footer}>
-          <span>© 2026 Axis. All rights reserved.</span>
-          <span className={styles.footerDivider} aria-hidden="true" />
-          <span>이용약관</span>
-          <span className={styles.footerDivider} aria-hidden="true" />
-          <span>개인정보처리방침</span>
-        </footer>
+        <AuthLegalFooter />
       </section>
     </main>
   )

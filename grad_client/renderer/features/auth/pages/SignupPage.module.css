@@ -227,7 +227,7 @@
   align-items: center;
   width: min(100%, 62rem);
   margin: 0 auto;
-  padding: 0.65rem 0 1rem;
+  padding: 0.65rem 0 0;
 }
 
 .visualPanel {
@@ -431,6 +431,7 @@
   min-height: 48rem;
   flex-direction: column;
   padding: 3rem 3.5rem 2.5rem;
+  align-self: end;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 1.45rem;
   background: color-mix(in srgb, var(--signup-surface) 97%, transparent);
@@ -778,25 +779,6 @@
   color: var(--signup-border);
 }
 
-.footer {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 1.25rem;
-  min-height: 1.5rem;
-  color: var(--signup-muted);
-  font-size: 0.9rem;
-}
-
-.footerDivider {
-  width: 1px;
-  height: 0.8rem;
-  background: var(--signup-border);
-}
-
 @media (max-width: 1200px) {
   .surface {
     overflow-y: auto;
@@ -807,7 +789,7 @@
     gap: 1.5rem;
     justify-content: center;
     width: 100%;
-    padding: 1.5rem 0 2.5rem;
+    padding: 1.5rem 0 0;
   }
 
   .visualPanel {
@@ -852,7 +834,7 @@
 
   .content {
     gap: 1rem;
-    padding: 1rem 0 1.75rem;
+    padding: 1rem 0 0;
   }
 
   .axisLogoWrap {
@@ -936,12 +918,11 @@
 @media (min-width: 1201px) and (max-height: 900px) {
   .surface {
     padding-top: 1.25rem;
-    padding-bottom: 1.5rem;
     overflow-y: auto;
   }
 
   .content {
-    padding-block: 0.5rem;
+    padding-block: 0.5rem 0;
   }
 
   .heroTitle {
@@ -993,12 +974,11 @@
 @media (max-width: 1200px) and (max-height: 720px) {
   .surface {
     padding-top: 0.75rem;
-    padding-bottom: 0.75rem;
   }
 
   .content {
     gap: 0.6rem;
-    padding-block: 0.6rem 1.25rem;
+    padding-block: 0.6rem 0;
   }
 
   .axisLogoWrap {
@@ -1047,3 +1027,4 @@
     transition: none;
   }
 }
+

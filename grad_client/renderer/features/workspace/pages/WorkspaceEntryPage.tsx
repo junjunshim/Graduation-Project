@@ -25,11 +25,12 @@ import { getWorkspaceDirectory } from '../queries/workspaceDirectory'
 import { canChangeNodeInfo, canCreateSubNode, hasDirectAuthorityBit } from '../model/effectiveAuthority'
 import {
   collectNodeSubtreeIds,
+  collectTrashExpandIds,
+  countDeletedNodesInSubtree,
   excludeDeletedNodes,
   findDeletedAncestorNode,
   isAllNodesDeleted,
   isRestorableFromTrash,
-  selectTrashNodes,
 } from '../model/nodeDeletion'
 import { readWorkspaceDb } from '../data/localStore'
 import { WorkspaceDeleteModal } from '../components/WorkspaceDeleteModal'
@@ -1092,11 +1093,6 @@ export function WorkspaceEntryPage() {
     () => ({ ...snapshot, nodes: excludeDeletedNodes(snapshot.nodes) }),
     [snapshot],
   )
-  const trashSnapshot = useMemo(
-    () => ({ ...snapshot, nodes: selectTrashNodes(snapshot.nodes) }),
-    [snapshot],
-  )
-  const deletedNodeCount = trashSnapshot.nodes.length
   // 루트까지 삭제되어 살아있는 워크스페이스가 하나도 없으면 휴지통 모드를 켠 상태로 고정한다.
   const isTrashModeLocked = isAllNodesDeleted(snapshot.nodes)
   const isShowingDeleted = isTrashModeLocked || isTrashMode
@@ -1134,6 +1130,15 @@ export function WorkspaceEntryPage() {
   const hierarchyRoot = hierarchyRootId
     ? (visibleDirectory.rootOptions.find((root) => root.id === hierarchyRootId) ?? null)
     : visibleDirectory.hierarchyRoot
+  // 휴지통 배지는 현재 표시 중인(선택된) 루트 워크스페이스의 하위 트리만 집계한다.
+  const deletedNodeCount = useMemo(() => {
+    const rootNodeId = Number.parseInt(hierarchyRoot?.id ?? '', 10)
+    if (!Number.isFinite(rootNodeId)) {
+      return 0
+    }
+    return countDeletedNodesInSubtree(rootNodeId, snapshot.nodes)
+  }, [hierarchyRoot?.id, snapshot.nodes])
+
   const shouldOpenChooserInitially = Boolean(
     !paramRootId && !isShowingDeleted && hierarchyRoot && !activeRoot && !defaultRoot,
   )
@@ -1303,10 +1308,23 @@ export function WorkspaceEntryPage() {
     }
   }
 
+  // 휴지통 모드에서 펼쳐야 할 삭제 노드/조상 ID (문자열).
+  function getDeletedExpandedIds(): string[] {
+    const rootNodeId = Number.parseInt(hierarchyRoot?.id ?? '', 10)
+    if (!Number.isFinite(rootNodeId)) {
+      return []
+    }
+    return collectTrashExpandIds(rootNodeId, snapshot.nodes).map(String)
+  }
+
   // 루트 워크스페이스 변경 시 새 루트의 모든 하위 브랜치 노드들도 기본 접힘 처리
   useEffect(() => {
     if (hierarchyBranches.length > 0) {
-      setCollapsedIds(collectAllCollapsibleIds(hierarchyBranches))
+      const nextCollapsed = collectAllCollapsibleIds(hierarchyBranches)
+      if (isShowingDeleted) {
+        getDeletedExpandedIds().forEach((id) => nextCollapsed.delete(id))
+      }
+      setCollapsedIds(nextCollapsed)
     }
     // Only reset when the hierarchy root changes so cache refreshes keep the user's collapse state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1383,6 +1401,34 @@ export function WorkspaceEntryPage() {
       }
       return next
     })
+  }
+
+  // 휴지통 모드로 전환할 때 삭제된 워크스페이스가 보이도록 해당 경로를 펼친다.
+  function expandDeletedWorkspacePaths() {
+    const expandIds = getDeletedExpandedIds()
+    if (expandIds.length === 0) {
+      return
+    }
+
+    const expandIdSet = new Set(expandIds)
+    cancelPendingCollapse(expandIdSet)
+    setCollapsingIds((prev) => {
+      const next = new Set(prev)
+      expandIdSet.forEach((id) => next.delete(id))
+      return next
+    })
+    setCollapsedIds((prev) => {
+      const next = new Set(prev)
+      expandIdSet.forEach((id) => next.delete(id))
+      return next
+    })
+  }
+
+  function handleToggleTrash() {
+    if (!isTrashMode) {
+      expandDeletedWorkspacePaths()
+    }
+    setIsTrashMode((prev) => !prev)
   }
 
   const isHierarchyFullyExpanded = collapsedIds.size === 0
@@ -1585,7 +1631,7 @@ export function WorkspaceEntryPage() {
         isTrashMode={isShowingDeleted}
         deletedCount={deletedNodeCount}
         isTrashModeLocked={isTrashModeLocked}
-        onToggleTrash={() => setIsTrashMode((prev) => !prev)}
+        onToggleTrash={handleToggleTrash}
       />
 
       {view === 'hierarchy' && hierarchyRoot ? (

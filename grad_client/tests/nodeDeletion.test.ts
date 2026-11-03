@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   collectNodeSubtreeIds,
+  collectTrashExpandIds,
+  countDeletedNodesInSubtree,
   excludeDeletedNodes,
   findDeletedAncestorNode,
   isAllNodesDeleted,
@@ -70,6 +72,41 @@ test('상위 워크스페이스가 삭제 상태면 먼저 복구해야 한다',
   assert.equal(isRestorableFromTrash(parent, nodes), true)
   assert.equal(isRestorableFromTrash(root, nodes), true)
   assert.equal(isRestorableFromTrash(node(20), nodes), false)
+})
+
+test('휴지통 개수는 선택한 루트의 하위 트리만 센다', () => {
+  const nodes = [
+    node(1, { path: [1] }),
+    node(2, { parentNodeId: 1, path: [1, 2], isDeleted: true }),
+    node(3, { parentNodeId: 2, path: [1, 2, 3], isDeleted: true }),
+    node(10, { path: [10] }),
+    node(11, { parentNodeId: 10, path: [10, 11], isDeleted: true }),
+  ]
+
+  assert.equal(countDeletedNodesInSubtree(1, nodes), 2)
+  assert.equal(countDeletedNodesInSubtree(2, nodes), 2)
+  assert.equal(countDeletedNodesInSubtree(10, nodes), 1)
+  assert.equal(countDeletedNodesInSubtree(999, nodes), 0)
+})
+
+test('휴지통 전환 시 삭제된 워크스페이스의 경로만 펼친다', () => {
+  const nodes = [
+    node(1, { path: [1] }),
+    node(2, { parentNodeId: 1, path: [1, 2], isDeleted: true }),
+    node(3, { parentNodeId: 2, path: [1, 2, 3], isDeleted: true }),
+    node(4, { parentNodeId: 1, path: [1, 4] }),
+    node(10, { path: [10] }),
+    node(11, { parentNodeId: 10, path: [10, 11], isDeleted: true }),
+  ]
+
+  assert.deepEqual(collectTrashExpandIds(1, nodes).sort((a, b) => a - b), [1, 2, 3])
+  assert.deepEqual(collectTrashExpandIds(10, nodes).sort((a, b) => a - b), [10, 11])
+  assert.deepEqual(collectTrashExpandIds(4, nodes), [])
+  assert.deepEqual(collectTrashExpandIds(999, nodes), [])
+
+  // path 캐시가 비어 있어도 부모 연결을 따라간다.
+  const withoutPath = nodes.map((item) => ({ ...item, path: [] }))
+  assert.deepEqual(collectTrashExpandIds(1, withoutPath).sort((a, b) => a - b), [1, 2, 3])
 })
 test('루트까지 삭제되어 모든 워크스페이스가 삭제 상태면 휴지통 모드를 고정한다', () => {
   assert.equal(isAllNodesDeleted([]), false)

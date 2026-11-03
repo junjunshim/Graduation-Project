@@ -45,6 +45,60 @@ export function collectNodeSubtreeIds(
 }
 
 /**
+ * 선택한 루트의 하위 트리에서 삭제(휴지통) 상태인 노드 수.
+ * 휴지통 배지가 다른 루트의 삭제 건수까지 합산하지 않도록 범위를 제한한다.
+ */
+export function countDeletedNodesInSubtree(
+  rootNodeId: number,
+  nodes: OrganizationNodeRecord[],
+): number {
+  const subtreeIds = new Set(collectNodeSubtreeIds(rootNodeId, nodes))
+  return nodes.reduce(
+    (count, node) => (node.isDeleted && subtreeIds.has(node.id) ? count + 1 : count),
+    0,
+  )
+}
+
+/**
+ * 휴지통 모드에서 삭제된 워크스페이스가 보이도록 펼칠 노드 ID 목록.
+ * 선택한 루트 하위 트리 안의 삭제 노드와 그 조상만 포함한다.
+ */
+export function collectTrashExpandIds(
+  rootNodeId: number,
+  nodes: OrganizationNodeRecord[],
+): number[] {
+  const subtreeIds = new Set(collectNodeSubtreeIds(rootNodeId, nodes))
+  const nodeById = new Map(nodes.map((node) => [node.id, node]))
+  const ids = new Set<number>()
+
+  const addNodeAndAncestors = (node: OrganizationNodeRecord) => {
+    ids.add(node.id)
+    if (Array.isArray(node.path)) {
+      node.path.forEach((pathId) => {
+        if (subtreeIds.has(pathId)) ids.add(pathId)
+      })
+    }
+
+    let parentId = node.parentNodeId
+    const visited = new Set<number>([node.id])
+    while (parentId !== undefined && !visited.has(parentId)) {
+      visited.add(parentId)
+      if (!subtreeIds.has(parentId)) break
+      ids.add(parentId)
+      parentId = nodeById.get(parentId)?.parentNodeId
+    }
+  }
+
+  nodes.forEach((node) => {
+    if (node.isDeleted && subtreeIds.has(node.id)) {
+      addNodeAndAncestors(node)
+    }
+  })
+
+  return Array.from(ids)
+}
+
+/**
  * 살아있는 워크스페이스가 하나도 없이 전부 삭제된 상태인지.
  * 이 경우 진입점은 휴지통 모드를 켠 상태로 고정된다.
  */

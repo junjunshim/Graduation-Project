@@ -46,6 +46,37 @@ Graduation-Project/
 
 
 ## 🛠 기술 스택 (Tech Stack)
+### 🧩 주요 기술 (Core Stack)
+
+**Client & Extension**
+
+[![Electron](https://img.shields.io/badge/Electron_30-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React_18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite_5-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vite.dev/)
+[![VS Code](https://img.shields.io/badge/VS_Code_1.110-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white)](https://code.visualstudio.com/)
+
+**Backend & Realtime**
+
+[![C++](https://img.shields.io/badge/C%2B%2B-17%2F20-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](https://isocpp.org/)
+[![Drogon](https://img.shields.io/badge/Drogon-C%2B%2B_Framework-1F6FEB?style=for-the-badge)](https://drogon.org/)
+[![Node.js](https://img.shields.io/badge/Node.js_20-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Yjs](https://img.shields.io/badge/Yjs_13-4B5563?style=for-the-badge)](https://yjs.dev/)
+[![WebSocket](https://img.shields.io/badge/WebSocket-WSS-010101?style=for-the-badge)](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)
+
+**Data & Infrastructure**
+
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL_15-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker_Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)](https://nginx.org/)
+[![AWS EC2](https://img.shields.io/badge/AWS_EC2-FF9900?style=for-the-badge&logo=amazonwebservices&logoColor=white)](https://aws.amazon.com/ec2/)
+[![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)](https://ubuntu.com/)
+[![GitHub](https://img.shields.io/badge/GitHub_API-181717?style=for-the-badge&logo=github&logoColor=white)](https://docs.github.com/en/rest)
+[![Let's Encrypt](https://img.shields.io/badge/Let%27s_Encrypt-003A70?style=for-the-badge&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
+[![Resend](https://img.shields.io/badge/Resend-000000?style=for-the-badge)](https://resend.com/)
+[![JWT](https://img.shields.io/badge/JWT-000000?style=for-the-badge&logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
+[![OpenSSL](https://img.shields.io/badge/OpenSSL-721412?style=for-the-badge&logo=openssl&logoColor=white)](https://www.openssl.org/)
+
 ### 💻 Development
 
 | 구분 | 기술 | 사용 목적 |
@@ -157,15 +188,67 @@ flowchart TB
 
 
 ## 📺 주요 화면 및 시연 (Screenshots & Demo)
-| 메인 화면 | 핵심 기능 실행 | 결과 화면 |
-| :---: | :---: | :---: |
-| 이미지 | 이미지 | 이미지 |
+
+### 🔐 로그인 및 대시보드
+
+| 로그인 및 회원가입 | 통합 대시보드 |
+| :---: | :---: |
+| <a href="assets/Axis_로그인화면.png"><img src="assets/Axis_로그인화면.png" alt="Axis 로그인 및 회원가입 화면" width="400" height="225"></a> | <a href="assets/Axis_대시보드(화이트).png"><img src="assets/Axis_대시보드(화이트).png" alt="Axis 통합 대시보드 화면" width="400" height="225"></a> |
+| 이메일 인증 기반 로그인·회원가입·비밀번호 재설정 | 진행 업무·완료율·지연 업무·주간 활동·다가오는 일정 |
+
+### 🗂 워크스페이스 및 권한
+
+| 워크스페이스 계층도 | 역할 및 권한 관리 |
+| :---: | :---: |
+| <a href="assets/Axis_워크스페이스(계층도).png"><img src="assets/Axis_워크스페이스(계층도).png" alt="Axis 워크스페이스 계층도 화면" width="400" height="225"></a> | <a href="assets/Axis_워크스페이스(역할및권한).png"><img src="assets/Axis_워크스페이스(역할및권한).png" alt="Axis 역할 및 권한 관리 화면" width="400" height="225"></a> |
+| 무한 계층 구조 시각화·확대/축소·루트 워크스페이스 선택 | ADMIN·MANAGER·MEMBER·VIEWER 역할별 세부 권한 설정 |
+
+### 📅 일정 및 소통
+
+| 캘린더 | 채널 및 1:1 DM |
+| :---: | :---: |
+| <a href="assets/Axis_캘린더.png"><img src="assets/Axis_캘린더.png" alt="Axis 캘린더 화면" width="400" height="225"></a> | <a href="assets/Axis_채팅(새창).png"><img src="assets/Axis_채팅(새창).png" alt="Axis 채널 및 1대1 DM 화면" width="400" height="225"></a> |
+| 월간 업무·반복 일정·공휴일 통합 조회 | 워크스페이스 채널·실시간 접속자·별도 채팅 창 |
+
+### 💻 GitHub 및 VS Code 협업
+
+| GitHub 저장소 연동 | VS Code 실시간 협업 |
+| :---: | :---: |
+| <a href="assets/Axis_워크스페이스(GitHub).png"><img src="assets/Axis_워크스페이스(GitHub).png" alt="Axis GitHub 저장소 연동 화면" width="400" height="225"></a> | <a href="assets/Axis_vscode.png"><img src="assets/Axis_vscode.png" alt="Axis Share VS Code 실시간 협업 화면" width="400" height="225"></a> |
+| 원격 저장소 연결·브랜치 및 파일 탐색·커밋 그래프 | 브랜치 단위 동시 편집·변경 상태·원격 커서·리뷰 데코레이션 |
 
 
 ## ⚙️ 시작하기 (Getting Started)
+Axis는 별도 서버를 설치하지 않고 운영 서버(`https://axisflow.team`)에 연결해 사용합니다. Windows용 데스크톱 앱을 설치하고 VS Code 확장을 연결하면 바로 협업을 시작할 수 있습니다.
+
+**운영 서버 상태:** [![Axis Server Status](https://img.shields.io/website?url=https%3A%2F%2Faxisflow.team%2Fserver-test&label=Axis%20Server&up_message=online&down_message=offline&up_color=2ea043&down_color=cf222e)](https://axisflow.team/server-test)
+
+> 운영 서버는 비용 문제로 중지될 수 있습니다. 상태가 `offline`이거나 확인 페이지에 접속되지 않으면 로그인, 데이터 동기화, GitHub 연동, 실시간 협업을 사용할 수 없습니다.
+
 ### 📋 요구 사항 (Prerequisites)
 
-### 🛠 빌드 및 실행 (Installation)
+- Windows 10/11 (x64)
+- Visual Studio Code `1.110.0` 이상
+- 인터넷 연결
+- Axis 계정 및 사용할 워크스페이스에 대한 접근 권한
+- GitHub 비공개 저장소를 연결할 경우 해당 저장소에 접근할 수 있는 PAT(Personal Access Token)
+
+### 🛠 설치 및 실행 (Installation)
+
+1. [Visual Studio Code](https://code.visualstudio.com/)를 설치합니다.
+2. [VS Code Marketplace의 Axis Share](https://marketplace.visualstudio.com/items?itemName=junjunshim.axis-share)에서 **Install**을 선택합니다.
+
+   ```bash
+   code --install-extension junjunshim.axis-share
+   ```
+
+3. 프로젝트 배포 페이지에서 Windows용 Axis 설치 패키지(`Axis-Windows-<version>-Setup.exe`)를 다운로드해 설치합니다.
+4. Axis 앱을 실행하고 회원가입 또는 로그인합니다. 앱은 별도 설정 없이 운영 서버(`https://axisflow.team`)에 연결됩니다.
+5. 비공개 저장소를 사용한다면 상단 사용자 메뉴에서 GitHub PAT를 등록합니다.
+6. 워크스페이스의 **GitHub** 탭에서 사용할 저장소를 연결합니다.
+7. **VSCode로 실시간 편집**을 선택하고, VS Code에서 연결 요청이 표시되면 허용합니다.
+
+> Axis Share는 앱과 연결된 상태에서만 저장소를 엽니다. VS Code에서 확장을 단독으로 실행하면 이전 세션이 자동 복원되지 않으므로, 새 창에서 작업할 때는 Axis 앱에서 다시 **VSCode로 실시간 편집**을 실행하세요.
 
 
 ## 📝 협업 규칙 (Contribution Guidelines)
@@ -179,9 +262,9 @@ flowchart TB
 
 ## 👥 팀원 역할 (Team Members)
 
-| 이름 | 역할 | 담당 업무 | 이모지 |
-| :--- | :--- | :--- | :---: |
-| **심동준** | 팀장 (PM) |  | 👑 |
-| **방희수** |  |  | 🧠 |
-| **박준현** |  |  | ⚙️ |
-| **강민수** |  |  | 🌱 |
+| 이름 | 역할 | 담당 업무 |
+| :--- | :--- | :--- |
+| **심동준** | 팀장 | 프로젝트 기획·일정 및 요구사항 관리<br>시스템 아키텍처·DB·API 설계<br>백엔드 API·WebSocket·GitHub 연동<br>프론트 기능 통합, 테스트 및 배포 |
+| **방희수** | 프론트 팀장 | 프론트엔드 구조·라우팅·상태 관리 설계<br>주요 화면 및 공통 컴포넌트 구현<br>API 연동과 프론트 코드 리뷰<br>화면 테스트 및 품질 개선 |
+| **박준현** | 프론트 개발자, 서기 | 주요 화면·컴포넌트 구현<br>API 연동 및 UI 상태 처리<br>회의록 작성·공유<br>요구사항·변경사항 문서화 |
+| **강민수** | 디자이너, 테스터 | 프론트엔드 UI/UX 설계<br>디자인 시스템·색상·타이포그래피·컴포넌트 스타일 정의<br>주요 화면 시안 제작<br>구현 화면의 디자인 검수 및 사용성 테스트 |

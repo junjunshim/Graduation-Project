@@ -2,8 +2,10 @@
 #include "OrganizationNodes.h"
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
+#include "CollabAuthorityNotifier.h"
 #include <json/json.h>
 #include <optional>
+#include <string>
 
 using namespace api;
 using namespace app_utils;
@@ -68,9 +70,18 @@ static void handleNodeMove(const HttpRequestPtr &req,
         callback(HttpResponse::newHttpJsonResponse(parseIntegratedDataResult(result)));
     };
 
+    // [성공 콜백 · 실행 전용] 응답을 보낸 뒤 권한 재계산을 통보한다.
+    // 이전은 노드의 path 를 바꾸므로 상속으로 얻던 권한이 달라진다 — 그 서브트리 저장소에 붙어
+    // 있는 사람에게 새 권한을 다시 알린다. 사전 검사(preview)는 아무것도 바꾸지 않는다.
+    const int movedNodeId = (*body)["node_id"].asInt();
+    auto moveSuccess = [callback, movedNodeId](const orm::Result &result) {
+        callback(HttpResponse::newHttpJsonResponse(parseIntegratedDataResult(result)));
+        notifyAuthorityChangedAsync(movedNodeId);
+    };
+
     // [실패 콜백] DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-    auto failure = [callback](const orm::DrogonDbException &e) {
-        Json::Value ret = parseDbError(e);
+    auto failure = [callback, req](const orm::DrogonDbException &e) {
+        Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
         // HTTP 상태 코드 추출
         auto status = static_cast<HttpStatusCode>(ret["http_code"].asInt());
         // JSON 응답에서 http_code 필드를 제거
@@ -103,7 +114,7 @@ static void handleNodeMove(const HttpRequestPtr &req,
             : Json::Value(Json::objectValue);
 
         db->execSqlAsync("SELECT * FROM move_node($1, $2, NULLIF($3, '')::INTEGER, $4, $5::JSONB, NULLIF($6, ''))",
-            success, failure, email, (*body)["node_id"].asInt(), parent,
+            moveSuccess, failure, email, movedNodeId, parent,
             (*body)["preview_token"].asString(), Json::writeString(writer, transfers),
             body->get("new_owner_email", "").asString());
     }
@@ -164,9 +175,9 @@ void OrgController::createTopNode(const HttpRequestPtr &req, std::function<void(
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -231,9 +242,9 @@ void OrgController::createSubNode(const HttpRequestPtr &req, std::function<void(
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -302,9 +313,9 @@ void OrgController::updateNode(const HttpRequestPtr &req, std::function<void(con
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e){
+        [callback, req](const orm::DrogonDbException &e){
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -359,7 +370,7 @@ void OrgController::deleteNode(const HttpRequestPtr &req, std::function<void(con
     dbClient->execSqlAsync(
         sql,
         // [성공 콜백]
-        [callback](const orm::Result &result) {
+        [callback, node_id](const orm::Result &result) {
             // DB 결과를 프론트엔드 응답용 JSON으로 변환
             Json::Value ret = parseIntegratedDataResult(result);
 
@@ -367,11 +378,14 @@ void OrgController::deleteNode(const HttpRequestPtr &req, std::function<void(con
             auto resp = HttpResponse::newHttpJsonResponse(ret);
             resp->setStatusCode(k200OK);
             callback(resp);
+
+            // 응답을 보낸 뒤에 끊는다 — 삭제 자체는 이미 끝났고, 통보를 기다릴 이유가 없다.
+            closeNodeSessionsAsync(node_id);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -449,9 +463,9 @@ void OrgController::getActivities(const HttpRequestPtr &req, std::function<void(
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e) {
+        [callback, req](const orm::DrogonDbException &e) {
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
@@ -514,8 +528,8 @@ void OrgController::getNodeDetail(const HttpRequestPtr &req, std::function<void(
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 
@@ -562,8 +576,8 @@ void OrgController::restoreNode(const HttpRequestPtr &req, std::function<void(co
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
 

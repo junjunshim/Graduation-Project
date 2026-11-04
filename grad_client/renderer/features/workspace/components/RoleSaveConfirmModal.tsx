@@ -4,6 +4,7 @@ import { Button } from '../../../design-system/primitives/Button'
 import { Icon } from '../../../design-system/primitives/Icon'
 import {
   AUTHORITY_BITS,
+  AUTHORITY_DENY_BIT,
   parseAuthorityBitSet,
   type AuthorityBitInfo,
 } from '../model/authorityDefinitions'
@@ -45,7 +46,7 @@ export function RoleSaveConfirmModal({
   const currentActiveBits: AuthorityBitInfo[] = []
 
   AUTHORITY_BITS.forEach((b) => {
-    if (b.bit === 23) return // DENY
+    if (b.bit === AUTHORITY_DENY_BIT) return // DENY
     const wasOn = savedSet.has(b.bit)
     const isOn = draftSet.has(b.bit)
     if (isOn) currentActiveBits.push(b)

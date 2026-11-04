@@ -1,4 +1,5 @@
 #include "AuthController.h"
+#include "AuthInputUtils.h"
 #include "ResponseUtils.h"
 #include "ValidationUtils.h"
 #include <json/json.h>
@@ -78,7 +79,7 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
     }
     
     // 요청 바디에서 JSON 데이터 파싱
-    std::string email = (*jsonPtr)["email"].asString();
+    std::string email = normalizeAuthEmail((*jsonPtr)["email"].asString());
     std::string password = (*jsonPtr)["password"].asString();
     
     
@@ -107,7 +108,7 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
                 // 실패 응답 생성 및 반환
                 Json::Value ret;
                 ret["status"] = "error";
-                ret["message"] = "Invalid email or password.";
+                ret["message"] = "이메일 또는 비밀번호가 올바르지 않습니다.";
                 auto resp = HttpResponse::newHttpJsonResponse(ret);
                 resp->setStatusCode(k401Unauthorized);
                 callback(resp);
@@ -124,9 +125,9 @@ void AuthController::loginUser(const HttpRequestPtr &req, std::function<void(con
             callback(resp);
         },
         // [실패 콜백]
-        [callback](const orm::DrogonDbException &e){
+        [callback, req](const orm::DrogonDbException &e){
             // DB 에러를 파싱하여 프론트엔드 응답용 JSON으로 변환
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
 
             // HTTP 상태 코드 추출
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());

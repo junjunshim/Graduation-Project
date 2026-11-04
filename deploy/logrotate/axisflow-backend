@@ -1,0 +1,20 @@
+# 백엔드 stdout/stderr 로그.
+#
+# 기동: nohup ./grad_server >> server.log 2>&1
+# 위치: /home/ubuntu/Graduation-Project/grad_server/build/server.log
+# 보관: /home/ubuntu/Graduation-Project/grad_server/build/log/server.log-YYYY-MM-DD.gz
+#
+# copytruncate: 실행 중인 서버를 재시작하지 않고 현재 파일을 복사한 뒤 비운다.
+# rotate 14: 압축된 일 단위 로그를 14개 보관한다.
+/home/ubuntu/Graduation-Project/grad_server/build/server.log {
+    daily
+    rotate 14
+    compress
+    missingok
+    notifempty
+    copytruncate
+    olddir /home/ubuntu/Graduation-Project/grad_server/build/log
+    createolddir 0755 root root
+    dateext
+    dateformat -%Y-%m-%d
+}

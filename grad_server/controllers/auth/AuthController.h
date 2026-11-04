@@ -25,8 +25,10 @@ class AuthController : public drogon::HttpController<AuthController>
     // void get(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, int p1, std::string p2);
     // void your_method_name(const HttpRequestPtr& req, std::function<void (const HttpResponsePtr &)> &&callback, double p1, int p2) const;
 
-    Json::Value generateToken(const std::string &user_id);
-    std::string timePointToString(const std::chrono::system_clock::time_point& tp);
+    // 순수 토큰 생성 유틸이라 인스턴스 없이 쓸 수 있게 static 으로 둔다.
+    // 확장 세션 발급(GithubController)도 같은 규격을 그대로 재사용한다.
+    static Json::Value generateToken(const std::string &user_email);
+    static std::string timePointToString(const std::chrono::system_clock::time_point& tp);
     void loginUser(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void refreshUserToken(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 };

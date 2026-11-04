@@ -1,0 +1,179 @@
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel);
+  transition: border-color var(--axis-motion-fast) ease, box-shadow var(--axis-motion-fast) ease;
+}
+
+.composer:focus-within {
+  border-color: var(--axis-brand-border);
+  box-shadow: var(--axis-shadow-focus);
+}
+
+.composer[data-dragging='true'] {
+  border-color: var(--axis-brand-primary);
+  background: var(--axis-brand-primary-soft);
+}
+
+.composer[data-compact='true'] {
+  padding: 0.52rem 0.62rem;
+}
+
+.fileChipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--line-default);
+}
+
+.fileChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 16rem;
+  padding: 0.26rem 0.5rem;
+  border: 1px solid var(--axis-brand-border);
+  border-radius: var(--axis-radius-action);
+  background: var(--axis-brand-primary-soft);
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.fileChipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileChipSize {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.fileChipRemove {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--axis-radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.fileChipRemove:hover,
+.fileChipRemove:focus-visible {
+  background: var(--surface-hover);
+  color: var(--axis-status-danger);
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.55rem;
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.attachButton {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-action);
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--axis-motion-fast) ease;
+}
+
+.attachButton:hover:not(:disabled),
+.attachButton:focus-visible:not(:disabled) {
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+}
+
+.attachButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.1rem;
+  max-height: 8.75rem;
+  padding: 0.42rem 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+}
+
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.sendButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2.1rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--axis-brand-primary);
+  border-radius: var(--axis-radius-action);
+  background: var(--axis-brand-primary);
+  color: var(--axis-text-on-brand);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter var(--axis-motion-fast) ease, opacity var(--axis-motion-fast) ease;
+}
+
+.sendButton:hover:not(:disabled),
+.sendButton:focus-visible:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.sendButton:disabled {
+  border-color: var(--line-default);
+  background: var(--axis-surface-muted);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.readOnlyBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+}

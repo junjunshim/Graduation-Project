@@ -1,22 +1,26 @@
+import { useEffect, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { getCurrentUser } from '../../auth/api'
 import { WorkspaceTasksTab } from '../../workspace/components/WorkspaceTasksTab'
 import { getOrgSnapshot } from '../../workspace/data/orgService'
+import { subscribeToWorkspaceCache } from '../../workspace/data/workspaceCacheEvents'
 import { getWorkspaceOverview } from '../../workspace/queries/workspaceOverview'
 import styles from './WorkItemsPage.module.css'
 
 export function WorkItemsPage() {
   const [searchParams] = useSearchParams()
+  const [snapshot, setSnapshot] = useState(() => getOrgSnapshot())
   const requestedView = searchParams.get('view')
   const requestedStatus = searchParams.get('status')
   const requestedSchedule = searchParams.get('schedule')
+
+  useEffect(() => subscribeToWorkspaceCache(() => setSnapshot(getOrgSnapshot())), [])
 
   // 기존 ?view=create 접근 시 /work-items/new 로 자동 리다이렉트
   if (requestedView === 'create') {
     return <Navigate to="/work-items/new" replace />
   }
 
-  const snapshot = getOrgSnapshot()
   const currentUser = getCurrentUser(snapshot)
   const overview = currentUser ? getWorkspaceOverview(currentUser.userId, snapshot) : null
   const visibleOwnerIds = new Set(overview?.visibleWorkItems.map((item) => item.ownerUserId) ?? [])

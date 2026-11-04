@@ -196,6 +196,233 @@
   white-space: nowrap;
 }
 
+/* ==========================================================================
+   사이드바 워크스페이스 하위 탭 (Sub-navigation)
+   ========================================================================== */
+.workspaceMenuBlock {
+  display: flex;
+  flex-direction: column;
+}
+
+.workspaceSubNav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.1rem 0 0.25rem 0.35rem;
+  padding-left: 0.35rem;
+  border-left: 1px solid var(--axis-line-default, #e2e8f0);
+}
+
+.workspaceActiveNodeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.32rem 0.4rem;
+  border-radius: var(--radius-xs, 4px);
+  color: var(--axis-text-primary, #1e293b);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.workspaceActiveNodeHeader:hover {
+  background: var(--surface-hover);
+  color: var(--axis-brand-primary, #625cf2);
+}
+
+.workspaceActiveNodeHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.workspaceActiveNodeIcon {
+  flex-shrink: 0;
+  color: var(--axis-brand-primary, #625cf2);
+}
+
+.workspaceActiveNodeName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspaceActiveNodeChevron {
+  flex-shrink: 0;
+  color: var(--axis-text-muted, #94a3b8);
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.workspaceActiveNodeChevronOpen {
+  transform: rotate(180deg);
+}
+
+.workspaceSubNavCollapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease-out;
+  opacity: 0;
+  overflow: hidden;
+  will-change: grid-template-rows, opacity;
+}
+
+.workspaceSubNavCollapseOpen {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.workspaceSubNavCollapseInner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.subNavItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-width: 0;
+  min-height: 1.7rem;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.subNavItem:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.subNavItemActive,
+.subNavItemActive:hover {
+  border-color: var(--line-selected, var(--axis-line-default));
+  background: var(--surface-selected, var(--axis-surface-selected));
+  color: var(--text-primary, var(--axis-text-primary));
+  font-weight: 700;
+}
+
+.subNavItemDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--axis-text-muted, #94a3b8);
+}
+
+.subNavItemDisabled:hover {
+  background: transparent;
+  color: var(--axis-text-muted, #94a3b8);
+}
+
+.subNavLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.workspaceNestedSubNav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding-left: 0.25rem;
+  margin-left: 0.45rem;
+  margin-top: 0.08rem;
+  margin-bottom: 0.12rem;
+  border-left: 1px dashed var(--line-default, rgba(255, 255, 255, 0.12));
+}
+
+.nestedSubNavItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.22rem 0.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.nestedSubNavItem:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.nestedSubNavItemActive,
+.nestedSubNavItemActive:hover {
+  border-color: var(--line-selected, var(--axis-line-default));
+  background: var(--surface-selected, var(--axis-surface-selected));
+  color: var(--text-primary, var(--axis-text-primary));
+  font-weight: 700;
+}
+
+.nestedSubNavItemDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--axis-text-muted, #94a3b8);
+}
+
+.nestedSubNavItemDisabled:hover {
+  background: transparent;
+  color: var(--axis-text-muted, #94a3b8);
+}
+
+
+.subNavIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+  color: currentColor;
+}
+
+.subNavLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subNavLockIcon {
+  flex-shrink: 0;
+  color: var(--axis-text-muted, #94a3b8);
+}
+
 .workspaceList {
   display: flex;
   flex: 1 1 0;

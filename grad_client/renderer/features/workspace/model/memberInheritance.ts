@@ -1,8 +1,9 @@
-import { resolveRoleAssignments } from './roleDefinitions'
+import { resolveRoleAssignments } from './roleDefinitions.js'
 import {
   AUTHORITY_BITS,
+  AUTHORITY_DENY_BIT,
   parseAuthorityBitSet,
-} from './authorityDefinitions'
+} from './authorityDefinitions.js'
 import type {
   AuthorityRecord,
   OrganizationNodeRecord,
@@ -28,12 +29,19 @@ export type WorkspaceMemberDetail = {
   assignedNodeId: number
 }
 
+const rolePriorityCacheByBitmaskMap = new WeakMap<Map<RoleName, string>, Map<string, number>>()
 
 export function getRolePriorityScore(
   role: string,
   roleBitmaskMap: Map<RoleName, string>,
 ): number {
-  const mask = roleBitmaskMap.get(role) ?? '000000000000000000000000'
+  let scoreByRole = rolePriorityCacheByBitmaskMap.get(roleBitmaskMap)
+  const cachedScore = scoreByRole?.get(role)
+  if (cachedScore !== undefined) {
+    return cachedScore
+  }
+
+  const mask = roleBitmaskMap.get(role) ?? '00000000000000000000000000000000'
   const bitSet = parseAuthorityBitSet(mask)
 
   let score = 0
@@ -48,8 +56,12 @@ export function getRolePriorityScore(
   if (bitSet.has(17)) score += 200 // FILE_CHANGE
   if (bitSet.has(6)) score += 150 // WI_HIDDEN_VIEW
 
-  const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== 23 && bitSet.has(b.bit)).length
+  const activeCount = AUTHORITY_BITS.filter((b) => b.bit !== AUTHORITY_DENY_BIT && bitSet.has(b.bit)).length
   score += activeCount * 10
+
+  scoreByRole ??= new Map<string, number>()
+  scoreByRole.set(role, score)
+  rolePriorityCacheByBitmaskMap.set(roleBitmaskMap, scoreByRole)
   return score
 }
 
@@ -90,7 +102,17 @@ export function analyzeWorkspaceMembers({
 
   roles = resolveRoleAssignments(roles, authorities)
   const roleBitmaskMap = buildRoleBitmaskMap(authorities)
-  const getRolePriority = (role: string) => getRolePriorityScore(role, roleBitmaskMap)
+  const rolePriorityByRoleId = new Map<string, number>()
+  const getRolePriority = (role: string) => {
+    const cachedScore = rolePriorityByRoleId.get(role)
+    if (cachedScore !== undefined) {
+      return cachedScore
+    }
+
+    const score = getRolePriorityScore(role, roleBitmaskMap)
+    rolePriorityByRoleId.set(role, score)
+    return score
+  }
 
   const nodesById = new Map(nodes.map((n) => [n.id, n]))
   const usersById = new Map(users.map((u) => [u.userId, u]))
@@ -103,8 +125,10 @@ export function analyzeWorkspaceMembers({
 
   // 2. 상위 조상 노드 ID 집합 식별 (path 컬럼 활용)
   const ancestorNodeIdSet = new Set<number>()
+  const pathDepthById = new Map<number, number>()
   if (rootNode.path && Array.isArray(rootNode.path)) {
-    rootNode.path.forEach((id) => {
+    rootNode.path.forEach((id, index) => {
+      pathDepthById.set(id, index)
       if (id !== rootNode.id) ancestorNodeIdSet.add(id)
     })
   }
@@ -143,7 +167,9 @@ export function analyzeWorkspaceMembers({
     const inheritedRole =
       ancestorRoles.length > 0
         ? ancestorRoles.reduce((prev, curr) =>
-            rootNode.path.indexOf(curr.nodeId) > rootNode.path.indexOf(prev.nodeId) ? curr : prev,
+            (pathDepthById.get(curr.nodeId) ?? -1) > (pathDepthById.get(prev.nodeId) ?? -1)
+              ? curr
+              : prev,
           )
         : null
 
@@ -195,9 +221,21 @@ export function analyzeWorkspaceMembers({
     return a.name.localeCompare(b.name, 'ko')
   })
 
-  const direct = all.filter((m) => m.isDirect)
-  const inherited = all.filter((m) => !m.isDirect && Boolean(m.inheritedRoleName))
-  const overridden = all.filter((m) => m.isOverridden)
+  const direct: WorkspaceMemberDetail[] = []
+  const inherited: WorkspaceMemberDetail[] = []
+  const overridden: WorkspaceMemberDetail[] = []
+
+  all.forEach((member) => {
+    if (member.isDirect) {
+      direct.push(member)
+    } else if (member.inheritedRoleName) {
+      inherited.push(member)
+    }
+
+    if (member.isOverridden) {
+      overridden.push(member)
+    }
+  })
 
   return { all, direct, inherited, overridden }
 }

@@ -19,7 +19,7 @@ type WorkItemAuthorityTarget = Pick<WorkItemRecord, 'ownerNodeId' | 'ownerUserId
  * - 항상 해당 노드에 WI_PERSONAL_CHANGE(bit 8) 필요
  * - 담당자가 내가 아니면 추가로 WI_OTHERS_CHANGE(bit 11) 필요
  * - 현재 숨김 속성 업무라면 추가로 WI_HIDDEN_CHANGE(bit 9) 필요
- * - DENY(bit 23) 가 켜져 있으면 getEffectiveAuthorityBitSet 이 빈 집합을 돌려주므로 항상 불가
+ * - DENY(bit 31) 가 켜져 있으면 getEffectiveAuthorityBitSet 이 빈 집합을 돌려주므로 항상 불가
  */
 export function canEditWorkItem(
   item: WorkItemAuthorityTarget,

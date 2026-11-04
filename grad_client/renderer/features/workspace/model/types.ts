@@ -148,6 +148,7 @@ export type SignUpRequest = {
   email: string
   name: string
   password: string
+  verificationToken: string
 }
 
 export type SignInRequest = {

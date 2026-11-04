@@ -23,27 +23,80 @@ function getDefaultTimestamp(offsetDays = 0) {
   return base.toISOString()
 }
 
-function computePath(nodeId: number, nodes: OrganizationNodeRecord[], trail = new Set<number>()): number[] {
-  if (trail.has(nodeId)) {
-    return [nodeId]
+function createNodeIndex(nodes: OrganizationNodeRecord[]) {
+  const nodesById = new Map<number, OrganizationNodeRecord>()
+
+  nodes.forEach((node) => {
+    if (!nodesById.has(node.id)) {
+      nodesById.set(node.id, node)
+    }
+  })
+
+  return nodesById
+}
+
+function createNodePathResolver(nodesById: Map<number, OrganizationNodeRecord>) {
+  const pathCache = new Map<number, number[]>()
+
+  return function resolveNodePath(nodeId: number): number[] {
+    const cached = pathCache.get(nodeId)
+    if (cached) {
+      return cached
+    }
+
+    const chain: number[] = []
+    const resolving = new Set<number>()
+    let currentId = nodeId
+    let basePath: number[] | null = null
+    let hasCycle = false
+
+    while (basePath === null) {
+      const memoized = pathCache.get(currentId)
+      if (memoized) {
+        basePath = memoized
+        break
+      }
+
+      if (resolving.has(currentId)) {
+        basePath = [currentId]
+        hasCycle = true
+        break
+      }
+
+      const node = nodesById.get(currentId)
+      if (!node) {
+        basePath = [currentId]
+        break
+      }
+
+      if (node.path.length > 0) {
+        basePath = node.path
+        break
+      }
+
+      if (!node.parentNodeId) {
+        basePath = [node.id]
+        break
+      }
+
+      resolving.add(currentId)
+      chain.push(currentId)
+      currentId = node.parentNodeId
+    }
+
+    let path = basePath
+
+    for (let index = chain.length - 1; index >= 0; index -= 1) {
+      const id = chain[index]
+      path = [...path, id]
+
+      if (!hasCycle) {
+        pathCache.set(id, path)
+      }
+    }
+
+    return path
   }
-
-  const node = nodes.find((candidate) => candidate.id === nodeId)
-
-  if (!node) {
-    return [nodeId]
-  }
-
-  if (node.path.length > 0) {
-    return node.path
-  }
-
-  if (!node.parentNodeId) {
-    return [node.id]
-  }
-
-  trail.add(nodeId)
-  return [...computePath(node.parentNodeId, nodes, trail), node.id]
 }
 
 function createEmptyServerWorkspace(): WorkspaceDatabase {
@@ -150,15 +203,18 @@ function normalizeDb(
     })
   })
 
+  const nodesById = createNodeIndex(nodes)
+  const resolveNodePath = createNodePathResolver(nodesById)
+
   nodes.forEach((node) => {
-    node.path = node.path.length > 0 ? node.path : computePath(node.id, nodes)
+    node.path = node.path.length > 0 ? node.path : resolveNodePath(node.id)
   })
 
   const userByEmail = new Map(
     users.filter((user) => Boolean(user.email)).map((user) => [user.email.toLowerCase(), user]),
   )
   const userById = new Map(users.map((user) => [user.userId, user]))
-  const nodeIds = new Set(nodes.map((node) => node.id))
+  const nodeIds = new Set(nodesById.keys())
 
   const roles: RoleAssignmentRecord[] = rawDb.roles
     .map((entry, index): RoleAssignmentRecord | null => {
@@ -202,18 +258,23 @@ function normalizeDb(
     })
     .filter((role): role is RoleAssignmentRecord => role !== null)
 
+  const personalNodeIdByUser = new Map<string, number>()
+
+  roles.forEach((role) => {
+    if (
+      role.isTopRole &&
+      !personalNodeIdByUser.has(role.userId) &&
+      nodesById.get(role.nodeId)?.nodeType === 'USER'
+    ) {
+      personalNodeIdByUser.set(role.userId, role.nodeId)
+    }
+  })
+
   users.forEach((user) => {
-    const personalRole = roles.find((role) => {
-      if (role.userId !== user.userId || !role.isTopRole) {
-        return false
-      }
+    const personalNodeId = personalNodeIdByUser.get(user.userId)
 
-      const node = nodes.find((candidate) => candidate.id === role.nodeId)
-      return node?.nodeType === 'USER'
-    })
-
-    if (personalRole) {
-      user.personalNodeId = personalRole.nodeId
+    if (personalNodeId !== undefined) {
+      user.personalNodeId = personalNodeId
     }
   })
 
@@ -329,6 +390,18 @@ export function normalizeServerWorkspaceDb(raw: unknown): WorkspaceDatabase {
 // In-memory cache to eliminate repetitive, expensive JSON.parse / JSON.stringify calls
 let inMemoryServerDb: WorkspaceDatabase | null = null
 
+// 서버 스코프가 적용될 때마다 증가한다. 파생 스냅샷 캐시는 이 값이 바뀌면 반드시 폐기한다.
+let workspaceRevision = 0
+
+export function getWorkspaceRevision(): number {
+  return workspaceRevision
+}
+
+function markWorkspaceChanged() {
+  workspaceRevision += 1
+  notifyWorkspaceCacheUpdated()
+}
+
 /** 서버 컨텍스트를 로컬에 캐시한 워크스페이스 DB */
 export function readWorkspaceDb(): WorkspaceDatabase {
   if (inMemoryServerDb) {
@@ -360,19 +433,39 @@ export function readWorkspaceDb(): WorkspaceDatabase {
 export function writeServerWorkspaceDb(db: WorkspaceDatabase) {
   inMemoryServerDb = db
   if (!hasStorage()) {
+    markWorkspaceChanged()
     return
   }
 
-  window.localStorage.setItem(SERVER_DB_STORAGE_KEY, JSON.stringify(db))
-  notifyWorkspaceCacheUpdated()
+  const nextRaw = JSON.stringify(db)
+  let unchanged = false
+
+  try {
+    const prevRaw = window.localStorage.getItem(SERVER_DB_STORAGE_KEY)
+    if (prevRaw === nextRaw) {
+      unchanged = true
+      return
+    }
+
+    window.localStorage.setItem(SERVER_DB_STORAGE_KEY, nextRaw)
+  } finally {
+    // Even if persistence fails, the in-memory server data is already authoritative.
+    if (!unchanged) {
+      markWorkspaceChanged()
+    }
+  }
 }
 
 export function clearServerWorkspaceDb() {
   inMemoryServerDb = null
   if (!hasStorage()) {
+    markWorkspaceChanged()
     return
   }
 
-  window.localStorage.removeItem(SERVER_DB_STORAGE_KEY)
-  notifyWorkspaceCacheUpdated()
+  try {
+    window.localStorage.removeItem(SERVER_DB_STORAGE_KEY)
+  } finally {
+    markWorkspaceChanged()
+  }
 }

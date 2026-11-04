@@ -1,0 +1,148 @@
+.root {
+  position: relative;
+  width: 100%;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-action);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--axis-motion-fast) ease,
+    background var(--axis-motion-fast) ease,
+    box-shadow var(--axis-motion-fast) ease;
+}
+
+.trigger:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+}
+
+.trigger:focus-visible,
+.triggerOpen {
+  outline: none;
+  border-color: var(--axis-brand-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--axis-brand-primary) 15%, transparent);
+}
+
+.trigger:disabled {
+  cursor: not-allowed;
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.selected {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspaceIcon {
+  flex: 0 0 auto;
+  color: var(--axis-brand-primary);
+}
+
+.selectedText,
+.optionText {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectedText {
+  font-weight: 600;
+}
+
+.placeholder {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.typeBadge {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.38rem;
+  border-radius: var(--radius-xs);
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.chevron {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  transition: transform 140ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.menu {
+  padding: 0.35rem;
+  overflow-y: auto;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel);
+  box-shadow: var(--axis-shadow-popover);
+}
+
+.menuList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--axis-motion-fast) ease;
+}
+
+.option:hover,
+.option:focus-visible {
+  outline: none;
+  background: var(--surface-hover);
+}
+
+.optionSelected,
+.optionSelected:hover,
+.optionSelected:focus-visible {
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+}
+
+.checkIcon {
+  flex: 0 0 auto;
+  color: var(--axis-brand-primary);
+}

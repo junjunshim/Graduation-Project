@@ -55,6 +55,10 @@ DROP TRIGGER IF EXISTS trg_update_mentions_time ON comment_mentions;
 DROP TRIGGER IF EXISTS trg_update_files_time ON work_item_files;
 DROP TRIGGER IF EXISTS trg_update_recurring_rules_time ON recurring_rules;
 DROP TRIGGER IF EXISTS trg_update_recurring_files_time ON recurring_rule_files;
+DROP TRIGGER IF EXISTS trg_update_chat_channels_time ON chat_channels;
+DROP TRIGGER IF EXISTS trg_update_chat_messages_time ON chat_messages;
+DROP TRIGGER IF EXISTS trg_update_chat_files_time ON chat_message_files;
+DROP TRIGGER IF EXISTS trg_update_chat_reads_time ON chat_channel_reads;
 
 CREATE TRIGGER trg_update_nodes_time BEFORE UPDATE ON organization_nodes FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_users_time BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_modified_column();
@@ -67,6 +71,10 @@ CREATE TRIGGER trg_update_mentions_time BEFORE UPDATE ON comment_mentions FOR EA
 CREATE TRIGGER trg_update_files_time BEFORE UPDATE ON work_item_files FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_recurring_rules_time BEFORE UPDATE ON recurring_rules FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 CREATE TRIGGER trg_update_recurring_files_time BEFORE UPDATE ON recurring_rule_files FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER trg_update_chat_channels_time BEFORE UPDATE ON chat_channels FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER trg_update_chat_messages_time BEFORE UPDATE ON chat_messages FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER trg_update_chat_files_time BEFORE UPDATE ON chat_message_files FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+CREATE TRIGGER trg_update_chat_reads_time BEFORE UPDATE ON chat_channel_reads FOR EACH ROW EXECUTE FUNCTION update_modified_column();
 
 
 
@@ -96,6 +104,43 @@ FOR EACH ROW EXECUTE FUNCTION log_role_authorities_history();
 CREATE TRIGGER trg_history_work_items
 AFTER INSERT OR UPDATE OR DELETE ON work_items
 FOR EACH ROW EXECUTE FUNCTION log_work_items_history();
+
+
+-- 3.5. 공유 조직 노드 생성 시 기본 '#일반' 채널 자동 생성 트리거 정의
+CREATE OR REPLACE FUNCTION create_default_workspace_channel()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.node_type <> 'PERSONAL' AND NEW.node_type <> 'USER' THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM chat_channels
+            WHERE channel_type = 'WORKSPACE'
+              AND owner_node_id = NEW.node_id
+              AND lower(name) = '일반'
+              AND is_deleted = FALSE
+        ) THEN
+            INSERT INTO chat_channels (
+                channel_type,
+                owner_node_id,
+                name,
+                description,
+                is_default
+            ) VALUES (
+                'WORKSPACE',
+                NEW.node_id,
+                '일반',
+                '워크스페이스 기본 소통 채널입니다.',
+                TRUE
+            );
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_create_default_workspace_channel ON organization_nodes;
+CREATE TRIGGER trg_create_default_workspace_channel
+AFTER INSERT ON organization_nodes
+FOR EACH ROW EXECUTE FUNCTION create_default_workspace_channel();
 
 
 -- 4. work_items 소프트 딜리트 연쇄(Cascade) 트리거 정의
@@ -146,6 +191,22 @@ BEGIN
           AND is_deleted = FALSE;
 
         UPDATE recurring_rules
+        SET is_deleted = TRUE
+        WHERE owner_node_id = NEW.node_id
+          AND is_deleted = FALSE;
+
+        -- 소속 채팅 채널, 메시지, 첨부파일 연쇄 소프트 딜리트
+        UPDATE chat_message_files
+        SET is_deleted = TRUE
+        WHERE channel_id IN (SELECT channel_id FROM chat_channels WHERE owner_node_id = NEW.node_id)
+          AND is_deleted = FALSE;
+
+        UPDATE chat_messages
+        SET is_deleted = TRUE
+        WHERE channel_id IN (SELECT channel_id FROM chat_channels WHERE owner_node_id = NEW.node_id)
+          AND is_deleted = FALSE;
+
+        UPDATE chat_channels
         SET is_deleted = TRUE
         WHERE owner_node_id = NEW.node_id
           AND is_deleted = FALSE;

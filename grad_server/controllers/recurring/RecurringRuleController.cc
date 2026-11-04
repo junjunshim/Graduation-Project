@@ -51,8 +51,8 @@ void RecurringRuleController::getRecurringRules(const HttpRequestPtr &req, std::
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -87,8 +87,8 @@ void RecurringRuleController::getRecurringRuleDetail(const HttpRequestPtr &req, 
                 callback(resp);
             }
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -186,8 +186,8 @@ void RecurringRuleController::createRecurringRule(const HttpRequestPtr &req, std
                 callback(resp);
             }
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -334,8 +334,8 @@ void RecurringRuleController::updateRecurringRule(const HttpRequestPtr &req, std
                 callback(resp);
             }
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -364,8 +364,8 @@ void RecurringRuleController::deleteRecurringRule(const HttpRequestPtr &req, std
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -393,8 +393,8 @@ void RecurringRuleController::restoreRecurringRule(const HttpRequestPtr &req, st
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -483,9 +483,9 @@ void RecurringRuleController::uploadFile(const HttpRequestPtr &req, std::functio
                 callback(resp);
             }
         },
-        [callback, full_path](const orm::DrogonDbException &e) {
+        [callback, full_path, req](const orm::DrogonDbException &e) {
             std::filesystem::remove(full_path);
-            Json::Value ret = parseDbError(e);
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -547,8 +547,8 @@ void RecurringRuleController::downloadFile(const HttpRequestPtr &req, std::funct
             resp->addHeader("Cache-Control", "public, max-age=3600");
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -574,8 +574,8 @@ void RecurringRuleController::deleteFile(const HttpRequestPtr &req, std::functio
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);
@@ -601,8 +601,8 @@ void RecurringRuleController::restoreFile(const HttpRequestPtr &req, std::functi
             resp->setStatusCode(k200OK);
             callback(resp);
         },
-        [callback](const orm::DrogonDbException &e) {
-            Json::Value ret = parseDbError(e);
+        [callback, req](const orm::DrogonDbException &e) {
+            Json::Value ret = parseDbError(e, app_utils::requestIdOf(req));
             auto statusCode = static_cast<drogon::HttpStatusCode>(ret["http_code"].asInt());
             ret.removeMember("http_code");
             auto resp = HttpResponse::newHttpJsonResponse(ret);

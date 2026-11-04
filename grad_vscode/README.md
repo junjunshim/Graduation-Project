@@ -1,71 +1,253 @@
-# grad-vscode README
+# Axis Share
 
-This is the README for your extension "grad-vscode". After writing up a brief description, we recommend including the following sections.
+**Axis Flow 워크스페이스의 원격 저장소를 VS Code에서 실시간으로 함께 편집하는 확장 프로그램입니다.**
 
-## Features
+Axis Share는 저장소를 각자 로컬에 복제해 따로 작업하는 대신, Axis Flow 서버의 저장소 작업 디렉터리에 여러 사용자가 같은 브랜치 단위로 접속해 파일을 편집하고 커밋합니다. 같은 브랜치에 접속한 사용자끼리만 편집 내용과 커서가 공유됩니다.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- Extension ID: `junjunshim.axis-share`
+- Publisher: `junjunshim`
+- VS Code: `1.110.0` 이상
 
-For example if there is an image subfolder under your extension project workspace:
+## 주요 기능
 
-\!\[feature X\]\(images/feature-x.png\)
+- **브랜치 단위 실시간 편집**: 같은 브랜치의 사용자끼리 텍스트 변경을 즉시 공유합니다.
+- **실시간 접속자 확인**: 저장소 전체 및 브랜치별 접속자와 각 사용자가 열어 둔 파일을 확인합니다.
+- **원격 커서와 선택 영역**: 다른 사용자의 커서와 드래그 영역을 사용자별 색상으로 표시합니다.
+- **리뷰 데코레이션**: 오타·문법·논리·기타·강조 데코레이션을 코드에 표시하고 사이드바에서 관리합니다.
+- **게으른 파일 로딩**: 처음에는 디렉터리 구조만 받고, 파일을 열 때 내용을 가져옵니다.
+- **Git 상태와 커밋**: 스테이징, 커밋, push, 되돌리기와 브랜치별 변경 상태를 Changes 뷰에서 처리합니다.
+- **내장 diff**: 작업 트리, 스테이징, 커밋, 원격 기준 변경을 VS Code 기본 diff 화면으로 확인합니다.
+- **커밋 그래프**: 현재 브랜치의 커밋 흐름과 원격 위치를 보여 주며, 저장소 전체 그래프도 웹뷰로 열 수 있습니다.
+- **안전한 세션 연결**: 앱이 발급한 1회용 코드로 확장 전용 세션을 시작하며, GitHub 비밀번호나 PAT를 확장에 직접 입력하지 않습니다.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## 요구 사항
 
-## Requirements
+- Visual Studio Code `1.110.0` 이상
+- Axis Flow 계정과 해당 워크스페이스의 저장소 접근 권한
+- Axis Flow에서 GitHub 원격 저장소가 연결되어 있어야 함
+- GitHub 작업 시 저장소 조회 권한과 편집 권한 필요
+- 초기 연결을 위한 Axis Flow 데스크톱 앱
+- 실시간 협업과 커밋/push를 위한 서버 네트워크 연결
+- 커밋할 경우 `user.name`과 `user.email` 설정 필요
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+## 설치
 
-## Extension Settings
+### VS Code Marketplace
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+1. VS Code의 Extensions 뷰를 엽니다.
+2. `Axis Share` 또는 `junjunshim.axis-share`를 검색합니다.
+3. **Install**을 선택합니다.
 
-For example:
+CLI로 설치할 수도 있습니다.
 
-This extension contributes the following settings:
+```bash
+code --install-extension junjunshim.axis-share
+```
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+### VSIX 파일
 
-## Known Issues
+배포된 VSIX 파일이 있다면 아래 명령으로 설치합니다.
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+```bash
+code --install-extension axis-share-<version>.vsix
+```
 
-## Release Notes
+## 시작하기
 
-Users appreciate release notes as you update your extension.
+1. Axis Flow 앱에서 원격 저장소를 연결합니다.
+2. 워크스페이스의 GitHub 탭에서 **VSCode로 실시간 편집**을 선택합니다.
+3. 운영체제가 `vscode://junjunshim.axis-share/auth?...` URI로 VS Code를 열면 연결을 허용합니다.
+4. 확장이 1회용 코드를 세션 토큰으로 교환하고 저장소의 기본 브랜치를 엽니다.
+5. 왼쪽 Activity Bar의 **Repository** 아이콘에서 파일 트리, 브랜치, 변경 상태를 확인합니다.
 
-### 1.0.0
+> Axis Share는 VS Code를 단독으로 실행했다고 이전 세션을 자동 복원하지 않습니다. 새 창에서 저장소를 사용하려면 Axis Flow 앱에서 다시 **VSCode로 실시간 편집**을 실행해야 합니다. 이 동작은 이전 연결 정보나 편집 상태가 의도치 않게 남는 것을 막기 위한 것입니다.
 
-Initial release of ...
+## 사이드바
 
-### 1.0.1
+| 뷰 | 설명 |
+|:---|:---|
+| **Repository** | 브랜치별 디렉터리·파일 트리, git 상태 배지, 브랜치 전환·생성·삭제, 파일 생성·이름 변경·삭제·경로 복사 |
+| **Changes** | 현재 브랜치의 staged/modified/untracked 상태, 스테이징·해제, 되돌리기, 커밋, push, diff |
+| **Graph** | 현재 브랜치의 커밋 목록과 원격 위치. 저장소 전체 그래프는 별도 웹뷰 탭으로 표시 |
+| **Editing** | 저장소 전체 접속자 수와 브랜치별 사용자, 각 사용자가 열어 둔 파일 |
+| **Reviews** | 오타·문법·논리·기타·강조 리뷰 데코레이션 목록과 이동·삭제·표시 전환 |
 
-Fixed issue #.
+### Repository
 
-### 1.1.0
+- 처음에는 디렉터리와 파일 구조만 조회합니다.
+- 파일을 열 때 서버에서 최신 내용을 가져옵니다.
+- 파일과 디렉터리는 컨텍스트 메뉴에서 생성·이름 변경·삭제할 수 있습니다.
+- 변경된 파일에는 `M`, 추가된 파일에는 `A`, 추적되지 않는 파일에는 `U`, 삭제된 파일에는 `D` 상태가 표시됩니다.
+- 브랜치 피커에서 브랜치를 전환하거나 새 브랜치를 만들 수 있습니다.
 
-Added features X, Y, and Z.
+### Changes
 
----
+- 현재 브랜치의 작업 트리 상태를 실시간으로 반영합니다.
+- 각 파일을 staged 또는 unstaged 상태로 전환할 수 있습니다.
+- 수정 내용을 이전 상태로 되돌릴 수 있습니다.
+- 커밋과 push는 분리되어 있습니다. 커밋 후 원하는 시점에 push합니다.
+- 파일을 선택하면 VS Code 내장 diff가 열립니다.
+- 다른 사용자가 상태를 바꾸거나 커밋하면 Changes 뷰도 갱신됩니다.
 
-## Following extension guidelines
+### Graph
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+- 현재 브랜치의 커밋을 시간 순서로 보여 줍니다.
+- 로컬 HEAD와 원격 브랜치 위치를 함께 확인할 수 있습니다.
+- 커밋을 펼쳐 변경된 파일을 보고 diff를 열 수 있습니다.
+- 상단의 그래프 버튼으로 모든 브랜치와 태그를 포함한 저장소 전체 그래프를 웹뷰 탭에서 확인할 수 있습니다.
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+### Editing
 
-## Working with Markdown
+- 저장소에 접속한 전체 사용자 수를 표시합니다.
+- 접속자를 브랜치별로 묶어 보여 줍니다.
+- 사용자 아래에서 해당 사용자가 현재 열어 둔 파일을 확인할 수 있습니다.
+- 다른 사용자의 파일 항목을 선택해 같은 파일을 열 수 있습니다.
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+### Reviews
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+- 리뷰 데코레이션은 파일의 해당 위치에 인라인으로 표시됩니다.
+- 데코레이션 목록에서 위치로 이동하거나 삭제할 수 있습니다.
+- 데코레이션 표시 여부는 설정 또는 Reviews 뷰 상단 버튼으로 전환합니다.
+- 리뷰는 같은 브랜치의 협업 사용자에게 공유됩니다.
 
-## For more information
+## 실시간 편집
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+- 실시간 공유 범위는 **저장소가 아니라 브랜치**입니다. 같은 저장소라도 서로 다른 브랜치에 있으면 편집 내용이 공유되지 않습니다.
+- 다른 사용자의 커서와 선택 영역이 사용자별 색상으로 표시됩니다.
+- 협업 연결이 끊기면 편집이 잠깁니다. 끊긴 동안 다른 사용자가 변경했을 수 있으므로 로컬 내용을 임의로 병합하지 않습니다.
+- 다시 연결되면 열려 있던 파일을 서버 내용으로 다시 받아 동기화합니다.
+- 편집 권한이 회수되면 해당 파일은 읽기 전용으로 전환됩니다.
+- 연결 상태는 VS Code 하단 상태 표시줄에서 확인할 수 있습니다.
 
-**Enjoy!**
+## 커밋과 push
+
+커밋을 만들려면 Changes 뷰 상단의 설정 버튼이나 명령 팔레트에서 **Axis Share: 커밋 사용자 설정**을 실행해 작성자 정보를 입력합니다.
+
+| 설정 | 설명 |
+|:---|:---|
+| `axis-share.user.name` | 커밋에 기록할 작성자 이름 |
+| `axis-share.user.email` | 커밋에 기록할 작성자 이메일. Axis Flow 계정 이메일과 일치해야 합니다. |
+
+두 값이 모두 설정되어야 커밋 입력창이 표시됩니다. 커밋은 현재 브랜치의 서버 작업 디렉터리에서 만들어지며, push는 별도로 실행합니다.
+
+### Diff 종류
+
+Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff에 맡깁니다. 다음 비교를 지원합니다.
+
+- 작업 트리와 `HEAD`
+- 스테이징된 인덱스와 `HEAD`
+- 스테이징 이후 작업 트리와 인덱스
+- 커밋과 부모 커밋
+- 원격 브랜치와 로컬 `HEAD`
+
+## 브랜치 규칙
+
+- 새 브랜치는 현재 작업 중인 로컬 브랜치를 기준으로 생성됩니다.
+- 브랜치를 전환하면 Repository, Changes, Graph, Editing 뷰가 해당 브랜치 기준으로 다시 그려집니다.
+- 기본 브랜치는 삭제할 수 없습니다.
+- 삭제 요청자 외에 같은 브랜치에 접속한 사용자가 있으면 삭제가 차단됩니다.
+- 커밋되지 않은 staged/modified/untracked 변경이 있으면 확인 후 강제 삭제할 수 있습니다.
+- 브랜치가 삭제되면 그 브랜치에 있던 사용자는 기본 브랜치로 이동합니다.
+
+## 설정
+
+| 설정 | 기본값 | 설명 |
+|:---|:---|:---|
+| `axis-share.serverUrl` | `https://axisflow.team/api` | Axis Flow 서버 API 주소. 끝의 `/`는 자동 제거됩니다. |
+| `axis-share.showDecorations` | `true` | 에디터에 리뷰 데코레이션을 표시합니다. 사이드바 목록에는 영향을 주지 않습니다. |
+| `axis-share.user.name` | 빈 값 | 커밋 작성자 이름 |
+| `axis-share.user.email` | 빈 값 | 커밋 작성자 이메일 |
+
+자체 호스팅 서버를 사용한다면 **앱에서 VSCode로 열기 전에** `axis-share.serverUrl`을 해당 서버의 API 주소로 설정하세요.
+
+## 명령
+
+명령 팔레트에서 `Axis Share`를 검색하거나 사이드바의 컨텍스트 메뉴·타이틀 버튼을 사용합니다.
+
+| 영역 | 명령 |
+|:---|:---|
+| 브랜치 | 브랜치 전환 |
+| 파일 | 새 파일, 새 폴더, 이름 바꾸기, 삭제, 경로 복사, 파일 열기, 새로 고침 |
+| Changes | 스테이징, 스테이징 해제, 모두 스테이징, 모두 해제, 커밋, push, fetch, 되돌리기 |
+| Diff | 변경 내용 보기, 스테이징 이후 변경 보기, 커밋 변경 내용 보기 |
+| Graph | 저장소 전체 그래프 보기 |
+| Reviews | 리뷰 데코레이션 추가, 위치로 이동, 삭제, 표시, 숨기기 |
+| 계정 | 커밋 사용자 설정 |
+
+## 보안 및 데이터
+
+- 확장은 Axis Flow 비밀번호를 직접 입력받지 않습니다.
+- 앱은 60초 동안 유효한 1회용 핸드오프 코드만 전달합니다.
+- 확장은 이 코드를 자체 access/refresh token으로 교환합니다.
+- 토큰은 VS Code `SecretStorage`에 저장되며 일반 설정 파일에 평문으로 기록되지 않습니다.
+- GitHub PAT는 Axis Flow 서버의 저장소 연결 절차에서 사용되며, VS Code 확장에 직접 전달되지 않습니다.
+- 실시간 편집 내용은 같은 브랜치에 접속한 사용자에게만 공유됩니다.
+- 협업 연결이 끊기면 편집을 잠가 서로 다른 내용이 충돌하는 상황을 줄입니다.
+
+## 문제 해결
+
+### 앱에서 VSCode로 열기가 동작하지 않음
+
+- Axis Share 확장이 설치되어 있는지 확인합니다.
+- VS Code가 `vscode://` URI 연결을 처리하도록 설치되어 있는지 확인합니다.
+- 앱에서 다시 **VSCode로 실시간 편집**을 실행합니다. 핸드오프 코드는 60초 후 만료되며 재사용할 수 없습니다.
+
+### Repository가 비어 있음
+
+- Axis Flow 앱을 거치지 않고 VS Code를 직접 실행한 경우 세션이 없습니다. 앱에서 다시 열어 주세요.
+- 저장소 조회 권한이 있는지 확인합니다.
+- Activity Bar에서 **Repository** 뷰를 선택하고 새로 고침합니다.
+
+### 편집 중 연결이 끊김
+
+- 하단 상태 표시줄의 Axis Share 상태를 확인합니다.
+- 네트워크가 복구되면 자동 재연결을 시도합니다.
+- 재연결 후 열려 있던 파일은 서버 내용을 기준으로 다시 동기화됩니다.
+- 연결이 끊긴 동안에는 다른 브랜치로 전환하거나 브랜치를 삭제하지 마세요.
+
+### 커밋 입력창이 보이지 않음
+
+- `axis-share.user.name`과 `axis-share.user.email`을 모두 설정했는지 확인합니다.
+- 이메일이 Axis Flow 계정 이메일과 일치하는지 확인합니다.
+
+### 브랜치를 삭제할 수 없음
+
+- 기본 브랜치는 삭제할 수 없습니다.
+- 다른 사용자가 같은 브랜치에 접속 중이면 삭제할 수 없습니다.
+- 커밋되지 않은 변경이 있으면 Changes 뷰에서 확인한 뒤 강제 삭제 여부를 결정합니다.
+
+### 사내/자체 서버에 연결되지 않음
+
+- `axis-share.serverUrl`이 `https://<서버 주소>/api` 형식인지 확인합니다.
+- 서버 인증서와 방화벽에서 REST 및 WebSocket 연결이 허용되는지 확인합니다.
+
+## 제한 사항
+
+- 한 VS Code 창은 하나의 저장소 세션을 기준으로 동작합니다.
+- 초기 연결은 반드시 Axis Flow 앱의 핸드오프 URI로 시작해야 합니다.
+- 실시간 협업은 텍스트 파일 편집을 중심으로 동작합니다.
+- VS Code의 네이티브 Source Control(SCM) 대신 Axis Share의 **Changes** 뷰를 사용합니다.
+- 원격 저장소를 사용자 PC에 직접 clone하는 방식이 아니며, 실제 작업 디렉터리는 Axis Flow 서버가 관리합니다.
+- 서버 연결이 없거나 편집 권한이 없으면 파일 생성·수정·커밋을 수행할 수 없습니다.
+
+## 개발 및 패키징
+
+```bash
+npm ci
+npm run check-types
+npm run lint
+npm run compile
+npm run package
+```
+
+- `npm run compile`: 타입 검사, 린트, 개발용 esbuild 번들 생성
+- `npm run package`: 타입 검사, 린트, 프로덕션 번들 생성
+- VS Code에서 F5를 실행하면 Extension Development Host로 확장을 확인할 수 있습니다.
+
+```bash
+npx @vscode/vsce package
+```
+
+## 지원
+
+설치·권한·저장소 연결 문제는 Axis Flow 워크스페이스 관리자 또는 프로젝트 운영팀에 문의해 주세요. 오류를 전달할 때는 VS Code 버전, Axis Share 버전, 발생 시각, 하단 연결 상태와 오류 메시지를 함께 알려 주면 확인에 도움이 됩니다.

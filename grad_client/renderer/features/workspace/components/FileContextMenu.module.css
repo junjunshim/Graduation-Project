@@ -12,6 +12,17 @@
   opacity: 0.6;
 }
 
+.aiItem {
+  composes: contextMenuItem from '../pages/WorkspaceEntryPage.module.css';
+  color: var(--axis-brand-primary, #7A5C43);
+  font-weight: 500;
+}
+
+.aiItem:hover:not(:disabled) {
+  background: var(--axis-brand-primary-soft, #F1ECE6);
+  color: var(--axis-brand-primary-hover, #694E37);
+}
+
 .deleteItem {
   composes: contextMenuItem from '../pages/WorkspaceEntryPage.module.css';
   color: #ef4444;

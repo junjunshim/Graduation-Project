@@ -29,16 +29,10 @@ export const navigationItems: NavigationItem[] = [
     to: '/channels',
     label: '채널',
     icon: 'messageCircle',
-    disabled: true,
   },
   {
     to: '/calendar',
     label: '캘린더',
     icon: 'calendar',
-  },
-  {
-    to: '/settings',
-    label: '설정',
-    icon: 'gear',
   },
 ]

@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { Button } from '../../../design-system/primitives/Button'
 import { DatePicker } from '../../../design-system/primitives/DatePicker'
+import { TimePicker } from '../../../design-system/primitives/TimePicker'
+import { UserAvatar } from '../../../design-system/primitives/UserAvatar'
+import { TaskFilterDropdown } from './TaskFilterDropdown'
 import type {
   CreateRecurringRuleRequest,
   HolidayAction,
@@ -12,7 +15,7 @@ import type {
   RecurringRuleRecord,
   RecurringWeekDay,
 } from '../model/recurringRuleTypes'
-import { RECURRING_CATEGORY_OPTIONS } from '../model/labels'
+import { getCategoryBadgeStyle, RECURRING_CATEGORY_OPTIONS } from '../model/labels'
 import { createRecurringRule, deleteRecurringRuleFile, updateRecurringRule } from '../data/recurringRuleService'
 import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
@@ -38,10 +41,10 @@ export type RecurringRuleModalProps = {
 }
 
 const FREQUENCY_OPTIONS: Array<{ value: RecurringFrequency; label: string }> = [
-  { value: 'DAILY', label: '매일' },
-  { value: 'WEEKLY', label: '매주' },
-  { value: 'MONTHLY', label: '매월' },
-  { value: 'YEARLY', label: '매년' },
+  { value: 'DAILY', label: '일간' },
+  { value: 'WEEKLY', label: '주간' },
+  { value: 'MONTHLY', label: '월간' },
+  { value: 'YEARLY', label: '연간' },
 ]
 
 const WEEK_DAYS: Array<{ value: RecurringWeekDay; label: string }> = [
@@ -93,13 +96,15 @@ export function RecurringRuleModal({
 
   // 반복 주기 속성
   const [frequency, setFrequency] = useState<RecurringFrequency>('WEEKLY')
-  const [intervalValue, setIntervalValue] = useState<number>(1)
+  const [intervalValue, setIntervalValue] = useState<number | string>(1)
   const [selectedDays, setSelectedDays] = useState<Set<RecurringWeekDay>>(new Set(['MO']))
-  const [byMonthDay, setByMonthDay] = useState<number>(1)
+  const [byMonthDay, setByMonthDay] = useState<number | string>(1)
+  const [yearlyMonth, setYearlyMonth] = useState<number>(() => new Date().getMonth() + 1)
+  const [yearlyDay, setYearlyDay] = useState<number | string>(() => new Date().getDate())
 
   // 시간 및 기간
   const [startTime, setStartTime] = useState<string>('09:00')
-  const [durationMinutes, setDurationMinutes] = useState<number>(60)
+  const [durationMinutes, setDurationMinutes] = useState<number | string>(60)
   const [repeatStartDate, setRepeatStartDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
   const [repeatEndDate, setRepeatEndDate] = useState<string>('')
 
@@ -120,56 +125,114 @@ export function RecurringRuleModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // 유형 및 담당자 드롭다운 옵션 목록 구성
+  const categoryOptions = useMemo(
+    () =>
+      RECURRING_CATEGORY_OPTIONS.map((opt) => ({
+        value: opt.value,
+        label: opt.label,
+        icon: (
+          <span
+            style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              display: 'inline-block',
+              ...getCategoryBadgeStyle(opt.label),
+            }}
+          />
+        ),
+      })),
+    [],
+  )
+
+  const assigneeOptions = useMemo(
+    () => [
+      {
+        value: '',
+        label: '미지정 (공용)',
+        icon: <Icon name="user" size={14} />,
+      },
+      ...members.map((m) => ({
+        value: m.userId,
+        label: m.roleName ? `${m.name} (${m.roleName})` : m.name,
+        icon: <UserAvatar name={m.name} userId={m.userId} size="small" />,
+      })),
+    ],
+    [members],
+  )
+
+  const hasInitializedRef = useRef(false)
+
   // 초기값 동기화
   useEffect(() => {
-    if (!isOpen) return
-
-    if (initialRule) {
-      setTitle(initialRule.title)
-      setDescription(initialRule.description || '')
-      setCategory(initialRule.category)
-      setAssigneeUserId(initialRule.assigneeUserId || '')
-      setFrequency(initialRule.frequency)
-      setIntervalValue(initialRule.intervalValue || 1)
-      if (initialRule.byDay) {
-        setSelectedDays(new Set(initialRule.byDay.split(',') as RecurringWeekDay[]))
-      } else {
-        setSelectedDays(new Set(['MO']))
-      }
-      setByMonthDay(initialRule.byMonthDay || 1)
-      setStartTime(initialRule.startTime ? initialRule.startTime.slice(0, 5) : '09:00')
-      setDurationMinutes(initialRule.durationMinutes || 60)
-      setRepeatStartDate(initialRule.repeatStartDate ? initialRule.repeatStartDate.slice(0, 10) : new Date().toISOString().slice(0, 10))
-      setRepeatEndDate(initialRule.repeatEndDate ? initialRule.repeatEndDate.slice(0, 10) : '')
-      setExcludeHolidays(initialRule.excludeHolidays)
-      setHolidayAction(initialRule.holidayAction)
-      setChecklists(
-        (initialRule.checklists || []).map((c, i) => ({
-          content: c.content,
-          sortOrder: c.sortOrder ?? i,
-        })),
-      )
-      setExistingFiles(initialRule.files || [])
-    } else {
-      setTitle('')
-      setDescription('')
-      setCategory('ROUTINE')
-      setAssigneeUserId('')
-      setFrequency('WEEKLY')
-      setIntervalValue(1)
-      setSelectedDays(new Set(['MO']))
-      setByMonthDay(1)
-      setStartTime('09:00')
-      setDurationMinutes(60)
-      setRepeatStartDate(new Date().toISOString().slice(0, 10))
-      setRepeatEndDate('')
-      setExcludeHolidays(true)
-      setHolidayAction('SKIP')
-      setChecklists([])
-      setExistingFiles([])
+    if (!isOpen) {
+      hasInitializedRef.current = false
+      return
     }
-    setAttachedFiles([])
-    setErrorMessage(null)
+
+    // 모달이 처음 열릴 때만 동기화
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true
+
+      if (initialRule) {
+        setTitle(initialRule.title)
+        setDescription(initialRule.description || '')
+        setCategory(initialRule.category)
+        setAssigneeUserId(initialRule.assigneeUserId || '')
+        setFrequency(initialRule.frequency)
+        setIntervalValue(initialRule.intervalValue || 1)
+        if (initialRule.byDay) {
+          setSelectedDays(new Set(initialRule.byDay.split(',') as RecurringWeekDay[]))
+        } else {
+          setSelectedDays(new Set(['MO']))
+        }
+        setByMonthDay(initialRule.byMonthDay || 1)
+        const startDateStr = initialRule.repeatStartDate ? initialRule.repeatStartDate.slice(0, 10) : new Date().toISOString().slice(0, 10)
+        const parsedStart = new Date(startDateStr)
+        if (!Number.isNaN(parsedStart.getTime())) {
+          setYearlyMonth(parsedStart.getMonth() + 1)
+          setYearlyDay(parsedStart.getDate())
+        } else {
+          setYearlyMonth(new Date().getMonth() + 1)
+          setYearlyDay(new Date().getDate())
+        }
+        setStartTime(initialRule.startTime ? initialRule.startTime.slice(0, 5) : '09:00')
+        setDurationMinutes(initialRule.durationMinutes || 60)
+        setRepeatStartDate(startDateStr)
+        setRepeatEndDate(initialRule.repeatEndDate ? initialRule.repeatEndDate.slice(0, 10) : '')
+        setExcludeHolidays(initialRule.excludeHolidays)
+        setHolidayAction(initialRule.holidayAction)
+        setChecklists(
+          (initialRule.checklists || []).map((c, i) => ({
+            content: c.content,
+            sortOrder: c.sortOrder ?? i,
+          })),
+        )
+        setExistingFiles(initialRule.files || [])
+      } else {
+        setTitle('')
+        setDescription('')
+        setCategory('ROUTINE')
+        setAssigneeUserId('')
+        setFrequency('WEEKLY')
+        setIntervalValue(1)
+        setSelectedDays(new Set(['MO']))
+        setByMonthDay(1)
+        setYearlyMonth(new Date().getMonth() + 1)
+        setYearlyDay(new Date().getDate())
+        setStartTime('09:00')
+        setDurationMinutes(60)
+        setRepeatStartDate(new Date().toISOString().slice(0, 10))
+        setRepeatEndDate('')
+        setExcludeHolidays(true)
+        setHolidayAction('SKIP')
+        setChecklists([])
+        setExistingFiles([])
+      }
+      setAttachedFiles([])
+      setErrorMessage(null)
+    }
   }, [isOpen, initialRule])
 
   if (!isOpen || typeof document === 'undefined') return null
@@ -237,6 +300,15 @@ export function RecurringRuleModal({
     try {
       const byDayString = frequency === 'WEEKLY' ? Array.from(selectedDays).join(',') : undefined
 
+      // 연간(YEARLY)일 경우, 사용자가 지정한 월/일이 반영되도록 repeatStartDate의 월/일을 설정
+      let effectiveRepeatStartDate = repeatStartDate
+      if (frequency === 'YEARLY') {
+        const baseYear = repeatStartDate ? new Date(repeatStartDate).getFullYear() : new Date().getFullYear()
+        const ym = String(yearlyMonth).padStart(2, '0')
+        const yd = String(Math.min(31, Math.max(1, Number(yearlyDay) || 1))).padStart(2, '0')
+        effectiveRepeatStartDate = `${baseYear}-${ym}-${yd}`
+      }
+
       if (isEdit && initialRule) {
         const res = await updateRecurringRule(
           {
@@ -251,7 +323,7 @@ export function RecurringRuleModal({
             byMonthDay: frequency === 'MONTHLY' ? Number(byMonthDay) : undefined,
             startTime: startTime ? `${startTime}:00` : undefined,
             durationMinutes: Number(durationMinutes) || 60,
-            repeatStartDate,
+            repeatStartDate: effectiveRepeatStartDate,
             repeatEndDate: repeatEndDate || null,
             excludeHolidays,
             holidayAction,
@@ -283,7 +355,7 @@ export function RecurringRuleModal({
           byMonthDay: frequency === 'MONTHLY' ? Number(byMonthDay) : undefined,
           startTime: startTime ? `${startTime}:00` : undefined,
           durationMinutes: Number(durationMinutes) || 60,
-          repeatStartDate,
+          repeatStartDate: effectiveRepeatStartDate,
           repeatEndDate: repeatEndDate || undefined,
           excludeHolidays,
           holidayAction,
@@ -348,33 +420,22 @@ export function RecurringRuleModal({
 
           <div className={styles.row}>
             <div className={styles.col}>
-              <label className={styles.label}>유형 (카테고리)</label>
-              <select
-                className={styles.select}
+              <TaskFilterDropdown
+                label="유형 (카테고리)"
                 value={category}
-                onChange={(e) => setCategory(e.target.value as RecurringCategory)}
-              >
-                {RECURRING_CATEGORY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                options={categoryOptions}
+                onChange={(val) => setCategory(val as RecurringCategory)}
+                className={styles.modalDropdownTrigger}
+              />
             </div>
             <div className={styles.col}>
-              <label className={styles.label}>기본 담당자</label>
-              <select
-                className={styles.select}
+              <TaskFilterDropdown
+                label="기본 담당자"
                 value={assigneeUserId}
-                onChange={(e) => setAssigneeUserId(e.target.value)}
-              >
-                <option value="">미지정 (공용)</option>
-                {members.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.name} {m.roleName ? `(${m.roleName})` : `(${m.userId})`}
-                  </option>
-                ))}
-              </select>
+                options={assigneeOptions}
+                onChange={(val) => setAssigneeUserId(val)}
+                className={styles.modalDropdownTrigger}
+              />
             </div>
           </div>
 
@@ -419,7 +480,22 @@ export function RecurringRuleModal({
                   className={styles.input}
                   style={{ width: '80px' }}
                   value={intervalValue}
-                  onChange={(e) => setIntervalValue(Math.max(1, Number(e.target.value)))}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val === '') {
+                      setIntervalValue('')
+                    } else {
+                      const num = parseInt(val, 10)
+                      setIntervalValue(Number.isNaN(num) ? '' : num)
+                    }
+                  }}
+                  onBlur={() => {
+                    if (intervalValue === '' || Number(intervalValue) < 1) {
+                      setIntervalValue(1)
+                    } else if (Number(intervalValue) > 365) {
+                      setIntervalValue(365)
+                    }
+                  }}
                 />
                 <span style={{ fontSize: '0.85rem', color: 'var(--axis-text-secondary)' }}>
                   {frequency === 'DAILY' && '일마다'}
@@ -462,7 +538,67 @@ export function RecurringRuleModal({
                     className={styles.input}
                     style={{ width: '80px' }}
                     value={byMonthDay}
-                    onChange={(e) => setByMonthDay(Math.min(31, Math.max(1, Number(e.target.value))))}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === '') {
+                        setByMonthDay('')
+                      } else {
+                        const num = parseInt(val, 10)
+                        setByMonthDay(Number.isNaN(num) ? '' : num)
+                      }
+                    }}
+                    onBlur={() => {
+                      if (byMonthDay === '' || Number(byMonthDay) < 1) {
+                        setByMonthDay(1)
+                      } else if (Number(byMonthDay) > 31) {
+                        setByMonthDay(31)
+                      }
+                    }}
+                  />
+                  <span style={{ fontSize: '0.85rem', color: 'var(--axis-text-secondary)' }}>일</span>
+                </div>
+              </div>
+            )}
+
+            {frequency === 'YEARLY' && (
+              <div className={styles.col}>
+                <label className={styles.label}>매년 실행일</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <select
+                    className={styles.select}
+                    style={{ width: '85px' }}
+                    value={yearlyMonth}
+                    onChange={(e) => setYearlyMonth(Number(e.target.value))}
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m}>
+                        {m}월
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    className={styles.input}
+                    style={{ width: '70px' }}
+                    value={yearlyDay}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      if (val === '') {
+                        setYearlyDay('')
+                      } else {
+                        const num = parseInt(val, 10)
+                        setYearlyDay(Number.isNaN(num) ? '' : num)
+                      }
+                    }}
+                    onBlur={() => {
+                      if (yearlyDay === '' || Number(yearlyDay) < 1) {
+                        setYearlyDay(1)
+                      } else if (Number(yearlyDay) > 31) {
+                        setYearlyDay(31)
+                      }
+                    }}
                   />
                   <span style={{ fontSize: '0.85rem', color: 'var(--axis-text-secondary)' }}>일</span>
                 </div>
@@ -473,23 +609,36 @@ export function RecurringRuleModal({
           {/* 3. 시간 및 유효 기간 */}
           <div className={styles.row}>
             <div className={styles.col}>
-              <label className={styles.label}>시작 시간</label>
-              <input
-                type="time"
-                className={styles.input}
+              <TimePicker
+                label="시작 시간"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={setStartTime}
               />
             </div>
             <div className={styles.col}>
               <label className={styles.label}>소요 시간 (분)</label>
               <input
                 type="number"
-                min={15}
+                min={1}
                 step={15}
                 className={styles.input}
                 value={durationMinutes}
-                onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (val === '') {
+                    setDurationMinutes('')
+                  } else {
+                    const num = parseInt(val, 10)
+                    setDurationMinutes(Number.isNaN(num) ? '' : num)
+                  }
+                }}
+                onBlur={() => {
+                  if (durationMinutes === '' || Number(durationMinutes) < 1) {
+                    setDurationMinutes(60)
+                  } else if (Number(durationMinutes) > 1440) {
+                    setDurationMinutes(1440)
+                  }
+                }}
               />
             </div>
           </div>
@@ -517,218 +666,221 @@ export function RecurringRuleModal({
 
           {/* 4. 고도화된 공휴일 처리 정책 */}
           <div className={styles.holidayCard}>
-            <label className={styles.checkboxLabel}>
-              <input
-                type="checkbox"
-                checked={excludeHolidays}
-                onChange={(e) => setExcludeHolidays(e.target.checked)}
-              />
-              <span>법정 공휴일 예외 정책 적용</span>
-            </label>
+                  <label className={styles.checkboxLabel}>
+                    <input
+                      type="checkbox"
+                      checked={excludeHolidays}
+                      onChange={(e) => setExcludeHolidays(e.target.checked)}
+                    />
+                    <span>법정 공휴일 예외 정책 적용</span>
+                  </label>
 
-            {excludeHolidays && (
-              <div className={styles.radioGroup}>
-                <label className={styles.radioLabel}>
-                  <input
-                    type="radio"
-                    name="holiday_action"
-                    value="SKIP"
-                    checked={holidayAction === 'SKIP'}
-                    onChange={() => setHolidayAction('SKIP')}
-                  />
-                  <span>
-                    <strong>건너뜀 (SKIP)</strong>: 공휴일 회차는 자동으로 생략합니다. (회의, 일상 루틴 권장)
-                  </span>
-                </label>
-                <label className={styles.radioLabel}>
-                  <input
-                    type="radio"
-                    name="holiday_action"
-                    value="NEXT_WORKDAY"
-                    checked={holidayAction === 'NEXT_WORKDAY'}
-                    onChange={() => setHolidayAction('NEXT_WORKDAY')}
-                  />
-                  <span>
-                    <strong>다음 영업일로 순연 (NEXT_WORKDAY)</strong>: 다음 평일에 실행합니다. (정기 점검 권장)
-                  </span>
-                </label>
-                <label className={styles.radioLabel}>
-                  <input
-                    type="radio"
-                    name="holiday_action"
-                    value="PREV_WORKDAY"
-                    checked={holidayAction === 'PREV_WORKDAY'}
-                    onChange={() => setHolidayAction('PREV_WORKDAY')}
-                  />
-                  <span>
-                    <strong>직전 영업일로 앞당김 (PREV_WORKDAY)</strong>: 직전 평일로 당겨 마감합니다. (정기 결산/보고서 제출 권장)
-                  </span>
-                </label>
-              </div>
-            )}
-          </div>
+                  {excludeHolidays && (
+                    <div className={styles.radioGroup}>
+                      <label className={styles.radioLabel}>
+                        <input
+                          type="radio"
+                          name="holiday_action"
+                          value="SKIP"
+                          checked={holidayAction === 'SKIP'}
+                          onChange={() => setHolidayAction('SKIP')}
+                        />
+                        <span>
+                          <strong>건너뜀 (SKIP)</strong>: 공휴일 회차는 자동으로 생략합니다. (회의, 일상 루틴 권장)
+                        </span>
+                      </label>
+                      <label className={styles.radioLabel}>
+                        <input
+                          type="radio"
+                          name="holiday_action"
+                          value="NEXT_WORKDAY"
+                          checked={holidayAction === 'NEXT_WORKDAY'}
+                          onChange={() => setHolidayAction('NEXT_WORKDAY')}
+                        />
+                        <span>
+                          <strong>다음 영업일로 순연 (NEXT_WORKDAY)</strong>: 다음 평일에 실행합니다. (정기 점검 권장)
+                        </span>
+                      </label>
+                      <label className={styles.radioLabel}>
+                        <input
+                          type="radio"
+                          name="holiday_action"
+                          value="PREV_WORKDAY"
+                          checked={holidayAction === 'PREV_WORKDAY'}
+                          onChange={() => setHolidayAction('PREV_WORKDAY')}
+                        />
+                        <span>
+                          <strong>직전 영업일로 앞당김 (PREV_WORKDAY)</strong>: 직전 평일로 당겨 마감합니다. (정기 결산/보고서 제출 권장)
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                </div>
 
-          {/* 5. 체크리스트 템플릿 */}
-          <div className={styles.checklistSection}>
-            <div className={styles.sectionHeader}>
-              <span className={styles.sectionTitle}>체크리스트 템플릿</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--axis-text-secondary)' }}>업무 인스턴스화 시 자동 이식됩니다.</span>
-            </div>
-            <div className={styles.checklistInputRow}>
-              <input
-                type="text"
-                className={styles.input}
-                placeholder="세부 점검 항목 입력 (예: 서버 백업 정상 완료 확인)"
-                value={newChecklistText}
-                onChange={(e) => setNewChecklistText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleAddChecklist()
-                  }
-                }}
-              />
-              <Button type="button" variant="secondary" onClick={handleAddChecklist}>
-                추가
-              </Button>
-            </div>
-            {checklists.length > 0 && (
-              <div className={styles.checklistItemList}>
-                {checklists.map((c, i) => (
-                  <div key={i} className={styles.checklistItem}>
-                    <span className={styles.checkItemText}>
-                      <Icon name="checkSquare" size={14} />
-                      {c.content}
-                    </span>
-                    <button
-                      type="button"
-                      className={styles.removeItemBtn}
-                      onClick={() => handleRemoveChecklist(i)}
-                      aria-label="항목 삭제"
-                    >
-                      <Icon name="close" size={13} />
-                    </button>
+                {/* 5. 체크리스트 템플릿 */}
+                <div className={styles.checklistSection}>
+                  <div className={styles.sectionHeader}>
+                    <span className={styles.sectionTitle}>체크리스트 템플릿</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 6. 공통 템플릿 파일 첨부 (드래그앤드롭) */}
-          <div className={styles.fileSection}>
-            <div className={styles.sectionHeader}>
-              <span className={styles.sectionTitle}>공통 템플릿 및 양식 첨부</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--axis-text-secondary)' }}>매뉴얼, 보고서 양식 등을 등록합니다.</span>
-            </div>
-            <div
-              className={[styles.dropzone, isDragging ? styles.dropzoneActive : ''].join(' ')}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setIsDragging(true)
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleFileDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input
-                type="file"
-                ref={fileInputRef}
-                multiple
-                style={{ display: 'none' }}
-                onChange={handleFileSelect}
-              />
-              <Icon name="folder" size={24} />
-              <span className={styles.dropzoneText}>파일을 마우스로 끌어다 놓거나 클릭하여 선택하세요.</span>
-              <span className={styles.dropzoneSub}>PDF, DOCX, XLSX 등 양식 파일 지원</span>
-            </div>
-
-            {/* 기존 등록된 서버 파일 목록 */}
-            {existingFiles && existingFiles.length > 0 && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <span style={{ fontSize: '0.78rem', color: 'var(--axis-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
-                  기존 등록된 파일 ({existingFiles.length}개)
-                </span>
-                <div className={styles.fileList}>
-                  {existingFiles.map((file) => (
-                    <div key={file.fileId} className={styles.fileItem}>
-                      <span className={styles.fileItemLeft}>
-                        <Icon name="page" size={14} />
-                        <span>{file.originalFileName}</span>
-                        <span style={{ color: 'var(--axis-text-muted)', fontSize: '0.72rem' }}>
-                          ({(file.fileSize / 1024).toFixed(1)} KB)
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className={styles.removeItemBtn}
-                        disabled={!canDeleteExistingFile(file)}
-                        title={canDeleteExistingFile(file) ? '파일 삭제' : '파일 삭제 권한이 없습니다.'}
-                        onClick={async () => {
-                          if (!window.confirm(`'${file.originalFileName}' 파일을 삭제하시겠습니까?`)) return
-                          try {
-                            const res = await deleteRecurringRuleFile(file.fileId)
-                            if (res.status === 'error') {
-                              showToast({
-                                title: '파일 삭제 실패',
-                                content: res.message || '파일을 삭제하지 못했습니다.',
-                                created_at: new Date().toISOString(),
-                              })
-                              return
-                            }
-                            setExistingFiles((prev) => (prev || []).filter((f) => f.fileId !== file.fileId))
-                            showToast({
-                              title: '파일 삭제 완료',
-                              content: `'${file.originalFileName}' 파일이 삭제되었습니다.`,
-                              created_at: new Date().toISOString(),
-                            })
-                          } catch (err) {
-                            showToast({
-                              title: '파일 삭제 실패',
-                              content: err instanceof Error ? err.message : '파일을 삭제하지 못했습니다.',
-                              created_at: new Date().toISOString(),
-                            })
-                          }
-                        }}
-                        aria-label="기존 파일 삭제"
-                      >
-                        <Icon name="close" size={13} />
-                      </button>
+                  <div className={styles.checklistInputRow}>
+                    <input
+                      type="text"
+                      className={styles.input}
+                      placeholder="세부 점검 항목 입력 (예: 서버 백업 정상 완료 확인)"
+                      value={newChecklistText}
+                      onChange={(e) => setNewChecklistText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleAddChecklist()
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className={styles.checklistAddBtn}
+                      onClick={handleAddChecklist}
+                    >
+                      추가
+                    </Button>
+                  </div>
+                  {checklists.length > 0 && (
+                    <div className={styles.checklistItemList}>
+                      {checklists.map((c, i) => (
+                        <div key={i} className={styles.checklistItem}>
+                          <span className={styles.checkItemText}>
+                            <Icon name="checkSquare" size={14} />
+                            {c.content}
+                          </span>
+                          <button
+                            type="button"
+                            className={styles.removeItemBtn}
+                            onClick={() => handleRemoveChecklist(i)}
+                            aria-label="항목 삭제"
+                          >
+                            <Icon name="close" size={13} />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            )}
 
-            {/* 새로 추가할 파일 목록 */}
-            {attachedFiles.length > 0 && (
-              <div style={{ marginTop: '0.5rem' }}>
-                <span style={{ fontSize: '0.78rem', color: 'var(--axis-brand-primary)', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
-                  새로 추가할 파일 ({attachedFiles.length}개)
-                </span>
-                <div className={styles.fileList}>
-                  {attachedFiles.map((file, idx) => (
-                    <div key={idx} className={styles.fileItem}>
-                      <span className={styles.fileItemLeft}>
-                        <Icon name="page" size={14} />
-                        <span>{file.name}</span>
-                        <span style={{ color: 'var(--axis-text-muted)', fontSize: '0.72rem' }}>
-                          ({(file.size / 1024).toFixed(1)} KB)
-                        </span>
+                {/* 6. 파일 첨부 (드래그앤드롭) */}
+                <div className={styles.fileSection}>
+                  <div className={styles.sectionHeader}>
+                    <span className={styles.sectionTitle}>첨부 파일 추가</span>
+                  </div>
+                  <div
+                    className={[styles.dropzone, isDragging ? styles.dropzoneActive : ''].join(' ')}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      setIsDragging(true)
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={handleFileDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={handleFileSelect}
+                    />
+                    <Icon name="folder" size={24} />
+                    <span className={styles.dropzoneText}>파일을 마우스로 끌어다 놓거나 클릭하여 선택하세요.</span>
+                    <span className={styles.dropzoneSub}>PDF, DOCX, XLSX 등 양식 파일 지원</span>
+                  </div>
+
+                  {/* 기존 등록된 서버 파일 목록 */}
+                  {existingFiles && existingFiles.length > 0 && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--axis-text-secondary)', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+                        기존 등록된 파일 ({existingFiles.length}개)
                       </span>
-                      <button
-                        type="button"
-                        className={styles.removeItemBtn}
-                        onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
-                        aria-label="파일 삭제"
-                      >
-                        <Icon name="close" size={13} />
-                      </button>
+                      <div className={styles.fileList}>
+                        {existingFiles.map((file) => (
+                          <div key={file.fileId} className={styles.fileItem}>
+                            <span className={styles.fileItemLeft}>
+                              <Icon name="page" size={14} />
+                              <span>{file.originalFileName}</span>
+                              <span style={{ color: 'var(--axis-text-muted)', fontSize: '0.72rem' }}>
+                                ({(file.fileSize / 1024).toFixed(1)} KB)
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className={styles.removeItemBtn}
+                              disabled={!canDeleteExistingFile(file)}
+                              title={canDeleteExistingFile(file) ? '파일 삭제' : '파일 삭제 권한이 없습니다.'}
+                              onClick={async () => {
+                                if (!window.confirm(`'${file.originalFileName}' 파일을 삭제하시겠습니까?`)) return
+                                try {
+                                  const res = await deleteRecurringRuleFile(file.fileId)
+                                  if (res.status === 'error') {
+                                    showToast({
+                                      title: '파일 삭제 실패',
+                                      content: res.message || '파일을 삭제하지 못했습니다.',
+                                      created_at: new Date().toISOString(),
+                                    })
+                                    return
+                                  }
+                                  setExistingFiles((prev) => (prev || []).filter((f) => f.fileId !== file.fileId))
+                                  showToast({
+                                    title: '파일 삭제 완료',
+                                    content: `'${file.originalFileName}' 파일이 삭제되었습니다.`,
+                                    created_at: new Date().toISOString(),
+                                  })
+                                } catch (err) {
+                                  showToast({
+                                    title: '파일 삭제 실패',
+                                    content: err instanceof Error ? err.message : '파일을 삭제하지 못했습니다.',
+                                    created_at: new Date().toISOString(),
+                                  })
+                                }
+                              }}
+                              aria-label="기존 파일 삭제"
+                            >
+                              <Icon name="close" size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  ))}
+                  )}
+
+                  {/* 새로 추가할 파일 목록 */}
+                  {attachedFiles.length > 0 && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--axis-brand-primary)', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+                        새로 추가할 파일 ({attachedFiles.length}개)
+                      </span>
+                      <div className={styles.fileList}>
+                        {attachedFiles.map((file, idx) => (
+                          <div key={idx} className={styles.fileItem}>
+                            <span className={styles.fileItemLeft}>
+                              <Icon name="page" size={14} />
+                              <span>{file.name}</span>
+                              <span style={{ color: 'var(--axis-text-muted)', fontSize: '0.72rem' }}>
+                                ({(file.size / 1024).toFixed(1)} KB)
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className={styles.removeItemBtn}
+                              onClick={() => setAttachedFiles((prev) => prev.filter((_, i) => i !== idx))}
+                              aria-label="파일 삭제"
+                            >
+                              <Icon name="close" size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-          </div>
         </form>
 
         <footer className={styles.footer}>

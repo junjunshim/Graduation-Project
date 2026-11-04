@@ -44,7 +44,7 @@ test('checked-in compact context response is normalized without inventing the cu
         id: '5',
         node_id: '10',
         role: 'VIEWER',
-        authority: '001100010000000000110011',
+        authority: '00000000011100010000000000110011',
         updated_at: '2026-08-29 01:00:00+00',
       },
       {
@@ -157,7 +157,7 @@ test('documented authority and mention metadata do not block workspace normaliza
         id: 2,
         node_id: 30,
         role: 'ADMIN',
-        authority: '011111111111111111111111',
+        authority: '01111111111111111111111111111111',
         updated_at: '2026-08-30T01:02:00Z',
       },
       {

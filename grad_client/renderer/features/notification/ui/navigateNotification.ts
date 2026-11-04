@@ -7,14 +7,37 @@ import { fetchRecurringRules } from '../../workspace/data/recurringRuleService'
 export async function navigateNotification(
   notification: Pick<
     LiveNotificationPayload,
-    'node_id' | 'link_url' | 'entity_type' | 'entity_id' | 'action'
+    'node_id' | 'link_url' | 'entity_type' | 'entity_id' | 'action' | 'sub_type'
   >,
   navigate: (path: string) => void,
   userId?: string,
 ) {
-  const isDirectlyDeleted = notification.action === 'deleted'
+  const subType = (notification.sub_type ?? '').toUpperCase()
+  if (subType === 'CHAT_MESSAGE') {
+    navigate(notification.link_url || '/channels')
+    return
+  }
+  if (subType === 'GITHUB') {
+    if (notification.node_id != null) {
+      selectWorkspaceRoot(String(notification.node_id), false, userId)
+    }
+    navigate(
+      notification.link_url ||
+        (notification.node_id != null
+          ? `/workspace?nodeId=${notification.node_id}&view=github`
+          : '/workspace'),
+    )
+    return
+  }
+
   const entityType = notification.entity_type
   const entityId = notification.entity_id
+  const isDeletableEntity =
+    entityType === 'WORK_ITEM' ||
+    entityType === 'COMMENT' ||
+    entityType === 'FILE' ||
+    entityType === 'NODE'
+  const isDirectlyDeleted = notification.action === 'deleted' && isDeletableEntity
 
   if (entityType === 'WORK_ITEM' && entityId && /^[1-9]\d*$/.test(entityId) && notification.node_id != null) {
     let isKnownWorkItem = false

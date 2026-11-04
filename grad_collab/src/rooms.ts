@@ -1,0 +1,254 @@
+// 브랜치 방 레지스트리 (TASK_11 §2.3 / §9.5 / §14.2).
+//
+// 방 하나 = (저장소, 브랜치) 하나 = worktree 하나. 다른 브랜치 사용자끼리는 같은 방에
+// 들어오지 않으므로 실시간 편집이 브랜치를 넘어 새지 않는다. 방이 비면 그 안의 doc 을
+// 전부 파일로 내려쓰고 메모리에서 놓는다.
+import { CollabSession } from './auth';
+import { DocRegistry } from './docRegistry';
+import { log } from './logger';
+import { notifyWorktreeChanged } from './notify';
+import { PresenceRegistry } from './presence';
+import { forgetResolvedRepo, ResolvedRepo } from './repoResolver';
+import { ReviewIndex } from './reviewIndex';
+
+/** 문서 소켓 하나. 방이 이 객체를 통해 프레임을 보낸다. */
+export interface RoomClient {
+  readonly id: string;
+  readonly session: CollabSession;
+  /** 지금 들어가 있는 방. 한 소켓은 한 번에 한 방에만 속한다. */
+  room: Room | null;
+  /** 살아 있는 소켓이면 JSON 프레임을 보낸다. 끊긴 소켓은 조용히 무시한다. */
+  send(frame: unknown): void;
+  /**
+   * 소켓을 닫는다. 서버 쪽에서 세션을 끝내야 할 때(노드 삭제, §12.9) 쓴다.
+   * `reason` 은 WebSocket close reason 이라 ASCII 로 짧게 넘긴다(사람이 읽을 문구는 별도 프레임으로 보낸다).
+   */
+  close(code: number, reason: string): void;
+}
+
+export function roomKey(repoId: number, branch: string): string {
+  return `repo:${repoId}:branch:${branch}`;
+}
+
+export class Room {
+  readonly clients = new Set<RoomClient>();
+  readonly docs: DocRegistry;
+  readonly presence = new PresenceRegistry();
+
+  /** 브랜치 단위 리뷰 인덱스(§15.6). 파일을 열지 않아도 사이드바가 목록을 그리게 하는 파생물이다. */
+  readonly reviews: ReviewIndex;
+
+  constructor(readonly repo: ResolvedRepo) {
+    this.docs = new DocRegistry(repo.worktreeDir, repo.collabDir);
+    // 파일이 flush 될 때마다 backend 에 알려, 같은 브랜치 접속자(Changes 뷰)가 즉시 갱신되게 한다(§9.9).
+    this.docs.setFlushListener((filePath) => notifyWorktreeChanged(repo.repoId, repo.branch, filePath));
+    this.reviews = new ReviewIndex(repo.collabDir);
+  }
+
+  get key(): string {
+    return roomKey(this.repo.repoId, this.repo.branch);
+  }
+
+  /** 방 전체(브랜치 접속자)에게. */
+  broadcast(frame: unknown, exceptClientId?: string): void {
+    for (const client of this.clients) {
+      if (client.id === exceptClientId) continue;
+      client.send(frame);
+    }
+  }
+
+  /** 지정한 접속자에게만. 되돌리기로 doc 을 버릴 때 그 watchers 에게 알린다(§12.11.1). */
+  sendTo(clientIds: Iterable<string>, frame: unknown): void {
+    const ids = new Set(clientIds);
+    for (const client of this.clients) {
+      if (ids.has(client.id)) client.send(frame);
+    }
+  }
+
+  /** 그 파일을 열고 있는 사람에게만. */
+  broadcastWatchers(filePath: string, frame: unknown, exceptClientId?: string): void {
+    const ids = new Set(this.docs.watchersOf(filePath).map((watcher) => watcher.clientId));
+    for (const client of this.clients) {
+      if (client.id === exceptClientId || !ids.has(client.id)) continue;
+      client.send(frame);
+    }
+  }
+
+  /**
+   * 그 파일을 보고 있는 사람(사이드바 형태). 같은 사람이 탭·창을 여러 개 열어도 이메일 기준 한 줄이다(§12.8).
+   * 이메일순으로 고정해 두어, 같은 내용이면 프레임의 순서도 같게 만든다.
+   */
+  private fileWatchers(filePath: string): Array<{ email: string; name: string }> {
+    const byEmail = new Map<string, string>();
+    for (const watcher of this.docs.watchersOf(filePath)) {
+      if (!byEmail.has(watcher.userEmail)) byEmail.set(watcher.userEmail, watcher.userName);
+    }
+
+    return [...byEmail]
+      .map(([email, name]) => ({ email, name }))
+      .sort((a, b) => a.email.localeCompare(b.email));
+  }
+
+  /**
+   * 그 파일의 참여자 집합을 **방 전체**에 알린다(TASK_11 §15.5 Editing 뷰).
+   *
+   * `peer_join`/`peer_leave` 는 그 파일을 열고 있는 사람에게만 가므로(§9.5), 사이드바는 다른 사람이
+   * 연 파일을 알 수 없다. 사이드바는 "누가 무엇을 보고 있나" 를 그려야 하므로 참여자가 바뀔 때마다
+   * **집합 전체**를 방 전체에 보낸다 — 집합이라 순서가 뒤바뀌어도 결과가 같다(§9.6). 빈 배열은
+   * "지금은 아무도 안 본다" 는 뜻이고, 받는 쪽은 그 파일을 목록에서 지운다.
+   */
+  announceFileWatchers(filePath: string): void {
+    this.broadcast({
+      type: 'file_watchers',
+      path: filePath,
+      watchers: this.fileWatchers(filePath),
+    });
+  }
+
+  /** 지금 이 방에서 열려 있는 파일과 그 참여자(입장 직후 스냅샷, §15.5). 아무도 안 보는 파일은 뺀다. */
+  openFiles(): Array<{ path: string; watchers: Array<{ email: string; name: string }> }> {
+    return this.docs
+      .paths()
+      .map((path) => ({ path, watchers: this.fileWatchers(path) }))
+      .filter((file) => file.watchers.length > 0)
+      .sort((a, b) => a.path.localeCompare(b.path));
+  }
+}
+
+export class RoomRegistry {
+  private readonly rooms = new Map<string, Room>();
+
+  /** 방이 없으면 만든다. 경로 해석은 호출자가 이미 마쳤다. */
+  ensure(repo: ResolvedRepo): Room {
+    const key = roomKey(repo.repoId, repo.branch);
+    const existing = this.rooms.get(key);
+    if (existing) return existing;
+
+    const room = new Room(repo);
+    this.rooms.set(key, room);
+    log('info', 'room opened', { repo: repo.repoId, branch: repo.branch });
+    return room;
+  }
+
+  get(repoId: number, branch: string): Room | undefined {
+    return this.rooms.get(roomKey(repoId, branch));
+  }
+
+  /** 그 저장소의 모든 브랜치 방. 권한 통보처럼 저장소 단위로 훑어야 할 때 쓴다(§12.9). */
+  ofRepo(repoId: number): Room[] {
+    const found: Room[] = [];
+    for (const room of this.rooms.values()) {
+      if (room.repo.repoId === repoId) found.push(room);
+    }
+    return found;
+  }
+
+  /**
+   * 지금 열려 있는 모든 방. 주기적 권한 재확인(§12.9)처럼 저장소 경계 없이 전체를 훑어야 할 때 쓴다.
+   * 접속자가 없는 방은 이미 닫혔으므로, 여기서 나오는 방에는 최소 한 명이 붙어 있다.
+   */
+  all(): Room[] {
+    return [...this.rooms.values()];
+  }
+
+  /**
+   * 저장소가 통째로 사라졌을 때(노드 삭제) 그 저장소의 모든 방을 닫는다(TASK_11 §12.9).
+   *
+   * `abandon`(브랜치 삭제)과 달리 **내려쓰고 닫는다.** 노드 삭제는 소프트 딜리트라 작업 트리가
+   * 그대로 남고, 복구되었을 때 편집 내용이 살아 있게 하기 위해서다. 접속자에게는 마지막으로
+   * `repo_closed` 를 보내고 소켓을 닫는다 — 확장은 그 신호로 편집 세션을 정리한다(제어 소켓은
+   * C++ 이 따로 끊는다).
+   *
+   * 경로 캐시도 함께 비운다. 남겨 두면 삭제 직후 다시 붙는 세션이 backend 를 거치지 않고 옛 경로로
+   * 방을 열어 버린다(`forgetResolvedRepo`).
+   */
+  async closeRepo(repoId: number, reason: string, message: string): Promise<{ rooms: number; clients: number }> {
+    const targets = this.ofRepo(repoId);
+    let clients = 0;
+    for (const room of targets) {
+      room.broadcast({ type: 'repo_closed', repo_id: repoId, reason, message });
+      for (const client of room.clients) {
+        client.room = null; // 늦게 도착한 프레임이 죽은 방으로 가지 않게 먼저 뗀다.
+        client.close(1000, reason);
+        clients += 1;
+      }
+      room.clients.clear();
+      await this.close(room); // flush(내려쓰기) → 영속화 → 메모리 해제
+    }
+    forgetResolvedRepo(repoId);
+    return { rooms: targets.length, clients };
+  }
+
+  /** 마지막 편집자가 나간 방을 정리한다(flush → 영속화 → 메모리 해제). */
+  async close(room: Room): Promise<void> {
+    this.rooms.delete(room.key);
+    room.presence.clear();
+    await room.docs.dispose();
+    await room.reviews.flush();
+    room.reviews.dispose();
+    log('info', 'room closed', { repo: room.repo.repoId, branch: room.repo.branch });
+  }
+
+  /**
+   * 브랜치가 삭제된 방을 버린다(§9.7). `close` 와 달리 **내려쓰지 않는다** — 되쓸 worktree 가 없고,
+   * 남은 doc 의 flush 가 사라진 작업 디렉터리를 되살리기 때문이다(`DocRegistry.abandon` 참고).
+   *
+   * 열려 있던 탭은 `doc_reset` 으로 닫는다("되돌리기" 안내는 띄우지 않는다). 접속자를 방에서
+   * 떼어내 늦게 도착한 프레임이 죽은 방으로 가지 않게 한다 — 확장은 제어 소켓의 `branch_deleted`
+   * 로 기본 브랜치로 옮기고, 다음 파일 열기에서 새 방에 붙는다(§10.3 / §12.2).
+   */
+  async abandon(room: Room): Promise<void> {
+    this.rooms.delete(room.key);
+
+    for (const filePath of room.docs.paths()) {
+      room.broadcastWatchers(filePath, {
+        type: 'doc_reset',
+        path: filePath,
+        deleted: true,
+        reason: 'branch_deleted',
+      });
+    }
+
+    const members = room.clients.size;
+    for (const client of room.clients) {
+      client.room = null;
+    }
+    room.clients.clear();
+    room.presence.clear();
+
+    await room.docs.abandon();
+    room.reviews.dispose();
+    log('info', 'room abandoned', { repo: room.repo.repoId, branch: room.repo.branch, members });
+  }
+
+  /** 서버 종료 — 모든 방을 내려쓴다. */
+  async disposeAll(): Promise<void> {
+    const rooms = [...this.rooms.values()];
+    this.rooms.clear();
+    for (const room of rooms) {
+      room.presence.clear();
+      await room.docs.dispose();
+      await room.reviews.flush();
+      room.reviews.dispose();
+    }
+  }
+
+  get roomCount(): number {
+    return this.rooms.size;
+  }
+
+  get openDocs(): number {
+    let total = 0;
+    for (const room of this.rooms.values()) total += room.docs.openCount;
+    return total;
+  }
+
+  lastFlushAt(): number | null {
+    let latest: number | null = null;
+    for (const room of this.rooms.values()) {
+      const at = room.docs.lastFlushAt();
+      if (at !== null && (latest === null || at > latest)) latest = at;
+    }
+    return latest;
+  }
+}

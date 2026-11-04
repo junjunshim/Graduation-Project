@@ -4,8 +4,8 @@
   place-items: center;
   padding: 32px;
   text-align: center;
-  color: var(--color-text-primary, #18202f);
-  background: var(--color-background, #f5f7fb);
+  color: var(--axis-text-primary);
+  background: var(--axis-surface-canvas);
 }
 
 .card {
@@ -13,9 +13,10 @@
   display: grid;
   gap: 12px;
   padding: 36px;
-  border: 1px solid var(--color-border, #dce2eb);
+  border: 1px solid var(--axis-line-default);
   border-radius: 16px;
-  background: var(--color-surface, #ffffff);
+  background: var(--axis-surface-panel);
+  box-shadow: var(--axis-shadow-dialog);
 }
 
 .card h1,
@@ -24,7 +25,7 @@
 }
 
 .card p {
-  color: var(--color-text-secondary, #657086);
+  color: var(--axis-text-secondary);
   line-height: 1.6;
 }
 
@@ -35,9 +36,14 @@
   padding: 0 16px;
   border: 0;
   border-radius: 9px;
-  color: #ffffff;
+  color: var(--axis-text-on-brand);
   font: inherit;
   font-weight: 700;
-  background: #4f6fd8;
+  background: var(--axis-brand-primary);
   cursor: pointer;
+}
+
+.action:hover,
+.action:focus-visible {
+  background: var(--axis-brand-primary-hover);
 }

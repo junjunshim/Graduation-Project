@@ -1,0 +1,127 @@
+.attachmentList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.4rem;
+}
+
+.imageCard {
+  display: flex;
+  flex-direction: column;
+  max-width: 21rem;
+  overflow: hidden;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel-subtle);
+}
+
+.imagePreviewButton {
+  display: block;
+  padding: 0;
+  border: none;
+  background: var(--axis-surface-muted);
+  cursor: pointer;
+}
+
+.imagePreview {
+  display: block;
+  max-width: 100%;
+  max-height: 14rem;
+  object-fit: contain;
+}
+
+.imagePlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 14rem;
+  height: 6.5rem;
+  padding: 0.75rem;
+  background: var(--axis-surface-muted);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.imageFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border-top: 1px solid var(--line-default);
+  background: var(--surface-panel);
+}
+
+.fileCard {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 22rem;
+  padding: 0.48rem 0.7rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-surface);
+  background: var(--surface-panel-subtle);
+}
+
+.fileIconBox {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--axis-brand-border);
+  border-radius: var(--axis-radius-action);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+}
+
+.fileMeta {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.fileName {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fileSize {
+  color: var(--text-secondary);
+  font-size: 0.71rem;
+  font-weight: 500;
+}
+
+.downloadButton {
+  flex: 0 0 auto;
+  padding: 0.26rem 0.58rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-action);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--axis-motion-fast) ease;
+}
+
+.downloadButton:hover:not(:disabled),
+.downloadButton:focus-visible:not(:disabled) {
+  border-color: var(--axis-brand-border);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+}
+
+.downloadButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

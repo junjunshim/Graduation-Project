@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { getNodeTypeLabel } from '../../workspace/model/labels'
 import type { OrganizationNodeRecord } from '../../workspace/model/types'
 import styles from '../styles/OrgManagePage.module.css'
@@ -12,23 +13,17 @@ type OrgTreeProps = {
 }
 
 function TreeBranch({
-  nodeId,
+  node,
+  childrenByParentId,
   selectedNodeId,
   onSelect,
-  nodes,
 }: {
-  nodeId: number
+  node: OrganizationNodeRecord
+  childrenByParentId: ReadonlyMap<number, OrganizationNodeRecord[]>
   selectedNodeId: number | null
   onSelect: (nodeId: number) => void
-  nodes: OrganizationNodeRecord[]
 }) {
-  const node = nodes.find((candidate) => candidate.id === nodeId)
-
-  if (!node) {
-    return null
-  }
-
-  const children = nodes.filter((candidate) => candidate.parentNodeId === node.id)
+  const children = childrenByParentId.get(node.id) ?? []
 
   return (
     <li className={styles.treeItem}>
@@ -51,10 +46,10 @@ function TreeBranch({
           {children.map((child) => (
             <TreeBranch
               key={child.id}
-              nodeId={child.id}
+              node={child}
+              childrenByParentId={childrenByParentId}
               selectedNodeId={selectedNodeId}
               onSelect={onSelect}
-              nodes={nodes}
             />
           ))}
         </ul>
@@ -64,6 +59,25 @@ function TreeBranch({
 }
 
 export function OrgTree({ nodes, rootNodes, selectedNodeId, searchQuery, onSearchChange, onSelect }: OrgTreeProps) {
+  const childrenByParentId = useMemo(() => {
+    const index = new Map<number, OrganizationNodeRecord[]>()
+
+    nodes.forEach((node) => {
+      if (node.parentNodeId === undefined) {
+        return
+      }
+
+      const children = index.get(node.parentNodeId)
+      if (children) {
+        children.push(node)
+      } else {
+        index.set(node.parentNodeId, [node])
+      }
+    })
+
+    return index
+  }, [nodes])
+
   return (
     <section className={[styles.panel, styles.treePanel].join(' ')}>
       <div className={styles.panelHeader}>
@@ -88,10 +102,10 @@ export function OrgTree({ nodes, rootNodes, selectedNodeId, searchQuery, onSearc
           {rootNodes.map((node) => (
             <TreeBranch
               key={node.id}
-              nodeId={node.id}
+              node={node}
+              childrenByParentId={childrenByParentId}
               selectedNodeId={selectedNodeId}
               onSelect={onSelect}
-              nodes={nodes}
             />
           ))}
         </ul>

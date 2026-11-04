@@ -1,9 +1,8 @@
 // 각 페이지의 상단 액션(알림, 프로필 등) 관리
-import { type ReactNode, useState } from 'react'
+import { type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Button } from '../../design-system/primitives/Button'
 import { Icon } from '../../design-system/primitives/Icon'
-import { SearchField } from '../../design-system/primitives/SearchField'
+import { UserMenuPopover } from '../../features/account/ui/UserMenuPopover'
 import { NotificationPopover } from '../../features/notification/ui/NotificationPopover'
 import styles from './ShellTopActions.module.css'
 
@@ -28,7 +27,7 @@ export type ShellTopActionsHeading =
       type: 'page'
       title: string
       titleDetail?: string
-      subtitle: string
+      subtitle?: string
     }
   | {
       type: 'workItem'
@@ -52,6 +51,7 @@ type ShellTopActionsProps = {
   currentUser: {
     name: string
     userId: string
+    email?: string
   }
   heading: ShellTopActionsHeading
   inset?: 'standard' | 'wide'
@@ -64,8 +64,6 @@ export function ShellTopActions({
   inset = 'standard',
   actions,
 }: ShellTopActionsProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-
   const shellTopActionsClassName = [
     styles.shellTopActions,
     inset === 'wide' ? styles.shellTopActionsWide : styles.shellTopActionsStandard,
@@ -107,7 +105,7 @@ export function ShellTopActions({
               <span className={styles.shellPageTitleDetail}>{heading.titleDetail}</span>
             ) : null}
           </h1>
-          <p className={styles.shellSubtitle}>{heading.subtitle}</p>
+          {heading.subtitle ? <p className={styles.shellSubtitle}>{heading.subtitle}</p> : null}
         </div>
       ) : heading.type === 'workItem' ? (
         <div className={styles.workItemHeading}>
@@ -145,28 +143,18 @@ export function ShellTopActions({
         </div>
       ) : heading.type !== 'workItem' ? (
         <div className={styles.shellTopActionControls}>
-          <SearchField
-            containerClassName={styles.shellSearchBox}
-            label="Search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search"
-          />
-
           <div className={styles.shellActionButtons}>
             <NotificationPopover
               userId={currentUser.userId}
               buttonClassName={styles.shellIconButton}
             />
 
-            <Button
-              variant="icon"
-              className={styles.shellProfileButton}
-              aria-label="User menu"
-              title={`${currentUser.name} (${currentUser.userId})`}
-            >
-              <Icon name="user" size={20} />
-            </Button>
+            <UserMenuPopover
+              userId={currentUser.userId}
+              name={currentUser.name}
+              email={currentUser.email}
+              buttonClassName={styles.shellProfileButton}
+            />
           </div>
         </div>
       ) : null}

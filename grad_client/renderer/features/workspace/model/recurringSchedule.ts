@@ -58,7 +58,13 @@ export function formatRepeatSummary(rule: RecurringRuleRecord): string {
   }
 
   if (rule.frequency === 'YEARLY') {
-    return rule.intervalValue === 1 ? '매년' : `${rule.intervalValue}년마다`
+    const intervalLabel = rule.intervalValue === 1 ? '매년' : `${rule.intervalValue}년마다`
+    const startDate = rule.repeatStartDate ? new Date(rule.repeatStartDate) : null
+    let monthDayStr = ''
+    if (startDate && !Number.isNaN(startDate.getTime())) {
+      monthDayStr = ` ${startDate.getMonth() + 1}월 ${startDate.getDate()}일`
+    }
+    return `${intervalLabel}${monthDayStr}`.trim()
   }
 
   return rule.frequency

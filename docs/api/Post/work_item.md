@@ -46,10 +46,10 @@
 | parent_work_item_id | String | 선택 | 부모 work_item_id |
 | description | String | 선택 | work_item 설명 |
 | status | String | 선택 | 현재 상태(todo, in_progress, done 등) |
-| priority | Integer | 선택 | 우선순위 |
-| hidden | Boolean | 선택 | 숨김속성 |
-| weight | Integer | 선택 | 가중치 |
-| progress | Integer | 선택 | 진행도 |
+| priority | Integer | 선택 | 우선순위 (기본값: 3) |
+| hidden | Boolean | 선택 | 숨김속성 (기본값: false) |
+| weight | Integer | 선택 | 가중치 (기본값: 1) |
+| progress | Integer | 선택 | 진행도 (기본값: 0) |
 | start_date | DATE | 선택 | 시작 날짜 |
 | due_date | DATE | 선택 | 마감 날짜 |
 
@@ -64,6 +64,7 @@
         {
             "type" : "WORK_ITEM",
             "id" : "WI-1101",
+            "display_id" : 1101,
             "parent_id" : "WI-110",
             "owner_node_id" : 10,
             "owner_user_id" : "U-12",
@@ -75,6 +76,7 @@
             "hidden" : false,
             "weight" : 1,
             "progress" : 0,
+            "computed_progress" : 0,
             "start_date" : "2026-03-01",
             "due_date" : "2026-03-31",
             "updated_at" : "2026-03-19 12:29:24.745634+00"
@@ -103,17 +105,19 @@
 | :--- | :--- | :--- | :--- |
 | type | String | 필수 | 데이터의 타입 (WORK_ITEM) |
 | id | String | 필수 | work_item 식별 id |
+| display_id | Integer | 필수 | 노드 내 업무 표시 번호 |
 | parent_id | String or Null | 선택 | 부모 work_item의 id |
 | owner_node_id | Integer | 필수 | 소속 노드 id |
 | owner_user_id | String | 필수 | 소유자 id |
 | title | String | 필수 | work_item 이름 |
-| description | String | 필수 | work_item 설명 |
+| description | String or Null | 선택 | work_item 설명 |
 | category | String or Null | 선택 | work_item 카테고리 |
 | status | String | 필수 | work_item 상태 |
 | priority | Integer | 필수 | work_item 우선순위 |
 | hidden | Boolean | 필수 | 숨김 속성 현황 |
 | weight | Integer | 필수 | 가중치 |
 | progress | Integer | 필수 | 진행률 |
-| start_date | String | 필수 | 시작 날짜 |
-| due_date | String | 필수 | 마감 날짜 |
+| computed_progress | Integer | 필수 | 하위 업무를 반영한 계산 진행률 |
+| start_date | String or Null | 선택 | 시작 날짜 |
+| due_date | String or Null | 선택 | 마감 날짜 |
 | updated_at | String | 필수 | 데이터의 최신 업데이트 시간 |

@@ -78,18 +78,72 @@
   text-align: center;
 }
 
-/* 우측 그룹: 오늘 · 워크스페이스 필터 · 알림 */
+/* 우측 그룹: 오늘 · 워크스페이스 · 구분 · 카테고리 · 상태 · 알림 */
 .actions {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  flex-wrap: wrap;
+  gap: 0.38rem;
   margin-left: auto;
   min-width: 0;
 }
 
 .filter {
   flex: 0 0 auto;
-  width: 12rem;
+  width: 10.5rem;
+}
+
+.categoryFilter {
+  flex: 0 0 auto;
+  width: 9.8rem;
+}
+
+.statusFilter {
+  flex: 0 0 auto;
+  width: 7.4rem;
+}
+
+.compactTrigger {
+  min-height: 1.95rem;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.entrySegmentGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-default);
+  border-radius: var(--axis-radius-control);
+  background: var(--axis-surface-muted);
+  flex: 0 0 auto;
+}
+
+.entrySegmentButton {
+  min-height: 1.65rem;
+  padding: 0.18rem 0.62rem;
+  border: 1px solid transparent;
+  border-radius: var(--axis-radius-action);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--axis-motion-fast) ease;
+}
+
+.entrySegmentButton:hover,
+.entrySegmentButton:focus-visible {
+  color: var(--text-primary);
+}
+
+.entrySegmentButton[data-active='true'] {
+  border-color: var(--axis-brand-border);
+  background: var(--surface-panel);
+  color: var(--axis-brand-primary);
+  font-weight: 700;
+  box-shadow: var(--axis-shadow-field);
 }
 
 /* 셸 헤더에서는 툴바 버튼 높이를 맞춘다. */
@@ -173,19 +227,23 @@
   font-weight: 600;
 }
 
-.cell[data-outside='true'] .dayNumber {
+.cell[data-outside='true'] .dayNumber,
+.weekDayHeaderCell[data-outside='true'] .dayNumber {
   color: var(--text-muted);
 }
 
-.cell[data-outside='false'][data-sunday='true']:not([data-today='true']) .dayNumber {
+.cell[data-outside='false'][data-sunday='true']:not([data-today='true']) .dayNumber,
+.weekDayHeaderCell[data-outside='false'][data-sunday='true']:not([data-today='true']) .dayNumber {
   color: var(--axis-status-danger);
 }
 
-.cell[data-outside='false'][data-saturday='true']:not([data-today='true']) .dayNumber {
+.cell[data-outside='false'][data-saturday='true']:not([data-today='true']) .dayNumber,
+.weekDayHeaderCell[data-outside='false'][data-saturday='true']:not([data-today='true']) .dayNumber {
   color: var(--axis-status-info);
 }
 
-.cell[data-outside='false'][data-holiday='true']:not([data-today='true']) .dayNumber {
+.cell[data-outside='false'][data-holiday='true']:not([data-today='true']) .dayNumber,
+.weekDayHeaderCell[data-outside='false'][data-holiday='true']:not([data-today='true']) .dayNumber {
   color: var(--axis-status-danger);
 }
 
@@ -203,7 +261,8 @@
 
 /* 오늘은 원형 뱃지만 사용한다. 날짜 숫자 색(주말·공휴일)과 뱃지 색이 겹쳐 보이지 않도록
    얇은 테두리를 함께 넣어 뱃지 윤곽을 살짝 잡아준다. */
-.cell[data-today='true'] .dayNumber {
+.cell[data-today='true'] .dayNumber,
+.weekDayHeaderCell[data-today='true'] .dayNumber {
   border: 1px solid var(--axis-brand-border);
   background: var(--axis-brand-primary);
   color: var(--axis-text-on-brand);
@@ -242,6 +301,19 @@
   filter: brightness(0.97);
 }
 
+.chip[data-selected='true'],
+.ongoingItem[data-selected='true'],
+.spanBar[data-selected='true'] {
+  box-shadow: 0 0 0 1.5px var(--axis-brand-primary);
+}
+
+.chip[data-status='done'] .chipTitle,
+.ongoingItem[data-status='done'] .chipTitle,
+.spanBar[data-status='done'] .spanBarTitle {
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
 .chipMarker {
   width: 5px;
   height: 5px;
@@ -264,37 +336,43 @@
   white-space: nowrap;
 }
 
-.chip[data-tone='brand'] {
+.chip[data-tone='brand'],
+.ongoingItem[data-tone='brand'] {
   background: var(--axis-brand-primary-soft);
   border-color: var(--axis-brand-border);
   color: var(--axis-brand-primary);
 }
 
-.chip[data-tone='info'] {
+.chip[data-tone='info'],
+.ongoingItem[data-tone='info'] {
   background: var(--axis-status-info-soft);
   border-color: var(--axis-status-info-border);
   color: var(--axis-status-info);
 }
 
-.chip[data-tone='success'] {
+.chip[data-tone='success'],
+.ongoingItem[data-tone='success'] {
   background: var(--axis-status-success-soft);
   border-color: var(--axis-status-success-border);
   color: var(--axis-status-success);
 }
 
-.chip[data-tone='warning'] {
+.chip[data-tone='warning'],
+.ongoingItem[data-tone='warning'] {
   background: var(--axis-status-warning-soft);
   border-color: var(--axis-status-warning-border);
   color: var(--axis-status-warning);
 }
 
-.chip[data-tone='danger'] {
+.chip[data-tone='danger'],
+.ongoingItem[data-tone='danger'] {
   background: var(--axis-status-danger-soft);
   border-color: var(--axis-status-danger-border);
   color: var(--axis-status-danger);
 }
 
-.chip[data-tone='muted'] {
+.chip[data-tone='muted'],
+.ongoingItem[data-tone='muted'] {
   background: var(--axis-status-neutral-soft);
   border-color: var(--axis-status-neutral-border);
   color: var(--axis-status-neutral);
@@ -348,6 +426,210 @@
 .ongoingItem:hover,
 .ongoingItem:focus-visible {
   filter: brightness(0.97);
+}
+
+/* '업무' 필터 전용 주간 연속 기간 바 보드 */
+.weekBoard {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--line-default);
+  border-radius: 0 0 var(--axis-radius-panel) var(--axis-radius-panel);
+  background: var(--surface-panel);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.weekRow {
+  position: relative;
+  display: flex;
+  flex: 1 0 5.4rem;
+  flex-direction: column;
+  min-width: 0;
+  border-bottom: 1px solid var(--line-default);
+}
+
+.weekRow:last-child {
+  border-bottom: none;
+}
+
+.weekRow[data-expanded='true'] {
+  flex: 1 0 auto;
+}
+
+.weekBackgroundGrid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  pointer-events: none;
+}
+
+.weekBgCell {
+  border-right: 1px solid var(--line-default);
+}
+
+.weekBgCell:nth-child(7n) {
+  border-right: none;
+}
+
+.weekBgCell[data-outside='true'] {
+  background: var(--surface-panel-subtle);
+}
+
+.weekContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.22rem;
+  padding-bottom: 0.3rem;
+  min-width: 0;
+}
+
+.weekDayHeaderRow {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  flex: 0 0 auto;
+}
+
+.weekDayHeaderCell {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.28rem 0.42rem 0.1rem;
+}
+
+.weekSpanBody {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: 1.42rem;
+  row-gap: 0.2rem;
+  column-gap: 0;
+  padding: 0 0.2rem;
+}
+
+.spanBar {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+  height: 1.38rem;
+  margin-inline: 0.16rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--line-default);
+  border-left-width: 3.5px;
+  border-radius: var(--axis-radius-action);
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.spanBar:hover,
+.spanBar:focus-visible {
+  filter: brightness(0.97);
+}
+
+/* 진행 중 (파랑 액센트) */
+.spanBar[data-tone='info'],
+.spanBar[data-status='in-progress']:not([data-tone='danger']):not([data-tone='warning']) {
+  background: color-mix(in srgb, var(--accent-blue) 15%, var(--surface-panel));
+  border-color: color-mix(in srgb, var(--accent-blue) 40%, var(--line-default));
+  border-left: 3.5px solid var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+/* 예정 (보라 액센트) */
+.spanBar[data-tone='brand'],
+.spanBar[data-tone='muted'],
+.spanBar[data-status='todo']:not([data-tone='danger']):not([data-tone='warning']) {
+  background: color-mix(in srgb, var(--accent-purple) 14%, var(--surface-panel));
+  border-color: color-mix(in srgb, var(--accent-purple) 38%, var(--line-default));
+  border-left: 3.5px solid var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+/* 완료 (초록 액센트) */
+.spanBar[data-tone='success'],
+.spanBar[data-status='done'] {
+  background: color-mix(in srgb, var(--accent-green) 14%, var(--surface-panel));
+  border-color: color-mix(in srgb, var(--accent-green) 38%, var(--line-default));
+  border-left: 3.5px solid var(--accent-green);
+  color: var(--accent-green);
+}
+
+/* 마감 지연 (빨강 액센트) */
+.spanBar[data-tone='danger'],
+.spanBar[data-tone='warning'] {
+  background: color-mix(in srgb, var(--accent-red) 15%, var(--surface-panel));
+  border-color: color-mix(in srgb, var(--accent-red) 42%, var(--line-default));
+  border-left: 3.5px solid var(--accent-red);
+  color: var(--accent-red);
+}
+
+.spanBar[data-continues-prev='true'] {
+  margin-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left-width: 1px;
+  border-left-style: dashed;
+}
+
+.spanBar[data-continues-next='true'] {
+  margin-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right-style: dashed;
+}
+
+.spanBarBadge {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.32rem;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.spanBarTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weekMoreRow {
+  display: flex;
+  align-items: center;
+  padding: 0.05rem 0.45rem 0;
+}
+
+.weekMoreButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.14rem 0.45rem;
+  border: 1px dashed var(--axis-status-info-border);
+  border-radius: var(--axis-radius-action);
+  background: var(--surface-panel);
+  color: var(--axis-status-info);
+  font-size: 0.7rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.weekMoreButton:hover,
+.weekMoreButton:focus-visible {
+  background: var(--axis-status-info-soft);
 }
 
 .categoryBadge {
@@ -473,19 +755,23 @@
 }
 
 /* 선택한 업무의 기간(시작~마감)을 달력 셀에 옅게 표시한다. */
-.cell[data-range] {
+.cell[data-range],
+.weekBgCell[data-range] {
   background-image: linear-gradient(var(--axis-brand-primary-soft), var(--axis-brand-primary-soft));
 }
 
-.cell[data-range='start'] {
+.cell[data-range='start'],
+.weekBgCell[data-range='start'] {
   box-shadow: inset 2px 0 0 var(--axis-brand-primary);
 }
 
-.cell[data-range='end'] {
+.cell[data-range='end'],
+.weekBgCell[data-range='end'] {
   box-shadow: inset -2px 0 0 var(--axis-brand-primary);
 }
 
-.cell[data-range='single'] {
+.cell[data-range='single'],
+.weekBgCell[data-range='single'] {
   box-shadow:
     inset 2px 0 0 var(--axis-brand-primary),
     inset -2px 0 0 var(--axis-brand-primary);

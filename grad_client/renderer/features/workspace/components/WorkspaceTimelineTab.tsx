@@ -12,7 +12,13 @@ import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
+import { getWorkspaceTodayTimestamp, parseWorkspaceDay } from '../model/workItemDue'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
+import {
+  buildTimelineMemberNameLookup,
+  getTimelineRange,
+  resolveTimelineMemberName,
+} from '../model/workspaceTaskIndex'
 import type { OrganizationNodeRecord, RoleMember, UserRecord, WorkItemRecord } from '../model/types'
 import styles from './WorkspaceTimelineTab.module.css'
 import { useWorkItemContextMenu } from './useWorkItemContextMenu'
@@ -63,7 +69,6 @@ type TimelineMonthGroup = {
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
-const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
 const DEFAULT_PIXELS_PER_DAY = 18
 const MIN_PIXELS_PER_DAY = 3
 const MAX_PIXELS_PER_DAY = 64
@@ -73,8 +78,16 @@ const MAX_VERTICAL_SCALE = 1.4
 const ZOOM_BUTTON_FACTOR = 1.16
 const GROUP_ROW_HEIGHT_REM = 2.85
 const TASK_ROW_HEIGHT_REM = 2.45
-const RANGE_PADDING_MONTHS = 6
 const TIMELINE_TONES: TimelineTone[] = ['purple', 'blue', 'green', 'yellow']
+const WORK_ITEM_TAG_ORDER_INDEX = new Map<string, number>(
+  Object.keys(WORK_ITEM_TAGS).map((key, index) => [key, index] as const),
+)
+
+const MONTH_LABEL_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
+  month: 'long',
+  timeZone: 'UTC',
+  year: 'numeric',
+})
 
 const toneClassNames: Record<TimelineTone, string> = {
   purple: styles.tonePurple,
@@ -87,50 +100,8 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.min(maximum, Math.max(minimum, value))
 }
 
-function parseWorkspaceDay(value?: string) {
-  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})/)
-
-  if (!match) {
-    return null
-  }
-
-  const [, rawYear, rawMonth, rawDay] = match
-  const year = Number(rawYear)
-  const month = Number(rawMonth) - 1
-  const day = Number(rawDay)
-
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return null
-  }
-
-  return Date.UTC(year, month, day)
-}
-
-function getWorkspaceTodayTimestamp() {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    day: '2-digit',
-    month: '2-digit',
-    timeZone: WORKSPACE_TIME_ZONE,
-    year: 'numeric',
-  }).formatToParts(new Date())
-  const year = Number(parts.find((part) => part.type === 'year')?.value)
-  const month = Number(parts.find((part) => part.type === 'month')?.value)
-  const day = Number(parts.find((part) => part.type === 'day')?.value)
-
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    const now = new Date()
-    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  }
-
-  return Date.UTC(year, month - 1, day)
-}
-
 function formatMonthLabel(timestamp: number) {
-  return new Intl.DateTimeFormat('ko-KR', {
-    month: 'long',
-    timeZone: 'UTC',
-    year: 'numeric',
-  }).format(new Date(timestamp))
+  return MONTH_LABEL_FORMATTER.format(new Date(timestamp))
 }
 
 function getMonthStart(timestamp: number) {
@@ -155,54 +126,27 @@ function formatTickLabel(timestamp: number, stepDays: number) {
 }
 
 function getTimelineEntries(workItems: WorkItemRecord[]) {
-  return workItems
-    .map((item): TimelineEntry | null => {
-      const parsedStart = parseWorkspaceDay(item.startDate)
-      const parsedEnd = parseWorkspaceDay(item.dueDate)
+  const entries: TimelineEntry[] = []
 
-      if (parsedStart === null || parsedEnd === null) {
-        return null
-      }
+  workItems.forEach((item) => {
+    const parsedStart = parseWorkspaceDay(item.startDate)
+    const parsedEnd = parseWorkspaceDay(item.dueDate)
 
-      const start = Math.min(parsedStart, parsedEnd)
-      const end = Math.max(parsedStart, parsedEnd)
+    if (parsedStart === null || parsedEnd === null) {
+      return
+    }
 
-      return { item, start, endExclusive: end + MS_PER_DAY }
-    })
-    .filter((entry): entry is TimelineEntry => entry !== null)
-    .sort(
-      (left, right) =>
-        left.start - right.start ||
-        left.endExclusive - right.endExclusive ||
-        left.item.title.localeCompare(right.item.title, 'ko'),
-    )
-}
+    const start = Math.min(parsedStart, parsedEnd)
+    const end = Math.max(parsedStart, parsedEnd)
+    entries.push({ item, start, endExclusive: end + MS_PER_DAY })
+  })
 
-function getMemberName(
-  userId: string,
-  members: RoleMember[],
-  users: WorkspaceTimelineTabProps['users'] = [],
-) {
-  const fromMembers = members.find((member) => member.userId === userId)
-  if (fromMembers) return fromMembers.name
-
-  // 역할이 제거되어 멤버 목록에 없는 담당자도 실제 이름으로 표시한다.
-  const fromUsers = users.find(
-    (user) => user.userId === userId || Boolean(user.email && user.email === userId),
+  return entries.sort(
+    (left, right) =>
+      left.start - right.start ||
+      left.endExclusive - right.endExclusive ||
+      left.item.title.localeCompare(right.item.title, 'ko'),
   )
-  return fromUsers?.name ?? '담당자 미정'
-}
-
-function getTimelineRange(entries: TimelineEntry[], today: number) {
-  const earliest = entries.length > 0 ? Math.min(today, ...entries.map((entry) => entry.start)) : today
-  const latest = entries.length > 0 ? Math.max(today, ...entries.map((entry) => entry.endExclusive)) : today
-  const earliestDate = new Date(earliest)
-  const latestDate = new Date(latest)
-
-  return {
-    start: Date.UTC(earliestDate.getUTCFullYear(), earliestDate.getUTCMonth() - RANGE_PADDING_MONTHS, 1),
-    end: Date.UTC(latestDate.getUTCFullYear(), latestDate.getUTCMonth() + RANGE_PADDING_MONTHS + 1, 1),
-  }
 }
 
 export function WorkspaceTimelineTab({ workItems, members, users = [] }: WorkspaceTimelineTabProps) {
@@ -256,6 +200,10 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
     getMonthStart(getWorkspaceTodayTimestamp()),
   )
   const today = getWorkspaceTodayTimestamp()
+  const memberNameLookup = useMemo(
+    () => buildTimelineMemberNameLookup(members, users),
+    [members, users],
+  )
 
   const entries = useMemo(() => getTimelineEntries(workItems), [workItems])
   const groups = useMemo<TimelineGroup[]>(() => {
@@ -334,15 +282,10 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
       groupedEntries.set(groupKey, existing)
     })
 
-    // 미리 정의된 태그 순서 (planning, research, design, document, review, release) 우선 정렬
-    const tagOrder = Object.keys(WORK_ITEM_TAGS)
-
     return Array.from(groupedEntries.entries())
       .sort(([keyA], [keyB]) => {
-        const indexA = tagOrder.indexOf(keyA)
-        const indexB = tagOrder.indexOf(keyB)
-        const orderA = indexA >= 0 ? indexA : 999
-        const orderB = indexB >= 0 ? indexB : 999
+        const orderA = WORK_ITEM_TAG_ORDER_INDEX.get(keyA) ?? 999
+        const orderB = WORK_ITEM_TAG_ORDER_INDEX.get(keyB) ?? 999
         return orderA - orderB || keyA.localeCompare(keyB, 'ko')
       })
       .map(([key, groupData], index) => ({
@@ -1087,7 +1030,10 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
                             18,
                             ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
                           )
-                          const memberName = getMemberName(entry.item.ownerUserId, members, users)
+                          const memberName = resolveTimelineMemberName(
+                            memberNameLookup,
+                            entry.item.ownerUserId,
+                          )
                           const barStyle = group.style
 
                           return (

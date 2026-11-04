@@ -188,6 +188,24 @@ export function formatWorkspaceShortDate(value?: string) {
   return tokens ? formatShortDateTokens(tokens) : normalizedValue
 }
 
+export function formatWorkspaceShortDateDot(value?: string) {
+  const normalizedValue = normalizeWorkspaceValue(value)
+
+  if (!normalizedValue) {
+    return '-'
+  }
+
+  const tokens = resolveDateTokens(normalizedValue)
+  if (!tokens) return normalizedValue
+
+  const month = Number(tokens.month)
+  const day = Number(tokens.day)
+  const monthStr = Number.isFinite(month) ? String(month).padStart(2, '0') : tokens.month
+  const dayStr = Number.isFinite(day) ? String(day).padStart(2, '0') : tokens.day
+
+  return `${monthStr}.${dayStr}`
+}
+
 export function formatWorkspaceTimestamp(value: string) {
   const normalizedValue = normalizeWorkspaceValue(value)
 

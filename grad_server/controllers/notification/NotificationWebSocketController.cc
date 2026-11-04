@@ -1,11 +1,14 @@
 #include "NotificationWebSocketController.h"
+#include "LogContext.h"
 #include <jwt-cpp/jwt.h>
 #include <json/json.h>
+#include <drogon/drogon.h>
 #include <algorithm>
 #include <thread>
 #include <chrono>
 #include <cstring>
 #include <fstream>
+#include <set>
 #include <libpq-fe.h>
 #ifndef _WIN32
 #include <sys/select.h>
@@ -27,7 +30,8 @@ std::string toJsonString(const Json::Value &value)
 } // namespace
 
 // JWT Access Token 을 검증하고 user_email 을 반환한다. 검증에 실패하면 빈 문자열을 반환한다.
-std::string NotificationWebSocketController::verifyAccessToken(const std::string &token)
+std::string NotificationWebSocketController::verifyAccessToken(const std::string &token,
+                                                               const std::string &requestId)
 {
     if (token.empty())
     {
@@ -48,7 +52,8 @@ std::string NotificationWebSocketController::verifyAccessToken(const std::string
     }
     catch (const std::exception &e)
     {
-        LOG_WARN << "WebSocket handshake failed: Invalid or expired token. Reason: " << e.what();
+        LOG_WARN << "[WS] event=notification.auth_failed " << app_utils::requestIdTag(requestId)
+                 << " reason=invalid_token error=" << app_utils::sanitizeLogValue(e.what(), 256);
         return "";
     }
 }
@@ -56,13 +61,14 @@ std::string NotificationWebSocketController::verifyAccessToken(const std::string
 // 인증된 연결을 샤드에 등록한다.
 // 1) 끊긴 연결을 정리하고 2) 같은 client_id 의 기존 연결은 교체하며 3) 새 연결을 추가한다.
 // 다른 client_id(다른 기기)의 연결은 그대로 유지한다.
-void NotificationWebSocketController::registerConnection(const WebSocketConnectionPtr &wsConnPtr,
+bool NotificationWebSocketController::registerConnection(const WebSocketConnectionPtr &wsConnPtr,
                                                          const std::string &user_email,
                                                          const std::string &client_id,
                                                          const std::shared_ptr<WsSession> &session)
 {
     std::vector<WebSocketConnectionPtr> replacedConnections;
     size_t activeCount = 0;
+    bool wasOnline = false;
 
     auto &shard = getShard(user_email);
     {
@@ -76,6 +82,17 @@ void NotificationWebSocketController::registerConnection(const WebSocketConnecti
                                return !conn || conn->disconnected();
                            }),
             sessions.end());
+
+        // 새 연결을 넣기 전에 이미 접속 중이었는지 확인한다.
+        // 접속 상태가 새로 바뀐 경우에만 열려 있는 채널들의 표시를 갱신한다.
+        for (const auto &conn : sessions)
+        {
+            if (conn && conn->connected())
+            {
+                wasOnline = true;
+                break;
+            }
+        }
 
         // 2. 같은 client_id 의 연결은 재연결로 인한 중복이므로 교체 대상으로 분리한다.
         if (!client_id.empty())
@@ -109,15 +126,331 @@ void NotificationWebSocketController::registerConnection(const WebSocketConnecti
 
     wsConnPtr->setContext(session);
 
-    LOG_INFO << "WebSocket connected: " << user_email
-             << " (client_id: " << (client_id.empty() ? "-" : client_id)
-             << ", active sessions: " << activeCount << ")";
+    LOG_INFO << "[WS] event=notification.connected " << app_utils::requestIdTag(session->request_id)
+             << " user=" << app_utils::maskEmail(user_email)
+             << " client_id=" << app_utils::sanitizeLogValue(client_id.empty() ? "-" : client_id, 128)
+             << " active_sessions=" << activeCount;
+
+    // 호출자는 AUTH_OK 를 먼저 보낸 뒤 이 값이 true 일 때 접속 상태를 브로드캐스트한다.
+    // (핸드셰이크 응답이 채널 현황 조회에 묶여 지연되지 않도록 한다.)
+    return !wasOnline;
+}
+
+// 채널 참여자 방 키. 채널 id 만으로 구분한다.
+std::string NotificationWebSocketController::channelRoomKey(int channel_id)
+{
+    return "channel:" + std::to_string(channel_id);
+}
+
+void NotificationWebSocketController::addToRoom(const std::string &room_key,
+                                                const WebSocketConnectionPtr &wsConnPtr)
+{
+    auto &shard = getShard(room_key);
+    std::unique_lock<std::shared_mutex> lock(shard.mutex);
+    auto &members = shard.rooms[room_key];
+
+    // 끊긴 소켓과 자기 자신을 먼저 걷어내고 넣는다(같은 채널에 두 번 join 해도 중복이 생기지 않는다).
+    members.erase(
+        std::remove_if(members.begin(), members.end(),
+                       [&wsConnPtr](const WebSocketConnectionPtr &conn) {
+                           return !conn || !conn->connected() || conn == wsConnPtr;
+                       }),
+        members.end());
+    members.push_back(wsConnPtr);
+}
+
+void NotificationWebSocketController::removeFromRoom(const std::string &room_key,
+                                                     const WebSocketConnectionPtr &wsConnPtr)
+{
+    if (room_key.empty())
+    {
+        return;
+    }
+
+    auto &shard = getShard(room_key);
+    std::unique_lock<std::shared_mutex> lock(shard.mutex);
+
+    auto it = shard.rooms.find(room_key);
+    if (it == shard.rooms.end())
+    {
+        return;
+    }
+
+    auto &members = it->second;
+    members.erase(
+        std::remove_if(members.begin(), members.end(),
+                       [&wsConnPtr](const WebSocketConnectionPtr &conn) {
+                           return conn == wsConnPtr || !conn || !conn->connected();
+                       }),
+        members.end());
+
+    if (members.empty())
+    {
+        shard.rooms.erase(it);
+    }
+}
+
+bool NotificationWebSocketController::sendToRoom(const std::string &room_key,
+                                                 const std::string &message)
+{
+    auto &shard = getShard(room_key);
+    std::vector<WebSocketConnectionPtr> targets;
+    bool hasDeadConnection = false;
+
+    {
+        std::shared_lock<std::shared_mutex> lock(shard.mutex);
+        auto it = shard.rooms.find(room_key);
+        if (it == shard.rooms.end())
+        {
+            return false;
+        }
+        targets = it->second;
+    }
+
+    std::vector<WebSocketConnectionPtr> liveTargets;
+    for (const auto &conn : targets)
+    {
+        if (conn && conn->connected())
+        {
+            liveTargets.push_back(conn);
+        }
+        else
+        {
+            hasDeadConnection = true;
+        }
+    }
+
+    // 끊긴 연결이 섞여 있었으면 회수한다(close 콜백을 놓친 half-open 소켓 정리).
+    if (hasDeadConnection)
+    {
+        std::unique_lock<std::shared_mutex> lock(shard.mutex);
+        auto it = shard.rooms.find(room_key);
+        if (it != shard.rooms.end())
+        {
+            auto &members = it->second;
+            members.erase(
+                std::remove_if(members.begin(), members.end(),
+                               [](const WebSocketConnectionPtr &conn) {
+                                   return !conn || !conn->connected();
+                               }),
+                members.end());
+
+            if (members.empty())
+            {
+                shard.rooms.erase(it);
+            }
+        }
+    }
+
+    // 락을 놓은 뒤 실제 네트워크 전송을 수행한다.
+    for (const auto &conn : liveTargets)
+    {
+        conn->send(message);
+    }
+
+    return !liveTargets.empty();
+}
+
+bool NotificationWebSocketController::isUserOnline(const std::string &user_email)
+{
+    // 한 사용자의 연결은 user_email 해시로 정해진 한 샤드에만 존재한다.
+    auto &shard = getShard(user_email);
+    std::shared_lock<std::shared_mutex> lock(shard.mutex);
+
+    auto it = shard.connections.find(user_email);
+    if (it == shard.connections.end())
+    {
+        return false;
+    }
+
+    for (const auto &conn : it->second)
+    {
+        if (conn && conn->connected())
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool NotificationWebSocketController::buildChannelPresenceMessage(int channel_id, std::string &message)
+{
+    if (channel_id <= 0)
+    {
+        return false;
+    }
+
+    Json::Value audience;
+    try
+    {
+        auto db = app().getDbClient();
+        auto result = db->execSqlSync("SELECT get_chat_channel_audience($1) AS audience", channel_id);
+        if (result.empty() || result[0]["audience"].isNull())
+        {
+            return false;
+        }
+
+        Json::Reader reader;
+        if (!reader.parse(result[0]["audience"].as<std::string>(), audience) || !audience.isArray())
+        {
+            LOG_WARN << "채널 사용자 목록 응답을 해석하지 못했습니다. channel_id=" << channel_id;
+            return false;
+        }
+    }
+    catch (const std::exception &e)
+    {
+        LOG_WARN << "채널 사용자 목록 조회 실패: " << e.what();
+        return false;
+    }
+
+    Json::Value event;
+    event["type"] = "CHAT";
+    event["sub_type"] = "CHANNEL_PRESENCE";
+    event["data"]["channel_id"] = channel_id;
+    event["data"]["participants"] = Json::arrayValue;
+
+    for (Json::ArrayIndex index = 0; index < audience.size(); ++index)
+    {
+        Json::Value participant = audience[index];
+        participant["online"] = isUserOnline(participant["email"].asString());
+        event["data"]["participants"].append(participant);
+    }
+
+    message = toJsonString(event);
+    return true;
+}
+
+bool NotificationWebSocketController::sendChannelPresence(const WebSocketConnectionPtr &wsConnPtr, int channel_id)
+{
+    if (!wsConnPtr || !wsConnPtr->connected())
+    {
+        return false;
+    }
+
+    std::string message;
+    if (!buildChannelPresenceMessage(channel_id, message))
+    {
+        return false;
+    }
+
+    wsConnPtr->send(message);
+    return true;
+}
+
+void NotificationWebSocketController::broadcastChannelPresence(int channel_id)
+{
+    if (channel_id <= 0)
+    {
+        return;
+    }
+
+    const std::string roomKey = channelRoomKey(channel_id);
+    auto &shard = getShard(roomKey);
+    {
+        std::shared_lock<std::shared_mutex> lock(shard.mutex);
+        if (shard.rooms.find(roomKey) == shard.rooms.end())
+        {
+            return;
+        }
+    }
+
+    std::string message;
+    if (!buildChannelPresenceMessage(channel_id, message))
+    {
+        return;
+    }
+
+    sendToRoom(roomKey, message);
+}
+
+void NotificationWebSocketController::broadcastPresenceToAllRooms()
+{
+    const std::string roomPrefix = "channel:";
+    std::vector<int> channelIds;
+
+    for (auto &shard : shards_)
+    {
+        std::shared_lock<std::shared_mutex> lock(shard.mutex);
+        for (const auto &entry : shard.rooms)
+        {
+            const std::string &roomKey = entry.first;
+            if (roomKey.compare(0, roomPrefix.size(), roomPrefix) != 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                channelIds.push_back(std::stoi(roomKey.substr(roomPrefix.size())));
+            }
+            catch (const std::exception &)
+            {
+                // 채널 방 키가 아니면 무시한다.
+            }
+        }
+    }
+
+    std::sort(channelIds.begin(), channelIds.end());
+    channelIds.erase(std::unique(channelIds.begin(), channelIds.end()), channelIds.end());
+
+    for (int channelId : channelIds)
+    {
+        broadcastChannelPresence(channelId);
+    }
+}
+
+void NotificationWebSocketController::enterChannelRoom(const WebSocketConnectionPtr &wsConnPtr,
+                                                       const std::shared_ptr<WsSession> &session,
+                                                       int channel_id)
+{
+    int previousChannelId;
+    {
+        std::lock_guard<std::mutex> sessionLock(session->presence_mutex);
+        previousChannelId = session->channel_id;
+        session->channel_id = channel_id;
+    }
+
+    // 다른 채널에서 넘어왔다면 이전 채널 방에서만 빠진다.
+    // 사용자 목록은 채널 권한으로 결정되므로 방 이동만으로 다른 사용자에게 다시 알릴 필요가 없다.
+    if (previousChannelId > 0 && previousChannelId != channel_id)
+    {
+        removeFromRoom(channelRoomKey(previousChannelId), wsConnPtr);
+    }
+
+    addToRoom(channelRoomKey(channel_id), wsConnPtr);
+    sendChannelPresence(wsConnPtr, channel_id);
+}
+
+bool NotificationWebSocketController::leaveChannelRoom(const WebSocketConnectionPtr &wsConnPtr,
+                                                       const std::shared_ptr<WsSession> &session)
+{
+    if (!session)
+    {
+        return false;
+    }
+
+    int channelId;
+    {
+        std::lock_guard<std::mutex> sessionLock(session->presence_mutex);
+        channelId = session->channel_id;
+        session->channel_id = 0;
+    }
+
+    if (channelId <= 0)
+    {
+        return false;
+    }
+
+    removeFromRoom(channelRoomKey(channelId), wsConnPtr);
+    return true;
 }
 
 void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &req, const WebSocketConnectionPtr &wsConnPtr)
 {
     // 1. 세션을 만들어 연결에 바인딩한다. 인증이 끝나기 전까지 authenticated 는 false 다.
     auto session = std::make_shared<WsSession>();
+    session->request_id = app_utils::ensureRequestId(req);
     session->client_id = req->getParameter("client_id");
     wsConnPtr->setContext(session);
 
@@ -126,7 +459,7 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
     auto queryToken = req->getParameter("token");
     if (!queryToken.empty())
     {
-        auto userEmail = verifyAccessToken(queryToken);
+        auto userEmail = verifyAccessToken(queryToken, session->request_id);
         if (userEmail.empty())
         {
             wsConnPtr->forceClose();
@@ -135,12 +468,17 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
 
         session->user_email = userEmail;
         session->authenticated = true;
-        registerConnection(wsConnPtr, userEmail, session->client_id, session);
+        const bool becameOnline = registerConnection(wsConnPtr, userEmail, session->client_id, session);
 
         Json::Value welcome;
         welcome["type"] = "SYSTEM";
         welcome["message"] = "Connected to real-time notification service.";
         wsConnPtr->send(toJsonString(welcome));
+
+        if (becameOnline)
+        {
+            broadcastPresenceToAllRooms();
+        }
         return;
     }
 
@@ -151,7 +489,8 @@ void NotificationWebSocketController::handleNewConnection(const HttpRequestPtr &
         auto conn = weakConn.lock();
         if (conn && !session->authenticated && !conn->disconnected())
         {
-            LOG_WARN << "WebSocket handshake failed: AUTH frame was not received in time.";
+            LOG_WARN << "[WS] event=notification.auth_timeout " << app_utils::requestIdTag(session->request_id)
+                     << " client_id=" << app_utils::sanitizeLogValue(session->client_id.empty() ? "-" : session->client_id, 128);
             conn->forceClose();
         }
     });
@@ -177,12 +516,13 @@ void NotificationWebSocketController::handleNewMessage(const WebSocketConnection
 
         if (!isAuthFrame)
         {
-            LOG_WARN << "WebSocket handshake failed: The first frame must be an AUTH message.";
+            LOG_WARN << "[WS] event=notification.auth_failed " << app_utils::requestIdTag(session->request_id)
+                     << " reason=first_frame_not_auth";
             wsConnPtr->forceClose();
             return;
         }
 
-        auto userEmail = verifyAccessToken(root["token"].asString());
+        auto userEmail = verifyAccessToken(root["token"].asString(), session->request_id);
         if (userEmail.empty())
         {
             // 클라이언트가 무한 재연결에 빠지지 않도록 인증 실패를 명시적으로 알린 뒤 닫는다.
@@ -201,12 +541,17 @@ void NotificationWebSocketController::handleNewMessage(const WebSocketConnection
         session->user_email = userEmail;
         session->authenticated = true;
 
-        registerConnection(wsConnPtr, userEmail, session->client_id, session);
+        const bool becameOnline = registerConnection(wsConnPtr, userEmail, session->client_id, session);
 
         Json::Value ack;
         ack["type"] = "AUTH_OK";
         ack["message"] = "Connected to real-time notification service.";
         wsConnPtr->send(toJsonString(ack));
+
+        if (becameOnline)
+        {
+            broadcastPresenceToAllRooms();
+        }
         return;
     }
 
@@ -227,7 +572,55 @@ void NotificationWebSocketController::handleNewMessage(const WebSocketConnection
         return;
     }
 
-    LOG_DEBUG << "WebSocket message from " << session->user_email << " (type: " << messageType << ")";
+    // 채널 화면에 들어오면 해당 채널의 실시간 이벤트 방에 입장하고 사용자 현황 스냅샷을 받는다.
+    if (messageType == "CHANNEL_JOIN")
+    {
+        const int channelId = root.isMember("channel_id") && root["channel_id"].isInt()
+                                  ? root["channel_id"].asInt()
+                                  : 0;
+        if (channelId <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            auto db = app().getDbClient();
+            auto result = db->execSqlSync("SELECT * FROM get_chat_channel_participants($1, $2)",
+                                          session->user_email, channelId);
+            if (result.empty())
+            {
+                return;
+            }
+        }
+        catch (const std::exception &e)
+        {
+            LOG_WARN << "[WS] event=notification.channel_join_failed " << app_utils::requestIdTag(session->request_id)
+                     << " channel_id=" << channelId
+                     << " error=" << app_utils::sanitizeLogValue(e.what(), 512);
+
+            Json::Value failure;
+            failure["type"] = "CHAT";
+            failure["sub_type"] = "CHANNEL_PRESENCE_ERROR";
+            failure["data"]["channel_id"] = channelId;
+            failure["data"]["message"] = "채널 사용자 정보를 확인하지 못했습니다.";
+            wsConnPtr->send(toJsonString(failure));
+            return;
+        }
+
+        enterChannelRoom(wsConnPtr, session, channelId);
+        return;
+    }
+
+    if (messageType == "CHANNEL_LEAVE")
+    {
+        leaveChannelRoom(wsConnPtr, session);
+        return;
+    }
+
+    LOG_DEBUG << "[WS] event=notification.message " << app_utils::requestIdTag(session->request_id)
+              << " user=" << app_utils::maskEmail(session->user_email)
+              << " type=" << app_utils::sanitizeLogValue(messageType, 64);
 }
 
 void NotificationWebSocketController::handleConnectionClosed(const WebSocketConnectionPtr &wsConnPtr)
@@ -241,6 +634,7 @@ void NotificationWebSocketController::handleConnectionClosed(const WebSocketConn
 
     const std::string user_email = session->user_email;
     auto &shard = getShard(user_email);
+    bool isStillOnline = false;
     {
         std::unique_lock<std::shared_mutex> lock(shard.mutex);
         auto it = shard.connections.find(user_email);
@@ -259,9 +653,29 @@ void NotificationWebSocketController::handleConnectionClosed(const WebSocketConn
             {
                 shard.connections.erase(it);
             }
+            else
+            {
+                for (const auto &conn : vec)
+                {
+                    if (conn && conn->connected())
+                    {
+                        isStillOnline = true;
+                        break;
+                    }
+                }
+            }
         }
     }
-    LOG_INFO << "WebSocket disconnected: " << user_email;
+    leaveChannelRoom(wsConnPtr, session);
+
+    // 마지막 인증 연결이 끊겼다면 채널을 보고 있는 사용자들에게 오프라인 상태를 알린다.
+    if (!isStillOnline)
+    {
+        broadcastPresenceToAllRooms();
+    }
+
+    LOG_INFO << "[WS] event=notification.disconnected " << app_utils::requestIdTag(session->request_id)
+             << " user=" << app_utils::maskEmail(user_email);
 }
 
 bool NotificationWebSocketController::sendNotificationToUser(const std::string &user_email, const std::string &message)
@@ -321,6 +735,54 @@ bool NotificationWebSocketController::sendNotificationToUser(const std::string &
     return !targetConnections.empty();
 }
 
+// 채널 접근 권한이 바뀐 노드의 사용자에게 채널 사이드바 재조회를 알린다.
+// 대상 사용자 계산은 DB 함수(get_channel_refresh_targets)가 맡고, 이 함수는 전달만 한다.
+void NotificationWebSocketController::notifyChannelAccessChangedAsync(int node_id)
+{
+    if (node_id <= 0)
+    {
+        return;
+    }
+
+    std::thread worker([node_id]() {
+        std::vector<std::string> emails;
+        try
+        {
+            auto rows = app().getDbClient()->execSqlSync(
+                "SELECT email FROM get_channel_refresh_targets($1)", node_id);
+            for (const auto &row : rows)
+            {
+                emails.push_back(row["email"].as<std::string>());
+            }
+        }
+        catch (const std::exception &e)
+        {
+            LOG_WARN << "채널 권한 변경 대상 조회 실패: node=" << node_id << " reason=" << e.what();
+            return;
+        }
+
+        if (emails.empty())
+        {
+            return;
+        }
+
+        Json::Value event;
+        event["type"] = "CHAT";
+        event["sub_type"] = "CHANNEL_ACCESS_CHANGED";
+        event["data"]["node_id"] = node_id;
+        const std::string message = toJsonString(event);
+
+        // WebSocket 전송은 다른 알림 경로와 같이 이벤트 루프에서 수행한다.
+        app().getLoop()->queueInLoop([emails, message]() {
+            for (const auto &email : emails)
+            {
+                sendNotificationToUser(email, message);
+            }
+        });
+    });
+    worker.detach();
+}
+
 // 활동 알림 JSON을 수신자별 맞춤(업무 열람 권한 유무에 따른 마스킹)으로 생성하여 샤딩 락 분리를 통해 전송
 static void processActivityNotification(const std::string &rawPayload)
 {
@@ -328,11 +790,17 @@ static void processActivityNotification(const std::string &rawPayload)
     Json::Value root;
     if (!reader.parse(rawPayload, root))
     {
-        LOG_ERROR << "[NotificationListener] Failed to parse activity payload: " << rawPayload;
+        LOG_ERROR << "[WS] event=activity_payload_invalid bytes=" << rawPayload.size();
         return;
     }
 
-    if (!root.isMember("recipients") || !root["recipients"].isArray() || root["recipients"].empty())
+    const bool hasDetailRecipients =
+        root.isMember("recipients") && root["recipients"].isArray() && !root["recipients"].empty();
+    const bool hasRefreshRecipients =
+        root.isMember("refresh_recipients") && root["refresh_recipients"].isArray() &&
+        !root["refresh_recipients"].empty();
+
+    if (!hasDetailRecipients && !hasRefreshRecipients)
     {
         return;
     }
@@ -430,17 +898,50 @@ static void processActivityNotification(const std::string &rawPayload)
     std::string fullMsg = Json::writeString(writer, fullPayload);
     std::string maskedMsg = Json::writeString(writer, maskedPayload);
 
-    // 3. 수신자 목록을 순회하며 각 유저에게 샤딩 락 격리 방식으로 발송 (중첩 락 없음)
-    for (const auto &recipient : root["recipients"])
+    // 3. 상세 알림 수신자에게는 기존처럼 활동 내용을 전송한다.
+    std::set<std::string> detailEmails;
+    if (hasDetailRecipients)
     {
-        std::string email = recipient["email"].asString();
-        bool canView = recipient["can_view_work_items"].asBool();
-        // 일정(정기 규칙) 파일은 업무 상세 권한과 무관하게 마스킹하지 않는다.
-        bool isWorkRelated = (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !isRecurringFile;
-        if (canView || !isWorkRelated) {
-            NotificationWebSocketController::sendNotificationToUser(email, fullMsg);
-        } else {
-            NotificationWebSocketController::sendNotificationToUser(email, maskedMsg);
+        for (const auto &recipient : root["recipients"])
+        {
+            std::string email = recipient["email"].asString();
+            bool canView = recipient["can_view_work_items"].asBool();
+            // 일정(정기 규칙) 파일은 업무 상세 권한과 무관하게 마스킹하지 않는다.
+            bool isWorkRelated = (entityType == "WORK_ITEM" || entityType == "COMMENT" || entityType == "FILE") && !isRecurringFile;
+            if (canView || !isWorkRelated) {
+                NotificationWebSocketController::sendNotificationToUser(email, fullMsg);
+            } else {
+                NotificationWebSocketController::sendNotificationToUser(email, maskedMsg);
+            }
+            detailEmails.insert(email);
+        }
+    }
+
+    // 4. 상세 알림을 받지 못한 멤버에게는 화면 갱신 신호만 보낸다.
+    //    상세 열람 권한(HISTORY_ALL_VIEW)이 없어도 워크스페이스 변경은 즉시 반영되어야 하므로,
+    //    활동 내용 없이 "이 노드가 바뀌었다"는 정보만 전달한다.
+    if (hasRefreshRecipients)
+    {
+        Json::Value refreshEvent;
+        refreshEvent["type"] = "WORKSPACE_REFRESH";
+        refreshEvent["sub_type"] = "ACTIVITY";
+        refreshEvent["data"]["node_id"] = nodeId;
+        refreshEvent["data"]["entity_type"] = entityType;
+        refreshEvent["data"]["entity_id"] = entityId;
+        refreshEvent["data"]["action"] = actionType;
+        refreshEvent["data"]["is_recurring_file"] = isRecurringFile;
+        const std::string refreshMsg = Json::writeString(writer, refreshEvent);
+
+        for (const auto &recipient : root["refresh_recipients"])
+        {
+            // SQL 이 이메일 문자열 배열로 내려준다. (구버전 객체 형식도 함께 허용)
+            const std::string email =
+                recipient.isString() ? recipient.asString() : recipient["email"].asString();
+            if (email.empty() || detailEmails.count(email) > 0)
+            {
+                continue;
+            }
+            NotificationWebSocketController::sendNotificationToUser(email, refreshMsg);
         }
     }
 }

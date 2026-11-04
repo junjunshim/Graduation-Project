@@ -1,4 +1,6 @@
 #include "ResponseUtils.h"
+#include "AuthorityBits.h"
+#include "LogContext.h"
 #include "NotificationWebSocketController.h"
 
 // DB 알림 결과(out_data)를 파싱하여 메시지를 주입한 후 웹소켓으로 발송하는 공통 함수
@@ -12,13 +14,13 @@ bool app_utils::sendNotificationFromDbResult(const drogon::orm::Result &result, 
         std::string jsonStr = row["out_data"].as<std::string>();
         Json::Value item;
         if (!reader.parse(jsonStr, item)) {
-            LOG_ERROR << "Failed to parse notification JSON: " << jsonStr;
+            LOG_ERROR << "[WS] event=notification.payload_invalid bytes=" << jsonStr.size();
             continue;
         }
 
         // 대상 이메일 추출
         if (!item.isMember("target_email")) {
-            LOG_WARN << "Notification payload missing target_email: " << jsonStr;
+            LOG_WARN << "[WS] event=notification.target_missing bytes=" << jsonStr.size();
             continue;
         }
         std::string targetEmail = item["target_email"].asString();
@@ -61,7 +63,7 @@ Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &resu
         if(reader.parse(jsonStr, item)){
             items.append(item);
         } else {
-            LOG_ERROR << "Failed to parse integrated JSON data: " << jsonStr;
+            LOG_ERROR << "[DB] event=integrated_data.parse_failed bytes=" << jsonStr.size();
         }
     }
 
@@ -70,6 +72,37 @@ Json::Value app_utils::parseIntegratedDataResult(const drogon::orm::Result &resu
     ret["data"] = items;
 
     // 완성된 JSON 객체 반환
+    return ret;
+}
+
+// DB 결과에서 HTTP 응답 데이터와 실시간 WebSocket 알림(target_email 포함)을 분리하여 발송 및 반환하는 함수
+Json::Value app_utils::parseAndDispatchChatResult(const drogon::orm::Result &result) {
+    Json::Value ret;
+    Json::Value items(Json::arrayValue);
+    Json::Reader reader;
+    Json::StreamWriterBuilder writer;
+    writer["indentation"] = "";
+
+    for (auto const &row : result) {
+        std::string jsonStr = row["out_data"].as<std::string>();
+        Json::Value item;
+        if (!reader.parse(jsonStr, item)) {
+            LOG_ERROR << "[DB] event=chat_data.parse_failed bytes=" << jsonStr.size();
+            continue;
+        }
+
+        if (item.isObject() && item.isMember("target_email") && item["target_email"].isString()) {
+            std::string targetEmail = item["target_email"].asString();
+            item.removeMember("target_email");
+            std::string payloadStr = Json::writeString(writer, item);
+            api::NotificationWebSocketController::sendNotificationToUser(targetEmail, payloadStr);
+        } else {
+            items.append(item);
+        }
+    }
+
+    ret["status"] = "success";
+    ret["data"] = items;
     return ret;
 }
 
@@ -117,14 +150,20 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0417") != std::string::npos) return DbErrorCode::RemoveRoleFailed;
     else if (errMsg.find("P0501") != std::string::npos) return DbErrorCode::EmailAlreadyExists;
     else if (errMsg.find("P0502") != std::string::npos) return DbErrorCode::UserRegistrationFailed;
-    else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::EmailNotFound;
-    else if (errMsg.find("P0504") != std::string::npos) return DbErrorCode::IncorrectPassword;
+    else if (errMsg.find("P0503") != std::string::npos) return DbErrorCode::InvalidCredentials;
+    else if (errMsg.find("P0504") != std::string::npos) return DbErrorCode::InvalidCredentials;
     else if (errMsg.find("P0505") != std::string::npos) return DbErrorCode::LoginFailed;
     else if (errMsg.find("P0506") != std::string::npos) return DbErrorCode::DeleteUserError;
     else if (errMsg.find("P0507") != std::string::npos) return DbErrorCode::GetUserProfileFailed;
     else if (errMsg.find("P0508") != std::string::npos) return DbErrorCode::UpdateUserFailed;
     else if (errMsg.find("P0509") != std::string::npos) return DbErrorCode::ReadMentionFailed;
     else if (errMsg.find("P0510") != std::string::npos) return DbErrorCode::UserIdAlreadyExists;
+    else if (errMsg.find("P0511") != std::string::npos) return DbErrorCode::PasswordResetTokenInvalid;
+    else if (errMsg.find("P0512") != std::string::npos) return DbErrorCode::PasswordPolicyViolation;
+    else if (errMsg.find("P0513") != std::string::npos) return DbErrorCode::PasswordResetFailed;
+    else if (errMsg.find("P0514") != std::string::npos) return DbErrorCode::SignupVerificationInvalid;
+    else if (errMsg.find("P0515") != std::string::npos) return DbErrorCode::SignupVerificationFailed;
+    else if (errMsg.find("P0516") != std::string::npos) return DbErrorCode::SignupInputInvalid;
     else if (errMsg.find("P0601") != std::string::npos) return DbErrorCode::ParentWorkItemNotFound;
     else if (errMsg.find("P0602") != std::string::npos) return DbErrorCode::CreateWorkItemFailed;
     else if (errMsg.find("P0603") != std::string::npos) return DbErrorCode::UpdateWorkItemNotFound;
@@ -149,16 +188,49 @@ DbErrorCode app_utils::parseDbErrorCode(const std::string &errMsg) {
     else if (errMsg.find("P0701") != std::string::npos) return DbErrorCode::InvalidActivityFilter;
     else if (errMsg.find("P0702") != std::string::npos) return DbErrorCode::FetchActivitiesFailed;
     else if (errMsg.find("P0703") != std::string::npos) return DbErrorCode::LogActivityFailed;
+
+    // --- GitHub 저장소 연동 (P08xx) ---
+    else if (errMsg.find("P0801") != std::string::npos) return DbErrorCode::RepoNotConnected;
+    else if (errMsg.find("P0802") != std::string::npos) return DbErrorCode::GithubCredentialInvalid;
+    else if (errMsg.find("P0803") != std::string::npos) return DbErrorCode::GithubScopeInsufficient;
+    else if (errMsg.find("P0804") != std::string::npos) return DbErrorCode::GithubPushDenied;
+    else if (errMsg.find("P0805") != std::string::npos) return DbErrorCode::GitNonFastForward;
+    else if (errMsg.find("P0806") != std::string::npos) return DbErrorCode::GithubKeyNotConfigured;
+    else if (errMsg.find("P0807") != std::string::npos) return DbErrorCode::GithubOperationFailed;
+    else if (errMsg.find("P0808") != std::string::npos) return DbErrorCode::RepoCloneFailed;
+    else if (errMsg.find("P0809") != std::string::npos) return DbErrorCode::BranchHasPresence;
+    else if (errMsg.find("P0810") != std::string::npos) return DbErrorCode::BranchHasLocalChanges;
+    else if (errMsg.find("P0811") != std::string::npos) return DbErrorCode::HandoffCodeInvalid;
+    else if (errMsg.find("P0812") != std::string::npos) return DbErrorCode::ExtensionTokenInvalid;
+    else if (errMsg.find("P0813") != std::string::npos) return DbErrorCode::PathAlreadyExists;
+    else if (errMsg.find("P0814") != std::string::npos) return DbErrorCode::PathNotFound;
+    else if (errMsg.find("P0815") != std::string::npos) return DbErrorCode::NodeDeletedForRepo;
+
+    // --- 채널 및 DM 채팅 (P09xx) ---
+    else if (errMsg.find("P0901") != std::string::npos) return DbErrorCode::ChannelNotFound;
+    else if (errMsg.find("P0902") != std::string::npos) return DbErrorCode::ChannelNameDuplicate;
+    else if (errMsg.find("P0903") != std::string::npos) return DbErrorCode::CannotDeleteDefaultChannel;
+    else if (errMsg.find("P0904") != std::string::npos) return DbErrorCode::CannotDmSelf;
+    else if (errMsg.find("P0905") != std::string::npos) return DbErrorCode::ChatMessageNotFound;
+    else if (errMsg.find("P0906") != std::string::npos) return DbErrorCode::ChatOperationFailed;
     else return DbErrorCode::Unknown;
 }
 
 // DB 에러 발생 시 Json::Value 반환하는 함수
-Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
+Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e, const std::string &requestId) {
     // DB 에러 메시지 추출
     std::string errMsg = e.base().what();
 
-    // 에러 메시지를 로그에 기록
-    LOG_ERROR << "Database error: " << errMsg;
+    // 메시지 안의 Pxxxx 코드를 꺼내 로그에서 바로 검색할 수 있게 한다.
+    std::string errorCodeText = "UNKNOWN";
+    const std::size_t codeStart = errMsg.find("[P");
+    if (codeStart != std::string::npos && codeStart + 6 < errMsg.size() && errMsg[codeStart + 6] == ']') {
+        errorCodeText = errMsg.substr(codeStart + 1, 5);
+    }
+
+    LOG_ERROR << "[DB] event=db.error " << requestIdTag(requestId)
+              << " code=" << errorCodeText
+              << " message=" << sanitizeLogValue(errMsg, 4096);
 
     // 반환 JSON 객체 초기화
     Json::Value ret;
@@ -270,7 +342,7 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             break;
         }
         case DbErrorCode::InvalidAuthorityBit:{
-            ret["message"] = "유효하지 않은 24비트 권한 비트 문자열입니다.";
+            ret["message"] = "유효하지 않은 " + std::to_string(app_utils::kAuthorityBitLength) + "비트 권한 비트 문자열입니다.";
             ret["http_code"] = drogon::k400BadRequest;
             break;
         }
@@ -339,6 +411,36 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["http_code"] = drogon::k400BadRequest;
             break;
         }
+        case DbErrorCode::PasswordResetTokenInvalid:{
+            ret["message"] = "재설정 링크가 유효하지 않거나 만료되었습니다. 재설정을 다시 요청해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::PasswordPolicyViolation:{
+            ret["message"] = "비밀번호는 8~64자이며 영문, 숫자, 특수문자를 모두 포함해야 합니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::PasswordResetFailed:{
+            ret["message"] = "비밀번호 재설정 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::SignupVerificationInvalid:{
+            ret["message"] = "이메일 인증이 유효하지 않거나 만료되었습니다. 인증을 다시 진행해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::SignupVerificationFailed:{
+            ret["message"] = "회원가입 이메일 인증 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::SignupInputInvalid:{
+            ret["message"] = "회원가입 입력값을 다시 확인해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
         case DbErrorCode::UserRegistrationFailed:{
             ret["message"] = "사용자 등록에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
@@ -374,13 +476,9 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
             ret["http_code"] = drogon::k500InternalServerError;
             break;
         }
-        case DbErrorCode::EmailNotFound:{
-            ret["message"] = "이메일을 찾을 수 없습니다.";
-            ret["http_code"] = drogon::k404NotFound;
-            break;
-        }
-        case DbErrorCode::IncorrectPassword:{
-            ret["message"] = "비밀번호가 일치하지 않습니다.";
+        case DbErrorCode::InvalidCredentials:{
+            // 이메일 미존재와 비밀번호 불일치를 구분하지 않아 계정 존재 여부를 노출하지 않는다.
+            ret["message"] = "이메일 또는 비밀번호가 올바르지 않습니다.";
             ret["http_code"] = drogon::k401Unauthorized;
             break;
         }
@@ -532,6 +630,119 @@ Json::Value app_utils::parseDbError(const drogon::orm::DrogonDbException &e) {
         case DbErrorCode::LogActivityFailed:{
             ret["message"] = "활동 로그 기록에 실패했습니다.";
             ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+
+        // --- GitHub 저장소 연동 (P08xx) ---
+        case DbErrorCode::RepoNotConnected:{
+            ret["message"] = "연결된 저장소나 브랜치를 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::GithubCredentialInvalid:{
+            ret["message"] = "GitHub 자격증명이 없거나 무효합니다. 다시 등록해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::GithubScopeInsufficient:{
+            ret["message"] = "GitHub 토큰에 repo 스코프가 필요합니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::GithubPushDenied:{
+            ret["message"] = "이 저장소에 push 권한이 없습니다.";
+            ret["http_code"] = drogon::k403Forbidden;
+            break;
+        }
+        case DbErrorCode::GitNonFastForward:{
+            ret["message"] = "원격 저장소가 앞서 있어 push할 수 없습니다. fetch 후 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::GithubKeyNotConfigured:{
+            ret["message"] = "GitHub 자격증명 암호화 키가 설정되지 않았습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::GithubOperationFailed:{
+            ret["message"] = "GitHub 저장소 작업에 실패했습니다.";
+            ret["http_code"] = drogon::k500InternalServerError;
+            break;
+        }
+        case DbErrorCode::RepoCloneFailed:{
+            ret["message"] = "저장소를 clone하지 못했습니다. 저장소 존재 여부와 접근 권한을 확인해 주세요.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::BranchHasPresence:{
+            ret["message"] = "이 브랜치에서 작업 중인 사용자가 있습니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::BranchHasLocalChanges:{
+            ret["message"] = "이 브랜치에 커밋되지 않은 변경이 있습니다. 확인해 주세요.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::HandoffCodeInvalid:{
+            ret["message"] = "확장 연결 코드가 유효하지 않거나 만료되었습니다. 앱에서 다시 시도해 주세요.";
+            ret["http_code"] = drogon::k401Unauthorized;
+            break;
+        }
+        case DbErrorCode::ExtensionTokenInvalid:{
+            ret["message"] = "확장 세션이 만료되었습니다. 앱에서 다시 연결해 주세요.";
+            ret["http_code"] = drogon::k401Unauthorized;
+            break;
+        }
+        case DbErrorCode::PathAlreadyExists:{
+            ret["message"] = "이미 있는 경로입니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::PathNotFound:{
+            ret["message"] = "경로를 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::NodeDeletedForRepo:{
+            ret["message"] = "워크스페이스가 삭제되어 연결할 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::ChannelNotFound:{
+            ret["code"] = "P0901";
+            ret["message"] = "존재하지 않거나 삭제된 채널입니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::ChannelNameDuplicate:{
+            ret["code"] = "P0902";
+            ret["message"] = "해당 워크스페이스에 이미 같은 이름의 채널이 존재합니다.";
+            ret["http_code"] = drogon::k409Conflict;
+            break;
+        }
+        case DbErrorCode::CannotDeleteDefaultChannel:{
+            ret["code"] = "P0903";
+            ret["message"] = "기본(#일반) 채널은 삭제할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::CannotDmSelf:{
+            ret["code"] = "P0904";
+            ret["message"] = "본인 이메일로는 1:1 대화를 시작할 수 없습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
+            break;
+        }
+        case DbErrorCode::ChatMessageNotFound:{
+            ret["code"] = "P0905";
+            ret["message"] = "메시지 또는 첨부파일을 찾을 수 없습니다.";
+            ret["http_code"] = drogon::k404NotFound;
+            break;
+        }
+        case DbErrorCode::ChatOperationFailed:{
+            ret["code"] = "P0906";
+            ret["message"] = "채널 또는 메시지 처리 중 오류가 발생했습니다.";
+            ret["http_code"] = drogon::k400BadRequest;
             break;
         }
         default:{

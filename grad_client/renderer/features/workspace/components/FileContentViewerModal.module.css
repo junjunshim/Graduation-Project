@@ -190,7 +190,7 @@
 .body {
   flex: 1;
   overflow: auto;
-  background: var(--surface-canvas, #0f172a);
+  background: var(--axis-surface-canvas, #F4F2EC);
   position: relative;
 }
 
@@ -202,11 +202,11 @@
   justify-content: center;
   height: 100%;
   gap: 12px;
-  color: var(--text-muted);
+  color: var(--axis-text-muted, #878278);
 }
 
 .errorState {
-  color: var(--accent-red, #ef4444);
+  color: var(--axis-status-danger, #A83B2E);
 }
 
 /* 미리보기 미지원 형식 안내 */
@@ -228,22 +228,22 @@
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 50%;
-  border: 1px solid var(--line-default);
-  background: var(--surface-panel-subtle);
-  color: var(--text-muted);
+  border: 1px solid var(--axis-line-default, #E2DDD2);
+  background: var(--axis-surface-panel, #F7F6F2);
+  color: var(--axis-text-muted, #878278);
 }
 
 .unsupportedTitle {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .unsupportedHint {
   margin: 0;
   font-size: 0.78rem;
-  color: var(--text-muted);
+  color: var(--axis-text-muted, #878278);
 }
 
 /* Raw 테이블 뷰 (GitHub 코드 뷰 형태) */
@@ -261,7 +261,7 @@
 }
 
 .rawRow:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--axis-surface-muted, #EBE7DE);
 }
 
 .lineNum {
@@ -269,16 +269,16 @@
   min-width: 50px;
   padding: 0 1rem;
   text-align: right;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--axis-text-muted, #878278);
   user-select: none;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid var(--axis-line-default, #E2DDD2);
 }
 
 .lineCode {
   padding: 0 1rem;
   white-space: pre-wrap;
   word-break: break-all;
-  color: #f1f5f9;
+  color: var(--axis-text-primary, #1C1B18);
 }
 
 .lineCode code {
@@ -288,8 +288,8 @@
 /* Preview 포매팅 뷰 */
 .previewContainer {
   padding: 1.5rem;
-  color: #f1f5f9;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--axis-text-primary, #1C1B18);
+  font-family: var(--font-sans);
   line-height: 1.6;
 }
 
@@ -299,4 +299,5 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.85rem;
+  color: var(--axis-text-primary, #1C1B18);
 }

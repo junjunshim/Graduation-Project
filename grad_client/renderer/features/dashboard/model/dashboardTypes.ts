@@ -99,6 +99,35 @@ export type DashboardDateRange = {
   maxDateKey: string
 }
 
+export type DashboardChartPeriod = '1d' | '1w' | '1m' | '6m'
+
+export type DashboardActivityChartSeries = {
+  period: DashboardChartPeriod
+  title: string
+  currentLabel: string
+  previousLabel: string
+  labels: string[]
+  currentValues: number[]
+  previousValues: number[]
+  yTicks: number[]
+}
+
+export type DashboardTaskFilter = 'all' | 'in-progress' | 'todo' | 'done' | 'overdue' | 'unscheduled'
+
+export type DashboardTableTaskRow = {
+  workItemId: string
+  title: string
+  categoryLabel: string
+  nodeId: number
+  nodeTitle: string
+  status: WorkItemStatus
+  statusLabel: string
+  dueDateShort: string
+  isOverdue: boolean
+  isUnscheduled: boolean
+  isDueToday: boolean
+}
+
 export type DashboardSchedule = {
   ruleId: number
   title: string
@@ -110,4 +139,15 @@ export type DashboardSchedule = {
   nodeTitle: string | null
   dateLabel: string
   repeatLabel: string
+  /** '10.20' */
+  monthDayLabel: string
+  /** '10월' */
+  monthShort: string
+  /** '20' */
+  dayNumber: string
+  /** '화' */
+  weekdayShort: string
+  isToday: boolean
+  /** '오늘 14:00 – 15:00' 또는 '10.20 · 10:00 – 11:00' */
+  timeRangeLabel: string
 }

@@ -1,13 +1,22 @@
 import type { SelectedWorkItemDetail, WorkspaceSnapshot } from '../model/types'
-import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService'
-import { sortWorkspaceWorkItems } from '../model/sorters'
+import { getAccessibleNodeIdsForUser, getNodePathLabel, getOrgSnapshot } from '../data/orgService.js'
+import { sortWorkspaceWorkItems } from '../model/sorters.js'
 
-export function getSelectedWorkItemDetail(
+const selectedWorkItemDetailCache = new WeakMap<
+  WorkspaceSnapshot,
+  Map<string, SelectedWorkItemDetail | null>
+>()
+const MAX_SELECTED_WORK_ITEM_DETAIL_ENTRIES = 64
+
+function getSelectedWorkItemDetailCacheKey(workItemId: string, userId?: string) {
+  return `${userId ?? ''}\u0000${workItemId}`
+}
+
+function calculateSelectedWorkItemDetail(
   workItemId: string,
-  userId?: string,
-  providedSnapshot?: WorkspaceSnapshot,
+  userId: string | undefined,
+  snapshot: WorkspaceSnapshot,
 ): SelectedWorkItemDetail | null {
-  const snapshot = providedSnapshot ?? getOrgSnapshot()
   const accessibleNodeIds = userId
     ? getAccessibleNodeIdsForUser(userId, snapshot)
     : snapshot.nodes.map((node) => node.id)
@@ -44,4 +53,32 @@ export function getSelectedWorkItemDetail(
     parentWorkItem,
     childWorkItems,
   }
+}
+
+export function getSelectedWorkItemDetail(
+  workItemId: string,
+  userId?: string,
+  providedSnapshot?: WorkspaceSnapshot,
+): SelectedWorkItemDetail | null {
+  const snapshot = providedSnapshot ?? getOrgSnapshot()
+  const cacheKey = getSelectedWorkItemDetailCacheKey(workItemId, userId)
+  let snapshotCache = selectedWorkItemDetailCache.get(snapshot)
+
+  if (snapshotCache?.has(cacheKey)) {
+    return snapshotCache.get(cacheKey) ?? null
+  }
+
+  const detail = calculateSelectedWorkItemDetail(workItemId, userId, snapshot)
+  snapshotCache ??= new Map<string, SelectedWorkItemDetail | null>()
+
+  if (snapshotCache.size >= MAX_SELECTED_WORK_ITEM_DETAIL_ENTRIES) {
+    const oldestKey = snapshotCache.keys().next()
+    if (!oldestKey.done) {
+      snapshotCache.delete(oldestKey.value)
+    }
+  }
+
+  snapshotCache.set(cacheKey, detail)
+  selectedWorkItemDetailCache.set(snapshot, snapshotCache)
+  return detail
 }

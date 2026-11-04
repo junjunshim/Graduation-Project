@@ -2,7 +2,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { formatActivityMessage } from '../renderer/features/dashboard/model/activityFormatter.js'
 import { getActivityLink } from '../renderer/features/dashboard/model/activityLink.js'
-import { resolveActivityEntity } from '../renderer/features/dashboard/model/resolveActivityEntity.js'
+import {
+  buildWorkItemIdSet,
+  isLegacyScheduleCandidateWithIds,
+  resolveActivityEntities,
+  resolveActivityEntity,
+} from '../renderer/features/dashboard/model/resolveActivityEntity.js'
 import type { ActivityRecord } from '../renderer/features/workspace/model/types.js'
 
 const activity: ActivityRecord = {
@@ -49,4 +54,33 @@ test('numeric IDs alone, another workspace, and known work items do not become s
   assert.equal(resolveActivityEntity(legacy, [{ ruleId: 17, ownerNodeId: 42 }], [{ workItemId: '17' }]), legacy)
   const fieldChange = { ...legacy, actionType: 'updated', fieldName: 'progress' }
   assert.equal(resolveActivityEntity(fieldChange, [{ ruleId: 17, ownerNodeId: 42 }], []), fieldChange)
+})
+
+test('work item ID lookup can be reused across activity checks', () => {
+  const workItemIds = buildWorkItemIdSet([{ workItemId: '17' }])
+  const knownWorkItem = { ...activity, entityType: 'WORK_ITEM' }
+  const legacySchedule = { ...knownWorkItem, entityId: '18' }
+
+  assert.equal(isLegacyScheduleCandidateWithIds(knownWorkItem, workItemIds), false)
+  assert.equal(isLegacyScheduleCandidateWithIds(legacySchedule, workItemIds), true)
+})
+
+test('bulk activity resolution indexes rules once and preserves unchanged records', () => {
+  const rules = [
+    { ruleId: 17, ownerNodeId: 42 },
+    { ruleId: 18, ownerNodeId: 42 },
+  ]
+  const legacySchedule = { ...activity, entityType: 'WORK_ITEM', entityId: '18' }
+  const knownWorkItem = { ...activity, id: 2, entityType: 'WORK_ITEM', entityId: '19' }
+  const unrelated = { ...activity, id: 3, entityType: 'WORK_ITEM', entityId: '999' }
+
+  const resolved = resolveActivityEntities(
+    [legacySchedule, knownWorkItem, unrelated],
+    rules,
+    [{ workItemId: '19' }],
+  )
+
+  assert.equal(resolved[0].entityType, 'RECURRING_RULE')
+  assert.equal(resolved[1], knownWorkItem)
+  assert.equal(resolved[2], unrelated)
 })

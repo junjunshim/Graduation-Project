@@ -7,29 +7,29 @@ CREATE OR REPLACE FUNCTION get_initial_context(
 RETURNS SETOF integrated_data AS $$
 DECLARE
     v_user_id users.user_id%TYPE;
-    v_node_info_view BIT(24);
-    v_node_members_view BIT(24);
-    v_node_sub_view BIT(24);
-    v_node_parent_view BIT(24);
-    v_wi_public_view BIT(24);
-    v_wi_hidden_view BIT(24);
-    v_file_view BIT(24);
-    v_history_personal_view BIT(24);
-    v_history_all_view BIT(24);
-    v_deny BIT(24);
+    v_node_info_view authority_mask;
+    v_node_members_view authority_mask;
+    v_node_sub_view authority_mask;
+    v_node_parent_view authority_mask;
+    v_wi_public_view authority_mask;
+    v_wi_hidden_view authority_mask;
+    v_file_view authority_mask;
+    v_history_personal_view authority_mask;
+    v_history_all_view authority_mask;
+    v_deny authority_mask;
 BEGIN
     -- 0. 권한 비트 한 번에 로드
     SELECT 
-        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view, v_node_sub_view, v_node_parent_view,
         v_wi_public_view, v_wi_hidden_view, v_file_view,
@@ -89,7 +89,7 @@ BEGIN
             get_effective_authority(v_user_id, vn.node_id) as effective_authority
         FROM (SELECT DISTINCT node_id FROM visible_node_ids) vn
     )
-    -- DENY 비트 체크 (Bit 23)
+    -- DENY 비트 체크 (Bit 31)
     , filtered_nodes AS (
         SELECT * FROM final_visible_nodes
         WHERE (effective_authority & v_deny) != v_deny
@@ -327,19 +327,19 @@ CREATE OR REPLACE FUNCTION get_workspace_directory_scope(
 RETURNS SETOF integrated_data AS $$
 DECLARE
     v_user_id users.user_id%TYPE;
-    v_node_info_view BIT(24);
-    v_node_members_view BIT(24);
-    v_node_sub_view BIT(24);
-    v_node_parent_view BIT(24);
-    v_deny BIT(24);
+    v_node_info_view authority_mask;
+    v_node_members_view authority_mask;
+    v_node_sub_view authority_mask;
+    v_node_parent_view authority_mask;
+    v_deny authority_mask;
 BEGIN
     -- 0. 노드 식별 및 권한 관련 필수 비트 로드
     SELECT 
-        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view, v_node_sub_view, v_node_parent_view, v_deny
     FROM authority_constants
@@ -467,10 +467,10 @@ CREATE OR REPLACE FUNCTION get_dashboard_context(
 RETURNS SETOF integrated_data AS $$
 DECLARE
     v_user_id users.user_id%TYPE;
-    v_node_info_view BIT(24);
-    v_node_sub_view BIT(24);
-    v_node_parent_view BIT(24);
-    v_deny BIT(24);
+    v_node_info_view authority_mask;
+    v_node_sub_view authority_mask;
+    v_node_parent_view authority_mask;
+    v_deny authority_mask;
     v_today DATE;
     v_week_start DATE;
     v_week_end DATE;
@@ -486,10 +486,10 @@ BEGIN
 
     -- 1. 스코프 계산에 필요한 권한 비트 로드
     SELECT
-        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_SUB_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_PARENT_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
     INTO
         v_node_info_view, v_node_sub_view, v_node_parent_view, v_deny
     FROM authority_constants

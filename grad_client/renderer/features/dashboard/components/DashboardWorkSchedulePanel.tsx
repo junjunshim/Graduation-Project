@@ -1,127 +1,151 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { useWorkItemContextMenu } from '../../workspace/components/useWorkItemContextMenu'
-import type { DashboardTaskRow, DashboardWeekBoard } from '../model/dashboardTypes'
+import type { DashboardTableTaskRow, DashboardTaskFilter } from '../model/dashboardTypes'
 import styles from './DashboardWorkSchedulePanel.module.css'
 
 type DashboardWorkSchedulePanelProps = {
-  board: DashboardWeekBoard
-  /** 스크롤 기준이 되는 날짜 (보고 있는 주에 오늘이 있으면 오늘) */
-  focusDateKey: string
+  rows: DashboardTableTaskRow[]
   weekLabel: string
+  filter: DashboardTaskFilter
+  weekRemainingCount: number
+  onFilterChange: (filter: DashboardTaskFilter) => void
   onShiftWeek: (direction: number) => void
   onGoToday: () => void
+  onViewAll: () => void
 }
 
-type TaskRowProps = {
-  row: DashboardTaskRow
-  variant?: 'ongoing'
-  onContextMenu: (event: MouseEvent, workItemId: string) => void
-}
+const FILTER_OPTIONS: ReadonlyArray<{ value: DashboardTaskFilter; label: string }> = [
+  { value: 'all', label: '전체' },
+  { value: 'in-progress', label: '진행 중' },
+  { value: 'todo', label: '예정' },
+  { value: 'done', label: '완료' },
+  { value: 'overdue', label: '지연' },
+  { value: 'unscheduled', label: '마감 미정' },
+]
 
-const EMPTY_WEEK_MESSAGE = '이번 주에 표시할 업무가 없습니다.'
-const EMPTY_DAY_MESSAGE = '일정 없음'
+const EMPTY_TABLE_MESSAGE = '선택한 조건에 해당하는 업무가 없습니다.'
 
-function TaskRow({ row, variant, onContextMenu }: TaskRowProps) {
-  return (
-    <li
-      className={styles.row}
-      data-tone={row.accentTone}
-      data-variant={variant}
-      onContextMenu={(event) => onContextMenu(event, row.workItemId)}
-    >
-      <span className={styles.rowAccent} aria-hidden="true" />
-
-      <div className={styles.rowMain}>
-        <span className={styles.rowTitle}>{row.title}</span>
-        <span className={styles.rowMeta}>
-          <Icon name="calendar" size={15} className={styles.rowMetaIcon} />
-          {row.startLabel ? <span>일자 {row.startLabel}</span> : null}
-          {row.startLabel && row.dueLabel ? <span aria-hidden="true">·</span> : null}
-          {row.dueLabel ? <span>마감 {row.dueLabel}</span> : <span>마감 미정</span>}
-        </span>
-      </div>
-
-      {row.nodeTitle ? (
-        <span className={styles.nodeChip} title={row.nodeTitle}>
-          {row.nodeTitle}
-        </span>
-      ) : null}
-
-      <span className={styles.statusPill}>{row.statusLabel}</span>
-    </li>
-  )
+function resolveStatusPillVariant(
+  row: DashboardTableTaskRow,
+): 'in-progress' | 'todo' | 'done' | 'overdue' {
+  if (row.isOverdue) {
+    return 'overdue'
+  }
+  if (row.status === 'in-progress') {
+    return 'in-progress'
+  }
+  if (row.status === 'done') {
+    return 'done'
+  }
+  return 'todo'
 }
 
 export function DashboardWorkSchedulePanel({
-  board,
-  focusDateKey,
+  rows,
   weekLabel,
+  filter,
+  weekRemainingCount,
+  onFilterChange,
   onShiftWeek,
   onGoToday,
+  onViewAll,
 }: DashboardWorkSchedulePanelProps) {
-  // 업무를 우클릭하면 업무 메뉴(상세 이동/수정/하위 생성/즐겨찾기/삭제)를 띄운다.
+  const navigate = useNavigate()
   const { onWorkItemContextMenu, workItemContextMenu } = useWorkItemContextMenu()
-  const bodyRef = useRef<HTMLDivElement>(null)
-  const dayRefs = useRef(new Map<string, HTMLElement | null>())
-  // 그날 걸쳐 있는 진행 중 업무는 기본으로 접어 두되, 오늘 날짜만 펼쳐서 보여 준다.
-  // 사용자가 직접 접거나 펼친 상태는 날짜별로 기억한다.
-  const [toggledDays, setToggledDays] = useState<Record<string, boolean>>({})
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const filterWrapRef = useRef<HTMLDivElement>(null)
 
-  const isOngoingExpanded = useCallback(
-    (dateKey: string, isToday: boolean) => toggledDays[dateKey] ?? isToday,
-    [toggledDays],
-  )
+  const selectedFilterLabel =
+    FILTER_OPTIONS.find((opt) => opt.value === filter)?.label ?? '필터'
 
-  const toggleOngoing = useCallback((dateKey: string, isToday: boolean) => {
-    setToggledDays((previous) => ({ ...previous, [dateKey]: !(previous[dateKey] ?? isToday) }))
-  }, [])
+  useEffect(() => {
+    if (!isFilterOpen) return undefined
 
-  const scrollToDay = useCallback((dateKey: string) => {
-    const container = bodyRef.current
-    const target = dayRefs.current.get(dateKey)
-
-    if (!container || !target) {
-      return
+    function handleOutsideClick(event: MouseEvent) {
+      if (!filterWrapRef.current?.contains(event.target as Node)) {
+        setIsFilterOpen(false)
+      }
     }
 
-    container.scrollTo({
-      top: Math.max(0, target.offsetTop - container.offsetTop - 4),
-      behavior: 'auto',
-    })
-  }, [])
-
-  // 주가 바뀌면 기준 날짜(오늘 또는 이동한 날짜) 그룹이 바로 보이게 맞춘다.
-  useEffect(() => {
-    scrollToDay(focusDateKey)
-  }, [focusDateKey, board, scrollToDay])
-
-  const hasAnyRow =
-    board.days.some((day) => day.events.length > 0 || day.ongoing.length > 0) ||
-    board.overdue.length > 0 ||
-    board.unscheduled.length > 0
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [isFilterOpen])
 
   return (
     <section className={styles.panel} aria-label="업무 일정">
       <header className={styles.header}>
-        <h2 className={styles.title}>
-          업무 일정
-          <span className={styles.titleDetail}>· {weekLabel}</span>
-        </h2>
+        <div className={styles.titleRow}>
+          <h2 className={styles.title}>업무 일정</h2>
+          <span className={styles.weekRange}>{weekLabel}</span>
+        </div>
 
         <div className={styles.controls}>
+          <div className={styles.filterWrap} ref={filterWrapRef}>
+            <button
+              type="button"
+              className={styles.filterButton}
+              data-active={filter !== 'all' ? 'true' : undefined}
+              aria-haspopup="listbox"
+              aria-expanded={isFilterOpen}
+              onClick={() => setIsFilterOpen((prev) => !prev)}
+            >
+              <svg
+                className={styles.funnelIcon}
+                width={14}
+                height={14}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              <span>{filter === 'all' ? '필터' : selectedFilterLabel}</span>
+            </button>
+
+            {isFilterOpen ? (
+              <div className={styles.filterMenu} role="listbox" aria-label="업무 일정 필터">
+                {FILTER_OPTIONS.map((opt) => {
+                  const selected = opt.value === filter
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      className={styles.filterOption}
+                      data-selected={selected ? 'true' : undefined}
+                      onClick={() => {
+                        onFilterChange(opt.value)
+                        setIsFilterOpen(false)
+                      }}
+                    >
+                      <span>{opt.label}</span>
+                      {selected ? <Icon name="checkCircle" size={14} /> : null}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+
           <button className={styles.todayButton} type="button" onClick={onGoToday}>
             오늘
           </button>
 
-          <div className={styles.nav}>
+          <div className={styles.navGroup}>
             <button
               className={styles.navButton}
               type="button"
               aria-label="이전 주"
               onClick={() => onShiftWeek(-1)}
             >
-              <Icon name="chevronLeft" size={18} />
+              <Icon name="chevronLeft" size={15} />
             </button>
             <button
               className={styles.navButton}
@@ -129,138 +153,83 @@ export function DashboardWorkSchedulePanel({
               aria-label="다음 주"
               onClick={() => onShiftWeek(1)}
             >
-              <Icon name="chevronRight" size={18} />
+              <Icon name="chevronRight" size={15} />
             </button>
           </div>
         </div>
       </header>
 
-      <div className={styles.body} ref={bodyRef}>
-        {hasAnyRow ? (
-          <>
-            {board.days.map((day) => {
-              const dueCount = day.events.filter((row) => row.accentTone === 'due').length
-              const startCount = day.events.length - dueCount
-              const ongoingExpanded = isOngoingExpanded(day.key, day.isToday)
+      <div className={styles.tableContainer}>
+        <div className={styles.tableHead} role="row">
+          <span className={styles.colTask}>업무명</span>
+          <span className={styles.colWorkspace}>워크스페이스</span>
+          <span className={styles.colStatus}>상태</span>
+          <span className={styles.colDue}>마감일</span>
+        </div>
+
+        <div className={styles.tableBody}>
+          {rows.length === 0 ? (
+            <p className={styles.empty}>{EMPTY_TABLE_MESSAGE}</p>
+          ) : (
+            rows.map((row) => {
+              const pillVariant = resolveStatusPillVariant(row)
 
               return (
-                <section
-                  className={styles.day}
-                  key={day.key}
-                  data-today={day.isToday ? 'true' : undefined}
-                  data-past={day.isPast ? 'true' : undefined}
-                  ref={(element) => {
-                    dayRefs.current.set(day.key, element)
+                <div
+                  key={row.workItemId}
+                  role="row"
+                  tabIndex={0}
+                  className={styles.tableRow}
+                  onClick={() => navigate(`/work-items/${row.workItemId}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      navigate(`/work-items/${row.workItemId}`)
+                    }
                   }}
+                  onContextMenu={(event) => onWorkItemContextMenu(event, row.workItemId)}
                 >
-                  <header className={styles.dayHeader}>
-                    <span className={styles.dayWeekday}>{day.weekdayLabel}</span>
-                    <span className={styles.dayDate}>{day.dayLabel}</span>
-                    {day.isToday ? <span className={styles.todayBadge}>오늘</span> : null}
+                  <div className={styles.taskCell}>
+                    <span className={styles.taskTitle}>{row.title}</span>
+                    <span className={styles.taskCategory}>{row.categoryLabel}</span>
+                  </div>
 
-                    <span className={styles.dayCounts}>
-                      {dueCount > 0 ? (
-                        <span className={styles.dayCount} data-tone="due">마감 {dueCount}</span>
-                      ) : null}
-                      {startCount > 0 ? (
-                        <span className={styles.dayCount} data-tone="start">시작 {startCount}</span>
-                      ) : null}
+                  <div className={styles.workspaceCell} title={row.nodeTitle}>
+                    <span className={styles.workspaceBadge} aria-hidden="true">
+                      <Icon name="building" size={13} />
                     </span>
-                  </header>
+                    <span className={styles.workspaceName}>{row.nodeTitle}</span>
+                  </div>
 
-                  {day.events.length === 0 && day.ongoing.length === 0 ? (
-                    <p className={styles.dayEmpty}>{EMPTY_DAY_MESSAGE}</p>
-                  ) : null}
+                  <div className={styles.statusCell}>
+                    <span className={styles.statusPill} data-variant={pillVariant}>
+                      {row.statusLabel}
+                    </span>
+                  </div>
 
-                  {day.events.length > 0 ? (
-                    <ul className={styles.list}>
-                      {day.events.map((row) => (
-                        <TaskRow
-                          key={`event-${row.workItemId}`}
-                          row={row}
-                          onContextMenu={onWorkItemContextMenu}
-                        />
-                      ))}
-                    </ul>
-                  ) : null}
-
-                  {day.ongoing.length > 0 ? (
-                    <>
-                      <button
-                        className={styles.subToggle}
-                        type="button"
-                        aria-expanded={ongoingExpanded}
-                        onClick={() => toggleOngoing(day.key, day.isToday)}
-                      >
-                        <Icon
-                          name={ongoingExpanded ? 'chevronDown' : 'chevronRight'}
-                          size={15}
-                          className={styles.subToggleIcon}
-                        />
-                        <span>진행 중</span>
-                        <span className={styles.subToggleCount}>{day.ongoing.length}건</span>
-                      </button>
-
-                      {ongoingExpanded ? (
-                        <ul className={styles.list}>
-                          {day.ongoing.map((row) => (
-                            <TaskRow
-                              key={`ongoing-${row.workItemId}`}
-                              row={row}
-                              variant="ongoing"
-                              onContextMenu={onWorkItemContextMenu}
-                            />
-                          ))}
-                        </ul>
-                      ) : null}
-                    </>
-                  ) : null}
-                </section>
+                  <div
+                    className={styles.dueCell}
+                    data-overdue={row.isOverdue ? 'true' : undefined}
+                  >
+                    {row.dueDateShort}
+                  </div>
+                </div>
               )
-            })}
-
-            {board.overdue.length > 0 ? (
-              <section className={styles.section} data-kind="overdue">
-                <header className={styles.sectionHeader}>
-                  <Icon name="alertTriangle" size={16} className={styles.sectionIcon} />
-                  <h3 className={styles.sectionTitle}>지연</h3>
-                  <span className={styles.sectionCount}>{board.overdue.length}건</span>
-                </header>
-                <ul className={styles.list}>
-                  {board.overdue.map((row) => (
-                    <TaskRow
-                      key={`overdue-${row.workItemId}`}
-                      row={row}
-                      onContextMenu={onWorkItemContextMenu}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-
-            {board.unscheduled.length > 0 ? (
-              <section className={styles.section} data-kind="unscheduled">
-                <header className={styles.sectionHeader}>
-                  <Icon name="calendar" size={16} className={styles.sectionIcon} />
-                  <h3 className={styles.sectionTitle}>마감 미정</h3>
-                  <span className={styles.sectionCount}>{board.unscheduled.length}건</span>
-                </header>
-                <ul className={styles.list}>
-                  {board.unscheduled.map((row) => (
-                    <TaskRow
-                      key={`unscheduled-${row.workItemId}`}
-                      row={row}
-                      onContextMenu={onWorkItemContextMenu}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </>
-        ) : (
-          <p className={styles.empty}>{EMPTY_WEEK_MESSAGE}</p>
-        )}
+            })
+          )}
+        </div>
       </div>
+
+      <footer className={styles.footer}>
+        <span className={styles.remainingText}>
+          이번 주 남은 마감 <strong>{weekRemainingCount}건</strong>
+        </span>
+
+        <button type="button" className={styles.viewAllButton} onClick={onViewAll}>
+          <span>전체 보기</span>
+          <span className={styles.arrowDiag} aria-hidden="true">↗</span>
+        </button>
+      </footer>
 
       {workItemContextMenu}
     </section>

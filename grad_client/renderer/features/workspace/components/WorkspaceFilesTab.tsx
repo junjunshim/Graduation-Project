@@ -13,6 +13,7 @@ import { getWorkItemStatusLabel, getWorkItemStatusTone } from '../model/labels'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
 import type { WorkItemFileRecord, WorkItemRecord } from '../model/types'
 import { getWorkItemTag } from '../model/workItemTags'
+import { groupFilesByWorkItem } from '../model/workspaceFileIndex'
 import { FileContentViewerModal } from './FileContentViewerModal'
 import {
   useFileContextMenu,
@@ -196,17 +197,10 @@ export function WorkspaceFilesTab({
   }, [folderMode, showDeletedFiles])
 
   // --- 업무 폴더 매핑 ---
-  const filesByWorkItem = useMemo(() => {
-    const map = new Map<string, UnifiedFileRecord[]>()
-    workItems.forEach((item) => {
-      const targetFiles = unifiedWorkItemFiles.filter((f) => {
-        if (f.workItemId !== item.workItemId) return false
-        return showDeletedFiles ? Boolean(f.isDeleted) : !f.isDeleted
-      })
-      map.set(item.workItemId, targetFiles)
-    })
-    return map
-  }, [unifiedWorkItemFiles, showDeletedFiles, workItems])
+  const filesByWorkItem = useMemo(
+    () => groupFilesByWorkItem(workItems, unifiedWorkItemFiles, showDeletedFiles),
+    [unifiedWorkItemFiles, showDeletedFiles, workItems],
+  )
 
   const filteredWorkFolders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -328,7 +322,10 @@ export function WorkspaceFilesTab({
         const res = await fetchRecurringRuleFileContent(fileId)
         setFileContentData(res)
       } else {
-        const res = await fetchWorkItemFileContent(file.id)
+        const res = await fetchWorkItemFileContent(file.id, {
+          expectedFileName: file.originalFileName,
+          expectedUpdatedAt: (file as any).updatedAt ?? file.createdAt,
+        })
         setFileContentData(res)
       }
     } catch (err) {
@@ -352,7 +349,6 @@ export function WorkspaceFilesTab({
 
   return (
     <div className={styles.container}>
-      {fileContextMenu}
       {/* 상단 툴바 */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>

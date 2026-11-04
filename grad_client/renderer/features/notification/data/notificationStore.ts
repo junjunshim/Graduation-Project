@@ -82,6 +82,11 @@ export function saveStoredNotifications(notifications: NotificationItem[], userI
 
 /** 멘션은 활동 로그와 ID 시퀀스가 달라 접두어를 붙인다(context/init 복원분과 같은 규칙). */
 function createNotificationId(payload: LiveNotificationPayload) {
+  const notificationKey = payload.notification_key?.trim()
+  if (notificationKey) {
+    return notificationKey
+  }
+
   if (payload.notification_id == null) {
     return `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
   }

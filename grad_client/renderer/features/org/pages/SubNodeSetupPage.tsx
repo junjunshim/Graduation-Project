@@ -198,7 +198,7 @@ export function SubNodeSetupPage() {
           <Icon name="alertTriangle" size={32} className={styles.emptyIcon} />
           <h2>하위 워크스페이스 생성 권한이 없습니다.</h2>
           <p>
-            <strong>{parentNode.name}</strong> 워크스페이스에 대한 하위 노드 생성(NODE_SUB_CREATE) 권한이 부족합니다.
+            <strong>{parentNode.name}</strong> 워크스페이스에 대한 하위 워크스페이스 생성 권한이 부족합니다.
           </p>
           <Button variant="secondary" onClick={() => navigate(`/workspace?nodeId=${parentNode.id}`)}>
             {parentNode.name} 상세페이지로 돌아가기

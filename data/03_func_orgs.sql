@@ -364,28 +364,28 @@ CREATE OR REPLACE FUNCTION get_node_detail(
 ) RETURNS SETOF integrated_data AS $$
 DECLARE
     v_requester_id users.user_id%TYPE;
-    v_authority BIT(24);
+    v_authority authority_mask;
     
     -- 권한 비트 상수 캐싱용
-    v_node_info_view BIT(24);
-    v_node_members_view BIT(24);
-    v_wi_public_view BIT(24);
-    v_wi_hidden_view BIT(24);
-    v_file_view BIT(24);
-    v_history_personal_view BIT(24);
-    v_history_all_view BIT(24);
-    v_deny BIT(24);
+    v_node_info_view authority_mask;
+    v_node_members_view authority_mask;
+    v_wi_public_view authority_mask;
+    v_wi_hidden_view authority_mask;
+    v_file_view authority_mask;
+    v_history_personal_view authority_mask;
+    v_history_all_view authority_mask;
+    v_deny authority_mask;
 BEGIN
     -- 0. 권한 상수 로드
     SELECT 
-        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END),
-        BIT_OR(CASE WHEN name = 'DENY' THEN (B'000000000000000000000001'::BIT(24) << bit_position) END)
+        BIT_OR(CASE WHEN name = 'NODE_INFO_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'NODE_MEMBERS_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_PUBLIC_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'WI_HIDDEN_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'FILE_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_PERSONAL_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'HISTORY_ALL_VIEW' THEN authority_mask_of(bit_position) END),
+        BIT_OR(CASE WHEN name = 'DENY' THEN authority_mask_of(bit_position) END)
     INTO 
         v_node_info_view, v_node_members_view,
         v_wi_public_view, v_wi_hidden_view, v_file_view,
@@ -664,17 +664,51 @@ BEGIN
     END IF;
 
     -- 5. 복구 수행
-    -- 5-1. 대상 노드 복구
+    -- 5-1. 대상 노드 및 소속 채팅 채널 복구
     UPDATE organization_nodes
     SET is_deleted = FALSE
     WHERE node_id = p_node_id;
 
-    -- 5-2. 일괄 복구(cascade = TRUE)인 경우: 모든 후손 노드, 소속 업무, 첨부파일 함께 복구
+    UPDATE chat_channels
+    SET is_deleted = FALSE
+    WHERE owner_node_id = p_node_id AND is_deleted = TRUE;
+
+    UPDATE chat_messages
+    SET is_deleted = FALSE
+    WHERE channel_id IN (SELECT channel_id FROM chat_channels WHERE owner_node_id = p_node_id)
+      AND is_deleted = TRUE;
+
+    UPDATE chat_message_files
+    SET is_deleted = FALSE
+    WHERE channel_id IN (SELECT channel_id FROM chat_channels WHERE owner_node_id = p_node_id)
+      AND is_deleted = TRUE;
+
+    -- 5-2. 일괄 복구(cascade = TRUE)인 경우: 모든 후손 노드, 소속 업무, 첨부파일, 채팅 채널 함께 복구
     IF p_cascade = TRUE THEN
         -- 하위 모든 자식 노드 복구
         UPDATE organization_nodes
         SET is_deleted = FALSE
         WHERE path @> ARRAY[p_node_id] AND is_deleted = TRUE;
+
+        -- 하위 모든 노드의 채팅 채널, 메시지, 첨부파일 복구
+        UPDATE chat_channels
+        SET is_deleted = FALSE
+        WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+          AND is_deleted = TRUE;
+
+        UPDATE chat_messages
+        SET is_deleted = FALSE
+        WHERE channel_id IN (
+            SELECT channel_id FROM chat_channels
+            WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+        ) AND is_deleted = TRUE;
+
+        UPDATE chat_message_files
+        SET is_deleted = FALSE
+        WHERE channel_id IN (
+            SELECT channel_id FROM chat_channels
+            WHERE owner_node_id IN (SELECT node_id FROM organization_nodes WHERE path @> ARRAY[p_node_id])
+        ) AND is_deleted = TRUE;
 
         -- 해당 노드 및 하위 모든 노드에 소속된 업무 복구
         UPDATE work_items
@@ -725,7 +759,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION check_authority_on_path(
     p_user_id VARCHAR, p_path INTEGER[], p_authority_name VARCHAR
 ) RETURNS BOOLEAN AS $$
-DECLARE v_auth BIT(24);
+DECLARE v_auth authority_mask;
 BEGIN
     SELECT a.authority INTO v_auth
     FROM unnest(p_path) WITH ORDINALITY AS path(node_id, depth)

@@ -58,6 +58,8 @@
             "owner_node_id" : 98,
             "owner_node_title" : "애플 기획부",
             "owner_user_id" : "U-163",
+            "owner_user_email" : "apple_1dept_leader@apple.com",
+            "owner_user_name" : "애플 기획부 팀장",
             "title" : "기획부 세부 구현 스프린트",
             "description" : "애플 기획부의 세부 마일스톤 기획 및 리소스 설계",
             "category" : "FEATURE",
@@ -66,6 +68,7 @@
             "hidden" : false,
             "weight" : 1,
             "progress" : 40,
+            "computed_progress" : 40,
             "comment_count" : 4,
             "is_deleted" : false,
             "start_date" : "2026-09-11",
@@ -140,6 +143,8 @@
 | owner_node_id | Integer | work_item, recurring_rule | 업무/일정 소속 노드 id |
 | owner_node_title | String or Null | work_item, recurring_rule | 업무/일정 소속 노드 이름 (화면에서 "어느 노드의 업무인지" 표시용) |
 | owner_user_id | String | work_item | 업무 담당자 사용자 id (항상 조회자 본인) |
+| owner_user_email | String or Null | work_item | 업무 담당자 이메일 |
+| owner_user_name | String or Null | work_item | 업무 담당자 이름 |
 | title | String | work_item, recurring_rule | 업무 제목 또는 일정 제목 |
 | description | String or Null | work_item, recurring_rule | 업무 설명 또는 일정 설명 |
 | category | String or Null | work_item, recurring_rule | 업무 카테고리 또는 일정 카테고리 |
@@ -148,6 +153,7 @@
 | hidden | Boolean | work_item | 업무 숨김 여부 |
 | weight | Integer | work_item | 업무 가중치 |
 | progress | Integer | work_item | 업무 진행률 |
+| computed_progress | Integer | work_item | 하위 업무를 반영한 계산 진행률 |
 | comment_count | Integer | work_item | 업무에 등록된 댓글 총 개수 |
 | is_deleted | Boolean | work_item, recurring_rule | 삭제 여부 (조회 시점에는 항상 false) |
 | start_date | String or Null | work_item | 업무 시작 일자 |

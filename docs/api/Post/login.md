@@ -43,7 +43,7 @@
 ```json
 {
     "status" : "error",
-    "message" : {에러 메세지}
+    "message" : "이메일 또는 비밀번호가 올바르지 않습니다."
 }
 ```
 
@@ -58,4 +58,6 @@
 
 - 설명<br>
 1. access_token은 클라이언트에서 저장하여 서버요청 시, 헤더에 항상 포함할것<br>
-2. refresh_token은 access_token 만료 시, 사용되는 토큰 값
+2. refresh_token은 access_token 만료 시, 사용되는 토큰 값<br>
+3. 이메일이 없거나 비밀번호가 틀린 경우 모두 `401 Unauthorized`와 동일한 메시지를 반환하여 계정 존재 여부를 노출하지 않는다.<br>
+4. 이메일 미존재 시에도 동일한 bcrypt 연산을 수행하여 응답 시간으로 계정 존재 여부를 추정하지 못하게 한다.

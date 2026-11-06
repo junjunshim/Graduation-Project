@@ -57,10 +57,14 @@ export function useWorkItemCreateForm(userId?: string, initialNodeId?: number, i
 
     setForm((current) => {
       const nextNodeId = current.ownerNodeId || (composer.selectedNode ? String(composer.selectedNode.id) : '')
+      const defaultAssigneeId =
+        composer.assignableUsers.find((user) => user.userId === userId)?.userId ??
+        composer.assignableUsers[0]?.userId ??
+        ''
       const nextUserId =
         composer.assignableUsers.some((user) => user.userId === current.ownerUserId)
           ? current.ownerUserId
-          : composer.assignableUsers[0]?.userId ?? ''
+          : defaultAssigneeId
 
       const nextParentId =
         current.parentWorkItemId &&

@@ -1,12 +1,18 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "GitRunner.h"
 
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <system_error>
 
 #include <drogon/drogon.h>
@@ -14,6 +20,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <spawn.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -69,24 +76,25 @@ std::string askpassPath() {
 
 // askpass 스크립트를 프로세스당 1회 준비한다. 실패하면 빈 문자열 (토큰 인증 불가).
 std::string ensureAskpassScript() {
+    static std::once_flag once;
     static std::string cached;
-    static bool tried = false;
-    if (tried) {
-        return cached;
-    }
-    tried = true;
 
-    const std::string target = askpassPath();
-    {
+    std::call_once(once, []() {
+        const std::string target = askpassPath();
         std::ofstream ofs(target, std::ios::binary | std::ios::trunc);
         if (!ofs) {
             LOG_ERROR << "askpass 스크립트를 생성할 수 없습니다: " << target;
-            return cached;
+            return;
         }
         ofs << kAskpassScript;
-    }
-    ::chmod(target.c_str(), S_IRWXU);  // 0700
-    cached = target;
+        ofs.flush();
+        if (!ofs) {
+            LOG_ERROR << "askpass 스크립트를 기록할 수 없습니다: " << target;
+            return;
+        }
+        ::chmod(target.c_str(), S_IRWXU);  // 0700
+        cached = target;
+    });
     return cached;
 }
 
@@ -112,6 +120,73 @@ std::string firstLine(const std::string &text) {
     const size_t pos = text.find('\n');
     return pos == std::string::npos ? text : text.substr(0, pos);
 }
+
+std::string sanitizeGitErrorText(const std::string &text, std::size_t maxLen) {
+    std::string line = firstLine(text);
+    const std::size_t cr = line.find('\r');
+    if (cr != std::string::npos) {
+        line.resize(cr);
+    }
+
+    std::string lower = line;
+    for (char &ch : lower) {
+        if (ch >= 'A' && ch <= 'Z') {
+            ch = static_cast<char>(ch - 'A' + 'a');
+        }
+    }
+    if (lower.find("authorization:") != std::string::npos ||
+        lower.find("bearer ") != std::string::npos ||
+        lower.find("x-access-token") != std::string::npos ||
+        lower.find("token=") != std::string::npos ||
+        lower.find("password=") != std::string::npos ||
+        lower.find("secret=") != std::string::npos) {
+        return "[redacted]";
+    }
+
+    for (char &ch : line) {
+        const unsigned char value = static_cast<unsigned char>(ch);
+        if (value < 0x20 || value == 0x7f) {
+            ch = ' ';
+        }
+    }
+
+    if (maxLen == 0) {
+        return "";
+    }
+    if (line.size() > maxLen) {
+        line.resize(maxLen);
+        line += "...";
+    }
+    return line;
+}
+
+struct SpawnFileActions {
+    posix_spawn_file_actions_t value{};
+    int initRc = -1;
+
+    SpawnFileActions() : initRc(::posix_spawn_file_actions_init(&value)) {}
+    ~SpawnFileActions() {
+        if (initRc == 0) {
+            ::posix_spawn_file_actions_destroy(&value);
+        }
+    }
+    SpawnFileActions(const SpawnFileActions &) = delete;
+    SpawnFileActions &operator=(const SpawnFileActions &) = delete;
+};
+
+struct SpawnAttrs {
+    posix_spawnattr_t value{};
+    int initRc = -1;
+
+    SpawnAttrs() : initRc(::posix_spawnattr_init(&value)) {}
+    ~SpawnAttrs() {
+        if (initRc == 0) {
+            ::posix_spawnattr_destroy(&value);
+        }
+    }
+    SpawnAttrs(const SpawnAttrs &) = delete;
+    SpawnAttrs &operator=(const SpawnAttrs &) = delete;
+};
 
 // git 은 workDir 로 chdir 한 뒤 실행되므로, 인자로 넘긴 상대 경로는 repo 디렉터리 기준으로
 // 해석된다. 예를 들어 worktree add 에 DB 의 상대 경로(repository/2/A.worktrees/x)를 그대로 넘기면
@@ -216,65 +291,66 @@ GitResult GitRunner::run(const std::string &workDir,
     // 3. 출력 파이프 준비
     int outPipe[2] = {-1, -1};
     int errPipe[2] = {-1, -1};
-    if (::pipe(outPipe) != 0) {
+    if (::pipe2(outPipe, O_CLOEXEC) != 0) {
         res.err = "pipe() 실패";
         return res;
     }
-    if (::pipe(errPipe) != 0) {
+    if (::pipe2(errPipe, O_CLOEXEC) != 0) {
         closeFd(outPipe[0]);
         closeFd(outPipe[1]);
         res.err = "pipe() 실패";
         return res;
     }
 
-    const pid_t pid = ::fork();
-    if (pid < 0) {
-        closeFd(outPipe[0]);
-        closeFd(outPipe[1]);
-        closeFd(errPipe[0]);
-        closeFd(errPipe[1]);
-        res.err = "fork() 실패";
-        return res;
+    SpawnFileActions fileActions;
+    SpawnAttrs attrs;
+    int spawnErr = fileActions.initRc;
+
+    if (spawnErr == 0) {
+        spawnErr = ::posix_spawn_file_actions_addopen(
+            &fileActions.value, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    }
+    if (spawnErr == 0) {
+        spawnErr = ::posix_spawn_file_actions_adddup2(
+            &fileActions.value, outPipe[1], STDOUT_FILENO);
+    }
+    if (spawnErr == 0) {
+        spawnErr = ::posix_spawn_file_actions_adddup2(
+            &fileActions.value, errPipe[1], STDERR_FILENO);
+    }
+    if (spawnErr == 0 && !workDir.empty()) {
+        spawnErr = ::posix_spawn_file_actions_addchdir_np(
+            &fileActions.value, workDir.c_str());
+    }
+    if (spawnErr == 0) {
+        spawnErr = attrs.initRc;
+    }
+    if (spawnErr == 0) {
+        spawnErr = ::posix_spawnattr_setpgroup(&attrs.value, 0);
+    }
+    if (spawnErr == 0) {
+        short flags = POSIX_SPAWN_SETPGROUP;
+#ifdef POSIX_SPAWN_CLOEXEC_DEFAULT
+        flags = static_cast<short>(flags | POSIX_SPAWN_CLOEXEC_DEFAULT);
+#endif
+        spawnErr = ::posix_spawnattr_setflags(&attrs.value, flags);
     }
 
-    if (pid == 0) {
-        // --- 자식 프로세스 ---
-        // 타임아웃 시 프로세스 그룹째 종료할 수 있도록 별도 그룹으로 분리한다
-        ::setpgid(0, 0);
-
-        if (!workDir.empty() && ::chdir(workDir.c_str()) != 0) {
-            ::_exit(126);
-        }
-
-        const int devnull = ::open("/dev/null", O_RDONLY);
-        if (devnull >= 0) {
-            ::dup2(devnull, STDIN_FILENO);
-            ::close(devnull);
-        }
-        ::dup2(outPipe[1], STDOUT_FILENO);
-        ::dup2(errPipe[1], STDERR_FILENO);
-        closeFd(outPipe[0]);
-        closeFd(outPipe[1]);
-        closeFd(errPipe[0]);
-        closeFd(errPipe[1]);
-
-        // 대화형 인증 프롬프트로 무한 대기하는 것을 막는 2차 방어선
-        if (timeoutSec > 0) {
-            ::alarm(static_cast<unsigned int>(timeoutSec));
-        }
-
-        // 반드시 execvpe(envp) 로 실행한다. execvp 는 위에서 구성한 envp 를 버리고 부모의
-        // environ 을 그대로 쓰기 때문에 GIT_TERMINAL_PROMPT=0 · GIT_ASKPASS 가 적용되지 않아
-        // git 이 아이디/비밀번호를 대화형으로 물어보며 멈춘다.
-        ::execvpe("git", argv.data(), envp.data());
-        ::_exit(127);  // exec 실패
+    pid_t pid = -1;
+    if (spawnErr == 0) {
+        spawnErr = ::posix_spawnp(&pid, "git", &fileActions.value,
+                                  &attrs.value, argv.data(), envp.data());
     }
 
-    // --- 부모 프로세스 ---
-    // setpgid 경합을 막기 위해 부모도 시도한다 (자식이 이미 했으면 실패해도 무해)
-    ::setpgid(pid, pid);
     closeFd(outPipe[1]);
     closeFd(errPipe[1]);
+
+    if (spawnErr != 0) {
+        closeFd(outPipe[0]);
+        closeFd(errPipe[0]);
+        res.err = std::string("git 실행 실패: ") + std::strerror(spawnErr);
+        return res;
+    }
 
     const int limit = (timeoutSec > 0) ? timeoutSec : kDefaultTimeoutSec;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(limit);
@@ -289,19 +365,29 @@ GitResult GitRunner::run(const std::string &workDir,
     fds[1].revents = 0;
     int openCount = 2;
 
+    // 시간 초과로 프로세스 그룹을 죽인 뒤에도 파이프 쓰기 끝이 남아 있을 수 있다.
+    // (git 이 낳은 손자 프로세스가 상속한 경우) 무한히 poll 하지 않도록 정리 유예 시간을 둔다.
+    const auto killGraceDeadline = deadline + std::chrono::milliseconds(500);
+
     while (openCount > 0) {
+        const auto now = std::chrono::steady_clock::now();
+        if (!killed && now >= deadline) {
+            // 시간 초과: 프로세스 그룹째 종료하고, 남은 출력을 잠깐만 더 거둬들인다.
+            ::kill(-pid, SIGKILL);
+            ::kill(pid, SIGKILL);
+            killed = true;
+            res.timedOut = true;
+        }
+        if (killed && now >= killGraceDeadline) {
+            break;
+        }
+
+        const auto pollDeadline = killed ? killGraceDeadline : deadline;
         auto remainMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            deadline - std::chrono::steady_clock::now())
+                            pollDeadline - now)
                             .count();
         if (remainMs <= 0) {
-            // 시간 초과: 남은 출력을 거둬들이기 위해 짧게만 더 기다린다
-            if (!killed) {
-                ::kill(-pid, SIGKILL);
-                ::kill(pid, SIGKILL);
-                killed = true;
-                res.timedOut = true;
-            }
-            remainMs = 200;
+            remainMs = 1;
         }
 
         const int n = ::poll(fds, 2, static_cast<int>(remainMs));
@@ -327,26 +413,42 @@ GitResult GitRunner::run(const std::string &workDir,
                 if (r < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
                     continue;
                 }
-                closeFd(fds[i].fd);
+                if (r < 0 && errno == EBADF) {
+                    // 이미 유효하지 않은 fd 다. close 를 또 호출하면 그 사이 재사용된
+                    // 다른 스레드의 fd 를 닫을 수 있으므로 소유권만 버린다.
+                    fds[i].fd = -1;
+                } else {
+                    closeFd(fds[i].fd);
+                }
                 --openCount;
             }
         }
     }
 
-    closeFd(outPipe[0]);
-    closeFd(errPipe[0]);
+    // 주의: 위 루프에서 이미 읽기 끝을 닫았다. outPipe[0]/errPipe[0] 는 fds[i].fd 의 복사본이라
+    // 여기서 다시 닫으면 같은 fd 번호를 두 번 close 하게 된다. 그 사이 다른 스레드가 연 소켓이
+    // 같은 번호를 받으면 그 소켓을 닫아버려 Drogon 이 EBADF/ epoll 단언으로 죽는다.
+    // 소유권은 fds 배열 하나로만 관리한다 (이미 닫힌 fd 는 -1 이므로 중복 close 가 없다).
+    closeFd(fds[0].fd);
+    closeFd(fds[1].fd);
 
     int status = 0;
-    while (::waitpid(pid, &status, 0) < 0 && errno == EINTR) {
-        // 시그널로 중단되면 재시도
-    }
+    pid_t waited = -1;
+    do {
+        waited = ::waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
 
-    if (WIFEXITED(status)) {
+    if (waited < 0) {
+        res.exitCode = -1;
+        if (res.err.empty()) {
+            res.err = std::string("waitpid() 실패: ") + std::strerror(errno);
+        }
+    } else if (WIFEXITED(status)) {
         res.exitCode = WEXITSTATUS(status);
     } else if (WIFSIGNALED(status)) {
         res.exitCode = -1;
         const int sig = WTERMSIG(status);
-        if (sig == SIGALRM || (killed && sig == SIGKILL)) {
+        if (killed && sig == SIGKILL) {
             res.timedOut = true;
         }
     }
@@ -357,10 +459,15 @@ GitResult GitRunner::run(const std::string &workDir,
                  << (res.timedOut ? ", timeout" : "")
                  << (res.exitCode == 126 ? ", workdir 없음: " + workDir : "")
                  << (res.exitCode == 127 ? ", git 실행 파일 없음" : "")
-                 << ") cmd=[" << joinCommand(full) << "] stderr=" << firstLine(res.err);
+                 << ") cmd=[" << joinCommand(full) << "] stderr="
+                 << sanitizeGitErrorText(res.err, 512);
     }
 
     return res;
+}
+
+std::string GitRunner::safeError(const GitResult &result, std::size_t maxLen) {
+    return sanitizeGitErrorText(result.err, maxLen);
 }
 
 GitResult GitRunner::clone(const std::string &parentDir, const std::string &url,

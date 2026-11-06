@@ -2012,8 +2012,9 @@ void GithubController::getRepositoryCommits(const HttpRequestPtr &req, std::func
         }
 
         if (!logResult.ok()) {
-            LOG_WARN << "커밋 로그 조회 실패 (" << scope << "): " << trim(logResult.err);
-            return errorResponse("P0807", "커밋 기록을 읽지 못했습니다: " + trim(logResult.err),
+            LOG_WARN << "커밋 로그 조회 실패 (" << scope << "): "
+                     << GitRunner::safeError(logResult);
+            return errorResponse("P0807", "커밋 기록을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.",
                                  k500InternalServerError);
         }
 

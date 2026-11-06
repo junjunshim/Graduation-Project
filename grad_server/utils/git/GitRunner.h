@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -39,6 +40,9 @@ public:
                          const Auth *auth = nullptr,
                          int timeoutSec = kDefaultTimeoutSec,
                          const std::vector<std::pair<std::string, std::string>> &extraEnv = {});
+
+    // 로그·응답에 내보내도 되는 짧은 오류 문자열. 제어문자와 인증 헤더를 제거한다.
+    static std::string safeError(const GitResult &result, std::size_t maxLen = 512);
 
     // --- 자주 쓰는 명령 래퍼 (그 외는 run 으로 직접 조합한다) ---
     static GitResult clone(const std::string &parentDir, const std::string &url,

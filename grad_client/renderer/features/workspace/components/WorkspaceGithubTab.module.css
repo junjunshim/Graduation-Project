@@ -13,8 +13,9 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+  height: 100%;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   padding-right: 4px;
 }
 
@@ -28,6 +29,28 @@
   padding: 12px;
 }
 
+.repoSection {
+  flex: 4 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.commitsSection {
+  flex: 6 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
 .sectionTitle {
   display: flex;
   align-items: center;
@@ -38,6 +61,29 @@
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.sectionTitleText {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sectionCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.15rem;
+  padding: 0 0.35rem;
+  border: 1px solid var(--line-default);
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  color: var(--text-muted);
+  font-size: 0.63rem;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .repoList {
@@ -56,6 +102,21 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   padding: 6px 8px;
+}
+
+.repoAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: 0 0 1.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 22%, var(--line-default));
+  border-radius: 0.42rem;
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+  font-size: 0.66rem;
+  font-weight: 800;
 }
 
 .repoItem:hover {
@@ -160,32 +221,185 @@
 }
 
 .emptyState {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  border: 1px dashed var(--line-default);
-  border-radius: var(--radius-md);
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  padding: 40px 16px;
+  gap: 1.6rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: clamp(2rem, 5vw, 4rem);
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 82% 8%, color-mix(in srgb, var(--accent-blue) 9%, transparent), transparent 38%),
+    var(--surface-panel);
   text-align: center;
 }
 
-.toolbar {
+.emptyMain {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 42rem;
+}
+
+.emptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: 0.15rem;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 24%, var(--line-default));
+  border-radius: 1rem;
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+}
+
+.emptyEyebrow {
+  color: var(--accent-blue);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(1.05rem, 2vw, 1.3rem);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.emptyDescription {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+.emptySteps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 52rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.emptyStep {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+}
+
+.emptyStepIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 1.55rem;
+  border-radius: 999px;
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.emptyStepCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.emptyStepCopy strong {
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.emptyStepCopy span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.emptyActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
   flex-wrap: wrap;
 }
 
-.toolbarLeft {
+.emptyHint {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.repoHeader {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+}
+
+.repoIdentity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+
+.repoAvatarLarge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 2.5rem;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 24%, var(--line-default));
+  border-radius: 0.65rem;
+  background: var(--accent-blue-soft);
+  color: var(--accent-blue);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.repoIdentityText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.repoTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
@@ -193,11 +407,47 @@
   color: var(--text-primary);
   font-size: 0.95rem;
   font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .repoTitleOwner {
   color: var(--text-muted);
   font-weight: 600;
+}
+
+.repoMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.metaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 2px 8px;
+  border: 1px solid var(--line-default);
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  color: var(--text-muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.metaChip b {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
 }
 
 .branchSelect {
@@ -353,20 +603,55 @@
   padding: 14px 10px;
 }
 
-.previewHeader {
+.panelHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 2.2rem;
   border-bottom: 1px solid var(--line-default);
-  padding: 8px 10px;
+  background: color-mix(in srgb, var(--surface-panel) 92%, var(--surface-panel-muted));
+  padding: 7px 10px;
+}
+
+.panelHeadingGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.panelHeading {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.panelCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.05rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--line-default);
+  border-radius: 999px;
+  background: var(--surface-panel-muted);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 .previewTitle {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
-  font-size: 0.78rem;
-  font-weight: 700;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -415,4 +700,95 @@
   font-size: 0.78rem;
   line-height: 1.6;
   padding: 12px;
+}
+
+.previewEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 100%;
+  padding: 2rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.previewEmptyIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  margin-bottom: 0.25rem;
+  border: 1px solid var(--line-default);
+  border-radius: 0.75rem;
+  background: var(--surface-panel-muted);
+  color: var(--text-secondary);
+}
+
+.previewEmpty strong {
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.previewEmpty > span:not(.previewEmptyIcon):not(.previewEmptyHint) {
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.previewEmptyHint {
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+@media (max-width: 920px) {
+  .container {
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .emptySteps {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 30rem;
+  }
+
+  .repoHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .headerActions {
+    align-self: stretch;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 720px) {
+  .container {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .sidebar {
+    max-height: 40vh;
+  }
+
+  .emptyState {
+    padding: 1.5rem 1rem;
+  }
+
+  .repoIdentity {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .headerActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }

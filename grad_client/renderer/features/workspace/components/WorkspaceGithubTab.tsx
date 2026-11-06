@@ -592,9 +592,14 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
   return (
     <div className={styles.container}>
       <aside className={styles.sidebar}>
-        <section className={styles.sidebarSection}>
+        <section className={[styles.sidebarSection, styles.repoSection].join(' ')}>
           <div className={styles.sectionTitle}>
-            <span>저장소</span>
+            <span className={styles.sectionTitleText}>
+              저장소
+              {repositories.length > 0 ? (
+                <span className={styles.sectionCount}>{repositories.length}</span>
+              ) : null}
+            </span>
             <Button
               variant="icon"
               aria-label="저장소 목록 새로고침"
@@ -605,6 +610,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
             </Button>
           </div>
 
+          <div className={styles.sectionBody}>
           {isLoadingRepos ? <p className={styles.mutedText}>저장소 목록을 불러오는 중…</p> : null}
           {reposError ? <p className={styles.errorText}>{reposError}</p> : null}
           {!isLoadingRepos && !reposError && repositories.length === 0 ? (
@@ -620,6 +626,9 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
                     .filter(Boolean)
                     .join(' ')}
                 >
+                  <span className={styles.repoAvatar} aria-hidden="true">
+                    {repository.repo_name.slice(0, 1).toUpperCase()}
+                  </span>
                   <button
                     type="button"
                     className={styles.repoSelect}
@@ -712,11 +721,15 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
               저장소 연결
             </Button>
           )}
+          </div>
         </section>
 
-        <section className={styles.sidebarSection}>
+        <section className={[styles.sidebarSection, styles.commitsSection].join(' ')}>
           <div className={styles.sectionTitle}>
-            <span>커밋 기록</span>
+            <span className={styles.sectionTitleText}>
+              커밋 기록
+              {commits.length > 0 ? <span className={styles.sectionCount}>{commits.length}</span> : null}
+            </span>
             <Button
               variant="icon"
               aria-label="커밋 기록 새로고침"
@@ -727,6 +740,7 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
             </Button>
           </div>
 
+          <div className={styles.sectionBody}>
           {!selectedRepository ? (
             <p className={styles.mutedText}>저장소를 선택하면 커밋 기록을 보여줍니다.</p>
           ) : null}
@@ -741,55 +755,120 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
           ) : null}
 
           {commits.length > 0 ? <GithubCommitGraph commits={commits} /> : null}
+          </div>
         </section>
       </aside>
 
       <div className={styles.content}>
         {!selectedRepository ? (
           <div className={styles.emptyState}>
-            <Icon name="database" size={26} />
-            <p>왼쪽에서 원격 저장소를 연결하거나 선택하세요.</p>
-            <p className={styles.mutedText}>
-              연결하면 서버가 저장소를 clone 하고, 구조와 브랜치를 여기에서 볼 수 있습니다.
-            </p>
+            <div className={styles.emptyMain}>
+              <span className={styles.emptyIcon} aria-hidden="true">
+                <Icon name="database" size={28} />
+              </span>
+              <span className={styles.emptyEyebrow}>GitHub 연동</span>
+              <h3 className={styles.emptyTitle}>
+                {repositories.length > 0
+                  ? '확인할 저장소를 선택하세요'
+                  : '저장소를 연결하고 코드를 살펴보세요'}
+              </h3>
+              <p className={styles.emptyDescription}>
+                {repositories.length > 0
+                  ? '왼쪽 저장소 목록에서 작업할 저장소를 선택하면 브랜치와 파일 구조를 바로 볼 수 있습니다.'
+                  : '원격 저장소를 연결하면 서버가 clone 하고, 브랜치·파일 구조·커밋 기록을 이 화면에서 한 번에 확인할 수 있습니다.'}
+              </p>
+            </div>
+
+            <ol className={styles.emptySteps}>
+              <li className={styles.emptyStep}>
+                <span className={styles.emptyStepIndex}>1</span>
+                <span className={styles.emptyStepCopy}>
+                  <strong>저장소 연결</strong>
+                  <span>owner와 repository 이름을 입력합니다.</span>
+                </span>
+              </li>
+              <li className={styles.emptyStep}>
+                <span className={styles.emptyStepIndex}>2</span>
+                <span className={styles.emptyStepCopy}>
+                  <strong>브랜치 선택</strong>
+                  <span>작업할 브랜치와 참여자를 확인합니다.</span>
+                </span>
+              </li>
+              <li className={styles.emptyStep}>
+                <span className={styles.emptyStepIndex}>3</span>
+                <span className={styles.emptyStepCopy}>
+                  <strong>VSCode 편집</strong>
+                  <span>실시간 편집으로 코드 작업을 이어갑니다.</span>
+                </span>
+              </li>
+            </ol>
+
+            <div className={styles.emptyActions}>
+              <Button variant="primary" onClick={() => setIsConnectFormOpen(true)}>
+                <Icon name="plus" size={15} />
+                저장소 연결
+              </Button>
+              <span className={styles.emptyHint}>왼쪽 저장소 카드에서도 연결할 수 있습니다.</span>
+            </div>
           </div>
         ) : (
           <>
-            <div className={styles.toolbar}>
-              <div className={styles.toolbarLeft}>
-                <span className={styles.repoTitle}>
-                  <span className={styles.repoTitleOwner}>{selectedRepository.owner_login}/</span>
-                  {selectedRepository.repo_name}
+            <div className={styles.repoHeader}>
+              <div className={styles.repoIdentity}>
+                <span className={styles.repoAvatarLarge} aria-hidden="true">
+                  {selectedRepository.repo_name.slice(0, 1).toUpperCase()}
                 </span>
+                <div className={styles.repoIdentityText}>
+                  <div className={styles.repoTitleRow}>
+                    <span className={styles.repoTitle}>
+                      <span className={styles.repoTitleOwner}>{selectedRepository.owner_login}/</span>
+                      {selectedRepository.repo_name}
+                    </span>
 
-                {branches.length > 0 ? (
-                  <select
-                    className={styles.branchSelect}
-                    value={currentBranch}
-                    onChange={(event) => handleSelectBranch(event.target.value)}
-                    aria-label="브랜치 선택"
-                  >
-                    {branches.map((branch) => (
-                      <option key={branch.name} value={branch.name}>
-                        {branch.name}
-                        {branch.is_default ? ' (기본)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
+                    {branches.length > 0 ? (
+                      <select
+                        className={styles.branchSelect}
+                        value={currentBranch}
+                        onChange={(event) => handleSelectBranch(event.target.value)}
+                        aria-label="브랜치 선택"
+                      >
+                        {branches.map((branch) => (
+                          <option key={branch.name} value={branch.name}>
+                            {branch.name}
+                            {branch.is_default ? ' (기본)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
 
-                {activeBranch && activeBranch.presence.length > 0 ? (
-                  <span className={styles.presenceChips}>
-                    {activeBranch.presence.map((person) => (
-                      <span key={person.email} className={styles.presenceChip}>
-                        {person.name || person.email}
+                  <div className={styles.repoMeta}>
+                    <span className={styles.metaChip}>
+                      기본 브랜치 <b>{selectedRepository.default_branch}</b>
+                    </span>
+                    <span className={styles.metaChip}>
+                      브랜치 <b>{branches.length}</b>
+                    </span>
+                    {activeBranch && activeBranch.presence.length > 0 ? (
+                      <span className={styles.metaChip}>
+                        <Icon name="users" size={12} />
+                        접속 <b>{activeBranch.presence.length}</b>
                       </span>
-                    ))}
-                  </span>
-                ) : null}
+                    ) : null}
+                    {activeBranch && activeBranch.presence.length > 0 ? (
+                      <span className={styles.presenceChips}>
+                        {activeBranch.presence.map((person) => (
+                          <span key={person.email} className={styles.presenceChip}>
+                            {person.name || person.email}
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
               </div>
 
-              <div className={styles.formActions}>
+              <div className={styles.headerActions}>
                 <Button variant="secondary" onClick={() => void handleRefreshDetail()} disabled={isLoadingEntries}>
                   <Icon name="rotateCcw" size={15} />
                   새로고침
@@ -828,6 +907,10 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
 
             <div className={styles.split}>
               <div className={styles.entryPanel}>
+                <div className={styles.panelHeader}>
+                  <span className={styles.panelHeading}>파일</span>
+                  <span className={styles.panelCount}>{sortedEntries.length}</span>
+                </div>
                 {isLoadingEntries ? <p className={styles.entryEmpty}>불러오는 중…</p> : null}
                 {!isLoadingEntries && sortedEntries.length === 0 && !detailError ? (
                   <p className={styles.entryEmpty}>표시할 파일이 없습니다.</p>
@@ -872,8 +955,11 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
               </div>
 
               <div className={styles.previewPanel}>
-                <div className={styles.previewHeader}>
-                  <span className={styles.previewTitle}>{previewPath ?? '파일을 선택하세요'}</span>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelHeadingGroup}>
+                    <span className={styles.panelHeading}>미리보기</span>
+                    <span className={styles.previewTitle}>{previewPath ?? '선택된 파일 없음'}</span>
+                  </div>
                   {previewFile ? (
                     <span
                       className={[styles.badge, previewFile.read_only ? styles.badgeWarn : styles.badgeOk].join(' ')}
@@ -891,9 +977,16 @@ export function WorkspaceGithubTab({ nodeId }: WorkspaceGithubTabProps) {
                     <p className={[styles.previewNotice, styles.errorText].join(' ')}>{fileError}</p>
                   ) : null}
                   {!isLoadingFile && !fileError && !previewFile ? (
-                    <p className={styles.previewNotice}>
-                      왼쪽에서 파일을 선택하면 내용을 보여줍니다. 실제 편집은 VSCode 로 실시간 편집에서 합니다.
-                    </p>
+                    <div className={styles.previewEmpty}>
+                      <span className={styles.previewEmptyIcon} aria-hidden="true">
+                        <Icon name="fileText" size={22} />
+                      </span>
+                      <strong>파일을 선택하세요</strong>
+                      <span>왼쪽 목록에서 파일을 선택하면 내용을 표시합니다.</span>
+                      <span className={styles.previewEmptyHint}>
+                        실제 편집은 VSCode 실시간 편집에서 이어집니다.
+                      </span>
+                    </div>
                   ) : null}
                   {previewFile && previewFile.content_omitted !== true && previewFile.content !== undefined ? (
                     <pre className={styles.previewCode}>{previewFile.content}</pre>

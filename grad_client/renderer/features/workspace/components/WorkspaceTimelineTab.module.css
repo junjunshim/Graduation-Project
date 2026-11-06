@@ -1,6 +1,7 @@
 .panel {
+  position: relative;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 100%;
   height: clamp(36rem, calc(100dvh - 9rem), 50rem);
@@ -20,20 +21,50 @@
   white-space: nowrap;
 }
 
-.viewOptions {
+.viewModeToggle {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.22rem;
+  width: 100%;
+}
+
+.viewModeButton {
   display: inline-flex;
-  flex: 0 0 auto;
-  gap: 0.4rem;
-}
-
-.viewOptions button {
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 1.5rem;
+  padding: 0.18rem 0.35rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-xs);
+  background: var(--surface-panel);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 1.15;
   white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
-.viewOptions button[aria-pressed='true'] {
+.viewModeButton:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-hover);
+}
+
+.viewModeButton[aria-pressed='true'] {
   color: var(--accent-blue);
   background: var(--surface-selected);
   border-color: var(--line-selected);
+}
+
+.viewModeButton:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 
 .taskLink {
@@ -84,12 +115,18 @@
 }
 
 .controls {
+  position: absolute;
+  bottom: 0.45rem;
+  right: 0.6rem;
+  z-index: 30;
   display: inline-flex;
   align-items: center;
-  justify-self: end;
-  gap: clamp(0.6rem, 1.5vw, 1.25rem);
-  flex: 0 0 auto;
+  gap: clamp(0.5rem, 1.2vw, 0.9rem);
   min-width: 0;
+  padding: 0.25rem;
+  border: 1px solid var(--line-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
 }
 
 .zoomControls {
@@ -192,7 +229,7 @@
 .monthMenu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 0.55rem);
+  bottom: calc(100% + 0.45rem);
   z-index: 20;
   width: min(15rem, calc(100vw - 2rem));
   max-height: min(18rem, 45vh);
@@ -259,87 +296,6 @@
   transform: rotate(180deg);
 }
 
-.footer {
-  position: relative;
-  z-index: 10;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 1.25rem;
-  min-height: 4.85rem;
-  min-width: 0;
-  padding: 0.8rem clamp(1rem, 5vw, 5rem) 0.8rem 1rem;
-  border-top: 1px solid var(--line-default);
-  background: var(--surface-panel);
-}
-
-.legend {
-  display: flex;
-  align-items: center;
-  gap: clamp(1.5rem, 3vw, 3rem);
-  min-width: 0;
-  color: var(--text-secondary);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.legend::-webkit-scrollbar {
-  display: none;
-}
-
-.legendItem {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.42rem;
-  flex: 0 0 auto;
-  font-size: 0.72rem;
-  font-weight: 800;
-  cursor: pointer;
-  user-select: none;
-}
-
-.legendCheckboxInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.legendCheck {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: 1rem;
-  height: 1rem;
-  flex: 0 0 1rem;
-  border: 1px solid var(--accent-purple);
-  border-radius: var(--radius-xs);
-  color: var(--accent-purple);
-}
-
-.legendCheckSelected {
-  position: relative;
-}
-
-.legendCheckSelected::after {
-  width: 0.24rem;
-  height: 0.48rem;
-  border: solid currentColor;
-  border-width: 0 1.5px 1.5px 0;
-  content: '';
-  transform: translateY(-0.06rem) rotate(45deg);
-}
-
-.legendCheckboxInput:focus-visible + .legendCheck {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
-}
-
-.legendItem i,
 .groupLabel > i {
   display: inline-block;
   width: 0.62rem;
@@ -348,15 +304,6 @@
   border: 1px solid var(--timeline-bar-color);
   border-radius: 999px;
   background: var(--timeline-bar-soft);
-}
-
-.legendItem strong {
-  max-width: 9.5rem;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .viewport {
@@ -464,7 +411,7 @@
   z-index: 21;
   display: flex;
   align-items: center;
-  padding: 0 0.9rem;
+  padding: 0.4rem 0.5rem;
   color: var(--text-secondary);
   font-size: 0.78rem;
   font-weight: 800;
@@ -834,6 +781,8 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--timeline-bar-soft) 82%, var(--surface-panel));
   color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
   transform: translateY(-50%);
   transition:
     filter 140ms ease,
@@ -897,15 +846,10 @@
 }
 
 @media (max-width: 900px) {
-  .footer {
-    grid-template-columns: 1fr;
-    gap: 0.8rem;
-  }
-
   .controls {
-    justify-self: end;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    bottom: 0.4rem;
+    right: 0.45rem;
+    gap: 0.5rem;
   }
 
   .viewport {
@@ -914,15 +858,11 @@
 }
 
 @media (max-width: 600px) {
-  .footer {
-    padding-inline: 0.8rem;
-  }
-
   .controls {
-    width: 100%;
-    gap: 0.6rem;
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    bottom: 0.35rem;
+    right: 0.35rem;
+    gap: 0.35rem;
+    padding: 0.2rem;
   }
 
   .viewport {

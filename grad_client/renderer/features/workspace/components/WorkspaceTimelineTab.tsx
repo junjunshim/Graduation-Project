@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Link } from 'react-router-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { formatWorkspaceShortDate } from '../model/formatters'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
@@ -166,7 +165,13 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
   const virtualScrollLeftRef = useRef<number | null>(null)
   const virtualScrollTopRef = useRef<number | null>(null)
   const initializedRangeRef = useRef<number | null>(null)
-  const dragRef = useRef<{ pointerId: number; scrollLeft: number; startX: number } | null>(null)
+  const dragRef = useRef<{
+    pointerId: number
+    scrollLeft: number
+    scrollTop: number
+    startX: number
+    startY: number
+  } | null>(null)
   const [pixelsPerDay, setPixelsPerDay] = useState(DEFAULT_PIXELS_PER_DAY)
   const [verticalScale, setVerticalScale] = useState(DEFAULT_VERTICAL_SCALE)
   const [minimumVerticalScale, setMinimumVerticalScale] = useState(MIN_VERTICAL_SCALE)
@@ -194,7 +199,6 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
     }
     return selected
   }, [selectedTaskId, workItems, viewMode])
-  const [hiddenGroupKeys, setHiddenGroupKeys] = useState<Set<string>>(() => new Set())
   const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<Set<string>>(() => new Set())
   const [selectedMonthStart, setSelectedMonthStart] = useState(() =>
     getMonthStart(getWorkspaceTodayTimestamp()),
@@ -375,6 +379,31 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
     () => labelColumnRef.current?.getBoundingClientRect().height ?? 0,
     [],
   )
+  const centerTimelineEntry = useCallback(
+    (entry: TimelineEntry) => {
+      const viewport = viewportRef.current
+
+      if (!viewport || entry.unscheduled) {
+        return
+      }
+
+      // 라벨 컬럼은 sticky 로 덮여 있으므로, 실제로 보이는 트랙 영역의 중앙을 기준으로 계산합니다.
+      const labelWidth = getLabelColumnWidth()
+      const barWidth = Math.max(
+        18,
+        ((entry.endExclusive - entry.start) / MS_PER_DAY) * pixelsPerDay,
+      )
+      const barCenter = ((entry.start - range.start) / MS_PER_DAY) * pixelsPerDay + barWidth / 2
+      const targetScrollLeft = barCenter - (viewport.clientWidth - labelWidth) / 2
+      const maximumScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+
+      viewport.scrollTo({
+        left: clamp(targetScrollLeft, 0, maximumScrollLeft),
+        behavior: 'smooth',
+      })
+    },
+    [getLabelColumnWidth, pixelsPerDay, range.start],
+  )
   const calculateMinimumVerticalScale = useCallback(() => {
     const viewport = viewportRef.current
 
@@ -382,8 +411,7 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
       return MIN_VERTICAL_SCALE
     }
 
-    const visibleGroups = groups.filter((group) => !hiddenGroupKeys.has(group.key))
-    const visibleTaskCount = visibleGroups.reduce(
+    const visibleTaskCount = groups.reduce(
       (taskCount, group) =>
         taskCount + (collapsedGroupKeys.has(group.key) ? 0 : group.entries.length),
       0,
@@ -394,7 +422,7 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
       viewport.clientHeight - getDateHeaderHeight(),
     )
     const baseRowsHeight =
-      ((viewMode === 'category' ? visibleGroups.length * GROUP_ROW_HEIGHT_REM : 0) +
+      ((viewMode === 'category' ? groups.length * GROUP_ROW_HEIGHT_REM : 0) +
         visibleTaskCount * TASK_ROW_HEIGHT_REM) *
       rootFontSize
 
@@ -407,7 +435,7 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
       MIN_VERTICAL_SCALE,
       DEFAULT_VERTICAL_SCALE,
     )
-  }, [collapsedGroupKeys, getDateHeaderHeight, groups, hiddenGroupKeys, viewMode])
+  }, [collapsedGroupKeys, getDateHeaderHeight, groups, viewMode])
 
   const applyView = useCallback(
     (
@@ -796,20 +824,6 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
     }
   }, [])
 
-  const handleGroupVisibilityChange = (groupKey: string, isVisible: boolean) => {
-    setHiddenGroupKeys((currentHiddenGroupKeys) => {
-      const nextHiddenGroupKeys = new Set(currentHiddenGroupKeys)
-
-      if (isVisible) {
-        nextHiddenGroupKeys.delete(groupKey)
-      } else {
-        nextHiddenGroupKeys.add(groupKey)
-      }
-
-      return nextHiddenGroupKeys
-    })
-  }
-
   const handleGroupCollapseChange = (groupKey: string) => {
     setCollapsedGroupKeys((currentCollapsedGroupKeys) => {
       const nextCollapsedGroupKeys = new Set(currentCollapsedGroupKeys)
@@ -838,7 +852,9 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
     dragRef.current = {
       pointerId: event.pointerId,
       scrollLeft: viewport.scrollLeft,
+      scrollTop: viewport.scrollTop,
       startX: event.clientX,
+      startY: event.clientY,
     }
     viewport.setPointerCapture(event.pointerId)
     setIsDragging(true)
@@ -857,8 +873,8 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
       return
     }
 
-    const nextScrollLeft = drag.scrollLeft - (event.clientX - drag.startX)
-    viewport.scrollLeft = nextScrollLeft
+    viewport.scrollLeft = drag.scrollLeft - (event.clientX - drag.startX)
+    viewport.scrollTop = drag.scrollTop - (event.clientY - drag.startY)
   }
 
   const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -938,7 +954,24 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
           <div className={styles.canvas} style={canvasStyle}>
             <div className={styles.dateHeader}>
               <div ref={labelColumnRef} className={[styles.headerLabel, styles.stickyLabel].join(' ')}>
-                업무
+                <div className={styles.viewModeToggle} role="group" aria-label="타임라인 보기 방식">
+                  <button
+                    type="button"
+                    className={styles.viewModeButton}
+                    aria-pressed={viewMode === 'category'}
+                    onClick={() => setViewMode('category')}
+                  >
+                    카테고리
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.viewModeButton}
+                    aria-pressed={viewMode === 'tree'}
+                    onClick={() => setViewMode('tree')}
+                  >
+                    업무 트리
+                  </button>
+                </div>
               </div>
               <div className={styles.monthTrack} aria-hidden="true">
                 {monthSegments.map((segment) => (
@@ -971,10 +1004,6 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
               </span>
 
               {groups.map((group, groupIndex) => {
-                if (hiddenGroupKeys.has(group.key)) {
-                  return null
-                }
-
                 const isCollapsed = viewMode === 'category' && collapsedGroupKeys.has(group.key)
                 const groupEntriesId = `timeline-group-entries-${group.key}`
 
@@ -1065,17 +1094,18 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
                                   </button>
                                 )}
                               {viewMode === 'category' ? (
-                                <Link
-                                  to={`/work-items/${entry.item.workItemId}`}
+                                <button
+                                  type="button"
                                   className={styles.taskLink}
                                   title={entry.item.title}
                                   data-work-item-id={entry.item.workItemId}
                                   onContextMenu={onWorkItemContextMenu}
-                                  aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}`}
+                                  aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}, 타임라인 중앙으로 이동`}
+                                  onClick={() => centerTimelineEntry(entry)}
                                 >
                                   <span className={styles.taskIcon} aria-hidden="true"><Icon name="checkCircle" size={timelineIconSize} /></span>
                                   <span className={styles.taskCopy}><strong>{entry.item.title}</strong></span>
-                                </Link>
+                                </button>
                               ) : <button
                                 type="button"
                                 className={styles.taskLink}
@@ -1083,8 +1113,11 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
                                 data-work-item-id={entry.item.workItemId}
                                 onContextMenu={onWorkItemContextMenu}
                                 aria-pressed={selectedTaskId === entry.item.workItemId}
-                                aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}, 업무와 하위 업무 강조`}
-                                onClick={() => setSelectedTaskId((current) => current === entry.item.workItemId ? null : entry.item.workItemId)}
+                                aria-label={`${entry.item.title}, ${memberName}, ${getWorkItemStatusLabel(entry.item.status)}, 업무와 하위 업무 강조, 타임라인 중앙으로 이동`}
+                                onClick={() => {
+                                  setSelectedTaskId((current) => current === entry.item.workItemId ? null : entry.item.workItemId)
+                                  centerTimelineEntry(entry)
+                                }}
                               >
                                 <span className={styles.taskIcon} aria-hidden="true">
                                   <Icon name="checkCircle" size={timelineIconSize} />
@@ -1095,8 +1128,8 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
                               </button>}
                               </div>
                               <div className={styles.gridTrack}>
-                                {entry.unscheduled ? <span className={styles.unscheduled}>일정 미정</span> : <Link
-                                  to={`/work-items/${entry.item.workItemId}`}
+                                {entry.unscheduled ? <span className={styles.unscheduled}>일정 미정</span> : <button
+                                  type="button"
                                   className={styles.timelineBar}
                                   data-work-item-id={entry.item.workItemId}
                                   onContextMenu={onWorkItemContextMenu}
@@ -1109,10 +1142,11 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
                                       color: barStyle.color,
                                     } : {}),
                                   }}
-                                  aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}`}
+                                  aria-label={`${entry.item.title}, 마감일 ${formatWorkspaceShortDate(entry.item.dueDate)}, 타임라인 중앙으로 이동`}
+                                  onClick={() => centerTimelineEntry(entry)}
                                 >
                                   <span>{`${entry.item.title} · ${formatWorkspaceShortDate(entry.item.dueDate)}`}</span>
-                                </Link>}
+                                </button>}
                               </div>
                             </div>
                           )
@@ -1132,45 +1166,7 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
         </div>
       )}
 
-      <footer className={styles.footer}>
-        <div className={styles.legend} aria-label={viewMode === 'tree' ? '타임라인 루트 업무 표시' : '타임라인 카테고리 표시'}>
-          {groups.map((group) => {
-            const isVisible = !hiddenGroupKeys.has(group.key)
-
-            return (
-              <label
-                key={group.key}
-                className={[styles.legendItem, toneClassNames[group.tone]].join(' ')}
-              >
-                <input
-                  type="checkbox"
-                  className={styles.legendCheckboxInput}
-                  checked={isVisible}
-                  onChange={(event) =>
-                    handleGroupVisibilityChange(group.key, event.currentTarget.checked)
-                  }
-                />
-                <span
-                  className={[
-                    styles.legendCheck,
-                    isVisible ? styles.legendCheckSelected : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                  aria-hidden="true"
-                />
-                <i aria-hidden="true" />
-                <strong>{group.name}</strong>
-              </label>
-            )
-          })}
-        </div>
-
-        <div className={styles.controls}>
-          <div className={styles.viewOptions} role="group" aria-label="타임라인 보기 방식">
-            <button type="button" className={styles.controlButton} aria-pressed={viewMode === 'category'} onClick={() => setViewMode('category')}>카테고리별</button>
-            <button type="button" className={styles.controlButton} aria-pressed={viewMode === 'tree'} onClick={() => setViewMode('tree')}>업무 트리</button>
-          </div>
+      <div className={styles.controls}>
           <div className={styles.zoomControls} role="group" aria-label="타임라인 확대 및 축소">
             <button
               type="button"
@@ -1275,8 +1271,7 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
               </span>
             </button>
           </div>
-        </div>
-      </footer>
+      </div>
       {workItemContextMenu}
     </section>
   )

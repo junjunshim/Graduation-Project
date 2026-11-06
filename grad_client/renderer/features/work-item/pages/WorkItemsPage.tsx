@@ -18,7 +18,10 @@ export function WorkItemsPage() {
 
   // 기존 ?view=create 접근 시 /work-items/new 로 자동 리다이렉트
   if (requestedView === 'create') {
-    return <Navigate to="/work-items/new" replace />
+    const nextSearchParams = new URLSearchParams(searchParams)
+    nextSearchParams.delete('view')
+    const nextSearch = nextSearchParams.toString()
+    return <Navigate to={`/work-items/new${nextSearch ? `?${nextSearch}` : ''}`} replace />
   }
 
   const currentUser = getCurrentUser(snapshot)

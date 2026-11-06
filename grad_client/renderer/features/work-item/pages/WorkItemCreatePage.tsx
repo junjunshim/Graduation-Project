@@ -9,6 +9,7 @@ import { canCreateWorkItem } from '../../workspace/model/effectiveAuthority'
 import { WorkItemCreateForm } from '../components/WorkItemCreateForm'
 import { WorkItemCreateSidebar } from '../components/WorkItemCreateSidebar'
 import { useWorkItemCreateForm } from '../hooks/useWorkItemCreateForm'
+import { getWorkItemListHref } from '../model/workItemNavigation'
 import { getWorkItemDateRangeError } from '../model/workItemFormValidation'
 import styles from '../styles/WorkItemCreatePage.module.css'
 
@@ -22,6 +23,7 @@ export function WorkItemCreatePage() {
   const [feedback, setFeedback] = useState<{ tone: 'error' | 'success'; message: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const { composer, form, setField } = useWorkItemCreateForm(currentUser?.userId, initialNodeId, searchParams.get('parentWorkItemId') ?? undefined)
+  const workItemListHref = getWorkItemListHref(initialNodeId)
 
   if (!currentUser || !composer) {
     return null
@@ -134,7 +136,7 @@ export function WorkItemCreatePage() {
     <div className={styles.page}>
       {/* 상단 브레드크럼 및 네비게이션 */}
       <div className={styles.breadcrumbRow}>
-        <Link to="/work-items" className={styles.backLink}>
+        <Link to={workItemListHref} className={styles.backLink}>
           <span>←</span> 업무 목록으로
         </Link>
         <span className={styles.breadcrumbDivider}>/</span>
@@ -155,7 +157,7 @@ export function WorkItemCreatePage() {
               : null)}
             submitDisabled={Boolean(serverAvailabilityMessage)}
             onSubmit={handleSubmit}
-            onCancel={() => navigate('/work-items')}
+            onCancel={() => navigate(workItemListHref)}
             onFieldChange={setField}
           />
         </main>

@@ -73,3 +73,26 @@ test('changing the assignee sends ownerUserId so the server can reassign the wor
   assert.equal(hasWorkItemChanges('WI-10', compactInitialForm, ownerChanged), true)
   assert.equal(hasWorkItemChanges('WI-10', compactInitialForm, compactInitialForm), false)
 })
+
+test('changing or clearing a category sends an explicit category value', () => {
+  const assigned = {
+    ...compactInitialForm,
+    categoryId: 'FEATURE',
+  }
+
+  assert.deepEqual(
+    createWorkItemUpdatePayload('WI-10', compactInitialForm, assigned),
+    {
+      workItemId: 'WI-10',
+      category: 'FEATURE',
+    },
+  )
+
+  assert.deepEqual(
+    createWorkItemUpdatePayload('WI-10', assigned, compactInitialForm),
+    {
+      workItemId: 'WI-10',
+      category: '',
+    },
+  )
+})

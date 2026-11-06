@@ -147,6 +147,13 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
     // 담당자 변경: 키가 아예 없으면 "변경 없음"
     bool owner_changed = jsonPtr->isMember("owner_user_email");
     std::string owner_user_email = owner_changed ? getStrOrNull("owner_user_email") : "";
+
+    // 카테고리 변경: 키가 없으면 NULL 로 보내 "변경 없음"을 뜻하고,
+    // 빈 문자열은 사용자가 미분류를 선택한 경우에만 전달한다.
+    std::optional<std::string> category = std::nullopt;
+    if (jsonPtr->isMember("category")) {
+        category = getStrOrNull("category");
+    }
     
 
     // 2. 비지니스 로직
@@ -190,7 +197,7 @@ void WorkItemController::updateWorkItem(const HttpRequestPtr &req, std::function
         work_item_id,
         getStrOrNull("title"),
         getStrOrNull("description"),
-        getStrOrNull("category"),
+        category,
         getBoolOrNull("hidden"),
         getStrOrNull("status"),
         getIntOrNull("priority", -1),

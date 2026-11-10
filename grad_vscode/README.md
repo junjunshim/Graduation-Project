@@ -18,6 +18,7 @@ Axis Share는 저장소를 각자 로컬에 복제해 따로 작업하는 대신
 - **Git 상태와 커밋**: 스테이징, 커밋, push, 되돌리기와 브랜치별 변경 상태를 Changes 뷰에서 처리합니다.
 - **내장 diff**: 작업 트리, 스테이징, 커밋, 원격 기준 변경을 VS Code 기본 diff 화면으로 확인합니다.
 - **커밋 그래프**: 현재 브랜치의 커밋 흐름과 원격 위치를 보여 주며, 저장소 전체 그래프도 웹뷰로 열 수 있습니다.
+- **AI CLI 연동**: Codex · Claude Code · Antigravity CLI를 현재 브랜치의 AI 전용 작업공간에서 실행하고, MCP로 Axis 상태·파일·diff를 읽고 안전하게 쓸 수 있습니다.
 - **안전한 세션 연결**: 앱이 발급한 1회용 코드로 확장 전용 세션을 시작하며, GitHub 비밀번호나 PAT를 확장에 직접 입력하지 않습니다.
 
 ## 요구 사항
@@ -29,6 +30,7 @@ Axis Share는 저장소를 각자 로컬에 복제해 따로 작업하는 대신
 - 초기 연결을 위한 Axis Flow 데스크톱 앱
 - 실시간 협업과 커밋/push를 위한 서버 네트워크 연결
 - 커밋할 경우 `user.name`과 `user.email` 설정 필요
+- AI CLI를 사용할 경우 Codex · Claude Code · Antigravity CLI 중 하나를 사용자 PC에 설치하고 로그인해야 함 (선택)
 
 ## 설치
 
@@ -71,6 +73,7 @@ code --install-extension axis-share-<version>.vsix
 | **Graph** | 현재 브랜치의 커밋 목록과 원격 위치. 저장소 전체 그래프는 별도 웹뷰 탭으로 표시 |
 | **Editing** | 저장소 전체 접속자 수와 브랜치별 사용자, 각 사용자가 열어 둔 파일 |
 | **Reviews** | 오타·문법·논리·기타·강조 리뷰 데코레이션 목록과 이동·삭제·표시 전환 |
+| **AI** | 설치된 AI CLI 감지, AI 전용 작업공간·MCP 브리지 상태, AI 터미널 실행·동기화·초기화 |
 
 ### Repository
 
@@ -110,6 +113,19 @@ code --install-extension axis-share-<version>.vsix
 - 데코레이션 표시 여부는 설정 또는 Reviews 뷰 상단 버튼으로 전환합니다.
 - 리뷰는 같은 브랜치의 협업 사용자에게 공유됩니다.
 
+### AI
+
+- Codex · Claude Code · Antigravity CLI의 설치 여부와 실행 파일 경로를 보여 줍니다.
+- **AI 터미널 열기**는 현재 브랜치의 AI 전용 작업공간에서 터미널만 엽니다. CLI 명령은 사용자가 직접 입력합니다.
+- 제공자 항목을 선택하면 설치된 CLI를 같은 작업공간에서 바로 실행합니다.
+- **작업공간 동기화**는 서버의 최신 브랜치 스냅샷을 다시 받습니다. AI가 직접 수정한 파일은 덮어쓰지 않습니다.
+- AI가 디스크에서 직접 고친 파일은 잠시 뒤 자동으로 서버에 CAS 반영되고, 다른 사용자의 Changes·Repository 뷰에도 알림이 갑니다.
+- **MCP 설정 보기**는 생성된 `.axis/mcp.json`을 엽니다.
+- **AI 작업공간 초기화**는 커밋하지 않은 AI 작업 내용까지 삭제합니다.
+- **AI 세션 종료**는 AI 터미널과 MCP 브리지를 함께 종료합니다.
+
+AI 작업공간은 현재 열린 저장소의 일반 편집 사본과 분리되어 `globalStorage/ai-workspace/repo-<id>/branch-<slug>`에 생성됩니다. 서버 파일 내용은 JSON 스냅샷으로 받고, `.git`은 로컬 baseline 용도로만 새로 초기화합니다.
+
 ## 실시간 편집
 
 - 실시간 공유 범위는 **저장소가 아니라 브랜치**입니다. 같은 저장소라도 서로 다른 브랜치에 있으면 편집 내용이 공유되지 않습니다.
@@ -118,6 +134,63 @@ code --install-extension axis-share-<version>.vsix
 - 다시 연결되면 열려 있던 파일을 서버 내용으로 다시 받아 동기화합니다.
 - 편집 권한이 회수되면 해당 파일은 읽기 전용으로 전환됩니다.
 - 연결 상태는 VS Code 하단 상태 표시줄에서 확인할 수 있습니다.
+
+## AI CLI 연동
+
+Axis Share는 AI 모델 API를 직접 호출하지 않습니다. 사용자가 설치하고 로그인한 CLI를 현재 브랜치의 전용 작업공간에서 실행하고, MCP를 통해 Axis의 최신 상태와 파일을 연결합니다.
+
+### 지원 CLI
+
+| CLI | 실행 명령 | 비고 |
+|:---|:---|:---|
+| Codex | `codex` | ChatGPT 로그인 또는 CLI 자체 인증 사용 |
+| Claude Code | `claude` | Anthropic 계정 로그인은 CLI에서 수행 |
+| Antigravity | `agy` | Antigravity CLI의 MCP 지원 여부에 따라 동작이 달라질 수 있음 |
+
+CLI가 `PATH`에 없으면 설정에서 실행 파일의 절대 경로를 지정합니다. Axis Share는 CLI를 자동 설치하거나 대신 로그인하지 않습니다.
+
+### 작업공간과 MCP
+
+AI 터미널을 열면 다음 파일이 생성됩니다.
+
+```text
+globalStorage/ai-workspace/repo-<id>/branch-<slug>/
+  <branch snapshot>
+  .git/                 # 로컬 baseline (원격과 연결되지 않음)
+  .axis/context.md      # 브랜치·상태·접속자·Axis 규칙
+  .axis/mcp.json        # MCP 브리지 설정
+  .mcp.json             # Claude Code 프로젝트 설정
+  .codex/config.toml    # Codex 프로젝트 설정
+  .antigravity/mcp.json # Antigravity 프로젝트 설정
+```
+
+MCP 브리지는 `127.0.0.1`의 임의 포트에서만 열리고, 세션마다 새로 만든 시크릿으로 인증합니다. 브리지 접속 정보는 `globalStorage/ai-session.json`에 저장되며 세션을 종료하면 삭제됩니다.
+
+### MCP 도구
+
+| 도구 | 설명 |
+|:---|:---|
+| `axis_get_context` | 저장소·브랜치·사용자·상태·원격·접속자·Axis 규칙 |
+| `axis_list_files` | AI 작업공간 파일 목록 |
+| `axis_read_file` | 서버 작업 트리의 최신 파일 내용과 `content_hash` |
+| `axis_get_status` | staged / modified / untracked 상태 |
+| `axis_get_diff` | working 또는 staged 통합 diff |
+| `axis_get_presence` | 브랜치별 접속자 |
+| `axis_write_file` | `expected_hash` 기반 CAS 파일 쓰기 |
+| `axis_delete_file` | `expected_hash` 기반 CAS 파일 삭제 |
+| `axis_stage` | 파일 스테이징 |
+| `axis_unstage` | 스테이징 해제 |
+
+AI가 기존 파일을 덮어쓸 때는 반드시 `axis_read_file`이 돌려준 `content_hash`를 `expected_hash`로 보내야 합니다. 그 사이 다른 사용자가 파일을 바꿨다면 서버가 `P0816` 충돌을 반환하며, AI는 최신 내용을 다시 읽고 병합해야 합니다.
+
+### 안전 정책
+
+- `.env`, `.npmrc`, `.ssh`, 자격 증명 파일 등 비밀값이 들어가기 쉬운 파일은 작업공간 스냅샷에서 제외합니다.
+- AI 작업공간의 `.git`은 로컬 baseline이며 GitHub 원격과 연결되지 않습니다.
+- AI가 작업공간에서 파일을 직접 디스크에 수정·삭제하면 파일 감시자가 변경을 모아 서버에 CAS 로 반영합니다. 그 사이 다른 사용자가 같은 파일을 바꿨다면 덮어쓰지 않고 AI 뷰에 충돌 경고를 남깁니다.
+- 자동 반영은 파일당 512KB 까지입니다. 더 큰 파일은 `axis_write_file` 로도 쓸 수 없으며, Axis Changes 에서 직접 처리해야 합니다.
+- AI의 commit·push 도구는 제공하지 않습니다. 스테이징까지만 MCP 로 가능하고, 커밋과 push 는 Changes 뷰에서 사용자가 직접 수행합니다.
+- AI가 연 터미널은 사용자 권한으로 실행되므로 작업공간 경로가 보안 경계가 되지 않습니다. 신뢰할 수 있는 CLI만 실행하세요.
 
 ## 커밋과 push
 
@@ -157,6 +230,14 @@ Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff
 | `axis-share.showDecorations` | `true` | 에디터에 리뷰 데코레이션을 표시합니다. 사이드바 목록에는 영향을 주지 않습니다. |
 | `axis-share.user.name` | 빈 값 | 커밋 작성자 이름 |
 | `axis-share.user.email` | 빈 값 | 커밋 작성자 이메일 |
+| `axis-share.ai.enabled` | `true` | AI CLI 연동과 AI 뷰를 사용합니다. |
+| `axis-share.ai.providers.codex.path` | 빈 값 | Codex CLI 절대 경로. 비우면 `PATH`에서 찾습니다. |
+| `axis-share.ai.providers.claude.path` | 빈 값 | Claude Code CLI 절대 경로. 비우면 `PATH`에서 찾습니다. |
+| `axis-share.ai.providers.antigravity.path` | 빈 값 | Antigravity CLI(`agy`) 절대 경로. 비우면 `PATH`에서 찾습니다. |
+| `axis-share.ai.autoSync` | `false` | AI 터미널을 열 때 서버 스냅샷을 자동으로 다시 받습니다. AI가 수정한 파일은 덮어쓰지 않습니다. |
+| `axis-share.ai.allowWrite` | `true` | MCP `axis_write_file`을 허용합니다. |
+| `axis-share.ai.allowCommit` | `false` | AI commit 도구 허용 여부. 1차 구현에서는 사용하지 않습니다. |
+| `axis-share.ai.allowPush` | `false` | AI push 도구 허용 여부. 1차 구현에서는 사용하지 않습니다. |
 
 자체 호스팅 서버를 사용한다면 **앱에서 VSCode로 열기 전에** `axis-share.serverUrl`을 해당 서버의 API 주소로 설정하세요.
 
@@ -172,6 +253,7 @@ Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff
 | Diff | 변경 내용 보기, 스테이징 이후 변경 보기, 커밋 변경 내용 보기 |
 | Graph | 저장소 전체 그래프 보기 |
 | Reviews | 리뷰 데코레이션 추가, 위치로 이동, 삭제, 표시, 숨기기 |
+| AI | AI 터미널 열기, 제공자 실행, 작업공간 동기화·초기화, MCP 설정 보기, AI 세션 종료 |
 | 계정 | 커밋 사용자 설정 |
 
 ## 보안 및 데이터
@@ -183,6 +265,9 @@ Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff
 - GitHub PAT는 Axis Flow 서버의 저장소 연결 절차에서 사용되며, VS Code 확장에 직접 전달되지 않습니다.
 - 실시간 편집 내용은 같은 브랜치에 접속한 사용자에게만 공유됩니다.
 - 협업 연결이 끊기면 편집을 잠가 서로 다른 내용이 충돌하는 상황을 줄입니다.
+- AI MCP 브리지는 `127.0.0.1`에만 바인딩되고 세션별 시크릿을 사용합니다.
+- AI 작업공간에는 Axis 토큰, GitHub PAT, AI API 키를 기록하지 않습니다.
+- AI 작업공간 스냅샷에서 `.env`, `.ssh`, 자격 증명 파일은 제외합니다.
 
 ## 문제 해결
 
@@ -221,6 +306,13 @@ Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff
 - `axis-share.serverUrl`이 `https://<서버 주소>/api` 형식인지 확인합니다.
 - 서버 인증서와 방화벽에서 REST 및 WebSocket 연결이 허용되는지 확인합니다.
 
+### AI CLI에서 Axis MCP 도구가 보이지 않음
+
+- AI 터미널을 Axis Share의 **AI 터미널 열기**로 열었는지 확인합니다.
+- `.axis/mcp.json`이 생성되어 있고 `AXIS_BRIDGE_FILE` 경로가 존재하는지 확인합니다.
+- 사용하는 CLI가 프로젝트 로컬 MCP 설정을 지원하지 않으면 `.axis/mcp.json`의 `axis-share` 서버 항목을 해당 CLI의 전역 MCP 설정에 등록합니다.
+- CLI를 재시작한 뒤 MCP 도구 목록에 `axis_get_context` 등이 표시되는지 확인합니다.
+
 ## 제한 사항
 
 - 한 VS Code 창은 하나의 저장소 세션을 기준으로 동작합니다.
@@ -229,6 +321,9 @@ Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff
 - VS Code의 네이티브 Source Control(SCM) 대신 Axis Share의 **Changes** 뷰를 사용합니다.
 - 원격 저장소를 사용자 PC에 직접 clone하는 방식이 아니며, 실제 작업 디렉터리는 Axis Flow 서버가 관리합니다.
 - 서버 연결이 없거나 편집 권한이 없으면 파일 생성·수정·커밋을 수행할 수 없습니다.
+- AI CLI의 모델 사용량·로그인·요금은 각 CLI 제공자의 정책을 따릅니다.
+- AI가 디스크에서 직접 수정한 파일은 자동 동기화되지만, 다른 사용자와 같은 파일을 동시에 고친 경우에는 덮어쓰지 않고 AI 뷰에 충돌 경고를 남깁니다.
+- AI commit·push는 기본적으로 제공하지 않으며, 커밋과 push는 Changes 뷰에서 사용자가 직접 수행합니다.
 
 ## 개발 및 패키징
 

@@ -7,6 +7,7 @@
 #include "CollabClient.h"
 #include "WorkerLimiter.h"
 #include "NotificationWebSocketController.h"
+#include "SecureToken.h"
 
 #include <drogon/HttpClient.h>
 #include <json/json.h>
@@ -19,11 +20,13 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <vector>
 
 using namespace api;
@@ -38,6 +41,16 @@ constexpr long long kMaxTextFileBytes = 512 * 1024;
 // 읽기 전용 열람 상한. 동시 편집은 못 해도 내용은 볼 수 있게 하는 한계다.
 // collab 의 MAX_READONLY_BYTES 와 같은 값이어야 두 경로(편집·diff)가 같은 파일에서 같은 판단을 한다.
 constexpr long long kMaxReadOnlyFileBytes = 4 * 1024 * 1024;
+
+// AI 작업공간 스냅샷 상한. 브라우저형 JSON 응답 하나로 옮기므로 파일 수·개별 크기·전체 크기를 모두 제한한다.
+// AI 작업공간 파일 하나의 상한은 실시간 편집 상한과 같게 둔다. 그래야 AI 가 스냅샷에서 받은 파일을
+// 512KB 넘게 키워 쓰다가 Yjs 문서와 어긋나는 경우를 만들지 않는다.
+constexpr long long kMaxAiWorkspaceFileBytes = kMaxTextFileBytes;
+constexpr long long kMaxAiWorkspaceTotalBytes = 24 * 1024 * 1024;
+constexpr int kMaxAiWorkspaceFiles = 5000;
+
+// MCP diff 응답 상한. 큰 diff 가 WebSocket·JSON 응답을 밀어내지 않게 한다.
+constexpr long long kMaxPatchBytes = 512 * 1024;
 
 // GitHub 연동 권한 비트. 조회는 GITHUB_VIEW(bit 22), 저장소 추가/해제는 GITHUB_REPO_MANAGE(bit 24) 로 SQL 함수가 판정하고,
 // worktree 편집(브랜치 생성·삭제, 커밋, push, 파일 조작)은 GITHUB_CHANGE(bit 23) 로 여기서 한 번 더 막는다.
@@ -1104,6 +1117,154 @@ bool isSafeRelPath(const std::string &path) {
     return true;
 }
 
+// AI 작업공간에 복사하지 않을 파일. 비밀값이 들어가기 쉬운 이름만 보수적으로 막는다.
+bool isSensitiveAiWorkspacePath(const std::string &path) {
+    const std::string lower = lowerCopy(path);
+    const std::size_t slash = lower.find_last_of('/');
+    const std::string name = (slash == std::string::npos) ? lower : lower.substr(slash + 1);
+
+    if (name == ".env" || (name.rfind(".env.", 0) == 0 && name != ".env.example")) {
+        return true;
+    }
+    if (name == ".npmrc" || name == ".pypirc" || name == ".netrc" || name == ".git-credentials" ||
+        name == "credentials.json" || name == "id_rsa" || name == "id_ed25519") {
+        return true;
+    }
+    if (lower == ".ssh" || lower.rfind(".ssh/", 0) == 0 || lower.find("/.ssh/") != std::string::npos) {
+        return true;
+    }
+    return false;
+}
+
+// 심볼릭 링크를 따라가지 않고 상한 안의 파일 바이트를 읽는다. 삭제 CAS 처럼 바이너리도 허용해야 할 때 쓴다.
+bool readFileBytesLimited(const std::string &absPath, long long maxBytes, std::string &out,
+                          std::string &reason) {
+    std::error_code ec;
+    const auto status = std::filesystem::symlink_status(absPath, ec);
+    if (ec || !std::filesystem::is_regular_file(status)) {
+        reason = "not_file";
+        return false;
+    }
+
+    const auto size = std::filesystem::file_size(absPath, ec);
+    if (ec) {
+        reason = "unreadable";
+        return false;
+    }
+    if (static_cast<long long>(size) > maxBytes) {
+        reason = "too_large";
+        return false;
+    }
+
+    std::ifstream input(absPath, std::ios::binary);
+    if (!input) {
+        reason = "unreadable";
+        return false;
+    }
+    out.assign(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+    if (!input.good() && !input.eof()) {
+        reason = "unreadable";
+        return false;
+    }
+    return true;
+}
+
+// UTF-8 로 해석할 수 있는 텍스트인가. JSON 문자열로 옮길 수 없는 파일은 스냅샷에서 제외한다.
+bool isValidUtf8(const std::string &text) {
+    std::size_t index = 0;
+    while (index < text.size()) {
+        const unsigned char lead = static_cast<unsigned char>(text[index]);
+        if (lead < 0x80) {
+            ++index;
+            continue;
+        }
+
+        std::size_t extra = 0;
+        unsigned int codePoint = 0;
+        if ((lead & 0xE0) == 0xC0) {
+            extra = 1;
+            codePoint = lead & 0x1F;
+        } else if ((lead & 0xF0) == 0xE0) {
+            extra = 2;
+            codePoint = lead & 0x0F;
+        } else if ((lead & 0xF8) == 0xF0) {
+            extra = 3;
+            codePoint = lead & 0x07;
+        } else {
+            return false;
+        }
+
+        if (index + extra >= text.size()) {
+            return false;
+        }
+        for (std::size_t offset = 1; offset <= extra; ++offset) {
+            const unsigned char next = static_cast<unsigned char>(text[index + offset]);
+            if ((next & 0xC0) != 0x80) {
+                return false;
+            }
+            codePoint = (codePoint << 6) | (next & 0x3F);
+        }
+
+        static constexpr unsigned int kMinForExtra[] = {0, 0x80, 0x800, 0x10000};
+        if (codePoint < kMinForExtra[extra] || codePoint > 0x10FFFF ||
+            (codePoint >= 0xD800 && codePoint <= 0xDFFF)) {
+            return false;
+        }
+        index += extra + 1;
+    }
+    return true;
+}
+
+// 일반 텍스트 파일만 읽는다. 심볼릭 링크·디렉터리·바이너리·상한 초과는 사유와 함께 거부한다.
+bool readTextFileLimited(const std::string &absPath, long long maxBytes, std::string &out,
+                         std::string &reason) {
+    if (!readFileBytesLimited(absPath, maxBytes, out, reason)) {
+        return false;
+    }
+    if (out.find('\0') != std::string::npos) {
+        reason = "binary";
+        return false;
+    }
+    if (!isValidUtf8(out)) {
+        reason = "encoding";
+        return false;
+    }
+    return true;
+}
+
+// 중간 경로 조각이 심볼릭 링크면 worktree 밖으로 탈출할 수 있다. 마지막 조각은 호출부가 symlink_status 로 따로 본다.
+bool hasSymlinkParent(const std::string &workDir, const std::string &relPath) {
+    std::error_code ec;
+    const std::filesystem::path root = std::filesystem::weakly_canonical(workDir, ec);
+    if (ec) {
+        return true;
+    }
+
+    std::filesystem::path current = root;
+    std::size_t start = 0;
+    while (true) {
+        const std::size_t slash = relPath.find('/', start);
+        if (slash == std::string::npos) {
+            break;   // 마지막 조각은 파일 자신이다.
+        }
+
+        current /= relPath.substr(start, slash - start);
+        const auto status = std::filesystem::symlink_status(current, ec);
+        if (ec || std::filesystem::is_symlink(status)) {
+            return true;
+        }
+        if (!std::filesystem::exists(status)) {
+            return false;   // 아직 없는 디렉터리 — create_directories 가 새로 만든다.
+        }
+        start = slash + 1;
+    }
+    return false;
+}
+
+std::string contentHash(const std::string &content) {
+    return "sha256:" + sha256Hex(content);
+}
+
 // worktree 안의 실제 경로. 상대 경로는 위에서 검증한 것만 넘긴다.
 std::string worktreeAbsPath(const std::string &workDir, const std::string &relPath) {
     return workDir + "/" + relPath;
@@ -1605,8 +1766,8 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
 
     const std::string branch = req->getParameter("branch");
     const std::string path = normalizePath(req->getParameter("path"));
-    if (path.empty()) {
-        callback(errorResponse("400", "필수 파라미터(path)가 누락되었습니다.", k400BadRequest));
+    if (path.empty() || !isSafeRelPath(path)) {
+        callback(errorResponse("400", "필수 파라미터(path)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
         return;
     }
 
@@ -1617,8 +1778,8 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
     // 비어 있거나 "head" = 브랜치 tip(= HEAD) 의 커밋된 내용(기존 동작 그대로),
     // 그 밖에는 임의 rev(<sha>, origin/<branch>, <sha>^) — diff 4·5번이 쓴다.
     const std::string refKind = trim(req->getParameter("ref"));
-    if (!refKind.empty() && refKind != "head" && refKind != "index" && !isValidRev(refKind)) {
-        callback(errorResponse("400", "알 수 없는 ref 입니다: " + refKind + " (head|index|<rev>)", k400BadRequest));
+    if (!refKind.empty() && refKind != "head" && refKind != "index" && refKind != "worktree" && !isValidRev(refKind)) {
+        callback(errorResponse("400", "알 수 없는 ref 입니다: " + refKind + " (head|index|worktree|<rev>)", k400BadRequest));
         return;
     }
 
@@ -1632,6 +1793,61 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
 
         const std::string localPath = repoRow["local_path"].asString();
         const std::string requested = branch.empty() ? repoRow["default_branch"].asString() : branch;
+
+        // worktree: 아직 커밋·스테이징되지 않은 현재 디스크 내용. AI MCP 의 최신 파일 읽기와 CAS 기준이다.
+        if (refKind == "worktree") {
+            std::string workDir;
+            HttpResponsePtr failure;
+            if (!resolveWorkDir(requester, repoRow, requested, workDir, failure)) {
+                return failure;
+            }
+            if (hasSymlinkParent(workDir, path)) {
+                return errorResponse("P0816", "심볼릭 링크를 거치는 경로는 읽을 수 없습니다: " + path,
+                                     k409Conflict);
+            }
+            flushCollabDocs(repoId, requested);
+
+            const std::string target = worktreeAbsPath(workDir, path);
+            std::error_code sizeEc;
+            const auto size = std::filesystem::file_size(target, sizeEc);
+            Json::Value data;
+            data["repo_id"] = repoId;
+            data["branch"] = requested;
+            data["path"] = path;
+            data["size"] = sizeEc ? 0 : static_cast<Json::Int64>(size);
+            data["encoding"] = "utf-8";
+            data["read_only"] = false;
+            data["content"] = "";
+            data["changed"] = true;
+            data["modified_at"] = contentHash("");
+            data["content_hash"] = "";
+
+            std::string content;
+            std::string reason;
+            if (!readTextFileLimited(target, kMaxReadOnlyFileBytes, content, reason)) {
+                data["read_only"] = true;
+                data["reason"] = reason;
+                data["content_omitted"] = true;
+                if (reason == "binary") {
+                    data["encoding"] = "binary";
+                }
+                return successResponse(singleItemArray(data),
+                                       reason == "binary" ? "바이너리 파일이라 내용을 싣지 않았습니다."
+                                                          : "파일을 읽을 수 없습니다: " + reason);
+            }
+
+            data["content"] = content;
+            data["size"] = static_cast<Json::Int64>(content.size());
+            data["eol"] = (content.find("\r\n") != std::string::npos) ? "crlf" : "lf";
+            data["content_hash"] = contentHash(content);
+            data["modified_at"] = data["content_hash"];
+            if (!since.empty() && since == data["content_hash"].asString()) {
+                data["changed"] = false;
+                data["content"] = "";
+                return successResponse(singleItemArray(data), "이미 받은 내용이 최신입니다.");
+            }
+            return successResponse(singleItemArray(data), "현재 작업 트리 파일을 조회했습니다.");
+        }
 
         // 1) 어느 버전을 읽을지 정한다.
         //    - index: 그 브랜치 worktree 의 인덱스. clone 이 아니라 worktree 에 있으므로 상태·스테이징과
@@ -1745,6 +1961,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
                     if (large.out.find('\0') == std::string::npos) {
                         data["content"] = large.out;
                         data["eol"] = (large.out.find("\r\n") != std::string::npos) ? "crlf" : "lf";
+                        data["content_hash"] = contentHash(large.out);
                         return successResponse(singleItemArray(data), "파일이 커서 동시 편집은 지원하지 않습니다. 내용은 읽기 전용으로 볼 수 있습니다.");
                     }
 
@@ -1752,6 +1969,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
                     data["reason"] = "binary";
                     data["encoding"] = "binary";
                     data["content_omitted"] = true;
+                    data["content_hash"] = contentHash(large.out);
                     return successResponse(singleItemArray(data), "바이너리 파일이라 읽기 전용으로 표시했습니다.");
                 }
             }
@@ -1772,12 +1990,421 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
             data["encoding"] = "binary";
             // 내용을 싣지 않았다 — diff의 왼쪽과 앱 미리보기가 이 표시로 판단한다.
             data["content_omitted"] = true;
+            data["content_hash"] = contentHash(content.out);
             return successResponse(singleItemArray(data), "바이너리 파일이라 읽기 전용으로 표시했습니다.");
         }
 
         data["content"] = content.out;
         data["eol"] = (content.out.find("\r\n") != std::string::npos) ? "crlf" : "lf";
+        data["content_hash"] = contentHash(content.out);
         return successResponse(singleItemArray(data), "파일을 조회했습니다.");
+    });
+}
+
+// GET /api/github/repos/workspace?repo_id=1&branch=main — AI 작업공간용 브랜치 스냅샷.
+// worktree 의 추적·untracked 텍스트 파일을 JSON 으로 한 번에 내려준다. .git 자체는 보내지 않고,
+// 확장이 로컬에서 baseline Git 을 초기화한다. 비밀값이 들어가기 쉬운 파일과 바이너리는 제외한다.
+void GithubController::getRepositoryWorkspace(const HttpRequestPtr &req,
+                                              std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requestedBranch = trim(req->getParameter("branch"));
+    const std::string requester = requesterEmail(req);
+    runOffLoop(req, std::move(callback), [requester, repoId, requestedBranch]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, requestedBranch, workDir, failure)) {
+            return failure;
+        }
+
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        // 아직 파일로 내려가지 않은 Yjs 편집도 스냅샷에 포함한다.
+        auto branchResult = GitRunner::currentBranch(workDir);
+        const std::string branch = branchResult.ok() ? trim(branchResult.out) : requestedBranch;
+        flushCollabDocs(repoId, branch);
+
+        auto listed = GitRunner::lsFiles(workDir, {"--cached", "--others", "--exclude-standard"});
+        if (!listed.ok()) {
+            return errorResponse("P0807", "작업공간 파일 목록을 읽지 못했습니다: " + trim(listed.err),
+                                 k500InternalServerError);
+        }
+
+        const std::vector<std::string> nested = nestedWorktreePaths(workDir);
+        Json::Value files(Json::arrayValue);
+        Json::Value skipped(Json::arrayValue);
+        long long totalBytes = 0;
+        int included = 0;
+        int skippedCount = 0;
+
+        auto skip = [&skipped, &skippedCount](const std::string &path, const std::string &reason) {
+            if (skippedCount >= 200) {
+                return;
+            }
+            Json::Value item;
+            item["path"] = path;
+            item["reason"] = reason;
+            skipped.append(item);
+            ++skippedCount;
+        };
+
+        for (const std::string &rawPath : splitNul(listed.out)) {
+            const std::string path = normalizePath(rawPath);
+            if (path.empty() || !isSafeRelPath(path)) {
+                continue;
+            }
+            if (path == ".axis" || path.rfind(".axis/", 0) == 0 || path.rfind(".worktrees/", 0) == 0) {
+                continue;
+            }
+
+            bool nestedPath = false;
+            for (const std::string &root : nested) {
+                if (pathCovers(root, path)) {
+                    nestedPath = true;
+                    break;
+                }
+            }
+            if (nestedPath) {
+                continue;
+            }
+
+            if (isSensitiveAiWorkspacePath(path)) {
+                skip(path, "sensitive");
+                continue;
+            }
+            if (hasSymlinkParent(workDir, path)) {
+                skip(path, "symlink");
+                continue;
+            }
+            if (included >= kMaxAiWorkspaceFiles) {
+                skip(path, "file_limit");
+                continue;
+            }
+
+            std::string content;
+            std::string reason;
+            if (!readTextFileLimited(worktreeAbsPath(workDir, path), kMaxAiWorkspaceFileBytes, content, reason)) {
+                skip(path, reason);
+                continue;
+            }
+            if (totalBytes + static_cast<long long>(content.size()) > kMaxAiWorkspaceTotalBytes) {
+                skip(path, "size_limit");
+                continue;
+            }
+
+            Json::Value file;
+            file["path"] = path;
+            file["content"] = content;
+            file["encoding"] = "utf-8";
+            file["hash"] = contentHash(content);
+            files.append(file);
+            totalBytes += static_cast<long long>(content.size());
+            ++included;
+        }
+
+        Json::Value data;
+        data["repo_id"] = repoId;
+        data["branch"] = branch;
+        auto head = GitRunner::headSha(workDir);
+        data["head_sha"] = head.ok() ? trim(head.out) : "";
+        data["file_count"] = included;
+        data["total_bytes"] = static_cast<Json::Int64>(totalBytes);
+        data["truncated"] = skippedCount > 0;
+        data["files"] = files;
+        data["skipped"] = skipped;
+        return successResponse(singleItemArray(data), "AI 작업공간 스냅샷을 만들었습니다.");
+    });
+}
+
+// PUT /api/github/repos/file — CAS 기반 파일 쓰기.
+// 기대 해시가 현재 worktree 내용과 다르면 덮어쓰지 않고 P0816 으로 충돌을 알린다.
+// 파일 쓰기 뒤에는 열려 있는 Yjs 문서도 같은 내용으로 맞춰 다른 사용자 화면에 즉시 반영한다.
+void GithubController::updateRepositoryFile(const HttpRequestPtr &req,
+                                            std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    const bool deleted = jsonPtr && jsonPtr->isMember("deleted") && (*jsonPtr)["deleted"].isBool() &&
+                         (*jsonPtr)["deleted"].asBool();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "path") ||
+        (!deleted && (!jsonPtr->isMember("content") || !(*jsonPtr)["content"].isString()))) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch, path, content 또는 deleted)가 누락되었습니다.",
+                               k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    const std::string path = normalizePath((*jsonPtr)["path"].asString());
+    const std::string content = deleted ? std::string() : (*jsonPtr)["content"].asString();
+    std::string expectedHash = (*jsonPtr).isMember("expected_hash") && (*jsonPtr)["expected_hash"].isString()
+                                   ? trim((*jsonPtr)["expected_hash"].asString())
+                                   : std::string();
+    if (expectedHash.rfind("sha256:", 0) == 0) {
+        expectedHash = expectedHash.substr(7);
+    }
+    if (branch.empty() || !isSafeRelPath(path)) {
+        callback(errorResponse("400", "경로 또는 브랜치가 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+    if (path == ".worktrees" || path.rfind(".worktrees/", 0) == 0) {
+        callback(errorResponse("400", "예약된 작업 디렉터리에는 쓸 수 없습니다.", k400BadRequest));
+        return;
+    }
+    if (isSensitiveAiWorkspacePath(path)) {
+        callback(errorResponse("400", "자격 증명이 들어가기 쉬운 파일에는 AI 가 쓸 수 없습니다.", k400BadRequest));
+        return;
+    }
+    if (!expectedHash.empty() && !isSha256Hex(expectedHash)) {
+        callback(errorResponse("400", "expected_hash 형식이 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+    if (!deleted && content.find('\0') != std::string::npos) {
+        callback(errorResponse("P0815", "NUL 바이트가 있는 바이너리 내용은 AI가 쓸 수 없습니다.",
+                               k400BadRequest));
+        return;
+    }
+    if (!deleted && static_cast<long long>(content.size()) > kMaxTextFileBytes) {
+        callback(errorResponse("P0815", "AI가 쓸 수 있는 파일 크기 상한을 넘었습니다.", k413PayloadTooLarge));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, path, content, expectedHash, deleted]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure, true)) {
+            return failure;
+        }
+        if (hasSymlinkParent(workDir, path)) {
+            return errorResponse("P0807", "심볼릭 링크를 거치는 경로에는 쓸 수 없습니다: " + path, k400BadRequest);
+        }
+
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+        flushCollabDocs(repoId, branch);
+
+        const std::string target = worktreeAbsPath(workDir, path);
+        std::error_code ec;
+        const auto status = std::filesystem::symlink_status(target, ec);
+        if (ec && ec != std::errc::no_such_file_or_directory) {
+            return errorResponse("P0807", "파일 상태를 확인하지 못했습니다: " + path, k500InternalServerError);
+        }
+        const bool exists = !ec && std::filesystem::exists(status);
+        if (exists && !std::filesystem::is_regular_file(status)) {
+            return errorResponse("P0816", "일반 파일이 아니어서 덮어쓸 수 없습니다: " + path, k409Conflict);
+        }
+
+        if (deleted) {
+            if (!exists) {
+                Json::Value data;
+                data["path"] = path;
+                data["deleted"] = true;
+                data["already_absent"] = true;
+                return successResponse(singleItemArray(data), "이미 없는 파일입니다.");
+            }
+
+            std::string current;
+            std::string reason;
+            if (!readFileBytesLimited(target, kMaxReadOnlyFileBytes, current, reason)) {
+                Json::Value data;
+                data["path"] = path;
+                data["reason"] = reason;
+                data["current_hash"] = "";
+                return errorResponse("P0816", "현재 파일을 안전하게 비교할 수 없습니다: " + path, k409Conflict, data);
+            }
+
+            const std::string currentHash = sha256Hex(current);
+            if (expectedHash.empty() || expectedHash != currentHash) {
+                Json::Value data;
+                data["path"] = path;
+                data["current_hash"] = "sha256:" + currentHash;
+                if (current.find('\0') == std::string::npos &&
+                    static_cast<long long>(current.size()) <= kMaxTextFileBytes) {
+                    data["current_content"] = current;
+                }
+                return errorResponse("P0816", "파일이 그 사이 변경되었습니다. 다시 읽고 삭제해 주세요.", k409Conflict, data);
+            }
+
+            // HEAD 에 없는 새 파일이면 intent-to-add / staged 항목도 같이 지운다. 그러지 않으면
+            // 파일은 사라졌는데 Changes 에 '추가됨' 항목만 남는다.
+            const bool trackedInHead = GitRunner::run(workDir, {"cat-file", "-e", "HEAD:" + path}).ok();
+            std::filesystem::remove(target, ec);
+            if (ec) {
+                return errorResponse("P0807", "파일을 삭제하지 못했습니다: " + path, k500InternalServerError);
+            }
+            if (!trackedInHead) {
+                auto unstaged = GitRunner::run(workDir, {"reset", "--", path});
+                if (!unstaged.ok()) {
+                    LOG_WARN << "삭제한 새 파일의 인덱스 정리 실패 (" << path << "): " << trim(unstaged.err);
+                }
+            }
+
+            dropCollabDocs(repoId, branch, {path});
+            broadcastTreeChanged(repoId, branch, "file_deleted", path);
+            broadcastStatusChanged(repoId, branch);
+
+            Json::Value data;
+            data["path"] = path;
+            data["deleted"] = true;
+            return successResponse(singleItemArray(data), "파일을 삭제했습니다.");
+        }
+
+        // expected_hash 가 있는데 파일이 사라졌다면 다른 사용자가 먼저 삭제한 것이다.
+        // 새 파일로 되살리지 말고 충돌을 돌려 AI 가 최신 상태를 다시 읽게 한다.
+        if (!exists && !expectedHash.empty()) {
+            Json::Value data;
+            data["path"] = path;
+            data["current_hash"] = "";
+            data["already_absent"] = true;
+            return errorResponse("P0816", "기대한 파일이 이미 삭제되었습니다. 최신 상태를 다시 확인해 주세요.",
+                                 k409Conflict, data);
+        }
+
+        std::string current;
+        std::string reason;
+        if (exists && !readTextFileLimited(target, kMaxReadOnlyFileBytes, current, reason)) {
+            Json::Value data;
+            data["path"] = path;
+            data["reason"] = reason;
+            data["current_hash"] = "";
+            return errorResponse("P0816", "현재 파일을 안전하게 비교할 수 없습니다: " + path, k409Conflict, data);
+        }
+
+        const std::string currentHash = sha256Hex(current);
+        if (exists && expectedHash.empty()) {
+            Json::Value data;
+            data["path"] = path;
+            data["current_hash"] = "sha256:" + currentHash;
+            data["current_content"] = current;
+            return errorResponse("P0816", "기존 파일을 덮어쓰려면 expected_hash 가 필요합니다.", k409Conflict, data);
+        }
+        if (!expectedHash.empty() && expectedHash != currentHash) {
+            Json::Value data;
+            data["path"] = path;
+            data["current_hash"] = "sha256:" + currentHash;
+            data["current_content"] = current;
+            return errorResponse("P0816", "파일이 그 사이 변경되었습니다. 다시 읽고 수정해 주세요.", k409Conflict, data);
+        }
+
+        const std::string parentReason = ensureParentDir(target);
+        if (!parentReason.empty()) {
+            return errorResponse("P0807", "상위 디렉터리를 만들지 못했습니다: " + parentReason,
+                                 k500InternalServerError);
+        }
+
+        std::string suffix;
+        generateSecureToken(suffix);
+        const std::string temp = target + ".axis-tmp-" + suffix;
+        {
+            std::ofstream output(temp, std::ios::binary | std::ios::trunc);
+            if (!output) {
+                return errorResponse("P0807", "임시 파일을 만들지 못했습니다: " + path, k500InternalServerError);
+            }
+            output.write(content.data(), static_cast<std::streamsize>(content.size()));
+            if (!output) {
+                std::filesystem::remove(temp, ec);
+                return errorResponse("P0807", "파일 내용을 쓰지 못했습니다: " + path, k500InternalServerError);
+            }
+        }
+
+        std::filesystem::rename(temp, target, ec);
+        if (ec) {
+            std::filesystem::remove(temp, ec);
+            return errorResponse("P0807", "파일을 교체하지 못했습니다: " + path, k500InternalServerError);
+        }
+
+        if (!exists) {
+            auto intent = GitRunner::run(workDir, {"add", "-N", "--", path});
+            if (!intent.ok()) {
+                LOG_WARN << "AI 파일 intent-to-add 실패 (" << path << "): " << trim(intent.err);
+            }
+        }
+
+        Json::Value resetFiles(Json::arrayValue);
+        Json::Value resetFile;
+        resetFile["path"] = path;
+        // Yjs 텍스트는 LF 고정이다. CRLF 파일을 그대로 넣으면 다음 flush 가 줄을 중복시킨다.
+        resetFile["text"] = toLf(content);
+        resetFiles.append(resetFile);
+        resetCollabDocs(repoId, branch, resetFiles);
+
+        if (!exists) {
+            broadcastTreeChanged(repoId, branch, "file_created", path);
+        }
+        broadcastStatusChanged(repoId, branch);
+
+        Json::Value data;
+        data["path"] = path;
+        data["content_hash"] = contentHash(content);
+        data["size"] = static_cast<Json::Int64>(content.size());
+        data["created"] = !exists;
+        return successResponse(singleItemArray(data), exists ? "파일을 안전하게 갱신했습니다." : "파일을 만들었습니다.");
+    });
+}
+
+// GET /api/github/repos/patch?repo_id=1&branch=main&mode=working|staged — MCP diff 도구용 통합 diff.
+void GithubController::getRepositoryPatch(const HttpRequestPtr &req,
+                                          std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 누락되었거나 올바르지 않습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string branch = trim(req->getParameter("branch"));
+    const std::string mode = trim(req->getParameter("mode")).empty() ? "working" : trim(req->getParameter("mode"));
+    const std::string path = normalizePath(req->getParameter("path"));
+    if (mode != "working" && mode != "staged") {
+        callback(errorResponse("400", "mode 는 working 또는 staged 여야 합니다.", k400BadRequest));
+        return;
+    }
+    if (!path.empty() && !isSafeRelPath(path)) {
+        callback(errorResponse("400", "경로가 올바르지 않습니다: " + path, k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runOffLoop(req, std::move(callback), [requester, repoId, branch, mode, path]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, branch, workDir, failure)) {
+            return failure;
+        }
+
+        if (mode == "working") {
+            auto current = GitRunner::currentBranch(workDir);
+            flushCollabDocs(repoId, current.ok() ? trim(current.out) : branch);
+        }
+
+        std::vector<std::string> args = {"diff", "--no-ext-diff", "--no-color", "--unified=3"};
+        if (mode == "staged") {
+            args.push_back("--cached");
+        }
+        if (!path.empty()) {
+            args.push_back("--");
+            args.push_back(path);
+        }
+
+        auto result = GitRunner::run(workDir, args);
+        if (!result.ok()) {
+            return errorResponse("P0807", "diff 를 만들지 못했습니다: " + trim(result.err), k500InternalServerError);
+        }
+
+        bool truncated = false;
+        std::string patch = result.out;
+        if (static_cast<long long>(patch.size()) > kMaxPatchBytes) {
+            patch.resize(static_cast<std::size_t>(kMaxPatchBytes));
+            truncated = true;
+        }
+
+        Json::Value data;
+        data["mode"] = mode;
+        data["path"] = path;
+        data["patch"] = patch;
+        data["truncated"] = truncated;
+        return successResponse(singleItemArray(data), "diff 를 만들었습니다.");
     });
 }
 

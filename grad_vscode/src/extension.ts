@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 
 import { ApiError } from './api';
+import { AiManager } from './ai/aiManager';
+import { createAiView } from './ai/aiView';
+import { registerAiCommands } from './ai/commands';
 import { showBranchPicker } from './repo/branchPicker';
 import { createChangesView } from './repo/changesProvider';
 import {
@@ -107,6 +110,9 @@ const COMMANDS: readonly string[] = [
     'axis-share.openRepoGraph'
 ];
 
+/** AI 커맨드는 registerAiCommands 가 등록한다. 여기서는 deactivate 때 정리할 인스턴스만 보관한다. */
+let aiManager: AiManager | undefined;
+
 /**
  * 커맨드를 자리표시자로 등록한다.
  * 매니페스트에 선언만 하고 등록하지 않으면 팔레트/메뉴에서 "command not found" 가 난다.
@@ -184,7 +190,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     //    이 창이 앱의 핸드오프 URI 를 받기 전까지 트리·접속자 뷰는 비어 있다.
     await initRepoSession(context);
 
-    // 2) 뷰 등록(§15.2). Repository·Changes·Graph·Editing·Reviews 다섯 뷰 모두 전용 provider 가 그린다.
+    // 1-1) AI CLI 연동. 세션이 없어도 CLI 설치 상태를 보여 주고, 핸드오프로 세션이 서면
+    //      AI 작업공간·MCP 브리지를 그때 준비한다. AI 커맨드는 이 매니저가 소유한다.
+    const ai = new AiManager(context);
+    await ai.initialize();
+    createAiView(context, ai);
+    registerAiCommands(context, ai);
+    aiManager = ai;
+
+    // 2) 뷰 등록(§15.2). Repository·Changes·Graph·Editing·Reviews·AI 여섯 뷰 모두 전용 provider 가 그린다.
     const repoTree = createRepoTreeView(context);
     createChangesView(context);
     const graphView = createGraphView(context);
@@ -351,7 +365,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     );
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
     // 소켓을 먼저 끊어 서버가 접속자 행을 정리하게 한다(§3.3).
     // 토큰은 남기지만 다음 창이 자동으로 붙지는 않는다 — 다음 창도 앱의 핸드오프로 세션을 세운다(§12.2).
     stopControlSocket();
@@ -360,4 +374,8 @@ export function deactivate(): void {
     stopDecorationRenderer();
     stopDecorations();
     stopRepoStatus();
+
+    const manager = aiManager;
+    aiManager = undefined;
+    await manager?.dispose();
 }

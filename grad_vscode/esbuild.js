@@ -24,7 +24,7 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
-    const ctx = await esbuild.context({
+    const extensionCtx = await esbuild.context({
         entryPoints: [
             'src/extension.ts'
         ],
@@ -42,11 +42,30 @@ async function main() {
             esbuildProblemMatcherPlugin,
         ],
     });
+
+    // AI CLI 가 익스텐션 호스트 밖에서 실행하는 stdio MCP 서버. `vscode` 를 쓰지 않는다.
+    const mcpCtx = await esbuild.context({
+        entryPoints: [
+            'src/mcp/axisShareMcp.ts'
+        ],
+        bundle: true,
+        format: 'cjs',
+        minify: production,
+        sourcemap: !production,
+        sourcesContent: false,
+        platform: 'node',
+        outfile: 'dist/mcp/axis-share-mcp.js',
+        logLevel: 'silent',
+        plugins: [
+            esbuildProblemMatcherPlugin,
+        ],
+    });
+
     if (watch) {
-        await ctx.watch();
+        await Promise.all([extensionCtx.watch(), mcpCtx.watch()]);
     } else {
-        await ctx.rebuild();
-        await ctx.dispose();
+        await Promise.all([extensionCtx.rebuild(), mcpCtx.rebuild()]);
+        await Promise.all([extensionCtx.dispose(), mcpCtx.dispose()]);
     }
 }
 

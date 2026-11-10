@@ -12,7 +12,14 @@
         "Other"
     ],
     "activationEvents": [
-        "onUri"
+        "onUri",
+        "onView:axis-share-ai",
+        "onCommand:axis-share.ai.openTerminal",
+        "onCommand:axis-share.ai.launchProvider",
+        "onCommand:axis-share.ai.syncWorkspace",
+        "onCommand:axis-share.ai.resetWorkspace",
+        "onCommand:axis-share.ai.configureMcp",
+        "onCommand:axis-share.ai.stopSession"
     ],
     "main": "./dist/extension.js",
     "contributes": {
@@ -46,6 +53,10 @@
                 {
                     "id": "axis-share-reviews",
                     "name": "Reviews"
+                },
+                {
+                    "id": "axis-share-ai",
+                    "name": "AI"
                 }
             ]
         },
@@ -172,6 +183,36 @@
                 "command": "axis-share.openRepoGraph",
                 "title": "Axis Share: 저장소 전체 그래프 보기",
                 "icon": "$(git-merge)"
+            },
+            {
+                "command": "axis-share.ai.openTerminal",
+                "title": "Axis Share: AI 터미널 열기",
+                "icon": "$(terminal)"
+            },
+            {
+                "command": "axis-share.ai.launchProvider",
+                "title": "Axis Share: AI CLI 실행",
+                "icon": "$(play)"
+            },
+            {
+                "command": "axis-share.ai.syncWorkspace",
+                "title": "Axis Share: AI 작업공간 동기화",
+                "icon": "$(sync)"
+            },
+            {
+                "command": "axis-share.ai.resetWorkspace",
+                "title": "Axis Share: AI 작업공간 초기화",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "axis-share.ai.configureMcp",
+                "title": "Axis Share: AI MCP 설정 생성",
+                "icon": "$(settings-gear)"
+            },
+            {
+                "command": "axis-share.ai.stopSession",
+                "title": "Axis Share: AI 세션 종료",
+                "icon": "$(debug-stop)"
             }
         ],
         "menus": {
@@ -250,6 +291,26 @@
                     "command": "axis-share.hideDecorations",
                     "when": "view == axis-share-reviews && !axis-share:decorationsVisible",
                     "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.ai.openTerminal",
+                    "when": "view == axis-share-ai",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "axis-share.ai.syncWorkspace",
+                    "when": "view == axis-share-ai",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "axis-share.ai.configureMcp",
+                    "when": "view == axis-share-ai",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "axis-share.ai.stopSession",
+                    "when": "view == axis-share-ai",
+                    "group": "navigation@4"
                 }
             ],
             "view/item/context": [
@@ -450,6 +511,46 @@
                     "type": "string",
                     "default": "",
                     "description": "커밋에 기록할 작성자 이메일. 비어 있으면 커밋 입력창이 숨겨진다."
+                },
+                "axis-share.ai.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "AI CLI 연동과 AI 작업공간 기능을 사용한다."
+                },
+                "axis-share.ai.providers.codex.path": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Codex CLI 실행 파일의 절대 경로. 비어 있으면 PATH 에서 찾는다."
+                },
+                "axis-share.ai.providers.claude.path": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Claude Code CLI 실행 파일의 절대 경로. 비어 있으면 PATH 에서 찾는다."
+                },
+                "axis-share.ai.providers.antigravity.path": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Antigravity CLI(agy) 실행 파일의 절대 경로. 비어 있으면 PATH 에서 찾는다."
+                },
+                "axis-share.ai.autoSync": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "AI 작업공간을 열 때 서버 스냅샷과 자동으로 맞춘다. AI 가 수정한 파일은 덮어쓰지 않는다."
+                },
+                "axis-share.ai.allowWrite": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "MCP 를 통한 CAS 기반 파일 쓰기·삭제·스테이징을 허용한다."
+                },
+                "axis-share.ai.allowCommit": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "AI 도구의 커밋을 허용한다. 현재 1차 구현에서는 사용하지 않는다."
+                },
+                "axis-share.ai.allowPush": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "AI 도구의 원격 push 를 허용한다. 현재 1차 구현에서는 사용하지 않는다."
                 }
             }
         },

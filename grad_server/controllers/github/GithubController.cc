@@ -11,11 +11,14 @@
 
 #include <drogon/HttpClient.h>
 #include <json/json.h>
+#include <zlib.h>
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -1411,6 +1414,235 @@ std::vector<std::string> nestedWorktreePaths(const std::string &workDir) {
     return result;
 }
 
+// AI 작업공간(manifest/archive)이 공유하는 파일 수집 규칙과 결과.
+struct AiWorkspaceEntry {
+    std::string path;
+    std::string absPath;
+    long long size = 0;
+    std::string version;
+};
+
+struct AiWorkspaceCollection {
+    std::vector<AiWorkspaceEntry> files;
+    Json::Value skipped = Json::Value(Json::arrayValue);
+    long long totalBytes = 0;
+    int skippedCount = 0;
+    bool complete = true;
+};
+
+// worktree 에서 AI 가 읽을 수 있는 파일 목록을 모은다. manifest 와 archive 가 같은 제한을 쓰도록 한 곳에 둔다.
+bool collectAiWorkspaceFiles(const std::string &workDir, AiWorkspaceCollection &out, std::string &error) {
+    auto listed = GitRunner::lsFiles(workDir, {"--cached", "--others", "--exclude-standard"});
+    if (!listed.ok()) {
+        error = trim(listed.err);
+        return false;
+    }
+
+    const std::vector<std::string> nested = nestedWorktreePaths(workDir);
+    auto skip = [&out](const std::string &path, const std::string &reason) {
+        if (out.skippedCount >= 200) {
+            out.complete = false;
+            return;
+        }
+        Json::Value item;
+        item["path"] = path;
+        item["reason"] = reason;
+        out.skipped.append(item);
+        ++out.skippedCount;
+    };
+
+    for (const std::string &rawPath : splitNul(listed.out)) {
+        const std::string path = normalizePath(rawPath);
+        if (path.empty() || !isSafeRelPath(path)) {
+            continue;
+        }
+        if (path == ".axis" || path.rfind(".axis/", 0) == 0 || path.rfind(".worktrees/", 0) == 0) {
+            continue;
+        }
+
+        bool nestedPath = false;
+        for (const std::string &root : nested) {
+            if (pathCovers(root, path)) {
+                nestedPath = true;
+                break;
+            }
+        }
+        if (nestedPath) {
+            continue;
+        }
+
+        if (isSensitiveAiWorkspacePath(path)) {
+            skip(path, "sensitive");
+            continue;
+        }
+        if (hasSymlinkParent(workDir, path)) {
+            skip(path, "symlink");
+            continue;
+        }
+        if (static_cast<int>(out.files.size()) >= kMaxAiWorkspaceFiles) {
+            skip(path, "file_limit");
+            out.complete = false;
+            continue;
+        }
+
+        const std::string target = worktreeAbsPath(workDir, path);
+        std::error_code ec;
+        const auto linkStatus = std::filesystem::symlink_status(target, ec);
+        if (ec || !std::filesystem::is_regular_file(linkStatus)) {
+            skip(path, "not_file");
+            continue;
+        }
+        const auto size = std::filesystem::file_size(target, ec);
+        if (ec) {
+            skip(path, "unreadable");
+            continue;
+        }
+        const long long fileBytes = static_cast<long long>(size);
+        if (fileBytes > kMaxAiWorkspaceFileBytes) {
+            skip(path, "too_large");
+            continue;
+        }
+        if (out.totalBytes + fileBytes > kMaxAiWorkspaceTotalBytes) {
+            skip(path, "size_limit");
+            out.complete = false;
+            continue;
+        }
+
+        const std::string version = aiWorkspaceVersion(target);
+        if (version.empty()) {
+            skip(path, "unreadable");
+            continue;
+        }
+
+        out.files.push_back(AiWorkspaceEntry{path, target, fileBytes, version});
+        out.totalBytes += fileBytes;
+    }
+    return true;
+}
+
+// USTAR 헤더의 8진수 필드. width 안에 (width-1) 자리 숫자와 NUL 을 채운다.
+void writeTarOctal(char *field, std::size_t width, unsigned long long value) {
+    std::snprintf(field, width, "%0*llo", static_cast<int>(width - 1), value);
+}
+
+// USTAR name(100) + prefix(155) 로 경로를 나눈다. 둘 다 넘으면 아카이브에서 제외한다.
+bool splitUstarPath(const std::string &path, std::string &name, std::string &prefix) {
+    if (path.size() <= 100) {
+        name = path;
+        prefix.clear();
+        return true;
+    }
+    if (path.size() > 255) {
+        return false;
+    }
+
+    const std::size_t start = path.size() - 100;
+    for (std::size_t pos = start; pos < path.size() && pos <= 155; ++pos) {
+        if (pos == 0 || path[pos] != '/') {
+            continue;
+        }
+        const std::size_t nameLength = path.size() - pos - 1;
+        if (nameLength == 0 || nameLength > 100) {
+            continue;
+        }
+        prefix = path.substr(0, pos);
+        name = path.substr(pos + 1);
+        return true;
+    }
+    return false;
+}
+
+void appendTarHeader(std::string &tar, const std::string &name, const std::string &prefix,
+                     long long size, std::time_t mtime) {
+    char header[512] = {0};
+    std::memcpy(header, name.data(), name.size());
+    std::memcpy(header + 100, "0000644", 7);
+    std::memcpy(header + 108, "0000000", 7);
+    std::memcpy(header + 116, "0000000", 7);
+    writeTarOctal(header + 124, 12, static_cast<unsigned long long>(size));
+    writeTarOctal(header + 136, 12, static_cast<unsigned long long>(mtime));
+    std::memset(header + 148, ' ', 8);
+    header[156] = '0';
+    std::memcpy(header + 257, "ustar", 5);
+    header[262] = '\0';
+    std::memcpy(header + 263, "00", 2);
+    std::memcpy(header + 265, "root", 4);
+    std::memcpy(header + 297, "root", 4);
+    if (!prefix.empty()) {
+        std::memcpy(header + 345, prefix.data(), prefix.size());
+    }
+
+    unsigned long long checksum = 0;
+    for (std::size_t i = 0; i < sizeof(header); ++i) {
+        checksum += static_cast<unsigned char>(header[i]);
+    }
+    std::snprintf(header + 148, 8, "%06llo", checksum);
+    tar.append(header, sizeof(header));
+}
+
+bool gzipCompress(const std::string &input, std::string &out, std::string &error) {
+    z_stream stream{};
+    if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        error = "zlib deflateInit2 failed";
+        return false;
+    }
+
+    stream.next_in = reinterpret_cast<Bytef *>(const_cast<char *>(input.data()));
+    stream.avail_in = static_cast<uInt>(input.size());
+    std::vector<char> buffer(64 * 1024);
+    int result = Z_OK;
+    while (result != Z_STREAM_END) {
+        stream.next_out = reinterpret_cast<Bytef *>(buffer.data());
+        stream.avail_out = static_cast<uInt>(buffer.size());
+        result = deflate(&stream, Z_FINISH);
+        if (result != Z_OK && result != Z_STREAM_END) {
+            deflateEnd(&stream);
+            error = "zlib deflate failed";
+            return false;
+        }
+        out.append(buffer.data(), buffer.size() - stream.avail_out);
+    }
+
+    deflateEnd(&stream);
+    return true;
+}
+
+// 현재 worktree 의 AI 작업공간 대상 텍스트 파일을 USTAR tar.gz 하나로 묶는다.
+// git archive 는 HEAD 기준이라 작업 중인 수정·untracked 파일이 빠지므로 쓰지 않는다.
+bool buildAiWorkspaceArchive(const std::string &workDir, std::string &out, std::string &error) {
+    AiWorkspaceCollection collection;
+    if (!collectAiWorkspaceFiles(workDir, collection, error)) {
+        return false;
+    }
+
+    std::string tar;
+    tar.reserve(static_cast<std::size_t>(collection.totalBytes) + collection.files.size() * 1024 + 1024);
+    const std::time_t now = std::time(nullptr);
+    for (const AiWorkspaceEntry &entry : collection.files) {
+        std::string name;
+        std::string prefix;
+        if (!splitUstarPath(entry.path, name, prefix)) {
+            continue;
+        }
+
+        std::string content;
+        std::string reason;
+        if (!readTextFileLimited(entry.absPath, kMaxAiWorkspaceFileBytes, content, reason)) {
+            continue;   // 바이너리·인코딩·크기 초과 파일은 개별 조회와 같은 규칙으로 제외한다.
+        }
+
+        appendTarHeader(tar, name, prefix, static_cast<long long>(content.size()), now);
+        tar.append(content);
+        const std::size_t remainder = content.size() % 512;
+        if (remainder != 0) {
+            tar.append(512 - remainder, '\0');
+        }
+    }
+
+    tar.append(1024, '\0');
+    return gzipCompress(tar, out, error);
+}
+
 // ls-tree(커밋된 트리)에는 없고 이 브랜치의 작업 디렉터리에만 있는 항목 이름을 한 단계 분량으로 모은다.
 //
 // 브랜치마다 작업 디렉터리가 따로 있으므로, 새로 만든 파일은 그것을 만든 브랜치에만 보인다.
@@ -2190,102 +2422,20 @@ void GithubController::getRepositoryWorkspaceManifest(const HttpRequestPtr &req,
         const std::string branch = branchResult.ok() ? trim(branchResult.out) : requestedBranch;
         flushCollabDocs(repoId, branch);
 
-        auto listed = GitRunner::lsFiles(workDir, {"--cached", "--others", "--exclude-standard"});
-        if (!listed.ok()) {
-            return errorResponse("P0807", "작업공간 파일 목록을 읽지 못했습니다: " + trim(listed.err),
+        AiWorkspaceCollection collection;
+        std::string collectError;
+        if (!collectAiWorkspaceFiles(workDir, collection, collectError)) {
+            return errorResponse("P0807", "작업공간 파일 목록을 읽지 못했습니다: " + collectError,
                                  k500InternalServerError);
         }
 
-        const std::vector<std::string> nested = nestedWorktreePaths(workDir);
         Json::Value files(Json::arrayValue);
-        Json::Value skipped(Json::arrayValue);
-        long long totalBytes = 0;
-        int included = 0;
-        int skippedCount = 0;
-        bool complete = true;
-
-        auto skip = [&skipped, &skippedCount, &complete](const std::string &path, const std::string &reason) {
-            if (skippedCount >= 200) {
-                complete = false;
-                return;
-            }
-            Json::Value item;
-            item["path"] = path;
-            item["reason"] = reason;
-            skipped.append(item);
-            ++skippedCount;
-        };
-
-        for (const std::string &rawPath : splitNul(listed.out)) {
-            const std::string path = normalizePath(rawPath);
-            if (path.empty() || !isSafeRelPath(path)) {
-                continue;
-            }
-            if (path == ".axis" || path.rfind(".axis/", 0) == 0 || path.rfind(".worktrees/", 0) == 0) {
-                continue;
-            }
-
-            bool nestedPath = false;
-            for (const std::string &root : nested) {
-                if (pathCovers(root, path)) {
-                    nestedPath = true;
-                    break;
-                }
-            }
-            if (nestedPath) {
-                continue;
-            }
-
-            if (isSensitiveAiWorkspacePath(path)) {
-                skip(path, "sensitive");
-                continue;
-            }
-            if (hasSymlinkParent(workDir, path)) {
-                skip(path, "symlink");
-                continue;
-            }
-            if (included >= kMaxAiWorkspaceFiles) {
-                skip(path, "file_limit");
-                complete = false;
-                continue;
-            }
-
-            const std::string target = worktreeAbsPath(workDir, path);
-            std::error_code ec;
-            const auto linkStatus = std::filesystem::symlink_status(target, ec);
-            if (ec || !std::filesystem::is_regular_file(linkStatus)) {
-                skip(path, "not_file");
-                continue;
-            }
-            const auto size = std::filesystem::file_size(target, ec);
-            if (ec) {
-                skip(path, "unreadable");
-                continue;
-            }
-            const long long fileBytes = static_cast<long long>(size);
-            if (fileBytes > kMaxAiWorkspaceFileBytes) {
-                skip(path, "too_large");
-                continue;
-            }
-            if (totalBytes + fileBytes > kMaxAiWorkspaceTotalBytes) {
-                skip(path, "size_limit");
-                complete = false;
-                continue;
-            }
-
-            const std::string version = aiWorkspaceVersion(target);
-            if (version.empty()) {
-                skip(path, "unreadable");
-                continue;
-            }
-
+        for (const AiWorkspaceEntry &entry : collection.files) {
             Json::Value file;
-            file["path"] = path;
-            file["size"] = static_cast<Json::Int64>(fileBytes);
-            file["version"] = version;
+            file["path"] = entry.path;
+            file["size"] = static_cast<Json::Int64>(entry.size);
+            file["version"] = entry.version;
             files.append(file);
-            totalBytes += fileBytes;
-            ++included;
         }
 
         Json::Value data;
@@ -2293,13 +2443,56 @@ void GithubController::getRepositoryWorkspaceManifest(const HttpRequestPtr &req,
         data["branch"] = branch;
         auto head = GitRunner::headSha(workDir);
         data["head_sha"] = head.ok() ? trim(head.out) : "";
-        data["file_count"] = included;
-        data["total_bytes"] = static_cast<Json::Int64>(totalBytes);
-        data["truncated"] = skippedCount > 0;
-        data["complete"] = complete;
+        data["file_count"] = static_cast<int>(collection.files.size());
+        data["total_bytes"] = static_cast<Json::Int64>(collection.totalBytes);
+        data["truncated"] = collection.skippedCount > 0;
+        data["complete"] = collection.complete;
         data["files"] = files;
-        data["skipped"] = skipped;
+        data["skipped"] = collection.skipped;
         return successResponse(singleItemArray(data), "AI 작업공간 manifest 를 만들었습니다.");
+    });
+}
+
+// GET /api/github/repos/workspace/archive?repo_id=1&branch=main
+// AI 작업공간 최초 동기화용 tar.gz. 파일별 API 왕복을 없애 큰 저장소의 첫 다운로드 시간을 줄인다.
+// 이후 증분 동기화는 기존 manifest + 파일별 조회를 그대로 쓴다.
+void GithubController::getRepositoryWorkspaceArchive(const HttpRequestPtr &req,
+                                                     std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 없거나 잘못되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requestedBranch = trim(req->getParameter("branch"));
+    const std::string requester = requesterEmail(req);
+    runOffLoop(req, std::move(callback), [requester, repoId, requestedBranch]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, requestedBranch, workDir, failure)) {
+            return failure;
+        }
+
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        auto branchResult = GitRunner::currentBranch(workDir);
+        const std::string branch = branchResult.ok() ? trim(branchResult.out) : requestedBranch;
+        flushCollabDocs(repoId, branch);
+
+        std::string archive;
+        std::string error;
+        if (!buildAiWorkspaceArchive(workDir, archive, error)) {
+            return errorResponse("P0807", "AI 작업공간 압축을 만들지 못했습니다: " + error,
+                                 k500InternalServerError);
+        }
+
+        auto resp = HttpResponse::newHttpResponse();
+        resp->setStatusCode(k200OK);
+        resp->setContentTypeString("application/gzip");
+        resp->addHeader("Content-Disposition", "attachment; filename=axis-workspace.tar.gz");
+        resp->addHeader("Cache-Control", "no-store");
+        resp->setBody(std::move(archive));
+        return resp;
     });
 }
 

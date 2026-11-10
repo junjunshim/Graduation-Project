@@ -31,7 +31,8 @@ add_executable(${PROJECT_NAME} main.cc)
 find_package(Drogon CONFIG REQUIRED)
 find_package(PostgreSQL REQUIRED)
 find_package(OpenSSL REQUIRED)
-target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon ${PostgreSQL_LIBRARIES} OpenSSL::Crypto)
+find_package(ZLIB REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE Drogon::Drogon ${PostgreSQL_LIBRARIES} OpenSSL::Crypto ZLIB::ZLIB)
 target_include_directories(${PROJECT_NAME} PRIVATE ${PostgreSQL_INCLUDE_DIRS})
 
 # ##############################################################################

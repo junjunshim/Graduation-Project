@@ -149,3 +149,55 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 
     return envelope?.data as T;
 }
+
+/**
+ * JSON 봉투가 아닌 바이너리 응답(예: AI 작업공간 tar.gz)을 그대로 받는다.
+ * 실패 응답은 서버 공통 규격(JSON)일 수 있으므로 본문을 읽어 ApiError 로 변환한다.
+ */
+export async function apiRequestBinary(
+    path: string,
+    options: { timeoutMs?: number; signal?: AbortSignal } = {}
+): Promise<Uint8Array> {
+    const url = `${getServerBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+    const headers: Record<string, string> = { Accept: 'application/gzip' };
+    const token = await accessTokenProvider();
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const abortByCaller = () => controller.abort();
+    options.signal?.addEventListener('abort', abortByCaller);
+
+    let response: Response;
+    try {
+        response = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+    } catch (error) {
+        throw new ApiError(
+            controller.signal.aborted
+                ? '서버 응답이 없습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.'
+                : `서버에 연결하지 못했습니다. ${error instanceof Error ? error.message : String(error)}`
+        );
+    } finally {
+        clearTimeout(timer);
+        options.signal?.removeEventListener('abort', abortByCaller);
+    }
+
+    if (!response.ok) {
+        let payload: unknown;
+        try {
+            payload = await response.json();
+        } catch {
+            payload = undefined;
+        }
+        const failure = readFailure(payload);
+        throw new ApiError(failure?.message ?? `서버 요청에 실패했습니다 (HTTP ${response.status}).`, {
+            code: failure?.code,
+            status: response.status,
+            data: failure?.data
+        });
+    }
+
+    return new Uint8Array(await response.arrayBuffer());
+}

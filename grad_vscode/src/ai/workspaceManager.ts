@@ -3,10 +3,11 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { TextDecoder } from 'node:util';
+import { gunzipSync } from 'node:zlib';
 
 import * as vscode from 'vscode';
 
-import { ApiError, apiRequest } from '../api';
+import { ApiError, apiRequest, apiRequestBinary } from '../api';
 import { getCurrentBranch, getSession } from '../repo/repoSession';
 import { branchSlug } from '../repo/repoTreeProvider';
 import { buildContextMarkdown } from './contextBuilder';
@@ -55,14 +56,66 @@ const MAX_LOCAL_FILE_BYTES = 4 * 1024 * 1024;
 // 서버의 AI 쓰기 상한과 같다. 이보다 큰 파일은 자동 동기화 대신 사용자에게 경고한다.
 const MAX_SYNC_FILE_BYTES = 512 * 1024;
 
-// 최초 동기화는 파일별 요청을 병렬로 내린다. 서버가 24MB JSON 하나를 만들지 않도록
-// manifest 로 바뀐 파일만 골라 받고, 동시에 6개까지만 읽어 메모리 사용을 제한한다.
+// 최초·대량 동기화는 tar.gz 한 번으로 받고, 이후 증분은 manifest 로 바뀐 파일만 골라
+// 6개씩 병렬로 내려받아 메모리 사용을 제한한다.
 const MAX_DOWNLOAD_CONCURRENCY = 6;
+
+// 최초·대량 동기화는 tar.gz 한 번으로 받는다. 이후 증분은 기존 manifest 경로를 쓴다.
+const ARCHIVE_TIMEOUT_MS = 120_000;
+const ARCHIVE_BATCH_FILE_THRESHOLD = 500;
+const ARCHIVE_BATCH_BYTE_THRESHOLD = 16 * 1024 * 1024;
 
 const MANAGED_MCP_CONFIG_PATHS = ['.mcp.json', '.codex/config.toml', '.antigravity/mcp.json'] as const;
 
 function hashContent(content: string): string {
     return `sha256:${createHash('sha256').update(content, 'utf8').digest('hex')}`;
+}
+
+function readTarString(buffer: Buffer, offset: number, length: number): string {
+    const field = buffer.subarray(offset, offset + length);
+    const end = field.indexOf(0);
+    return (end === -1 ? field : field.subarray(0, end)).toString('utf8');
+}
+
+/** USTAR tar.gz 를 path → UTF-8 내용으로 푼다. 잘못된 헤더·비UTF-8 항목은 건너뛴다. */
+function parseWorkspaceArchive(bytes: Uint8Array): Map<string, string> {
+    const tar = gunzipSync(Buffer.from(bytes), { maxOutputLength: 64 * 1024 * 1024 });
+    const files = new Map<string, string>();
+    const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+    let offset = 0;
+
+    while (offset + 512 <= tar.length) {
+        const header = tar.subarray(offset, offset + 512);
+        if (header.every((value) => value === 0)) {
+            break;
+        }
+
+        const name = readTarString(header, 0, 100);
+        const prefix = readTarString(header, 345, 155);
+        const sizeText = readTarString(header, 124, 12).trim();
+        const size = sizeText.length > 0 ? Number.parseInt(sizeText, 8) : 0;
+        const type = String.fromCharCode(header[156] ?? 0x30);
+        if (!Number.isFinite(size) || size < 0) {
+            break;
+        }
+
+        const dataOffset = offset + 512;
+        if (dataOffset + size > tar.length) {
+            break;
+        }
+        if (type === '0' || type === '\0') {
+            const relPath = prefix.length > 0 ? `${prefix}/${name}` : name;
+            if (isSafeAiWorkspacePath(relPath) && !isSensitiveAiWorkspacePath(relPath)) {
+                try {
+                    files.set(relPath, decoder.decode(tar.subarray(dataOffset, dataOffset + size)));
+                } catch {
+                    // 서버는 텍스트만 넣지만, 방어적으로 비UTF-8 항목은 제외한다.
+                }
+            }
+        }
+        offset = dataOffset + Math.ceil(size / 512) * 512;
+    }
+    return files;
 }
 
 export function isSafeAiWorkspacePath(value: string): boolean {
@@ -290,7 +343,7 @@ export class AiWorkspaceManager {
 
     /**
      * 서버 manifest 와 `.axis/manifest.json` 캐시를 비교해 바뀐 파일만 내려받는다.
-     * 최초 실행에서도 24MB JSON 하나를 받지 않고 파일별 요청을 병렬로 처리한다.
+     * 최초·대량 동기화는 tar.gz 한 번을 쓰고, 이후에는 파일별 요청을 병렬로 처리한다.
      */
     private async syncFromServer(): Promise<{
         root: string;
@@ -698,32 +751,79 @@ export class AiWorkspaceManager {
             downloads.push(entry);
         }
 
-        await mapWithConcurrency(downloads, MAX_DOWNLOAD_CONCURRENCY, async (entry) => {
-            const download = await this.downloadManifestFile(repoId, branch, entry.path);
-            if (download.kind === 'error' || download.kind === 'missing') {
-                return;
-            }
-            if (download.kind === 'omitted') {
-                nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
-                return;
-            }
+        const downloadBytes = downloads.reduce((sum, entry) => sum + entry.size, 0);
+        const useArchive =
+            baseline === undefined ||
+            downloads.length >= ARCHIVE_BATCH_FILE_THRESHOLD ||
+            downloadBytes >= ARCHIVE_BATCH_BYTE_THRESHOLD;
 
-            const status = await this.mergeServerContent(
-                root,
-                working,
-                entry.path,
-                download.content,
-                download.hash,
-                baseline === undefined
-            );
-            if (status === 'written') {
-                changedPaths.push(entry.path);
-                written += 1;
-            } else if (status === 'conflict' || status === 'deleted-locally') {
-                localSkipped += 1;
+        let archived: Map<string, string> | undefined;
+        if (useArchive) {
+            try {
+                archived = await this.downloadWorkspaceArchive(repoId, branch);
+            } catch {
+                archived = undefined; // 압축 다운로드가 실패하면 기존 파일별 경로로 폴백한다.
             }
-            nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
-        });
+        }
+
+        if (archived !== undefined) {
+            const archiveFiles = archived;
+            const targets = baseline === undefined ? manifest.files : downloads;
+            await mapWithConcurrency(targets, MAX_DOWNLOAD_CONCURRENCY, async (entry) => {
+                if (!isSafeAiWorkspacePath(entry.path) || isSensitiveAiWorkspacePath(entry.path)) {
+                    return;
+                }
+                const content = archiveFiles.get(entry.path);
+                if (content === undefined) {
+                    // 바이너리·인코딩·크기 초과처럼 아카이브에서 뺀 파일은 개별 조회의 omitted 와 같게 다룬다.
+                    nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
+                    return;
+                }
+
+                const status = await this.mergeServerContent(
+                    root,
+                    working,
+                    entry.path,
+                    content,
+                    undefined,
+                    baseline === undefined
+                );
+                if (status === 'written') {
+                    changedPaths.push(entry.path);
+                    written += 1;
+                } else if (status === 'conflict' || status === 'deleted-locally') {
+                    localSkipped += 1;
+                }
+                nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
+            });
+        } else {
+            await mapWithConcurrency(downloads, MAX_DOWNLOAD_CONCURRENCY, async (entry) => {
+                const download = await this.downloadManifestFile(repoId, branch, entry.path);
+                if (download.kind === 'error' || download.kind === 'missing') {
+                    return;
+                }
+                if (download.kind === 'omitted') {
+                    nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
+                    return;
+                }
+
+                const status = await this.mergeServerContent(
+                    root,
+                    working,
+                    entry.path,
+                    download.content,
+                    download.hash,
+                    baseline === undefined
+                );
+                if (status === 'written') {
+                    changedPaths.push(entry.path);
+                    written += 1;
+                } else if (status === 'conflict' || status === 'deleted-locally') {
+                    localSkipped += 1;
+                }
+                nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
+            });
+        }
 
         let deleted = 0;
         // 목록이 잘렸으면 서버에 있지만 manifest 에 없는 파일을 지울 수 있으므로 삭제를 건너뛴다.
@@ -744,6 +844,15 @@ export class AiWorkspaceManager {
         }
 
         return { baseline: working, manifest: nextManifest, localSkipped, deleted, written, changedPaths };
+    }
+
+    /** 최초·대량 동기화용 tar.gz 한 번 다운로드. 실패하면 호출부가 파일별 경로로 폴백한다. */
+    private async downloadWorkspaceArchive(repoId: number, branch: string): Promise<Map<string, string>> {
+        const bytes = await apiRequestBinary(
+            `/github/repos/workspace/archive?repo_id=${repoId}&branch=${encodeURIComponent(branch)}`,
+            { timeoutMs: ARCHIVE_TIMEOUT_MS }
+        );
+        return parseWorkspaceArchive(bytes);
     }
 
     private async downloadManifestFile(repoId: number, branch: string, relPath: string): Promise<DownloadResult> {

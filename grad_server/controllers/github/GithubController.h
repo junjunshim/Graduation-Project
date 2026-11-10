@@ -24,6 +24,7 @@ class GithubController : public drogon::HttpController<GithubController>
     ADD_METHOD_TO(GithubController::getRepositoryFile, "/api/github/repos/file", Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryWorkspace, "/api/github/repos/workspace", Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryWorkspaceManifest, "/api/github/repos/workspace/manifest", Get, "JwtFilter");
+    ADD_METHOD_TO(GithubController::getRepositoryWorkspaceArchive, "/api/github/repos/workspace/archive", Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::updateRepositoryFile, "/api/github/repos/file", Put, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryPatch, "/api/github/repos/patch", Get, "JwtFilter");
     ADD_METHOD_TO(GithubController::getRepositoryCommits, "/api/github/repos/commits", Get, "JwtFilter");
@@ -75,6 +76,7 @@ class GithubController : public drogon::HttpController<GithubController>
     void getRepositoryFile(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryWorkspace(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryWorkspaceManifest(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void getRepositoryWorkspaceArchive(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void updateRepositoryFile(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryPatch(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getRepositoryCommits(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);

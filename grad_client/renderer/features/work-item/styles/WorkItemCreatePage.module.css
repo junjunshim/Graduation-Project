@@ -239,6 +239,33 @@
   line-height: 1.35;
 }
 
+.parentDateHint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: -0.35rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--axis-brand-border);
+  border-radius: var(--axis-radius-sm, 6px);
+  background: var(--axis-brand-primary-soft);
+  color: var(--axis-brand-primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.parentDateHintNote {
+  color: var(--axis-text-muted);
+  font-weight: 600;
+}
+
+.parentDateHintEmpty {
+  border-color: var(--axis-line-default);
+  background: var(--axis-surface-muted);
+  color: var(--axis-text-muted);
+}
+
 .textInput,
 .selectInput,
 .textareaInput {

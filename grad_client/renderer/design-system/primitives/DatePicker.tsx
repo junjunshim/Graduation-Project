@@ -6,7 +6,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
 const CALENDAR_CELL_COUNT = 42
 const WORKSPACE_TIME_ZONE = 'Asia/Seoul'
 /** 패널을 위로 띄울지 판단할 때 쓰는 대략적인 높이(px) */
-const PANEL_ESTIMATED_HEIGHT = 330
+const PANEL_ESTIMATED_HEIGHT = 360
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
 type DatePickerProps = {
@@ -19,6 +19,14 @@ type DatePickerProps = {
   disabled?: boolean
   /** 드롭다운 패널 정렬. 기본은 트리거 왼쪽 기준. */
   panelAlign?: 'start' | 'end'
+  /** 현재 값이 없을 때 달력이 처음 보여줄 기준 날짜. */
+  fallbackDate?: string
+  /** 달력에서 참고용으로 강조할 기간. 선택 가능 범위에는 영향을 주지 않는다. */
+  referenceRange?: {
+    start?: string
+    end?: string
+    label?: string
+  }
 }
 
 type CalendarCell = {
@@ -153,6 +161,8 @@ export function DatePicker({
   maxDate,
   disabled = false,
   panelAlign = 'start',
+  fallbackDate,
+  referenceRange,
 }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [visibleMonth, setVisibleMonth] = useState(() => getMonthStartTimestamp(getTodayTimestamp()))
@@ -165,8 +175,25 @@ export function DatePicker({
 
   const todayTimestamp = useMemo(() => getTodayTimestamp(), [])
   const selectedTimestamp = parseDayValue(value)
+  const fallbackTimestamp = parseDayValue(fallbackDate)
   const minTimestamp = parseDayValue(minDate)
   const maxTimestamp = parseDayValue(maxDate)
+  const referenceStartTimestamp = parseDayValue(referenceRange?.start)
+  const referenceEndTimestamp = parseDayValue(referenceRange?.end)
+  const referenceRangeStart = referenceStartTimestamp ?? referenceEndTimestamp
+  const referenceRangeEnd = referenceEndTimestamp ?? referenceStartTimestamp
+  const referenceRangeBounds =
+    referenceRangeStart === null || referenceRangeEnd === null
+      ? null
+      : {
+          start: Math.min(referenceRangeStart, referenceRangeEnd),
+          end: Math.max(referenceRangeStart, referenceRangeEnd),
+        }
+  const referenceRangeText = referenceRange
+    ? `${referenceRange.label ?? '참고 일정'}: ${
+        referenceRange.start ? formatPickerDate(referenceRange.start) : '시작일 미정'
+      } ~ ${referenceRange.end ? formatPickerDate(referenceRange.end) : '마감일 미정'}`
+    : null
 
   const cells = useMemo(() => buildCalendarCells(visibleMonth), [visibleMonth])
 
@@ -255,7 +282,8 @@ export function DatePicker({
   }
 
   function openPanel() {
-    const base = selectedTimestamp ?? todayTimestamp
+    const base = selectedTimestamp ?? fallbackTimestamp ?? todayTimestamp
+    const focusBase = selectedTimestamp ?? fallbackTimestamp ?? todayTimestamp
     const triggerRect = containerRef.current?.getBoundingClientRect()
 
     // 모달 안처럼 아래 공간이 부족하면 패널을 위로 띄운다.
@@ -265,7 +293,7 @@ export function DatePicker({
     }
 
     setVisibleMonth(getMonthStartTimestamp(base))
-    setFocusedTimestamp(selectedTimestamp ?? (isDayDisabled(todayTimestamp) ? null : todayTimestamp))
+    setFocusedTimestamp(isDayDisabled(focusBase) ? null : focusBase)
     setIsOpen(true)
   }
 
@@ -402,6 +430,14 @@ export function DatePicker({
               const isSelected = selectedTimestamp === cell.timestamp
               const isToday = todayTimestamp === cell.timestamp
               const isDisabled = isDayDisabled(cell.timestamp)
+              const isReferenceDay =
+                referenceRangeBounds !== null &&
+                cell.timestamp >= referenceRangeBounds.start &&
+                cell.timestamp <= referenceRangeBounds.end
+              const isReferenceBoundary =
+                referenceRangeBounds !== null &&
+                (cell.timestamp === referenceRangeBounds.start ||
+                  cell.timestamp === referenceRangeBounds.end)
 
               return (
                 <button
@@ -421,13 +457,17 @@ export function DatePicker({
                     cell.weekdayIndex === 0 ? styles.dayCellSunday : '',
                     cell.weekdayIndex === 6 ? styles.dayCellSaturday : '',
                     isToday ? styles.dayCellToday : '',
+                    isReferenceDay ? styles.dayCellReferenceRange : '',
+                    isReferenceBoundary ? styles.dayCellReferenceBoundary : '',
                     isSelected ? styles.dayCellSelected : '',
                     isDisabled ? styles.dayCellDisabled : '',
                   ].filter(Boolean).join(' ')}
                   disabled={isDisabled}
                   aria-pressed={isSelected}
                   aria-current={isToday ? 'date' : undefined}
-                  aria-label={`${cell.year}년 ${cell.month}월 ${cell.day}일`}
+                  aria-label={`${cell.year}년 ${cell.month}월 ${cell.day}일${
+                    isReferenceDay ? `, ${referenceRange?.label ?? '참고 일정'} 기간` : ''
+                  }`}
                   onClick={() => commitSelection(cell.timestamp)}
                 >
                   {cell.day}
@@ -435,6 +475,13 @@ export function DatePicker({
               )
             })}
           </div>
+
+          {referenceRangeBounds && referenceRangeText ? (
+            <div className={styles.referenceRangeLegend}>
+              <span className={styles.referenceRangeSwatch} aria-hidden={true} />
+              <span>{referenceRangeText}</span>
+            </div>
+          ) : null}
 
           <div className={styles.panelFooter}>
             <span className={styles.footerHint}>

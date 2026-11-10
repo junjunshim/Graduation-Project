@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useId, useRef, useState } from 'react'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getNodeVisualMetadata } from '../../workspace/queries/workspaceDirectory'
 import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../../workspace/model/labels'
-import { getWorkItemDisplayCode } from '../../workspace/model/formatters'
+import { formatWorkspaceDate, getWorkItemDisplayCode } from '../../workspace/model/formatters'
 import { WORK_ITEM_STATUS_OPTIONS } from '../../workspace/model/options'
 import type { WorkItemComposerContext } from '../../workspace/model/types'
 import { DatePicker } from '../../../design-system/primitives/DatePicker'
@@ -116,6 +116,22 @@ export function WorkItemCreateForm({
     })),
   ]
   const selectedParent = parentOptions.find((option) => option.value === form.parentWorkItemId)
+  const selectedParentItem = form.parentWorkItemId
+    ? composer.availableParentItems.find((item) => item.workItemId === form.parentWorkItemId)
+    : null
+  const parentDateReference =
+    selectedParentItem && (selectedParentItem.startDate || selectedParentItem.dueDate)
+      ? {
+          start: selectedParentItem.startDate,
+          end: selectedParentItem.dueDate,
+          label: '상위 업무 일정',
+        }
+      : undefined
+  const parentDateRangeText = parentDateReference
+    ? `${parentDateReference.start ? formatWorkspaceDate(parentDateReference.start) : '시작일 미정'} ~ ${
+        parentDateReference.end ? formatWorkspaceDate(parentDateReference.end) : '마감일 미정'
+      }`
+    : null
 
   const selectedNodeObj = composer.availableNodes.find(
     (n) => String(n.id) === form.ownerNodeId,
@@ -682,6 +698,8 @@ export function WorkItemCreateForm({
                 value={form.startDate}
                 onChange={(nextValue) => onFieldChange('startDate', nextValue)}
                 maxDate={form.dueDate || undefined}
+                fallbackDate={form.dueDate || undefined}
+                referenceRange={parentDateReference}
               />
             </div>
 
@@ -692,9 +710,24 @@ export function WorkItemCreateForm({
                 value={form.dueDate}
                 onChange={(nextValue) => onFieldChange('dueDate', nextValue)}
                 minDate={form.startDate || undefined}
+                fallbackDate={form.startDate || undefined}
+                referenceRange={parentDateReference}
               />
             </div>
           </div>
+
+          {parentDateRangeText ? (
+            <div className={styles.parentDateHint} role={'note'}>
+              <Icon name={'calendar'} size={14} />
+              <span>상위 업무 일정: {parentDateRangeText}</span>
+              <span className={styles.parentDateHintNote}>날짜 선택 달력에서 강조 표시됩니다.</span>
+            </div>
+          ) : selectedParentItem ? (
+            <div className={`${styles.parentDateHint} ${styles.parentDateHintEmpty}`} role={'note'}>
+              <Icon name={'calendar'} size={14} />
+              <span>상위 업무에 등록된 시작일·마감일이 없습니다.</span>
+            </div>
+          ) : null}
 
           {/* 가중치 및 진행률 */}
           <div className={styles.fieldGridTwo}>

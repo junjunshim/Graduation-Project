@@ -2167,7 +2167,8 @@ void GithubController::updateRepositoryFile(const HttpRequestPtr &req,
         return;
     }
     if (!deleted && static_cast<long long>(content.size()) > kMaxTextFileBytes) {
-        callback(errorResponse("P0815", "AI가 쓸 수 있는 파일 크기 상한을 넘었습니다.", k413PayloadTooLarge));
+        callback(errorResponse("P0815", "AI가 쓸 수 있는 파일 크기 상한을 넘었습니다.",
+                               k413RequestEntityTooLarge));
         return;
     }
 

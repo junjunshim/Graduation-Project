@@ -120,7 +120,7 @@ code --install-extension axis-share-<version>.vsix
 - 제공자 항목을 선택하면 설치된 CLI를 같은 작업공간에서 바로 실행합니다.
 - **작업공간 동기화**는 서버의 최신 브랜치 스냅샷을 다시 받습니다. AI가 직접 수정한 파일은 덮어쓰지 않습니다.
 - AI가 디스크에서 직접 고친 파일은 잠시 뒤 자동으로 서버에 CAS 반영되고, 다른 사용자의 Changes·Repository 뷰에도 알림이 갑니다.
-- **MCP 설정 보기**는 생성된 `.axis/mcp.json`을 엽니다.
+- **MCP 설정 보기**는 Codex·Claude에서는 `.axis/mcp.json`, Antigravity에서는 `~/.gemini/config/mcp_config.json`을 엽니다.
 - **AI 작업공간 초기화**는 커밋하지 않은 AI 작업 내용까지 삭제합니다.
 - **AI 세션 종료**는 AI 터미널과 MCP 브리지를 함께 종료합니다.
 
@@ -145,7 +145,7 @@ Axis Share는 AI 모델 API를 직접 호출하지 않습니다. 사용자가 �
 |:---|:---|:---|
 | Codex | `codex` | ChatGPT 로그인 또는 CLI 자체 인증 사용 |
 | Claude Code | `claude` | Anthropic 계정 로그인은 CLI에서 수행 |
-| Antigravity | `agy` | Antigravity CLI의 MCP 지원 여부에 따라 동작이 달라질 수 있음 |
+| Antigravity | `agy` | `~/.gemini/config/mcp_config.json`에 Axis MCP 서버를 등록 |
 
 CLI가 `PATH`에 없으면 설정에서 실행 파일의 절대 경로를 지정합니다. Axis Share는 CLI를 자동 설치하거나 대신 로그인하지 않습니다.
 
@@ -161,10 +161,11 @@ globalStorage/ai-workspace/repo-<id>/branch-<slug>/
   .axis/mcp.json        # MCP 브리지 설정
   .mcp.json             # Claude Code 프로젝트 설정
   .codex/config.toml    # Codex 프로젝트 설정
-  .antigravity/mcp.json # Antigravity 프로젝트 설정
 ```
 
 MCP 브리지는 `127.0.0.1`의 임의 포트에서만 열리고, 세션마다 새로 만든 시크릿으로 인증합니다. 브리지 접속 정보는 `globalStorage/ai-session.json`에 저장되며 세션을 종료하면 삭제됩니다.
+
+Antigravity CLI(`agy`)는 프로젝트 로컬 MCP 설정을 읽지 않습니다. 따라서 AI 터미널을 열 때 `~/.gemini/config/mcp_config.json`의 `mcpServers.axis-share` 항목을 현재 저장소·브랜치 기준으로 갱신합니다. 기존의 다른 MCP 서버 항목은 유지됩니다.
 
 ### MCP 도구
 
@@ -310,7 +311,9 @@ Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff
 
 - AI 터미널을 Axis Share의 **AI 터미널 열기**로 열었는지 확인합니다.
 - `.axis/mcp.json`이 생성되어 있고 `AXIS_BRIDGE_FILE` 경로가 존재하는지 확인합니다.
-- 사용하는 CLI가 프로젝트 로컬 MCP 설정을 지원하지 않으면 `.axis/mcp.json`의 `axis-share` 서버 항목을 해당 CLI의 전역 MCP 설정에 등록합니다.
+- Antigravity는 `agy` 실행 후 `/mcp`를 입력해 `axis-share` 서버가 보이는지 확인합니다.
+- Antigravity 설정은 `~/.gemini/config/mcp_config.json`에 생성됩니다. `/mcp`에 보이지 않으면 AI 터미널을 다시 열어 설정을 갱신하고 `agy`를 재시작합니다.
+- 다른 CLI가 프로젝트 로컬 MCP 설정을 지원하지 않으면 `.axis/mcp.json`의 `axis-share` 항목을 해당 CLI의 전역 설정에 등록합니다.
 - CLI를 재시작한 뒤 MCP 도구 목록에 `axis_get_context` 등이 표시되는지 확인합니다.
 
 ## 제한 사항

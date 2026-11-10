@@ -7,6 +7,7 @@ import { apiRequest } from '../api';
 import { getCurrentBranch, getSession, onDidChangeSession } from '../repo/repoSession';
 import { AiFileWriteBridge } from './fileWriteBridge';
 import { AiMcpBridgeServer } from './mcpBridgeServer';
+import { agyMcpConfigPath, writeMcpConfigs } from './mcpConfig';
 import { detectProviders, detectionFor } from './providerDetector';
 import { AI_PROVIDERS, getProvider } from './providerRegistry';
 import { AiTerminalManager } from './terminalManager';
@@ -144,6 +145,7 @@ export class AiManager {
         const provider = this.resolveProvider(providerId);
         const definition = getProvider(provider.id);
         const workspace = this.aiAutoSync() ? await this.prepareWorkspace() : await this.ensureWorkspace();
+        await this.refreshMcpConfigs(workspace);
         this.terminal.open(workspace.rootPath, definition, workspace.repoId, workspace.branch);
         this.activeProvider = provider.id;
         this.changeEmitter.fire();
@@ -171,6 +173,7 @@ export class AiManager {
 
         const definition = getProvider(provider.id);
         const workspace = this.aiAutoSync() ? await this.prepareWorkspace() : await this.ensureWorkspace();
+        await this.refreshMcpConfigs(workspace);
         this.terminal.open(
             workspace.rootPath,
             definition,
@@ -212,7 +215,11 @@ export class AiManager {
 
     public async configureMcp(): Promise<void> {
         const workspace = await this.ensureWorkspace();
-        const uri = vscode.Uri.file(path.join(workspace.rootPath, '.axis', 'mcp.json'));
+        await this.refreshMcpConfigs(workspace);
+        const configPath = this.activeProvider === 'antigravity'
+            ? agyMcpConfigPath()
+            : path.join(workspace.rootPath, '.axis', 'mcp.json');
+        const uri = vscode.Uri.file(configPath);
         await vscode.window.showTextDocument(uri, { preview: true });
         const config = this.bridge.getConfig();
         if (config) {
@@ -519,5 +526,27 @@ export class AiManager {
             }
         }
         return this.prepareWorkspace();
+    }
+
+    private async refreshMcpConfigs(workspace: AiWorkspaceState): Promise<void> {
+        const config = this.bridge.getConfig();
+        if (!config) {
+            return;
+        }
+
+        try {
+            const warnings = await writeMcpConfigs(workspace.rootPath, config.mcpScript, config.sessionFile);
+            if (warnings.length > 0) {
+                this.syncMessage = warnings.join(' ');
+                this.changeEmitter.fire();
+                void vscode.window.showWarningMessage(`Axis Share: ${this.syncMessage}`);
+            }
+        } catch (error) {
+            this.syncMessage = `MCP 설정을 갱신하지 못했습니다: ${
+                error instanceof Error ? error.message : String(error)
+            }`;
+            this.changeEmitter.fire();
+            void vscode.window.showWarningMessage(`Axis Share: ${this.syncMessage}`);
+        }
     }
 }

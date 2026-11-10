@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 
 export type McpServerEntry = {
@@ -6,6 +7,11 @@ export type McpServerEntry = {
     args: string[];
     env: Record<string, string>;
 };
+
+/** agy CLI가 실제로 읽는 사용자 전역 MCP 설정 파일. */
+export function agyMcpConfigPath(): string {
+    return path.join(homedir(), '.gemini', 'config', 'mcp_config.json');
+}
 
 function mcpServerEntry(mcpScript: string, sessionFile: string, workspaceRoot: string): McpServerEntry {
     return {
@@ -57,7 +63,11 @@ function replaceCodexSection(existing: string, entry: McpServerEntry): string {
 
 async function readJsonObject(file: string): Promise<Record<string, unknown> | undefined> {
     try {
-        const parsed: unknown = JSON.parse(await fs.readFile(file, 'utf8'));
+        const text = (await fs.readFile(file, 'utf8')).replace(/^\uFEFF/u, '').trim();
+        if (text.length === 0) {
+            return {};
+        }
+        const parsed: unknown = JSON.parse(text);
         return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
             ? (parsed as Record<string, unknown>)
             : undefined;
@@ -73,6 +83,13 @@ async function pathExists(file: string): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+async function writeJsonFileAtomic(file: string, value: unknown): Promise<void> {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const temp = `${file}.${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`;
+    await fs.writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await fs.rename(temp, file);
 }
 
 async function readText(file: string): Promise<string | undefined> {
@@ -110,18 +127,24 @@ export async function writeMcpConfigs(
         await fs.writeFile(claudeConfigPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
     }
 
-    const antigravityConfigPath = path.join(workspaceRoot, '.antigravity', 'mcp.json');
-    const existingAntigravity = await readJsonObject(antigravityConfigPath);
-    if (existingAntigravity === undefined && (await pathExists(antigravityConfigPath))) {
-        warnings.push('.antigravity/mcp.json 이 JSON 객체가 아니어서 덮어쓰지 않았습니다.');
-    } else {
-        const next = existingAntigravity ?? {};
-        const servers = typeof next.mcpServers === 'object' && next.mcpServers !== null && !Array.isArray(next.mcpServers)
-            ? (next.mcpServers as Record<string, unknown>)
-            : {};
-        next.mcpServers = { ...servers, 'axis-share': entry };
-        await fs.mkdir(path.dirname(antigravityConfigPath), { recursive: true });
-        await fs.writeFile(antigravityConfigPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+    // agy는 프로젝트 로컬이 아니라 사용자 전역 설정만 읽는다. 다른 MCP 서버 항목은 보존한다.
+    const agyConfigPath = agyMcpConfigPath();
+    try {
+        const existingAgy = await readJsonObject(agyConfigPath);
+        if (existingAgy === undefined && (await pathExists(agyConfigPath))) {
+            warnings.push('.gemini/config/mcp_config.json 이 JSON 객체가 아니어서 덮어쓰지 않았습니다.');
+        } else {
+            const next = existingAgy ?? {};
+            const servers = typeof next.mcpServers === 'object' && next.mcpServers !== null && !Array.isArray(next.mcpServers)
+                ? (next.mcpServers as Record<string, unknown>)
+                : {};
+            next.mcpServers = { ...servers, 'axis-share': { ...entry, disabled: false } };
+            await writeJsonFileAtomic(agyConfigPath, next);
+        }
+    } catch (error) {
+        warnings.push(
+            `agy MCP 설정을 저장하지 못했습니다: ${error instanceof Error ? error.message : String(error)}`
+        );
     }
 
     const codexConfigPath = path.join(workspaceRoot, '.codex', 'config.toml');

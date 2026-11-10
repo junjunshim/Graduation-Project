@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildChronologicalTimelineTree,
   buildTimelineMemberNameLookup,
   getTimelineRange,
   resolveTimelineMemberName,
@@ -77,5 +78,73 @@ test('timeline range expands around the earliest and latest entries in one pass'
       start: Date.UTC(2024, 6, 1),
       end: Date.UTC(2027, 7, 1),
     },
+  )
+})
+
+test('timeline tree orders sibling groups by the earliest start in their subtree', () => {
+  const items = [
+    { workItemId: 'root-late', title: 'Late root', displayId: 1 },
+    { workItemId: 'root-early', title: 'Early root', displayId: 2 },
+    {
+      workItemId: 'child-early',
+      title: 'Early child',
+      displayId: 3,
+      parentWorkItemId: 'root-late',
+    },
+  ]
+  const startById = new Map([
+    ['root-late', Date.UTC(2026, 0, 20)],
+    ['root-early', Date.UTC(2026, 0, 10)],
+    ['child-early', Date.UTC(2026, 0, 5)],
+  ])
+
+  const tree = buildChronologicalTimelineTree(items, startById)
+
+  assert.deepEqual(
+    tree.roots.map((item) => item.workItemId),
+    ['root-late', 'root-early'],
+  )
+  assert.deepEqual(
+    tree.children.get('root-late')?.map((item) => item.workItemId),
+    ['child-early'],
+  )
+})
+
+test('timeline tree keeps unscheduled siblings at the bottom and breaks ties by display id', () => {
+  const items = [
+    { workItemId: 'unscheduled', title: 'No date', displayId: 1 },
+    { workItemId: 'second', title: 'Second', displayId: 3 },
+    { workItemId: 'first', title: 'First', displayId: 2 },
+  ]
+  const startById = new Map([
+    ['second', Date.UTC(2026, 0, 5)],
+    ['first', Date.UTC(2026, 0, 5)],
+  ])
+
+  const tree = buildChronologicalTimelineTree(items, startById)
+
+  assert.deepEqual(
+    tree.orderedItems.map((item) => item.workItemId),
+    ['first', 'second', 'unscheduled'],
+  )
+})
+
+test('timeline tree keeps all items when parent references form a cycle', () => {
+  const items = [
+    { workItemId: 'a', title: 'A', parentWorkItemId: 'b' },
+    { workItemId: 'b', title: 'B', parentWorkItemId: 'a' },
+  ]
+  const startById = new Map([
+    ['a', Date.UTC(2026, 0, 5)],
+    ['b', Date.UTC(2026, 0, 6)],
+  ])
+
+  const tree = buildChronologicalTimelineTree(items, startById)
+
+  assert.deepEqual(tree.roots, [])
+  assert.equal(tree.orderedItems.length, 2)
+  assert.deepEqual(
+    tree.children.get('a')?.map((item) => item.workItemId),
+    ['b'],
   )
 })

@@ -14,6 +14,7 @@ import { getCategoryBadgeStyle, getWorkItemStatusLabel } from '../model/labels'
 import { getWorkspaceTodayTimestamp, parseWorkspaceDay } from '../model/workItemDue'
 import { getWorkItemTag, WORK_ITEM_TAGS } from '../model/workItemTags'
 import {
+  buildChronologicalTimelineTree,
   buildTimelineMemberNameLookup,
   getTimelineRange,
   resolveTimelineMemberName,
@@ -213,22 +214,8 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
   const groups = useMemo<TimelineGroup[]>(() => {
     if (viewMode === 'tree') {
       const entryMap = new Map(entries.map((entry) => [entry.item.workItemId, entry]))
-      const scheduledItems = entries.map((entry) => entry.item)
-      const itemMap = new Map(scheduledItems.map((item) => [item.workItemId, item]))
-      const children = new Map<string, WorkItemRecord[]>()
-      const roots: WorkItemRecord[] = []
-      const sortedItems = [...scheduledItems].sort((left, right) =>
-        left.workItemId.localeCompare(right.workItemId, 'en', { numeric: true }),
-      )
-      sortedItems.forEach((item) => {
-        if (item.parentWorkItemId && itemMap.has(item.parentWorkItemId) && item.parentWorkItemId !== item.workItemId) {
-          const siblings = children.get(item.parentWorkItemId) ?? []
-          siblings.push(item)
-          children.set(item.parentWorkItemId, siblings)
-        } else {
-          roots.push(item)
-        }
-      })
+      const startById = new Map(entries.map((entry) => [entry.item.workItemId, entry.start]))
+      const { roots, children, orderedItems } = buildChronologicalTimelineTree(workItems, startById)
       const treeEntries: TimelineEntry[] = []
       const visited = new Set<string>()
       const visit = (item: WorkItemRecord, depth: number, hidden = false) => {
@@ -237,7 +224,12 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
         const descendants = children.get(item.workItemId) ?? []
         if (!hidden) {
           treeEntries.push({
-            ...entryMap.get(item.workItemId)!,
+            ...(entryMap.get(item.workItemId) ?? {
+              item,
+              start: today,
+              endExclusive: today,
+              unscheduled: true,
+            }),
             depth,
             hasChildren: descendants.length > 0,
           })
@@ -257,7 +249,7 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
       }
       roots.forEach(addRoot)
       // 누락된 부모나 순환 관계가 있어도 업무가 사라지지 않도록 처리합니다.
-      sortedItems.forEach(addRoot)
+      orderedItems.forEach(addRoot)
       return treeGroups
     }
     const groupedEntries = new Map<string, { name: string; tone: TimelineTone; entries: TimelineEntry[] }>()
@@ -299,7 +291,7 @@ export function WorkspaceTimelineTab({ workItems, members, users = [] }: Workspa
         tone: groupData.tone || TIMELINE_TONES[index % TIMELINE_TONES.length],
         style: getCategoryBadgeStyle(groupData.name),
       }))
-  }, [entries, viewMode, collapsedTaskIds])
+  }, [entries, viewMode, collapsedTaskIds, workItems, today])
 
   const range = useMemo(() => getTimelineRange(entries, today), [entries, today])
   const totalDays = Math.max(1, Math.ceil((range.end - range.start) / MS_PER_DAY))

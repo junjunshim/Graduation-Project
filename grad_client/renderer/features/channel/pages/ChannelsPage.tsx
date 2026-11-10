@@ -72,6 +72,26 @@ function buildLastMessagePreview(message: ChatMessage): string {
   return message.files.length > 0 ? '[파일 첨부]' : ''
 }
 
+function upsertThreadReply(replies: ChatMessage[], incoming: ChatMessage): ChatMessage[] {
+  const existing = replies.find((reply) => reply.messageId === incoming.messageId)
+  if (!existing) {
+    return [...replies, incoming].sort((a, b) => a.messageId - b.messageId)
+  }
+
+  return replies.map((reply) =>
+    reply.messageId === incoming.messageId
+      ? {
+          ...reply,
+          ...incoming,
+          files:
+            incoming.isDeleted || incoming.files.length > 0
+              ? incoming.files
+              : reply.files,
+        }
+      : reply,
+  )
+}
+
 function applyIncomingMessageToSidebarChannel<T extends SidebarChannel>(
   channel: T,
   message: ChatMessage,
@@ -417,6 +437,8 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
               ) {
                 setActiveThreadParent(null)
                 setThreadReplies([])
+              } else if (incomingMessage.parentMessageId === currentThreadId) {
+                setThreadReplies((prev) => upsertThreadReply(prev, incomingMessage))
               } else {
                 void loadThread(currentThreadId)
               }
@@ -447,7 +469,7 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
             // 스레드 답글 이벤트인 경우 부모 메시지의 replyCount 갱신 및 활성 스레드 갱신
             const parentId = incomingMessage.parentMessageId
             if (currentThreadId === parentId) {
-              void loadThread(parentId)
+              setThreadReplies((prev) => upsertThreadReply(prev, incomingMessage))
             }
             void loadChannelMessages(eventChannelId)
           }
@@ -692,13 +714,7 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
       }
     }
 
-    setThreadReplies((prev) => {
-      const exists = prev.some((r) => r.messageId === latestReply.messageId)
-      if (exists) {
-        return prev.map((r) => (r.messageId === latestReply.messageId ? latestReply : r))
-      }
-      return [...prev, latestReply].sort((a, b) => a.messageId - b.messageId)
-    })
+    setThreadReplies((prev) => upsertThreadReply(prev, latestReply))
 
     // 부모 메시지의 답글 수 즉시 반영
     setMessages((prev) =>
@@ -750,6 +766,9 @@ export function ChannelsPage({ mode = 'page' }: ChannelsPageProps) {
   }
 
   function handleOpenThread(message: ChatMessage) {
+    if (activeThreadParentIdRef.current !== message.messageId) {
+      setThreadReplies([])
+    }
     setActiveThreadParent(message)
     void loadThread(message.messageId)
   }

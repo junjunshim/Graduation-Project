@@ -146,7 +146,7 @@ export function ChannelThreadPanel({
         </div>
 
         {/* 답글 목록 */}
-        {isLoading ? (
+        {isLoading && replies.length === 0 ? (
           <p className={styles.stateText}>스레드 답글을 불러오는 중입니다...</p>
         ) : replies.length === 0 ? (
           <p className={styles.stateText}>아직 등록된 답글이 없습니다. 첫 답글을 남겨보세요.</p>

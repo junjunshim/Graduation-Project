@@ -4,7 +4,7 @@ import { ensureHolidayYears, getHolidayNames } from '../renderer/features/worksp
 import { getSchedulesForCalendarDate, occursOnCalendarDate } from '../renderer/features/workspace/model/recurringCalendar.js'
 import { getNextOccurrenceInfo } from '../renderer/features/workspace/model/recurringSchedule.js'
 import type { RecurringRuleRecord } from '../renderer/features/workspace/model/recurringRuleTypes.js'
-import { optionalRecurringNumber } from '../renderer/features/workspace/model/recurringRuleValues.js'
+import { getActiveRecurringRuleFiles, optionalRecurringNumber } from '../renderer/features/workspace/model/recurringRuleValues.js'
 
 const daily: RecurringRuleRecord = {
   ruleId: 1, ownerNodeId: 42, creatorUserId: 'user', title: '일간 회의',
@@ -19,6 +19,17 @@ test('daily meeting starting Tuesday appears on every remaining day of the week'
   for (const day of [15, 16, 17, 18, 19, 20]) {
     assert.deepEqual(getSchedulesForCalendarDate([daily], `2026-09-${day}`), [daily])
   }
+})
+
+test('active recurring rule files exclude soft-deleted attachments', () => {
+  const files = [
+    { fileId: 1, isDeleted: false },
+    { fileId: 2, isDeleted: true },
+    { fileId: 3 },
+  ]
+
+  assert.deepEqual(getActiveRecurringRuleFiles(files).map((file) => file.fileId), [1, 3])
+  assert.deepEqual(getActiveRecurringRuleFiles(undefined), [])
 })
 
 test('daily expansion respects interval, inclusive end date, and maximum occurrences', () => {

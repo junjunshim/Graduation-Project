@@ -21,6 +21,7 @@ import { getCurrentUser } from '../../auth/api'
 import { getOrgSnapshot } from '../data/orgService'
 import { canChangeRecurringRuleFile } from '../model/filePermission'
 import { canCreateRecurringRule } from '../model/recurringRulePermission'
+import { getActiveRecurringRuleFiles } from '../model/recurringRuleValues'
 import { showToast } from '../../notification/data/toastEvents'
 import type { UserRecord } from '../model/types'
 import styles from './RecurringRuleModal.module.css'
@@ -209,7 +210,7 @@ export function RecurringRuleModal({
             sortOrder: c.sortOrder ?? i,
           })),
         )
-        setExistingFiles(initialRule.files || [])
+        setExistingFiles(getActiveRecurringRuleFiles(initialRule.files))
       } else {
         setTitle('')
         setDescription('')

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Icon } from '../../../design-system/primitives/Icon'
 import { getCategoryBadgeStyle, getRecurringCategoryLabel } from '../model/labels'
 import type { RecurringRuleRecord } from '../model/recurringRuleTypes'
+import { getActiveRecurringRuleFiles } from '../model/recurringRuleValues'
 import { deleteRecurringRule } from '../data/recurringRuleService'
 import { showToast } from '../../notification/data/toastEvents'
 import { ConfirmDeleteModal } from './ConfirmDeleteModal'
@@ -48,12 +49,12 @@ export function RecurringRuleDetailModal({
   const [isDeleting, setIsDeleting] = useState(false)
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [localFiles, setLocalFiles] = useState(rule?.files || [])
+  const [localFiles, setLocalFiles] = useState(getActiveRecurringRuleFiles(rule?.files))
 
   // rule 변경 시 localFiles 동기화
   useEffect(() => {
     if (rule) {
-      setLocalFiles(rule.files || [])
+      setLocalFiles(getActiveRecurringRuleFiles(rule.files))
     }
   }, [rule])
 

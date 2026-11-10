@@ -15,6 +15,7 @@ import {
   restoreRecurringRule,
 } from '../data/recurringRuleService'
 import { formatRepeatSummary, getNextOccurrenceInfo } from '../model/recurringSchedule'
+import { getActiveRecurringRuleFiles } from '../model/recurringRuleValues'
 import { RecurringRuleModal } from './RecurringRuleModal'
 import { RecurringRuleDetailModal } from './RecurringRuleDetailModal'
 import { ConfirmRestoreModal } from './ConfirmRestoreModal'
@@ -412,7 +413,7 @@ export function WorkspaceSchedulesTab({
 
               <span className={styles.metaChip} title="첨부 서식 파일">
                 <Icon name="fileText" size={12} />
-                <span>첨부파일 {rule.files?.length || 0}개</span>
+                <span>첨부파일 {getActiveRecurringRuleFiles(rule.files).length}개</span>
               </span>
             </div>
 

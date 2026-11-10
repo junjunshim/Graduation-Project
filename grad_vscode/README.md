@@ -18,7 +18,7 @@ Axis Share는 저장소를 각자 로컬에 복제해 따로 작업하는 대신
 - **Git 상태와 커밋**: 스테이징, 커밋, push, 되돌리기와 브랜치별 변경 상태를 Changes 뷰에서 처리합니다.
 - **내장 diff**: 작업 트리, 스테이징, 커밋, 원격 기준 변경을 VS Code 기본 diff 화면으로 확인합니다.
 - **커밋 그래프**: 현재 브랜치의 커밋 흐름과 원격 위치를 보여 주며, 저장소 전체 그래프도 웹뷰로 열 수 있습니다.
-- **AI CLI 연동**: Codex · Claude Code · Antigravity CLI를 현재 브랜치의 AI 전용 작업공간에서 실행하고, MCP로 Axis 상태·파일·diff를 읽고 안전하게 쓸 수 있습니다.
+- **AI CLI 연동**: Codex · Claude Code · Antigravity CLI를 현재 브랜치의 AI 전용 작업공간에서 사용할 수 있고, MCP로 Axis 상태·파일·diff를 읽고 안전하게 쓸 수 있습니다.
 - **안전한 세션 연결**: 앱이 발급한 1회용 코드로 확장 전용 세션을 시작하며, GitHub 비밀번호나 PAT를 확장에 직접 입력하지 않습니다.
 
 ## 요구 사항
@@ -115,15 +115,14 @@ code --install-extension axis-share-<version>.vsix
 
 ### AI
 
-- Codex · Claude Code · Antigravity CLI의 설치 여부와 실행 파일 경로를 보여 줍니다.
 - **AI 터미널 열기**는 현재 브랜치의 AI 전용 작업공간에서 터미널만 엽니다. CLI 명령은 사용자가 직접 입력합니다.
-- 제공자 항목을 선택하면 설치된 CLI를 같은 작업공간에서 바로 실행합니다.
+- AI 탭 트리에는 현재 세션·작업공간 상태와 MCP 설정 진입점만 표시합니다.
 - **작업공간 동기화**는 최초에는 worktree 압축본(tar.gz)을 한 번 받고, 이후에는 서버 manifest와 로컬 캐시를 비교해 바뀐 파일만 다시 받습니다. AI가 직접 수정한 파일은 덮어쓰지 않습니다.
 - AI가 디스크에서 직접 고친 파일은 잠시 뒤 자동으로 서버에 CAS 반영되고, 다른 사용자의 Changes·Repository 뷰에도 알림이 갑니다.
 - 다른 사용자가 바꾼 파일은 제어 WebSocket 알림(`worktree_changed`·파일 생성/삭제/이동)으로 AI 작업공간에도 즉시 반영됩니다.
 - **MCP 설정 보기**는 Codex·Claude에서는 `.axis/mcp.json`, Antigravity에서는 `~/.gemini/config/mcp_config.json`을 엽니다.
-- **AI 작업공간 초기화**는 커밋하지 않은 AI 작업 내용까지 삭제합니다.
-- **AI 세션 종료**는 AI 터미널과 MCP 브리지를 함께 종료합니다.
+- **AI 작업공간 초기화**는 명령 팔레트에서 실행하며, 커밋하지 않은 AI 작업 내용까지 삭제합니다.
+- **AI 세션 종료**는 AI 뷰 상단 툴바에서 AI 터미널과 MCP 브리지를 함께 종료합니다.
 
 AI 작업공간은 현재 열린 저장소의 일반 편집 사본과 분리되어 `globalStorage/ai-workspace/repo-<id>/branch-<slug>`에 생성됩니다. 서버는 먼저 경로·크기·버전 토큰만 담은 manifest를 주고, 최초·대량 동기화는 worktree 전체를 tar.gz 한 번으로 내려받아 풉니다. 이후에는 `.axis/manifest.json` 캐시와 비교해 바뀐 파일만 개별 API로 받습니다. 압축은 전송량을 줄이는 용도이며 파일 수·크기·민감 파일 제외 규칙은 manifest와 같습니다. `.git`은 로컬 baseline 용도로만 새로 초기화합니다.
 

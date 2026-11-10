@@ -10,7 +10,7 @@ type WsSocket = WebSocket.WebSocket;
 
 import { CollabAuthError, CollabSession, consumeTicket } from './auth';
 import { config } from './config';
-import { AcquireResult } from './docRegistry';
+import { AcquireResult, TEXT_TYPE } from './docRegistry';
 import { log } from './logger';
 import { isSafeRelPath } from './paths';
 import { SessionRef, verifySessionPermissions } from './permissionCheck';
@@ -385,6 +385,7 @@ function onUpdate(client: RoomClient, filePath: string, updateBase64: string): v
     return;
   }
 
+  const before = entry.doc.getText(TEXT_TYPE).toString();
   try {
     Y.applyUpdate(entry.doc, new Uint8Array(bytes), client.id);
   } catch (error) {
@@ -392,7 +393,11 @@ function onUpdate(client: RoomClient, filePath: string, updateBase64: string): v
     return;
   }
 
-  room.docs.touch(filePath);
+  // 같은 텍스트를 다시 보내는 에코/무변경 update 도 CRDT 상태에는 의미가 있을 수 있으므로
+  // 팬아웃은 유지한다. 다만 worktree flush 는 텍스트가 실제로 바뀐 경우에만 예약한다.
+  if (entry.doc.getText(TEXT_TYPE).toString() !== before) {
+    room.docs.touch(filePath);
+  }
   room.broadcastWatchers(
     filePath,
     { type: 'update', path: filePath, update: updateBase64, from: client.session.userEmail },
@@ -504,6 +509,10 @@ async function onFlush(client: RoomClient, filePath: string | undefined): Promis
   const targets = filePath ? [filePath] : room.docs.paths();
   for (const target of targets) {
     if (!room.docs.has(target)) continue;
+    if (room.docs.entry(target)?.dirty !== true) {
+      client.send({ type: 'flushed', path: target });
+      continue;
+    }
     try {
       await room.docs.flush(target);
     } catch (error) {
@@ -529,7 +538,7 @@ async function onSwitchBranch(
     return;
   }
 
-  await room.docs.flushAll();
+  await room.docs.flushDirty();
   await detach(client);
   await onJoin(client, repoId, to);
 }
@@ -674,9 +683,9 @@ async function handleResetRequest(req: http.IncomingMessage, res: http.ServerRes
 }
 
 /**
- * 강제 flush(§12.11). C++ 이 커밋·스테이징 **직전**에 부른다 — 편집은 디바운스(기본 2초) 뒤에
- * 파일로 내려가므로, 기다리지 않고 git 을 돌리면 마지막 편집이 커밋·인덱스에서 빠진다. 응답은
- * "이 브랜치의 열린 doc 을 전부 내려쓰려고 시도했다" 는 뜻이고, 파일별 실패는 여기 로그에 남는다
+ * 강제 flush(§12.11). C++ 이 커밋·스테이징 **직전**이나 `ref=worktree` 파일 조회 전에 부른다 —
+ * 편집은 디바운스(기본 2초) 뒤에 파일로 내려가므로, 기다리지 않고 git 을 돌리면 마지막 편집이
+ * 커밋·인덱스에서 빠진다. 실제 편집이 있는(dirty) doc 만 내려쓰며, 파일별 실패는 여기 로그에 남는다
  * (호출자를 막지는 않는다).
  */
 async function handleFlushRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
@@ -709,7 +718,7 @@ async function handleFlushRequest(req: http.IncomingMessage, res: http.ServerRes
     return;
   }
 
-  const paths = room.docs.paths();
+  const paths = room.docs.paths().filter((filePath) => room.docs.entry(filePath)?.dirty === true);
   const failed: string[] = [];
   for (const filePath of paths) {
     try {

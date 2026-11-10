@@ -308,17 +308,6 @@ export class DocRegistry {
     return watchers;
   }
 
-  /** 열린 doc 을 전부 내려쓴다. 실패는 로그만 남긴다(브랜치 전환·종료 경로). */
-  async flushAll(): Promise<void> {
-    await Promise.all(
-      this.paths().map((filePath) =>
-        this.flush(filePath).catch((error: unknown) => {
-          log('error', 'flush 실패', { path: filePath, reason: (error as Error).message });
-        }),
-      ),
-    );
-  }
-
   /** 주기 저장. 더러운 doc 만 내려쓴다. */
   async flushDirty(): Promise<void> {
     for (const entry of [...this.docs.values()]) {
@@ -338,7 +327,7 @@ export class DocRegistry {
       entry.flushTimer = undefined;
       entry.unloadTimer = undefined;
     }
-    await this.flushAll();
+    await this.flushDirty();
     this.docs.clear();
   }
 
@@ -524,20 +513,24 @@ export class DocRegistry {
 
   private async writeEntry(entry: DocEntry): Promise<void> {
     const text = entry.doc.getText(TEXT_TYPE).toString();
+    let changed = false;
     try {
-      await flushFile(this.worktreeDir, entry.filePath, text, entry.eol, entry.bom);
+      changed = await flushFile(this.worktreeDir, entry.filePath, text, entry.eol, entry.bom);
       await writeDocState(this.collabDir, entry.filePath, Y.encodeStateAsUpdate(entry.doc));
     } catch (error) {
       log('error', 'flush 실패', { path: entry.filePath, reason: (error as Error).message });
       throw error;
     }
 
-    // worktree 파일이 실제로 바뀐 순간이다. 방이 이 신호로 backend 에 알린다(§9.9).
-    // 리스너는 알림만 예약하므로 실패해도 flush 결과에는 영향을 주지 않는다.
-    try {
-      this.flushListener?.(entry.filePath);
-    } catch (error) {
-      log('warn', 'flush 리스너 실패', { path: entry.filePath, reason: (error as Error).message });
+    // worktree 파일이 실제로 바뀐 순간에만 방이 backend 에 알린다(§9.9).
+    // 같은 내용을 다시 내려쓴 경우까지 알리면 `GET file?ref=worktree` → flush → 알림 →
+    // 다시 조회로 이어지는 자기 증폭 루프가 만들어진다.
+    if (changed) {
+      try {
+        this.flushListener?.(entry.filePath);
+      } catch (error) {
+        log('warn', 'flush 리스너 실패', { path: entry.filePath, reason: (error as Error).message });
+      }
     }
     entry.dirty = false;
     entry.mismatch = false;

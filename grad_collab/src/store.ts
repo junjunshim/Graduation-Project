@@ -182,21 +182,37 @@ async function writeAtomic(absPath: string, data: Buffer): Promise<void> {
   }
 }
 
-/** Y.Doc 텍스트를 worktree 파일에 반영한다. 원본 EOL·BOM 을 복원한다. */
+/**
+ * Y.Doc 텍스트를 worktree 파일에 반영한다. 원본 EOL·BOM 을 복원한다.
+ * 반환값은 실제 디스크 내용이 바뀌었는지다 — 같은 내용을 다시 쓰면 mtime 만 흔들리고
+ * worktree_changed 알림이 불필요하게 반복된다.
+ */
 export async function flushFile(
   worktreeDir: string,
   filePath: string,
   text: string,
   eol: Eol,
   bom: boolean,
-): Promise<void> {
+): Promise<boolean> {
   const abs = safeJoin(worktreeDir, filePath);
   assertInside(worktreeDir, abs);
 
   const body = eol === 'crlf' ? text.replace(/\n/g, '\r\n') : text;
   const encoded = Buffer.from(body, 'utf8');
   const data = bom ? Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), encoded]) : encoded;
+
+  let current: Buffer | undefined;
+  try {
+    current = await fsp.readFile(abs);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  if (current?.equals(data)) {
+    return false;
+  }
+
   await writeAtomic(abs, data);
+  return true;
 }
 
 // ---------------------------------------------------------------------------

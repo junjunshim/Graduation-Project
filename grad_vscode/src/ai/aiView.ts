@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 
 import { getRepositoryDisplayName, getSession } from '../repo/repoSession';
 import type { AiManager } from './aiManager';
-import type { ProviderDetection } from './types';
 
 const VIEW_ID = 'axis-share-ai';
 
@@ -10,7 +9,6 @@ type AiNode =
     | { kind: 'message'; label: string; description?: string }
     | { kind: 'session'; label: string; description: string }
     | { kind: 'workspace'; label: string; description: string; tooltip: string }
-    | { kind: 'provider'; provider: ProviderDetection; active: boolean }
     | { kind: 'action'; label: string; command: string; icon: string; description?: string; args?: unknown[] };
 
 export class AiViewProvider implements vscode.TreeDataProvider<AiNode> {
@@ -44,28 +42,6 @@ export class AiViewProvider implements vscode.TreeDataProvider<AiNode> {
             item.iconPath = new vscode.ThemeIcon('folder');
             item.description = node.description;
             item.tooltip = node.tooltip;
-            return item;
-        }
-
-        if (node.kind === 'provider') {
-            const provider = node.provider;
-            const item = new vscode.TreeItem(
-                provider.displayName,
-                vscode.TreeItemCollapsibleState.None
-            );
-            item.iconPath = new vscode.ThemeIcon(
-                node.active ? 'play-circle' : provider.installed ? 'check' : 'warning'
-            );
-            item.description = provider.installed ? (node.active ? '실행 중' : '설치됨') : '미설치';
-            item.tooltip = provider.installed
-                ? provider.executablePath ?? provider.command
-                : `${provider.error ?? 'CLI 를 찾지 못했습니다.'}\n클릭하면 설치 안내를 확인합니다.`;
-            item.command = {
-                command: 'axis-share.ai.launchProvider',
-                title: `${provider.displayName} 실행`,
-                arguments: [provider.id]
-            };
-            item.contextValue = 'axisAiProvider';
             return item;
         }
 
@@ -115,21 +91,7 @@ export class AiViewProvider implements vscode.TreeDataProvider<AiNode> {
             });
         }
 
-        for (const provider of state.providers) {
-            nodes.push({
-                kind: 'provider',
-                provider,
-                active: state.activeProvider === provider.id
-            });
-        }
-
-        nodes.push(
-            { kind: 'action', label: 'AI 터미널 열기', command: 'axis-share.ai.openTerminal', icon: 'terminal' },
-            { kind: 'action', label: '작업공간 동기화', command: 'axis-share.ai.syncWorkspace', icon: 'sync' },
-            { kind: 'action', label: 'MCP 설정 보기', command: 'axis-share.ai.configureMcp', icon: 'json' },
-            { kind: 'action', label: 'AI 작업공간 초기화', command: 'axis-share.ai.resetWorkspace', icon: 'trash' },
-            { kind: 'action', label: 'AI 세션 종료', command: 'axis-share.ai.stopSession', icon: 'debug-stop' }
-        );
+        nodes.push({ kind: 'action', label: 'MCP 설정 보기', command: 'axis-share.ai.configureMcp', icon: 'json' });
         return nodes;
     }
 

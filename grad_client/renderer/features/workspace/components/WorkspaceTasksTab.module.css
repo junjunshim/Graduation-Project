@@ -2096,12 +2096,16 @@
   gap: 8px;
   width: 100%;
   height: 44px;
+  flex: 0 0 44px;
+  min-height: 44px;
+  box-sizing: border-box;
   border: 1.5px dashed var(--axis-line-strong, #cbd5e1);
   border-radius: var(--axis-radius-panel, 8px);
   background: var(--axis-surface-panel, var(--surface-panel));
   color: var(--axis-text-primary, var(--text-primary));
   font-size: 0.86rem;
   font-weight: 700;
+  white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
   transition: all 140ms ease;

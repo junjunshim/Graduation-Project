@@ -38,6 +38,7 @@ import {
   shiftMonth,
   startOfMonth,
 } from '../model/calendarSummary'
+import { getWorkItemCalendarRangeStartKey } from '../model/calendarRange'
 import type {
   CalendarChip,
   CalendarFilterEntryType,
@@ -154,6 +155,7 @@ export function CalendarPage() {
   const recurringRules = context?.recurringRules ?? EMPTY_RECURRING_RULES
   const today = useMemo(() => resolveTodayDate(context?.viewer?.today ?? null), [context])
   const visibleMonth = useMemo(() => month ?? startOfMonth(today), [month, today])
+  const workItemRangeStartKey = useMemo(() => getWorkItemCalendarRangeStartKey(today), [today])
   const monthLabel = formatMonthLabel(visibleMonth)
   const orgSnapshot = useMemo(() => getOrgSnapshot(), [])
 
@@ -721,6 +723,7 @@ export function CalendarPage() {
                           className={styles.weekBgCell}
                           data-outside={!cell.isCurrentMonth}
                           data-today={cell.isToday}
+                          data-before-range={cell.key < workItemRangeStartKey ? 'true' : undefined}
                           data-range={
                             getCalendarRangeState(
                               cell.key,
@@ -743,6 +746,8 @@ export function CalendarPage() {
                             data-sunday={cell.isSunday}
                             data-saturday={cell.isSaturday}
                             data-holiday={cell.holiday != null}
+                            data-before-range={cell.key < workItemRangeStartKey ? 'true' : undefined}
+                            title={cell.key < workItemRangeStartKey ? '6개월 이전 업무는 표시되지 않습니다.' : undefined}
                           >
                             <span className={styles.dayNumber}>{cell.dayNumber}</span>
                             {cell.holiday ? (
@@ -812,6 +817,7 @@ export function CalendarPage() {
               {cells.map((cell) => {
                 const isExpanded = expandedDays[cell.key] === true
                 const ongoingSummaryLabel = formatOngoingSummaryLabel(cell.ongoing, statusFilter)
+                const isBeforeWorkItemRange = cell.key < workItemRangeStartKey
 
                 return (
                   <div
@@ -822,6 +828,8 @@ export function CalendarPage() {
                     data-sunday={cell.isSunday}
                     data-saturday={cell.isSaturday}
                     data-holiday={cell.holiday != null}
+                    data-before-range={isBeforeWorkItemRange ? 'true' : undefined}
+                    title={isBeforeWorkItemRange ? '6개월 이전 업무는 표시되지 않습니다.' : undefined}
                     data-range={
                       getCalendarRangeState(
                         cell.key,

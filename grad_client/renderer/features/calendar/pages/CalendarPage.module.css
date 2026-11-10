@@ -719,6 +719,23 @@
   min-height: 0;
 }
 
+/* 오늘 기준 6개월 이전: 업무 조회 범위 밖 셀은 흐리게 표시 */
+.cell[data-before-range='true'],
+.weekDayHeaderCell[data-before-range='true'] {
+  opacity: 0.38;
+  cursor: help;
+}
+
+.cell[data-before-range='true']:hover,
+.weekDayHeaderCell[data-before-range='true']:hover {
+  opacity: 0.56;
+}
+
+.weekBgCell[data-before-range='true'] {
+  background: var(--surface-panel-subtle);
+  opacity: 0.7;
+}
+
 /* 상세 영역 폭. 등장/퇴장 애니메이션에서도 같은 값을 쓴다. */
 .detailColumn {
   --detail-column-width: 22rem;

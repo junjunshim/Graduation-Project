@@ -6,14 +6,15 @@ import { TextDecoder } from 'node:util';
 
 import * as vscode from 'vscode';
 
-import { apiRequest } from '../api';
+import { ApiError, apiRequest } from '../api';
 import { getCurrentBranch, getSession } from '../repo/repoSession';
 import { branchSlug } from '../repo/repoTreeProvider';
 import { buildContextMarkdown } from './contextBuilder';
 import { writeMcpConfigs } from './mcpConfig';
 import type {
     AiBridgeConfig,
-    AiWorkspaceFile,
+    AiWorkspaceManifest,
+    AiWorkspaceManifestEntry,
     AiWorkspaceSnapshot,
     AiWorkspaceState
 } from './types';
@@ -23,17 +24,40 @@ type WorkspaceBaseline = {
     files: Record<string, string>;
 };
 
+/** `.axis/manifest.json` — 마지막으로 맞춘 서버 파일의 버전 토큰. */
+type WorkspaceManifestCache = {
+    version: 1;
+    files: Record<string, { size: number; version: string }>;
+};
+
 type ApplyResult = {
     baseline: WorkspaceBaseline;
+    manifest: WorkspaceManifestCache;
     localSkipped: number;
     deleted: number;
     written: number;
     changedPaths: string[];
 };
 
+type ServerApplyResult = {
+    written: number;
+    deleted: number;
+    conflicts: number;
+};
+
+type DownloadResult =
+    | { kind: 'content'; content: string; hash?: string; version?: string }
+    | { kind: 'omitted'; version?: string }
+    | { kind: 'missing' }
+    | { kind: 'error' };
+
 const MAX_LOCAL_FILE_BYTES = 4 * 1024 * 1024;
 // 서버의 AI 쓰기 상한과 같다. 이보다 큰 파일은 자동 동기화 대신 사용자에게 경고한다.
 const MAX_SYNC_FILE_BYTES = 512 * 1024;
+
+// 최초 동기화는 파일별 요청을 병렬로 내린다. 서버가 24MB JSON 하나를 만들지 않도록
+// manifest 로 바뀐 파일만 골라 받고, 동시에 6개까지만 읽어 메모리 사용을 제한한다.
+const MAX_DOWNLOAD_CONCURRENCY = 6;
 
 const MANAGED_MCP_CONFIG_PATHS = ['.mcp.json', '.codex/config.toml', '.antigravity/mcp.json'] as const;
 
@@ -156,10 +180,33 @@ async function pathExists(file: string): Promise<boolean> {
     }
 }
 
+/** 파일별 다운로드를 제한된 동시성으로 실행한다. 결과 배열은 입력 순서를 유지한다. */
+async function mapWithConcurrency<T, R>(
+    items: readonly T[],
+    limit: number,
+    worker: (item: T) => Promise<R>
+): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let nextIndex = 0;
+    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (true) {
+            const index = nextIndex;
+            nextIndex += 1;
+            if (index >= items.length) {
+                return;
+            }
+            results[index] = await worker(items[index]);
+        }
+    });
+    await Promise.all(runners);
+    return results;
+}
+
 export class AiWorkspaceManager {
     private state: AiWorkspaceState | undefined;
     private lastSnapshot: AiWorkspaceSnapshot | undefined;
     private baselineCache: { root: string; data: WorkspaceBaseline } | undefined;
+    private manifestCache: { root: string; data: WorkspaceManifestCache } | undefined;
 
     public constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -171,6 +218,7 @@ export class AiWorkspaceManager {
         this.state = undefined;
         this.lastSnapshot = undefined;
         this.baselineCache = undefined;
+        this.manifestCache = undefined;
     }
 
     /** 저장한 스냅샷 정보로 `.axis/context.md` 를 다시 만든다. 상태·접속자가 바뀐 뒤 호출한다. */
@@ -207,6 +255,49 @@ export class AiWorkspaceManager {
     }
 
     public async prepare(mcp: AiBridgeConfig): Promise<AiWorkspaceState> {
+        const synced = await this.syncFromServer();
+        const warnings = await writeMcpConfigs(synced.root, mcp.mcpScript, mcp.sessionFile);
+        await this.alignManagedConfigBaseline(synced.root, synced.baseline);
+        try {
+            await this.initBaselineGit(synced.root, synced.changedPaths);
+        } catch (error) {
+            warnings.push(
+                `로컬 Git baseline 을 만들지 못했습니다. ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
+        await this.writeBaseline(synced.root, synced.baseline);
+
+        if (warnings.length > 0) {
+            synced.state.message = synced.state.message ?? warnings.join(' ');
+        }
+        return synced.state;
+    }
+
+    /**
+     * 연결이 끊겼다 돌아왔거나 다른 사용자의 변경 알림을 놓쳤을 때 부른다.
+     * MCP 설정은 건드리지 않고 manifest 차이만 다시 맞춘다.
+     */
+    public async resync(): Promise<AiWorkspaceState> {
+        const synced = await this.syncFromServer();
+        try {
+            await this.initBaselineGit(synced.root, synced.changedPaths);
+        } catch {
+            // Git baseline 은 다음 동기화에서 다시 맞춘다.
+        }
+        await this.writeBaseline(synced.root, synced.baseline);
+        return synced.state;
+    }
+
+    /**
+     * 서버 manifest 와 `.axis/manifest.json` 캐시를 비교해 바뀐 파일만 내려받는다.
+     * 최초 실행에서도 24MB JSON 하나를 받지 않고 파일별 요청을 병렬로 처리한다.
+     */
+    private async syncFromServer(): Promise<{
+        root: string;
+        state: AiWorkspaceState;
+        baseline: WorkspaceBaseline;
+        changedPaths: string[];
+    }> {
         const session = getSession();
         const branch = getCurrentBranch();
         if (!session || !branch) {
@@ -216,59 +307,57 @@ export class AiWorkspaceManager {
         const root = this.getRootPathFor(session.repoId, branch);
         await fs.mkdir(root, { recursive: true });
 
-        const snapshotRows = await apiRequest<AiWorkspaceSnapshot[]>(
-            `/github/repos/workspace?repo_id=${session.repoId}&branch=${encodeURIComponent(branch)}`
+        const manifestRows = await apiRequest<AiWorkspaceManifest[]>(
+            `/github/repos/workspace/manifest?repo_id=${session.repoId}&branch=${encodeURIComponent(branch)}`
         );
-        const snapshot = Array.isArray(snapshotRows) ? snapshotRows[0] : undefined;
-        if (!snapshot || !Array.isArray(snapshot.files)) {
-            throw new Error('AI 작업공간 스냅샷 응답 형식이 올바르지 않습니다.');
+        const manifest = Array.isArray(manifestRows) ? manifestRows[0] : undefined;
+        if (!manifest || !Array.isArray(manifest.files)) {
+            throw new Error('AI 작업공간 manifest 응답 형식이 올바르지 않습니다.');
         }
 
-        this.baselineCache = undefined;   // 디스크의 baseline 을 기준으로 새로 맞춘다.
+        // 디스크의 baseline·manifest 를 기준으로 새로 맞춘다.
+        this.baselineCache = undefined;
+        this.manifestCache = undefined;
         const baseline = await this.readBaseline(root);
-        const applied = await this.applySnapshot(root, snapshot.files, baseline);
-        // 컨텍스트 갱신에는 메타데이터만 필요하다. 24MB 스냅샷 본문을 계속 들고 있지 않는다.
-        this.lastSnapshot = {
-            repo_id: snapshot.repo_id,
-            branch: snapshot.branch,
-            head_sha: snapshot.head_sha,
-            file_count: snapshot.file_count,
+        const cached = await this.readManifestCache(root);
+        const applied = await this.applyManifest(root, session.repoId, branch, manifest, cached, baseline);
+
+        const snapshot: AiWorkspaceSnapshot = {
+            repo_id: manifest.repo_id,
+            branch: manifest.branch,
+            head_sha: manifest.head_sha,
+            file_count: manifest.file_count,
+            total_bytes: manifest.total_bytes,
+            truncated: manifest.truncated,
             files: [],
-            skipped: snapshot.skipped
+            skipped: manifest.skipped
         };
-        const contextText = await buildContextMarkdown(snapshot, root, snapshot.skipped?.length ?? 0);
+        this.lastSnapshot = snapshot;
+        const contextText = await buildContextMarkdown(snapshot, root, manifest.skipped?.length ?? 0);
         await fs.mkdir(path.join(root, '.axis'), { recursive: true });
         await writeFileAtomic(path.join(root, '.axis', 'context.md'), contextText);
 
-        const warnings = await writeMcpConfigs(root, mcp.mcpScript, mcp.sessionFile);
-        await this.alignManagedConfigBaseline(root, applied.baseline);
-        try {
-            await this.initBaselineGit(root, applied.changedPaths);
-        } catch (error) {
-            warnings.push(
-                `로컬 Git baseline 을 만들지 못했습니다. ${error instanceof Error ? error.message : String(error)}`
-            );
-        }
         await this.writeBaseline(root, applied.baseline);
+        await this.writeManifestCache(root, applied.manifest);
 
-        this.state = {
+        const skippedCount = (manifest.skipped?.length ?? 0) + applied.localSkipped;
+        const state: AiWorkspaceState = {
             repoId: session.repoId,
             branch,
             rootPath: root,
-            headSha: snapshot.head_sha,
-            fileCount: snapshot.file_count ?? snapshot.files.length,
-            skippedCount: (snapshot.skipped?.length ?? 0) + applied.localSkipped,
+            headSha: manifest.head_sha,
+            fileCount: manifest.file_count ?? manifest.files.length,
+            skippedCount,
             preparedAt: Date.now(),
             message:
                 applied.localSkipped > 0
                     ? `AI 가 수정한 파일 ${applied.localSkipped}개는 자동으로 덮어쓰지 않았습니다.`
-                    : (snapshot.skipped?.length ?? 0) > 0
-                      ? `서버에서 파일 ${snapshot.skipped?.length ?? 0}개를 제외했습니다. (민감 파일·바이너리·인코딩·크기 제한)`
-                      : warnings.length > 0
-                        ? warnings.join(' ')
-                        : undefined
+                    : (manifest.skipped?.length ?? 0) > 0
+                      ? `서버에서 파일 ${manifest.skipped?.length ?? 0}개를 제외했습니다. (민감 파일·바이너리·인코딩·크기 제한)`
+                      : undefined
         };
-        return this.state;
+        this.state = state;
+        return { root, state, baseline: applied.baseline, changedPaths: applied.changedPaths };
     }
 
     private async alignManagedConfigBaseline(root: string, baseline: WorkspaceBaseline): Promise<void> {
@@ -299,6 +388,7 @@ export class AiWorkspaceManager {
         this.state = undefined;
         this.lastSnapshot = undefined;
         this.baselineCache = undefined;
+        this.manifestCache = undefined;
     }
 
     public async listFiles(): Promise<string[]> {
@@ -407,6 +497,12 @@ export class AiWorkspaceManager {
 
         await fs.rm(localPath(root, relPath), { force: true }).catch(() => undefined);
 
+        const cached = await this.readManifestCache(root);
+        if (cached && relPath in cached.files) {
+            delete cached.files[relPath];
+            await this.writeManifestCache(root, cached);
+        }
+
         const baseline = await this.readBaseline(root);
         if (!baseline || !(relPath in baseline.files)) {
             return;
@@ -425,29 +521,13 @@ export class AiWorkspaceManager {
             return false;
         }
 
-        const file = localPath(root, relPath);
         const baseline = await this.readBaseline(root);
         if (!baseline) {
             return false; // baseline 이 없으면 어떤 파일이 AI 수정인지 판단할 수 없다.
         }
-        const baselineHash = baseline.files[relPath];
-        const local = await readFileIfPresent(file);
-        const localHash = local === undefined ? undefined : hashContent(local);
-
-        if (local === undefined && baselineHash !== undefined) {
-            return false; // AI 가 지운 파일을 되살리지 않는다.
-        }
-        if (local !== undefined && localHash !== baselineHash) {
-            return false; // AI 가 수정한 파일을 덮어쓰지 않는다.
-        }
-
-        const serverHash = hash ?? hashContent(content);
-        if (localHash !== serverHash) {
-            await writeFileAtomic(file, content);
-        }
-        baseline.files[relPath] = serverHash;
+        const status = await this.mergeServerContent(root, baseline, relPath, content, hash, false);
         await this.writeBaseline(root, baseline);
-        return localHash !== serverHash;
+        return status === 'written';
     }
 
     /** MCP 또는 브리지를 거친 쓰기를 로컬 작업공간과 baseline 에 반영한다. */
@@ -458,6 +538,12 @@ export class AiWorkspaceManager {
         }
         const file = localPath(root, relPath);
         await writeFileAtomic(file, content);
+        const cached = await this.readManifestCache(root);
+        if (cached && relPath in cached.files) {
+            // 서버 버전 토큰은 쓰기 응답에 없으므로 다음 manifest 동기화에서 한 번 다시 확인한다.
+            delete cached.files[relPath];
+            await this.writeManifestCache(root, cached);
+        }
         const baseline = await this.readBaseline(root);
         if (baseline) {
             baseline.files[relPath] = hashContent(content);
@@ -465,68 +551,296 @@ export class AiWorkspaceManager {
         }
     }
 
-    private async applySnapshot(
+    /**
+     * 제어 WebSocket 으로 받은 경로만 골라 서버 최신 내용을 작업공간에 반영한다.
+     * AI 가 수정 중인 파일은 덮어쓰지 않고 충돌 수를 돌려준다.
+     */
+    public async applyServerChanges(changes: {
+        paths?: readonly string[];
+        deletes?: readonly string[];
+    }): Promise<ServerApplyResult> {
+        const root = this.state?.rootPath;
+        const state = this.state;
+        const session = getSession();
+        if (!root || !state || !session) {
+            return { written: 0, deleted: 0, conflicts: 0 };
+        }
+        const baseline = await this.readBaseline(root);
+        if (!baseline) {
+            return { written: 0, deleted: 0, conflicts: 0 };
+        }
+
+        const cached = (await this.readManifestCache(root)) ?? { version: 1 as const, files: {} };
+        const changedPaths: string[] = [];
+        let written = 0;
+        let deleted = 0;
+        let conflicts = 0;
+
+        for (const relPath of new Set(changes.deletes ?? [])) {
+            if (!isSafeAiWorkspacePath(relPath) || shouldIgnoreAiWorkspacePath(relPath)) {
+                continue;
+            }
+            const status = await this.applyServerDelete(root, baseline, relPath);
+            if (status === 'deleted') {
+                deleted += 1;
+                changedPaths.push(relPath);
+                delete cached.files[relPath];
+            } else if (status === 'conflict') {
+                conflicts += 1;
+            } else {
+                delete cached.files[relPath];
+            }
+        }
+
+        for (const relPath of new Set(changes.paths ?? [])) {
+            if (!isSafeAiWorkspacePath(relPath) || shouldIgnoreAiWorkspacePath(relPath)) {
+                continue;
+            }
+            const download = await this.downloadManifestFile(session.repoId, state.branch, relPath);
+            if (download.kind === 'error') {
+                continue;
+            }
+            if (download.kind === 'missing') {
+                const status = await this.applyServerDelete(root, baseline, relPath);
+                if (status === 'deleted') {
+                    deleted += 1;
+                    changedPaths.push(relPath);
+                    delete cached.files[relPath];
+                } else if (status === 'conflict') {
+                    conflicts += 1;
+                } else {
+                    delete cached.files[relPath];
+                }
+                continue;
+            }
+            if (download.kind === 'omitted') {
+                if (download.version) {
+                    cached.files[relPath] = { size: 0, version: download.version };
+                }
+                continue;
+            }
+
+            const status = await this.mergeServerContent(root, baseline, relPath, download.content, download.hash);
+            if (status === 'written') {
+                written += 1;
+                changedPaths.push(relPath);
+            } else if (status === 'conflict' || status === 'deleted-locally') {
+                conflicts += 1;
+            }
+            if (download.version) {
+                cached.files[relPath] = {
+                    size: Buffer.byteLength(download.content, 'utf8'),
+                    version: download.version
+                };
+            } else {
+                delete cached.files[relPath];
+            }
+        }
+
+        await this.writeBaseline(root, baseline);
+        await this.writeManifestCache(root, cached);
+        if (changedPaths.length > 0) {
+            try {
+                await this.initBaselineGit(root, changedPaths);
+            } catch {
+                // Git baseline 커밋은 다음 동기화에서 다시 맞춘다.
+            }
+        }
+        return { written, deleted, conflicts };
+    }
+
+    /** manifest 목록과 로컬 캐시를 비교해 바뀐 파일만 내려받아 반영한다. */
+    private async applyManifest(
         root: string,
-        files: readonly AiWorkspaceFile[],
+        repoId: number,
+        branch: string,
+        manifest: AiWorkspaceManifest,
+        cached: WorkspaceManifestCache | undefined,
         baseline: WorkspaceBaseline | undefined
     ): Promise<ApplyResult> {
-        const nextBaseline: WorkspaceBaseline = { version: 1, files: { ...(baseline?.files ?? {}) } };
-        const serverPaths = new Set<string>();
+        const working: WorkspaceBaseline = { version: 1, files: { ...(baseline?.files ?? {}) } };
+        const nextManifest: WorkspaceManifestCache = { version: 1, files: { ...(cached?.files ?? {}) } };
+        const present = new Set<string>();
+        for (const skipped of manifest.skipped ?? []) {
+            present.add(skipped.path);
+        }
+
         const changedPaths: string[] = [];
+        const downloads: AiWorkspaceManifestEntry[] = [];
         let localSkipped = 0;
         let written = 0;
 
-        for (const file of files) {
-            if (!isSafeAiWorkspacePath(file.path) || isSensitiveAiWorkspacePath(file.path)) {
+        for (const entry of manifest.files) {
+            if (!isSafeAiWorkspacePath(entry.path) || isSensitiveAiWorkspacePath(entry.path)) {
                 continue;
             }
-            serverPaths.add(file.path);
+            present.add(entry.path);
 
-            const target = localPath(root, file.path);
-            const current = await readFileIfPresent(target);
+            const current = await readFileIfPresent(localPath(root, entry.path));
+            const baselineHash = working.files[entry.path];
             const currentHash = current === undefined ? undefined : hashContent(current);
-            const previousHash = baseline?.files[file.path];
-            const desiredHash = file.hash ?? hashContent(file.content);
-
-            // 이미 서버 내용과 같으면 다시 쓰지 않는다. baseline 만 맞춰 두고 다음 파일로 넘어간다.
-            if (current !== undefined && currentHash === desiredHash) {
-                nextBaseline.files[file.path] = desiredHash;
-                continue;
-            }
-
-            if (currentHash !== undefined && previousHash !== undefined && currentHash !== previousHash) {
-                localSkipped += 1;
-                continue;
-            }
-            if (currentHash !== undefined && baseline !== undefined && previousHash === undefined) {
-                localSkipped += 1;
-                continue;
-            }
-
-            await writeFileAtomic(target, file.content);
-            nextBaseline.files[file.path] = desiredHash;
-            changedPaths.push(file.path);
-            written += 1;
-        }
-
-        let deleted = 0;
-        if (baseline) {
-            for (const [relPath, previousHash] of Object.entries(baseline.files)) {
-                if (serverPaths.has(relPath) || !isSafeAiWorkspacePath(relPath)) {
+            if (cached?.files[entry.path]?.version === entry.version) {
+                if (currentHash !== undefined && currentHash === baselineHash) {
+                    continue; // 서버·로컬 모두 그대로다.
+                }
+                if (baseline !== undefined && currentHash === undefined && baselineHash === undefined) {
+                    continue; // AI 가 지운 파일을 되살리지 않는다.
+                }
+                if (baseline !== undefined && currentHash === undefined && baselineHash !== undefined) {
+                    localSkipped += 1; // AI 가 지운 추적 파일
                     continue;
                 }
-                const target = localPath(root, relPath);
-                const current = await readFileIfPresent(target);
-                if (current !== undefined && hashContent(current) === previousHash) {
-                    await fs.rm(target, { force: true });
-                    delete nextBaseline.files[relPath];
+                if (baseline !== undefined && currentHash !== undefined && currentHash !== baselineHash) {
+                    localSkipped += 1; // 이미 알려진 AI 수정 충돌
+                    continue;
+                }
+            }
+            downloads.push(entry);
+        }
+
+        await mapWithConcurrency(downloads, MAX_DOWNLOAD_CONCURRENCY, async (entry) => {
+            const download = await this.downloadManifestFile(repoId, branch, entry.path);
+            if (download.kind === 'error' || download.kind === 'missing') {
+                return;
+            }
+            if (download.kind === 'omitted') {
+                nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
+                return;
+            }
+
+            const status = await this.mergeServerContent(
+                root,
+                working,
+                entry.path,
+                download.content,
+                download.hash,
+                baseline === undefined
+            );
+            if (status === 'written') {
+                changedPaths.push(entry.path);
+                written += 1;
+            } else if (status === 'conflict' || status === 'deleted-locally') {
+                localSkipped += 1;
+            }
+            nextManifest.files[entry.path] = { size: entry.size, version: entry.version };
+        });
+
+        let deleted = 0;
+        // 목록이 잘렸으면 서버에 있지만 manifest 에 없는 파일을 지울 수 있으므로 삭제를 건너뛴다.
+        if (baseline && manifest.complete !== false) {
+            for (const relPath of Object.keys(working.files)) {
+                if (present.has(relPath) || !isSafeAiWorkspacePath(relPath)) {
+                    continue;
+                }
+                const status = await this.applyServerDelete(root, working, relPath);
+                if (status === 'deleted') {
                     changedPaths.push(relPath);
                     deleted += 1;
+                    delete nextManifest.files[relPath];
+                } else if (status === 'conflict') {
+                    localSkipped += 1;
                 }
             }
         }
 
-        return { baseline: nextBaseline, localSkipped, deleted, written, changedPaths };
+        return { baseline: working, manifest: nextManifest, localSkipped, deleted, written, changedPaths };
+    }
+
+    private async downloadManifestFile(repoId: number, branch: string, relPath: string): Promise<DownloadResult> {
+        try {
+            const rows = await apiRequest<Array<{
+                content?: unknown;
+                content_hash?: unknown;
+                version?: unknown;
+                content_omitted?: unknown;
+            }>>(
+                `/github/repos/file?repo_id=${repoId}` +
+                    `&branch=${encodeURIComponent(branch)}` +
+                    `&path=${encodeURIComponent(relPath)}&ref=worktree`
+            );
+            const row = Array.isArray(rows) ? rows[0] : undefined;
+            if (!row) {
+                return { kind: 'missing' };
+            }
+            if (row.content_omitted === true) {
+                return { kind: 'omitted', version: typeof row.version === 'string' ? row.version : undefined };
+            }
+            if (typeof row.content !== 'string') {
+                return { kind: 'error' };
+            }
+            return {
+                kind: 'content',
+                content: row.content,
+                hash: typeof row.content_hash === 'string' ? row.content_hash : undefined,
+                version: typeof row.version === 'string' ? row.version : undefined
+            };
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 404) {
+                return { kind: 'missing' };
+            }
+            return { kind: 'error' };
+        }
+    }
+
+    private async mergeServerContent(
+        root: string,
+        baseline: WorkspaceBaseline,
+        relPath: string,
+        content: string,
+        hash?: string,
+        firstRun = false
+    ): Promise<'written' | 'unchanged' | 'conflict' | 'deleted-locally'> {
+        const target = localPath(root, relPath);
+        const local = await readFileIfPresent(target);
+        const localHash = local === undefined ? undefined : hashContent(local);
+        const baselineHash = baseline.files[relPath];
+        const serverHash = hash ?? hashContent(content);
+
+        if (localHash === serverHash) {
+            baseline.files[relPath] = serverHash;
+            return 'unchanged';
+        }
+        // baseline 이 이미 있는데 이 파일 항목만 없으면 AI 가 새로 만든 파일일 수 있다.
+        if (localHash !== undefined && baselineHash === undefined && !firstRun) {
+            return 'conflict';
+        }
+        // AI 가 baseline 이후 수정한 파일은 다른 사용자의 내용으로 덮어쓰지 않는다.
+        if (localHash !== undefined && baselineHash !== undefined && localHash !== baselineHash) {
+            return 'conflict';
+        }
+        // AI 가 지운 파일을 서버 내용으로 되살리지 않는다.
+        if (localHash === undefined && baselineHash !== undefined) {
+            return 'deleted-locally';
+        }
+
+        await writeFileAtomic(target, content);
+        baseline.files[relPath] = serverHash;
+        return 'written';
+    }
+
+    private async applyServerDelete(
+        root: string,
+        baseline: WorkspaceBaseline,
+        relPath: string
+    ): Promise<'deleted' | 'absent' | 'conflict'> {
+        const target = localPath(root, relPath);
+        const local = await readFileIfPresent(target);
+        if (local === undefined) {
+            if (relPath in baseline.files) {
+                delete baseline.files[relPath];
+                return 'deleted';
+            }
+            return 'absent';
+        }
+
+        const baselineHash = baseline.files[relPath];
+        if (baselineHash !== undefined && hashContent(local) === baselineHash) {
+            await fs.rm(target, { force: true });
+            delete baseline.files[relPath];
+            return 'deleted';
+        }
+        // AI 가 새로 만들었거나 수정한 파일은 서버 삭제 이벤트로 지우지 않는다.
+        return 'conflict';
     }
 
     private async readBaseline(root: string): Promise<WorkspaceBaseline | undefined> {
@@ -560,6 +874,47 @@ export class AiWorkspaceManager {
         const file = path.join(root, '.axis', 'baseline.json');
         await writeFileAtomic(file, `${JSON.stringify(baseline, null, 2)}\n`);
         this.baselineCache = { root, data: baseline };
+    }
+
+    private async readManifestCache(root: string): Promise<WorkspaceManifestCache | undefined> {
+        if (this.manifestCache?.root === root) {
+            return this.manifestCache.data;
+        }
+        try {
+            const parsed: unknown = JSON.parse(
+                await fs.readFile(path.join(root, '.axis', 'manifest.json'), 'utf8')
+            );
+            if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+                return undefined;
+            }
+            const record = parsed as { version?: unknown; files?: unknown };
+            if (record.version !== 1 || typeof record.files !== 'object' || record.files === null || Array.isArray(record.files)) {
+                return undefined;
+            }
+
+            const files: WorkspaceManifestCache['files'] = {};
+            for (const [key, value] of Object.entries(record.files)) {
+                if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+                    continue;
+                }
+                const entry = value as { size?: unknown; version?: unknown };
+                if (typeof entry.size === 'number' && typeof entry.version === 'string') {
+                    files[key] = { size: entry.size, version: entry.version };
+                }
+            }
+
+            const cache: WorkspaceManifestCache = { version: 1, files };
+            this.manifestCache = { root, data: cache };
+            return cache;
+        } catch {
+            return undefined;
+        }
+    }
+
+    private async writeManifestCache(root: string, cache: WorkspaceManifestCache): Promise<void> {
+        const file = path.join(root, '.axis', 'manifest.json');
+        await writeFileAtomic(file, `${JSON.stringify(cache, null, 2)}\n`);
+        this.manifestCache = { root, data: cache };
     }
 
     private async initBaselineGit(root: string, changedPaths: readonly string[]): Promise<void> {

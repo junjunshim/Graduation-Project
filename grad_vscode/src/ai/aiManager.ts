@@ -5,6 +5,13 @@ import * as vscode from 'vscode';
 
 import { apiRequest } from '../api';
 import { getCurrentBranch, getSession, onDidChangeSession } from '../repo/repoSession';
+import {
+    getControlState,
+    onDidChangeControlState,
+    onDidReceiveControlEvent,
+    type ControlEvent,
+    type ControlState
+} from '../repo/controlSocket';
 import { AiFileWriteBridge } from './fileWriteBridge';
 import { AiMcpBridgeServer } from './mcpBridgeServer';
 import { agyMcpConfigPath, writeMcpConfigs } from './mcpConfig';
@@ -72,6 +79,10 @@ export class AiManager {
     private sessionIdentityKey: string | undefined;
     private syncMessage: string | undefined;
     private syncQueue: Promise<void> = Promise.resolve();
+    private lastControlState: ControlState = 'disconnected';
+    private serverSyncTimer: ReturnType<typeof setTimeout> | undefined;
+    private readonly pendingServerPaths = new Set<string>();
+    private readonly pendingServerDeletes = new Set<string>();
 
     public readonly onDidChange = this.changeEmitter.event;
 
@@ -85,6 +96,11 @@ export class AiManager {
             onDidChangeSession(() => {
                 void this.handleSessionChanged();
             })
+        );
+        this.lastControlState = getControlState();
+        this.disposables.push(
+            onDidReceiveControlEvent((event) => this.handleControlEvent(event)),
+            onDidChangeControlState((next) => this.handleControlState(next))
         );
         this.disposables.push(
             vscode.workspace.onDidChangeConfiguration((event) => {
@@ -204,6 +220,7 @@ export class AiManager {
 
         this.terminal.disposeAll();
         this.watcher.stop();
+        this.cancelServerSync();
         await this.bridge.stop().catch(() => undefined);
         await this.workspace.reset();
         this.activeProvider = undefined;
@@ -232,6 +249,7 @@ export class AiManager {
     public async stopSession(): Promise<void> {
         this.terminal.disposeAll();
         this.watcher.stop();
+        this.cancelServerSync();
         await this.bridge.stop();
         this.workspace.clearState();
         this.activeProvider = undefined;
@@ -244,6 +262,7 @@ export class AiManager {
     public async dispose(): Promise<void> {
         this.terminal.dispose();
         this.watcher.dispose();
+        this.cancelServerSync();
         await this.bridge.stop().catch(() => undefined);
         for (const disposable of this.disposables) {
             disposable.dispose();
@@ -257,6 +276,10 @@ export class AiManager {
 
     private aiAutoSync(): boolean {
         return vscode.workspace.getConfiguration('axis-share').get<boolean>('ai.autoSync', false);
+    }
+
+    private aiLiveSync(): boolean {
+        return vscode.workspace.getConfiguration('axis-share').get<boolean>('ai.liveSync', true);
     }
 
     private aiWritesAllowed(): boolean {
@@ -294,6 +317,7 @@ export class AiManager {
         this.lastSessionKey = nextKey;
         this.terminal.disposeAll();
         this.watcher.stop();
+        this.cancelServerSync();
         this.workspace.clearState();
         this.activeProvider = undefined;
         this.sessionIdentityKey = undefined;
@@ -302,12 +326,150 @@ export class AiManager {
         this.changeEmitter.fire();
     }
 
+    /**
+     * 제어 WebSocket 이 알려 준 변경만 AI 작업공간에 반영한다.
+     * 변경이 잦으면 400ms 모아서 한 번에 처리하고, 로컬 변경 동기화와 같은 큐를 쓴다.
+     */
+    private handleControlEvent(event: ControlEvent): void {
+        if (!this.aiLiveSync() || !this.workspace.getState()) {
+            return;
+        }
+
+        const session = getSession();
+        const branch = getCurrentBranch();
+        if (!session || !branch || event.repoId !== session.repoId || event.branch !== branch) {
+            return;
+        }
+
+        switch (event.type) {
+            case 'worktree_changed':
+                for (const path of event.paths ?? []) {
+                    this.queueServerPath(path);
+                }
+                break;
+            case 'file_created':
+            case 'file_restored':
+                this.queueServerPath(event.path);
+                break;
+            case 'file_deleted':
+                this.queueServerDelete(event.path);
+                break;
+            case 'file_moved':
+                this.queueServerDelete(event.from);
+                this.queueServerPath(event.path);
+                break;
+            default:
+                return;
+        }
+
+        if (this.pendingServerPaths.size === 0 && this.pendingServerDeletes.size === 0) {
+            return;
+        }
+        if (this.serverSyncTimer) {
+            clearTimeout(this.serverSyncTimer);
+        }
+        this.serverSyncTimer = setTimeout(() => {
+            this.serverSyncTimer = undefined;
+            this.flushServerChanges();
+        }, 400);
+    }
+
+    /** 연결이 끊겼다 돌아오면 놓친 변경을 manifest 차이로 한 번 맞춘다. */
+    private handleControlState(next: ControlState): void {
+        const previous = this.lastControlState;
+        this.lastControlState = next;
+        if (next !== 'joined' || previous === 'joined' || !this.aiLiveSync()) {
+            return;
+        }
+        if (!this.workspace.getState()) {
+            return;
+        }
+
+        const run = this.syncQueue.then(async () => {
+            try {
+                await this.workspace.resync();
+                this.changeEmitter.fire();
+            } catch {
+                // 연결 직후 서버가 아직 준비되지 않았을 수 있다. 다음 변경 알림에서 다시 맞춘다.
+            }
+        });
+        this.syncQueue = run.catch(() => undefined);
+    }
+
+    private queueServerPath(value: string | undefined): void {
+        if (!value || !isSafeAiWorkspacePath(value) || isSensitiveAiWorkspacePath(value)) {
+            return;
+        }
+        this.pendingServerDeletes.delete(value);
+        this.pendingServerPaths.add(value);
+    }
+
+    private queueServerDelete(value: string | undefined): void {
+        if (!value || !isSafeAiWorkspacePath(value) || isSensitiveAiWorkspacePath(value)) {
+            return;
+        }
+        this.pendingServerPaths.delete(value);
+        this.pendingServerDeletes.add(value);
+    }
+
+    private cancelServerSync(): void {
+        if (this.serverSyncTimer) {
+            clearTimeout(this.serverSyncTimer);
+            this.serverSyncTimer = undefined;
+        }
+        this.pendingServerPaths.clear();
+        this.pendingServerDeletes.clear();
+    }
+
+    private flushServerChanges(): void {
+        if (this.pendingServerPaths.size === 0 && this.pendingServerDeletes.size === 0) {
+            return;
+        }
+
+        const paths = [...this.pendingServerPaths];
+        const deletes = [...this.pendingServerDeletes];
+        this.pendingServerPaths.clear();
+        this.pendingServerDeletes.clear();
+
+        const run = this.syncQueue.then(() => this.processServerChanges(paths, deletes));
+        this.syncQueue = run.catch(() => undefined);
+    }
+
+    private async processServerChanges(paths: readonly string[], deletes: readonly string[]): Promise<void> {
+        if (!this.workspace.getState()) {
+            return;
+        }
+
+        const result = await this.workspace.applyServerChanges({ paths, deletes });
+        if (result.conflicts > 0) {
+            this.syncMessage =
+                `다른 사용자가 바꾼 파일 ${result.conflicts}개는 AI 작업 중이라 덮어쓰지 않았습니다. ` +
+                '충돌을 정리한 뒤 다시 동기화해 주세요.';
+            this.changeEmitter.fire();
+            return;
+        }
+        if (result.written > 0 || result.deleted > 0) {
+            if (this.syncMessage) {
+                this.syncMessage = undefined;
+            }
+            this.changeEmitter.fire();
+        }
+    }
+
     private async prepareWorkspace(): Promise<NonNullable<AiViewState['workspace']>> {
-        const session = requireSession();
-        // 준비 중에 파일 감시가 새 변경을 잡으면 스냅샷과 baseline 이 엇갈린다 — 먼저 멈춘다.
         this.watcher.stop();
-        // 이전 작업공간의 디스크 변경이 아직 서버에 올라가는 중이면, 새 스냅샷을 받기 전에 끝낸다.
-        await this.syncQueue;
+        this.cancelServerSync();
+        // 로컬 변경 업로드·서버 변경 반영과 같은 큐에서 실행해 baseline 이 서로 엇갈리지 않게 한다.
+        const run = this.syncQueue.then(() => this.doPrepareWorkspace());
+        this.syncQueue = run.then(
+            () => undefined,
+            () => undefined
+        );
+        return run;
+    }
+
+    private async doPrepareWorkspace(): Promise<NonNullable<AiViewState['workspace']>> {
+        const session = requireSession();
         try {
             await fs.access(this.mcpScript);
         } catch {

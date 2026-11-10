@@ -537,6 +537,11 @@
                     "default": false,
                     "description": "AI 작업공간을 열 때 서버 스냅샷과 자동으로 맞춘다. AI 가 수정한 파일은 덮어쓰지 않는다."
                 },
+                "axis-share.ai.liveSync": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "다른 사용자가 바꾼 파일을 제어 WebSocket 알림으로 AI 작업공간에 즉시 반영한다. AI 가 수정 중인 파일은 덮어쓰지 않는다."
+                },
                 "axis-share.ai.allowWrite": {
                     "type": "boolean",
                     "default": true,

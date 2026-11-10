@@ -118,13 +118,14 @@ code --install-extension axis-share-<version>.vsix
 - Codex · Claude Code · Antigravity CLI의 설치 여부와 실행 파일 경로를 보여 줍니다.
 - **AI 터미널 열기**는 현재 브랜치의 AI 전용 작업공간에서 터미널만 엽니다. CLI 명령은 사용자가 직접 입력합니다.
 - 제공자 항목을 선택하면 설치된 CLI를 같은 작업공간에서 바로 실행합니다.
-- **작업공간 동기화**는 서버의 최신 브랜치 스냅샷을 다시 받습니다. AI가 직접 수정한 파일은 덮어쓰지 않습니다.
+- **작업공간 동기화**는 서버 manifest와 로컬 캐시를 비교해 바뀐 파일만 다시 받습니다. AI가 직접 수정한 파일은 덮어쓰지 않습니다.
 - AI가 디스크에서 직접 고친 파일은 잠시 뒤 자동으로 서버에 CAS 반영되고, 다른 사용자의 Changes·Repository 뷰에도 알림이 갑니다.
+- 다른 사용자가 바꾼 파일은 제어 WebSocket 알림(`worktree_changed`·파일 생성/삭제/이동)으로 AI 작업공간에도 즉시 반영됩니다.
 - **MCP 설정 보기**는 Codex·Claude에서는 `.axis/mcp.json`, Antigravity에서는 `~/.gemini/config/mcp_config.json`을 엽니다.
 - **AI 작업공간 초기화**는 커밋하지 않은 AI 작업 내용까지 삭제합니다.
 - **AI 세션 종료**는 AI 터미널과 MCP 브리지를 함께 종료합니다.
 
-AI 작업공간은 현재 열린 저장소의 일반 편집 사본과 분리되어 `globalStorage/ai-workspace/repo-<id>/branch-<slug>`에 생성됩니다. 서버 파일 내용은 JSON 스냅샷으로 받고, `.git`은 로컬 baseline 용도로만 새로 초기화합니다.
+AI 작업공간은 현재 열린 저장소의 일반 편집 사본과 분리되어 `globalStorage/ai-workspace/repo-<id>/branch-<slug>`에 생성됩니다. 서버는 먼저 경로·크기·버전 토큰만 담은 manifest를 주고, 확장은 `.axis/manifest.json` 캐시와 비교해 바뀐 파일만 개별 API로 내려받습니다. 최초 동기화도 24MB JSON 하나를 만들지 않아 서버 메모리 사용이 작고, 두 번째부터는 변경분만 받습니다. `.git`은 로컬 baseline 용도로만 새로 초기화합니다.
 
 ## 실시간 편집
 
@@ -236,6 +237,7 @@ Axis Share는 서버에서 파일 내용을 받고 비교는 VS Code 내장 diff
 | `axis-share.ai.providers.claude.path` | 빈 값 | Claude Code CLI 절대 경로. 비우면 `PATH`에서 찾습니다. |
 | `axis-share.ai.providers.antigravity.path` | 빈 값 | Antigravity CLI(`agy`) 절대 경로. 비우면 `PATH`에서 찾습니다. |
 | `axis-share.ai.autoSync` | `false` | AI 터미널을 열 때 서버 스냅샷을 자동으로 다시 받습니다. AI가 수정한 파일은 덮어쓰지 않습니다. |
+| `axis-share.ai.liveSync` | `true` | 다른 사용자의 변경을 제어 WebSocket 알림으로 AI 작업공간에 즉시 반영합니다. AI가 수정 중인 파일은 건너뛰고 충돌로 표시합니다. |
 | `axis-share.ai.allowWrite` | `true` | MCP `axis_write_file`을 허용합니다. |
 | `axis-share.ai.allowCommit` | `false` | AI commit 도구 허용 여부. 1차 구현에서는 사용하지 않습니다. |
 | `axis-share.ai.allowPush` | `false` | AI push 도구 허용 여부. 1차 구현에서는 사용하지 않습니다. |

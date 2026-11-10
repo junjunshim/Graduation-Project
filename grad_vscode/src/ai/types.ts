@@ -30,6 +30,30 @@ export type AiWorkspaceSkippedFile = {
     reason: string;
 };
 
+/** GET /api/github/repos/workspace/manifest 의 data[0].files[] */
+export type AiWorkspaceManifestEntry = {
+    path: string;
+    size: number;
+    version: string;
+};
+
+/**
+ * GET /api/github/repos/workspace/manifest 의 data[0].
+ * 파일 본문 없이 경로·크기·버전 토큰만 담아 최초 동기화 비용을 줄인다.
+ */
+export type AiWorkspaceManifest = {
+    repo_id: number;
+    branch: string;
+    head_sha?: string;
+    file_count?: number;
+    total_bytes?: number;
+    truncated?: boolean;
+    /** 서버가 크기·개수 제한 없이 전체 목록을 담았는지. false 면 삭제 판정을 보수적으로 건너뛴다. */
+    complete?: boolean;
+    files: AiWorkspaceManifestEntry[];
+    skipped?: AiWorkspaceSkippedFile[];
+};
+
 /** GET /api/github/repos/workspace 의 data[0]. */
 export type AiWorkspaceSnapshot = {
     repo_id: number;

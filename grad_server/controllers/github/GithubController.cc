@@ -1036,6 +1036,32 @@ void broadcastStatusChanged(int repoId, const std::string &branch) {
     GithubWebSocketController::broadcastToBranch(repoId, branch, event);
 }
 
+// worktree 내용이 바뀐 경로를 같은 브랜치의 AI 작업공간에도 알린다.
+// collab 이 보내는 worktree_changed 와 같은 모양(paths 배열)을 쓴다.
+void broadcastWorktreeChanged(int repoId, const std::string &branch,
+                              const std::vector<std::string> &paths) {
+    if (branch.empty() || paths.empty()) {
+        return;
+    }
+
+    Json::Value list(Json::arrayValue);
+    for (const auto &path : paths) {
+        if (!path.empty()) {
+            list.append(path);
+        }
+    }
+    if (list.empty()) {
+        return;
+    }
+
+    Json::Value event;
+    event["type"] = "worktree_changed";
+    event["repo_id"] = repoId;
+    event["branch"] = branch;
+    event["paths"] = list;
+    GithubWebSocketController::broadcastToBranch(repoId, branch, event);
+}
+
 // push 실패 stderr 를 확장이 배지로 구분할 사유로 나눈다.
 std::string classifyPushFailure(const std::string &detail) {
     if (detail.find("Authentication failed") != std::string::npos ||
@@ -1263,6 +1289,22 @@ bool hasSymlinkParent(const std::string &workDir, const std::string &relPath) {
 
 std::string contentHash(const std::string &content) {
     return "sha256:" + sha256Hex(content);
+}
+
+// AI 작업공간 manifest 의 변경 토큰. 파일 내용을 읽지 않고 크기와 수정 시각만 사용한다.
+// 내용 해시와 달리 서버 디스크를 전부 읽지 않으므로 최초 동기화 판단 비용이 작다.
+std::string aiWorkspaceVersion(const std::string &absPath) {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(absPath, ec);
+    if (ec) {
+        return "";
+    }
+    const auto modified = std::filesystem::last_write_time(absPath, ec);
+    if (ec) {
+        return "";
+    }
+    return std::to_string(static_cast<unsigned long long>(size)) + ":" +
+           std::to_string(static_cast<long long>(modified.time_since_epoch().count()));
 }
 
 // worktree 안의 실제 경로. 상대 경로는 위에서 검증한 것만 넘긴다.
@@ -1815,6 +1857,7 @@ void GithubController::getRepositoryFile(const HttpRequestPtr &req, std::functio
             data["branch"] = requested;
             data["path"] = path;
             data["size"] = sizeEc ? 0 : static_cast<Json::Int64>(size);
+            data["version"] = aiWorkspaceVersion(target);
             data["encoding"] = "utf-8";
             data["read_only"] = false;
             data["content"] = "";
@@ -2101,6 +2144,7 @@ void GithubController::getRepositoryWorkspace(const HttpRequestPtr &req,
             file["content"] = content;
             file["encoding"] = "utf-8";
             file["hash"] = contentHash(content);
+            file["version"] = aiWorkspaceVersion(worktreeAbsPath(workDir, path));
             files.append(file);
             totalBytes += static_cast<long long>(content.size());
             ++included;
@@ -2117,6 +2161,145 @@ void GithubController::getRepositoryWorkspace(const HttpRequestPtr &req,
         data["files"] = files;
         data["skipped"] = skipped;
         return successResponse(singleItemArray(data), "AI 작업공간 스냅샷을 만들었습니다.");
+    });
+}
+
+// GET /api/github/repos/workspace/manifest?repo_id=1&branch=main
+// AI 작업공간 최초 동기화용 경량 manifest. 파일 본문을 JSON 으로 싣지 않고
+// path/size/version 만 돌려준다. 확장은 로컬 캐시와 비교해 바뀐 파일만 개별 조회한다.
+void GithubController::getRepositoryWorkspaceManifest(const HttpRequestPtr &req,
+                                                      std::function<void(const HttpResponsePtr &)> &&callback) {
+    int repoId = 0;
+    if (!parseInt(req->getParameter("repo_id"), repoId)) {
+        callback(errorResponse("400", "필수 파라미터(repo_id)가 없거나 잘못되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requestedBranch = trim(req->getParameter("branch"));
+    const std::string requester = requesterEmail(req);
+    runOffLoop(req, std::move(callback), [requester, repoId, requestedBranch]() -> HttpResponsePtr {
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoId, requestedBranch, workDir, failure)) {
+            return failure;
+        }
+
+        std::lock_guard<std::mutex> guard(*repoLock(repoId));
+
+        auto branchResult = GitRunner::currentBranch(workDir);
+        const std::string branch = branchResult.ok() ? trim(branchResult.out) : requestedBranch;
+        flushCollabDocs(repoId, branch);
+
+        auto listed = GitRunner::lsFiles(workDir, {"--cached", "--others", "--exclude-standard"});
+        if (!listed.ok()) {
+            return errorResponse("P0807", "작업공간 파일 목록을 읽지 못했습니다: " + trim(listed.err),
+                                 k500InternalServerError);
+        }
+
+        const std::vector<std::string> nested = nestedWorktreePaths(workDir);
+        Json::Value files(Json::arrayValue);
+        Json::Value skipped(Json::arrayValue);
+        long long totalBytes = 0;
+        int included = 0;
+        int skippedCount = 0;
+        bool complete = true;
+
+        auto skip = [&skipped, &skippedCount, &complete](const std::string &path, const std::string &reason) {
+            if (skippedCount >= 200) {
+                complete = false;
+                return;
+            }
+            Json::Value item;
+            item["path"] = path;
+            item["reason"] = reason;
+            skipped.append(item);
+            ++skippedCount;
+        };
+
+        for (const std::string &rawPath : splitNul(listed.out)) {
+            const std::string path = normalizePath(rawPath);
+            if (path.empty() || !isSafeRelPath(path)) {
+                continue;
+            }
+            if (path == ".axis" || path.rfind(".axis/", 0) == 0 || path.rfind(".worktrees/", 0) == 0) {
+                continue;
+            }
+
+            bool nestedPath = false;
+            for (const std::string &root : nested) {
+                if (pathCovers(root, path)) {
+                    nestedPath = true;
+                    break;
+                }
+            }
+            if (nestedPath) {
+                continue;
+            }
+
+            if (isSensitiveAiWorkspacePath(path)) {
+                skip(path, "sensitive");
+                continue;
+            }
+            if (hasSymlinkParent(workDir, path)) {
+                skip(path, "symlink");
+                continue;
+            }
+            if (included >= kMaxAiWorkspaceFiles) {
+                skip(path, "file_limit");
+                complete = false;
+                continue;
+            }
+
+            const std::string target = worktreeAbsPath(workDir, path);
+            std::error_code ec;
+            const auto linkStatus = std::filesystem::symlink_status(target, ec);
+            if (ec || !std::filesystem::is_regular_file(linkStatus)) {
+                skip(path, "not_file");
+                continue;
+            }
+            const auto size = std::filesystem::file_size(target, ec);
+            if (ec) {
+                skip(path, "unreadable");
+                continue;
+            }
+            const long long fileBytes = static_cast<long long>(size);
+            if (fileBytes > kMaxAiWorkspaceFileBytes) {
+                skip(path, "too_large");
+                continue;
+            }
+            if (totalBytes + fileBytes > kMaxAiWorkspaceTotalBytes) {
+                skip(path, "size_limit");
+                complete = false;
+                continue;
+            }
+
+            const std::string version = aiWorkspaceVersion(target);
+            if (version.empty()) {
+                skip(path, "unreadable");
+                continue;
+            }
+
+            Json::Value file;
+            file["path"] = path;
+            file["size"] = static_cast<Json::Int64>(fileBytes);
+            file["version"] = version;
+            files.append(file);
+            totalBytes += fileBytes;
+            ++included;
+        }
+
+        Json::Value data;
+        data["repo_id"] = repoId;
+        data["branch"] = branch;
+        auto head = GitRunner::headSha(workDir);
+        data["head_sha"] = head.ok() ? trim(head.out) : "";
+        data["file_count"] = included;
+        data["total_bytes"] = static_cast<Json::Int64>(totalBytes);
+        data["truncated"] = skippedCount > 0;
+        data["complete"] = complete;
+        data["files"] = files;
+        data["skipped"] = skipped;
+        return successResponse(singleItemArray(data), "AI 작업공간 manifest 를 만들었습니다.");
     });
 }
 
@@ -2333,6 +2516,10 @@ void GithubController::updateRepositoryFile(const HttpRequestPtr &req,
 
         if (!exists) {
             broadcastTreeChanged(repoId, branch, "file_created", path);
+        } else {
+            // 기존 파일 내용이 바뀐 경우에는 트리 모양이 그대로라 worktree_changed 로 알린다.
+            // 확장은 이 경로만 다시 받아 AI 작업공간을 최신으로 맞춘다.
+            broadcastWorktreeChanged(repoId, branch, {path});
         }
         broadcastStatusChanged(repoId, branch);
 

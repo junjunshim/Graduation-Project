@@ -54,6 +54,12 @@ export type ControlEvent = {
     branch?: string;
     /** `presence_updated` 전용 — 그 브랜치의 접속자 목록. */
     presence?: PresenceEntry[];
+    /** `worktree_changed` 전용 — 바뀐 파일 경로 목록. AI 작업공간 증분 동기화에 쓴다. */
+    paths?: string[];
+    /** 트리 이벤트(`file_created`·`file_deleted` 등)의 대상 경로. */
+    path?: string;
+    /** `file_moved` 전용 — 이동 전 경로. */
+    from?: string;
     /** `branch_deleted` 전용 — 삭제된 브랜치에 있던 사용자가 옮겨 갈 브랜치(§1.3-10). */
     defaultBranch?: string;
     /** `err` 전용 — SQL 이 던진 `Pxxxx` 를 그대로 옮긴 코드. */
@@ -749,6 +755,9 @@ function emitEvent(payload: Record<string, unknown>, type: string): void {
         repoId: asNumber(payload.repo_id),
         branch: asString(payload.branch),
         presence: payload.presence === undefined ? undefined : asPresence(payload.presence),
+        paths: asStringArray(payload.paths),
+        path: asString(payload.path),
+        from: asString(payload.from),
         defaultBranch: asString(payload.default_branch),
         code: asString(payload.code),
         message: asString(payload.message),
@@ -787,6 +796,14 @@ function asString(value: unknown): string | undefined {
 
 function asNumber(value: unknown): number | undefined {
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+    if (!Array.isArray(value)) {
+        return undefined;
+    }
+    const result = value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+    return result.length > 0 ? result : undefined;
 }
 
 function asPresence(value: unknown): PresenceEntry[] {

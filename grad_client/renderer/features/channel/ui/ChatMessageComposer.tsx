@@ -56,16 +56,22 @@ export function ChatMessageComposer({
     const trimmed = content.trim()
     const attached = [...files]
 
+    setContent('')
+    setFiles([])
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
+
     setIsSending(true)
     try {
       await onSend(trimmed, attached)
-      setContent('')
-      setFiles([])
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto'
-      }
+    } catch (error) {
+      setContent((current) => (current.length === 0 ? trimmed : current))
+      setFiles((current) => (current.length === 0 ? attached : current))
+      throw error
     } finally {
       setIsSending(false)
+      textareaRef.current?.focus()
     }
   }
 
@@ -173,7 +179,7 @@ export function ChatMessageComposer({
           rows={1}
           value={content}
           placeholder={placeholder}
-          disabled={disabled || isSending}
+          disabled={disabled}
           className={styles.textarea}
           onChange={(event) => {
             setContent(event.target.value)

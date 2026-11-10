@@ -534,6 +534,7 @@
 .recentWorkItemIcon {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   color: var(--text-muted);
 }
 
@@ -560,16 +561,27 @@
   color: var(--text-primary);
 }
 
-.recentWorkItem span {
-  flex: 0 0 auto;
-  color: var(--text-muted);
-}
-
 .recentWorkItem strong {
   min-width: 0;
   overflow: hidden;
   font-size: inherit;
   font-weight: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentWorkItemLabel {
+  display: grid;
+  min-width: 0;
+  gap: 0.05rem;
+}
+
+.recentWorkItemContext {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -697,6 +709,33 @@
 .tooltipAnchor:hover::after,
 .tooltipAnchor:focus-visible::after {
   transform: translate3d(0, -50%, 0);
+}
+
+/* 사이드바 경계에 붙은 툴팁이 스크롤 컨테이너에 잘리지 않도록 안쪽에 배치 */
+.tooltipAnchorBelow::before,
+.tooltipAnchorBelow::after {
+  top: auto;
+  right: 0;
+  left: auto;
+}
+
+.tooltipAnchorBelow::before {
+  top: calc(100% + 0.3rem);
+  right: 0.62rem;
+  border-top: 1px solid var(--line-strong);
+  border-right: 1px solid var(--line-strong);
+  border-left: 0;
+  transform: rotate(45deg);
+}
+
+.tooltipAnchorBelow::after {
+  top: calc(100% + 0.55rem);
+  transform: translate3d(0, -0.18rem, 0);
+}
+
+.tooltipAnchorBelow:hover::after,
+.tooltipAnchorBelow:focus-visible::after {
+  transform: translate3d(0, 0, 0);
 }
 
 /* 캘린더 페이지가 셸 헤더로 포털해 넣는 툴바 자리 */

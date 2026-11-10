@@ -170,10 +170,25 @@
   color: var(--axis-text-icon-muted);
 }
 
-.optionName {
+.optionText {
   flex: 1 1 auto;
   min-width: 0;
+  display: grid;
+  gap: 0.05rem;
+}
+
+.optionName {
+  min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionContext {
+  overflow: hidden;
+  color: var(--axis-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

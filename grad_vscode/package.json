@@ -2,7 +2,7 @@
     "name": "axis-share",
     "displayName": "Axis Share",
     "description": "Axis Flow 워크스페이스의 원격 저장소를 VSCode 에서 실시간으로 함께 편집한다.",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "publisher": "junjunshim",
     "icon": "media/axis-share-icon.png",
     "engines": {

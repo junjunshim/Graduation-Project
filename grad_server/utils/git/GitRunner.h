@@ -76,6 +76,12 @@ public:
     static GitResult rmPath(const std::string &worktreeDir, const std::string &path);
     static GitResult commit(const std::string &worktreeDir, const std::string &message,
                             const std::string &authorName, const std::string &authorEmail);
+    // 원격 추적 ref 를 현재 브랜치에 병합한다. 충돌하면 git 이 1 로 끝나며 worktree 에 충돌 표시가
+    // 남으므로, 호출자가 `merge --abort` 로 정리한 뒤 사유를 사용자에게 알린다.
+    static GitResult merge(const std::string &worktreeDir, const std::string &ref,
+                           const std::string &authorName, const std::string &authorEmail);
+    // 커밋을 되돌린다. mode 는 soft|mixed|hard 만 허용한다.
+    static GitResult reset(const std::string &worktreeDir, const std::string &mode, const std::string &ref);
     static GitResult headSha(const std::string &worktreeDir);
     // range 의 커밋 수를 센다. push 대상(ahead)·뒤처진 커밋(behind) 계산에 쓴다.
     static GitResult revListCount(const std::string &repoDir, const std::string &range);

@@ -52,6 +52,9 @@ class GithubController : public drogon::HttpController<GithubController>
 
     // 커밋과 push 는 분리한다
     ADD_METHOD_TO(GithubController::commitPaths, "/api/github/repos/commits", Post, "JwtFilter");
+    // 원격 변경 병합(pull)과 로컬 이력 되돌리기(reset)도 별도 사용자 동작이다.
+    ADD_METHOD_TO(GithubController::pullRepository, "/api/github/repos/pull", Post, "JwtFilter");
+    ADD_METHOD_TO(GithubController::resetRepository, "/api/github/repos/reset", Post, "JwtFilter");
     ADD_METHOD_TO(GithubController::pushRepository, "/api/github/repos/push", Post, "JwtFilter");
 
     // 사용자 GitHub 자격증명(PAT)
@@ -99,6 +102,8 @@ class GithubController : public drogon::HttpController<GithubController>
     void fetchRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void getSync(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void commitPaths(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void pullRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
+    void resetRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
     void pushRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);
 
     void getCredentialStatus(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback);

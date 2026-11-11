@@ -656,6 +656,43 @@ GitResult GitRunner::commit(const std::string &worktreeDir, const std::string &m
     return run(worktreeDir, {"commit", "--no-verify", "-m", message}, nullptr, kDefaultTimeoutSec, extra);
 }
 
+GitResult GitRunner::merge(const std::string &worktreeDir, const std::string &ref,
+                           const std::string &authorName, const std::string &authorEmail) {
+    if (ref.empty()) {
+        GitResult r;
+        r.err = "병합할 ref 가 비어 있습니다";
+        return r;
+    }
+    if (!isValidIdentity(authorName) || !isValidIdentity(authorEmail)) {
+        GitResult r;
+        r.err = "병합 커밋 아이덴티티가 유효하지 않습니다";
+        return r;
+    }
+
+    // merge commit 을 만들 때 서버 저장소에 사용자 설정이 없을 수 있다. 요청자 계정으로 고정한다.
+    const std::vector<std::pair<std::string, std::string>> extra = {
+        {"GIT_AUTHOR_NAME", authorName},
+        {"GIT_AUTHOR_EMAIL", authorEmail},
+        {"GIT_COMMITTER_NAME", authorName},
+        {"GIT_COMMITTER_EMAIL", authorEmail},
+    };
+    return run(worktreeDir, {"merge", "--no-edit", ref}, nullptr, 300, extra);
+}
+
+GitResult GitRunner::reset(const std::string &worktreeDir, const std::string &mode, const std::string &ref) {
+    if (mode != "soft" && mode != "mixed" && mode != "hard") {
+        GitResult r;
+        r.err = "reset mode 는 soft|mixed|hard 중 하나여야 합니다";
+        return r;
+    }
+    if (ref.empty()) {
+        GitResult r;
+        r.err = "되돌릴 ref 가 비어 있습니다";
+        return r;
+    }
+    return run(worktreeDir, {"reset", "--" + mode, ref}, nullptr, 120);
+}
+
 GitResult GitRunner::push(const std::string &worktreeDir, const std::string &branch, const Auth *auth) {
     // push 는 요청한 사용자의 토큰으로만 수행한다
     return run(worktreeDir, {"push", "origin", branch}, auth, 300);

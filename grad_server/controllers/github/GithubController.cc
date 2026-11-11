@@ -1766,6 +1766,196 @@ void broadcastTreeChanged(int repoId, const std::string &branch, const std::stri
     }
     GithubWebSocketController::broadcastToBranch(repoId, branch, event);
 }
+
+// pull/reset 으로 브랜치 이력이 바뀌었음을 알린다. status_changed 와 달리 Graph 뷰의 커밋 목록도
+// 다시 받아야 한다 — 확장은 이 이벤트 하나로 Changes 와 Graph 를 함께 갱신한다.
+void broadcastBranchSynced(int repoId, const std::string &branch, const std::string &email,
+                           const std::string &action) {
+    if (branch.empty()) {
+        return;
+    }
+
+    Json::Value event;
+    event["type"] = "branch_synced";
+    event["repo_id"] = repoId;
+    event["branch"] = branch;
+    event["email"] = email;
+    event["action"] = action;
+    GithubWebSocketController::broadcastToBranch(repoId, branch, event);
+}
+
+// 병합 충돌 경로. 충돌이 없으면 빈 배열이다.
+Json::Value unmergedPaths(const std::string &workDir) {
+    Json::Value paths(Json::arrayValue);
+    auto diff = GitRunner::run(workDir, {"diff", "--name-only", "--diff-filter=U", "-z"});
+    if (!diff.ok()) {
+        return paths;
+    }
+    for (const std::string &path : splitNul(diff.out)) {
+        if (!path.empty()) {
+            paths.append(path);
+        }
+    }
+    return paths;
+}
+
+// `git diff --name-status -z` 를 파싱한 변경 한 건. kind 는 git 의 상태 문자(A/M/D/R/C/T)다.
+struct TreeChange {
+    char kind = 'M';
+    std::string from;
+    std::string path;
+    // reset 전 작업 트리에만 있던 변경을 되살리기 위해 넣은 항목이면 true.
+    // 커밋 사이 diff 에는 없지만 worktree/tree 뷰와 Y.Doc 은 갱신해야 한다.
+    bool restored = false;
+};
+
+std::vector<TreeChange> changedPathsBetween(const std::string &workDir, const std::string &fromSha,
+                                            const std::string &toSha) {
+    std::vector<TreeChange> changes;
+    if (fromSha.empty() || toSha.empty() || fromSha == toSha) {
+        return changes;
+    }
+
+    auto diff = GitRunner::run(workDir, {"diff", "--name-status", "-z", "--find-renames", "--no-ext-diff",
+                                         fromSha, toSha});
+    if (!diff.ok()) {
+        LOG_WARN << "브랜치 변경 경로 조회 실패 (" << fromSha << ".." << toSha << "): " << trim(diff.err);
+        return changes;
+    }
+
+    const std::vector<std::string> tokens = splitNul(diff.out);
+    std::size_t index = 0;
+    while (index < tokens.size()) {
+        const std::string status = tokens[index++];
+        if (status.empty()) {
+            continue;
+        }
+
+        const char kind = status.front();
+        if (kind == 'R' || kind == 'C') {
+            if (index + 1 >= tokens.size()) {
+                break;
+            }
+            TreeChange change;
+            change.kind = kind;
+            change.from = tokens[index++];
+            change.path = tokens[index++];
+            changes.push_back(std::move(change));
+            continue;
+        }
+
+        if (index >= tokens.size()) {
+            break;
+        }
+        TreeChange change;
+        change.kind = kind;
+        change.path = tokens[index++];
+        changes.push_back(std::move(change));
+    }
+    return changes;
+}
+
+// pull/reset 으로 바뀐 worktree 내용을 열려 있는 Y.Doc 에 반영하고, 같은 브랜치의 확장들에게
+// 트리·상태 변경을 알린다. 큰 파일·바이너리는 collab 이 doc 으로 열지 않으므로 통보에서 뺀다.
+// extraPaths 는 hard reset 이 버린 미커밋 경로다. 커밋 diff 에 없어도 Y.Doc 을 현재 파일로 맞춰야
+// 다음 flush 가 버린 내용을 되살리지 않는다.
+int syncCollabAndBroadcastChanges(int repoId, const std::string &branch, const std::string &workDir,
+                                  const std::string &fromSha, const std::string &toSha,
+                                  const std::vector<std::string> &extraPaths = {}) {
+    std::vector<TreeChange> changes = changedPathsBetween(workDir, fromSha, toSha);
+    for (const std::string &path : extraPaths) {
+        if (!isSafeRelPath(path)) {
+            continue;
+        }
+        const bool known = std::any_of(changes.begin(), changes.end(), [&path](const TreeChange &change) {
+            return change.path == path || change.from == path;
+        });
+        if (known) {
+            continue;
+        }
+
+        TreeChange extra;
+        extra.path = path;
+        extra.restored = true;
+        extra.kind = worktreePathExists(workDir, path) ? 'M' : 'D';
+        changes.push_back(std::move(extra));
+    }
+    if (changes.empty()) {
+        broadcastStatusChanged(repoId, branch);
+        return 0;
+    }
+
+    constexpr std::size_t kCollabDocLimit = 512 * 1024;
+    constexpr std::size_t kResetPayloadLimit = 8 * 1024 * 1024;
+    Json::Value files(Json::arrayValue);
+    std::size_t payloadBytes = 0;
+    std::vector<std::string> changedPaths;
+
+    const auto addDeletedDoc = [&files](const std::string &path) {
+        if (!isSafeRelPath(path)) {
+            return;
+        }
+        Json::Value file;
+        file["path"] = path;
+        file["deleted"] = true;
+        files.append(file);
+    };
+
+    for (const TreeChange &change : changes) {
+        if (!change.path.empty()) {
+            changedPaths.push_back(change.path);
+        }
+        if (!change.from.empty()) {
+            changedPaths.push_back(change.from);
+        }
+
+        if (change.kind == 'D') {
+            addDeletedDoc(change.path);
+            continue;
+        }
+        if (change.kind == 'R' && !change.from.empty()) {
+            addDeletedDoc(change.from);
+        }
+
+        if (!isSafeRelPath(change.path)) {
+            continue;
+        }
+        std::string text;
+        std::string reason;
+        if (!readTextFileLimited(worktreeAbsPath(workDir, change.path), kCollabDocLimit, text, reason)) {
+            continue;
+        }
+        if (!isValidUtf8(text) || payloadBytes + text.size() > kResetPayloadLimit) {
+            continue;
+        }
+        payloadBytes += text.size();
+        Json::Value file;
+        file["path"] = change.path;
+        file["text"] = toLf(text);
+        files.append(file);
+    }
+
+    if (!resetCollabDocs(repoId, branch, files)) {
+        LOG_WARN << "pull/reset 뒤 collab doc 동기화 실패 (repo=" << repoId << ", branch=" << branch << ")";
+    }
+
+    for (const TreeChange &change : changes) {
+        if (change.kind == 'A' || change.kind == 'C') {
+            broadcastTreeChanged(repoId, branch, "file_created", change.path);
+        } else if (change.kind == 'D') {
+            broadcastTreeChanged(repoId, branch, "file_deleted", change.path);
+        } else if (change.kind == 'R') {
+            broadcastTreeChanged(repoId, branch, "file_moved", change.path, change.from);
+        } else if (change.restored) {
+            // modified 파일은 hard reset 뒤에도 트리에 남아 있다. 그래도 경로 캐시를 비워야
+            // 되돌리기 전 상태가 남지 않는다(Pull/Reset 뒤 다른 확장도 즉시 따라오게).
+            broadcastTreeChanged(repoId, branch, "file_restored", change.path);
+        }
+    }
+    broadcastWorktreeChanged(repoId, branch, changedPaths);
+    broadcastStatusChanged(repoId, branch);
+    return static_cast<int>(changes.size());
+}
 }  // namespace
 
 // 저장소 연결 / 목록 / 해제
@@ -4052,6 +4242,337 @@ void GithubController::fetchRepository(const HttpRequestPtr &req, std::function<
             data["branch"] = branch;
         }
         return successResponse(data, "원격 저장소를 최신으로 맞췄습니다.");
+    });
+}
+
+// POST /api/github/repos/pull — fetch 후 현재 브랜치에 원격 변경을 병합한다.
+//
+// push 와 달리 작업 트리를 바꾸므로, 커밋되지 않은 변경이 있으면 거부한다. 병합 충돌도 worktree 에
+// 남기지 않는다 — `merge --abort` 로 되돌린 뒤 충돌 경로만 돌려준다. 자동 rebase 는 쓰지 않는다:
+// 로컬 커밋 SHA 가 바뀌면 DB 의 커밋 기록·업무 연결이 끊어진다.
+void GithubController::pullRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runNetworkOffLoop(req, std::move(callback), [requester, repoId, branch]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoRow, branch, workDir, failure, true)) {
+            return failure;
+        }
+
+        // 병합 커밋의 작성자는 요청자 계정으로 확정한다(요청 본문을 신뢰하지 않는다).
+        Json::Value userRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_user_profile($1, $2)", requester, requester), userRow)) {
+            return errorResponse("P0001", "로그인 사용자를 찾을 수 없습니다.", k404NotFound);
+        }
+        std::string authorName = userRow["name"].asString();
+        const std::string authorEmail = userRow["email"].asString();
+        if (!GitRunner::isValidIdentity(authorName)) {
+            authorName = "Axis Share";
+        }
+
+        GitRunner::Auth auth;
+        const GitRunner::Auth *authPtr = nullptr;
+        const std::string token = userToken(db, requester);
+        if (!token.empty()) {
+            auth.login = "x-access-token";
+            auth.token = token;
+            authPtr = &auth;
+        }
+
+        std::lock_guard<std::mutex> syncGuard(*repoLock(repoId));
+
+        // 열려 있는 문서의 마지막 편집을 파일로 내려놓은 뒤에만 병합한다. 실패하면 파일과 Y.Doc 이
+        // 어긋난 채 병합할 수 있으므로 커밋과 같은 엄격한 기준을 쓴다.
+        if (!flushCollabDocsStrict(repoId, branch)) {
+            return errorResponse("P0908",
+                                 "협업 서버와 연결하지 못해 원격 변경을 병합하지 않았습니다. 잠시 뒤 다시 시도해 주세요.",
+                                 k503ServiceUnavailable);
+        }
+
+        GitResult statusResult;
+        const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+        if (!statusResult.ok()) {
+            return errorResponse("P0807", "작업 트리 상태를 읽지 못했습니다: " + trim(statusResult.err),
+                                 k500InternalServerError);
+        }
+        if (!entries.empty()) {
+            return errorResponse("P0810",
+                                 "커밋되지 않은 변경이 있어 원격 변경을 병합하지 않았습니다. 먼저 커밋하거나 되돌려 주세요.",
+                                 k409Conflict, entries);
+        }
+
+        auto fetched = GitRunner::fetchAll(workDir, authPtr);
+        if (!fetched.ok()) {
+            const std::string detail = trim(fetched.err);
+            LOG_WARN << "pull 전 fetch 실패 (" << branch << "): " << detail;
+            if (detail.find("Authentication failed") != std::string::npos ||
+                detail.find("could not read Username") != std::string::npos ||
+                detail.find("403") != std::string::npos ||
+                detail.find("401") != std::string::npos) {
+                return errorResponse("P0802", "GitHub 자격증명이 유효하지 않거나 이 저장소에 접근할 수 없습니다.",
+                                     k401Unauthorized);
+            }
+            return errorResponse("P0807", "원격 저장소를 가져오지 못했습니다: " + detail, k502BadGateway);
+        }
+
+        const SyncState before = readSyncState(workDir, branch);
+        if (!before.hasUpstream) {
+            return errorResponse("P0801", "원격 추적 브랜치가 없습니다. 먼저 브랜치를 push 해 주세요.", k409Conflict);
+        }
+        if (before.behind == 0) {
+            Json::Value data = syncToJson(before);
+            data["action"] = "up_to_date";
+            return successResponse(singleItemArray(data), "이미 원격 최신 상태입니다.");
+        }
+        if (before.headSha.empty()) {
+            return errorResponse("P0807", "현재 커밋 SHA 를 읽지 못했습니다.", k500InternalServerError);
+        }
+
+        const std::string oldHead = before.headSha;
+        const std::string action = before.ahead > 0 ? "merged" : "fast_forward";
+        auto merged = GitRunner::merge(workDir, "origin/" + branch, authorName, authorEmail);
+        if (!merged.ok()) {
+            const Json::Value conflicts = unmergedPaths(workDir);
+            auto mergeHead = GitRunner::run(workDir, {"rev-parse", "-q", "--verify", "MERGE_HEAD"});
+            if (mergeHead.ok()) {
+                auto aborted = GitRunner::run(workDir, {"merge", "--abort"});
+                if (!aborted.ok()) {
+                    LOG_WARN << "병합 충돌 후 merge --abort 실패 (" << branch << "): " << trim(aborted.err);
+                }
+            }
+
+            const std::string detail = trim(merged.err);
+            LOG_WARN << "pull 병합 실패 (" << branch << "): " << detail;
+            if (!conflicts.empty() || mergeHead.ok()) {
+                return errorResponse("P0817",
+                                     "원격 변경과 충돌해 병합을 취소했습니다. 충돌 파일을 정리한 뒤 다시 시도해 주세요.",
+                                     k409Conflict, conflicts);
+            }
+            return errorResponse("P0807", "원격 변경을 병합하지 못했습니다: " + detail, k500InternalServerError);
+        }
+
+        const SyncState after = readSyncState(workDir, branch);
+        if (after.headSha.empty()) {
+            return errorResponse("P0807", "병합 후 커밋 SHA 를 읽지 못했습니다.", k500InternalServerError);
+        }
+        const int changedPaths = syncCollabAndBroadcastChanges(repoId, branch, workDir, oldHead, after.headSha);
+        broadcastBranchSynced(repoId, branch, requester, action);
+
+        Json::Value data = syncToJson(after);
+        data["action"] = action;
+        data["changed_paths"] = changedPaths;
+        return successResponse(singleItemArray(data),
+                               action == "fast_forward" ? "원격 변경을 fast-forward 했습니다."
+                                                        : "원격 변경을 병합했습니다.");
+    });
+}
+
+// POST /api/github/repos/reset — 커밋 이력을 되돌린다.
+//
+// target=last  : HEAD~1 로 되돌린다. mode=soft 면 변경 내용을 스테이징된 채 남기고, hard 면 모두 버린다.
+// target=remote: origin/<branch> 로 맞춘다. 로컬 커밋과 커밋되지 않은 변경을 모두 버리므로 hard 만 허용한다.
+void GithubController::resetRepository(const HttpRequestPtr &req, std::function<void(const HttpResponsePtr &)> &&callback) {
+    auto jsonPtr = req->getJsonObject();
+    if (!jsonPtr || !validateInts(jsonPtr, "repo_id") || !validateStrings(jsonPtr, "branch", "target", "mode")) {
+        callback(errorResponse("400", "필수 파라미터(repo_id, branch, target, mode)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+
+    const int repoId = (*jsonPtr)["repo_id"].asInt();
+    const std::string branch = trim((*jsonPtr)["branch"].asString());
+    const std::string target = trim((*jsonPtr)["target"].asString());
+    const std::string mode = trim((*jsonPtr)["mode"].asString());
+    if (branch.empty()) {
+        callback(errorResponse("400", "필수 파라미터(branch)가 누락되었습니다.", k400BadRequest));
+        return;
+    }
+    if (target != "last" && target != "remote") {
+        callback(errorResponse("400", "target 은 last 또는 remote 여야 합니다.", k400BadRequest));
+        return;
+    }
+    if (mode != "soft" && mode != "mixed" && mode != "hard") {
+        callback(errorResponse("400", "mode 는 soft, mixed, hard 중 하나여야 합니다.", k400BadRequest));
+        return;
+    }
+    if (target == "remote" && mode != "hard") {
+        callback(errorResponse("400", "원격 기준 초기화는 mode=hard 만 지원합니다.", k400BadRequest));
+        return;
+    }
+
+    const std::string requester = requesterEmail(req);
+    runNetworkOffLoop(req, std::move(callback), [requester, repoId, branch, target, mode]() -> HttpResponsePtr {
+        auto db = app().getDbClient();
+
+        Json::Value repoRow;
+        if (!singleRow(db->execSqlSync("SELECT * FROM get_github_repository_by_id($1, $2)", requester, repoId), repoRow)) {
+            return errorResponse("P0801", "연결된 저장소를 찾을 수 없습니다.", k404NotFound);
+        }
+
+        std::string workDir;
+        HttpResponsePtr failure;
+        if (!resolveWorkDir(requester, repoRow, branch, workDir, failure, true)) {
+            return failure;
+        }
+
+        GitRunner::Auth auth;
+        const GitRunner::Auth *authPtr = nullptr;
+        const std::string token = userToken(db, requester);
+        if (!token.empty()) {
+            auth.login = "x-access-token";
+            auth.token = token;
+            authPtr = &auth;
+        }
+
+        std::lock_guard<std::mutex> resetGuard(*repoLock(repoId));
+
+        if (target == "remote") {
+            auto fetched = GitRunner::fetchAll(workDir, authPtr);
+            if (!fetched.ok()) {
+                const std::string detail = trim(fetched.err);
+                LOG_WARN << "reset 전 fetch 실패 (" << branch << "): " << detail;
+                if (detail.find("Authentication failed") != std::string::npos ||
+                    detail.find("could not read Username") != std::string::npos ||
+                    detail.find("403") != std::string::npos ||
+                    detail.find("401") != std::string::npos) {
+                    return errorResponse("P0802", "GitHub 자격증명이 유효하지 않거나 이 저장소에 접근할 수 없습니다.",
+                                         k401Unauthorized);
+                }
+                return errorResponse("P0807", "원격 저장소를 가져오지 못했습니다: " + detail, k502BadGateway);
+            }
+        }
+
+        const std::string targetRef = target == "remote" ? ("origin/" + branch) : "HEAD~1";
+        auto targetSha = GitRunner::resolveRef(workDir, targetRef);
+        if (!targetSha.ok()) {
+            return errorResponse("P0818",
+                                 target == "remote"
+                                     ? "되돌릴 원격 브랜치를 찾을 수 없습니다. 먼저 fetch 해 주세요."
+                                     : "첫 커밋은 되돌릴 수 없습니다.",
+                                 k409Conflict);
+        }
+        const std::string newHead = trim(targetSha.out);
+
+        const SyncState before = readSyncState(workDir, branch);
+        const std::string oldHead = before.headSha;
+        if (oldHead.empty()) {
+            return errorResponse("P0807", "현재 커밋 SHA 를 읽지 못했습니다.", k500InternalServerError);
+        }
+        if (oldHead == newHead) {
+            Json::Value data = syncToJson(before);
+            data["action"] = "up_to_date";
+            data["target"] = target;
+            return successResponse(singleItemArray(data), "이미 되돌릴 커밋이 없습니다.");
+        }
+
+        if (mode == "hard") {
+            // hard reset 은 작업 트리를 덮어쓴다. 먼저 열린 문서를 내려쓰고, 이후 새 내용으로 맞춘다.
+            if (!flushCollabDocsStrict(repoId, branch)) {
+                return errorResponse("P0908",
+                                     "협업 서버와 연결하지 못해 되돌리지 않았습니다. 잠시 뒤 다시 시도해 주세요.",
+                                     k503ServiceUnavailable);
+            }
+
+            // reset 이 버릴 미커밋 경로를 먼저 모은다. 커밋 diff 에 없더라도 열린 Y.Doc 을
+            // 현재 파일 내용으로 맞춰야 다음 flush 가 버린 변경을 되살리지 않는다.
+            GitResult statusResult;
+            const Json::Value entries = readWorktreeStatus(workDir, statusResult);
+            if (!statusResult.ok()) {
+                return errorResponse("P0807", "작업 트리 상태를 읽지 못했습니다: " + trim(statusResult.err),
+                                     k500InternalServerError);
+            }
+            std::vector<std::string> dirtyPaths;
+            for (const auto &entry : entries) {
+                if (entry["state"].asString() == "untracked") {
+                    continue;   // reset --hard 는 untracked 를 지우지 않는다.
+                }
+                const std::string path = entry["path"].asString();
+                if (!path.empty()) {
+                    dirtyPaths.push_back(path);
+                }
+                if (entry["from"].isString() && !entry["from"].asString().empty()) {
+                    dirtyPaths.push_back(entry["from"].asString());
+                }
+            }
+
+            auto resetResult = GitRunner::reset(workDir, mode, newHead);
+            if (!resetResult.ok()) {
+                LOG_WARN << "reset 실패 (" << branch << ", " << target << ", " << mode << "): "
+                         << trim(resetResult.err);
+                return errorResponse("P0807", "커밋을 되돌리지 못했습니다: " + trim(resetResult.err),
+                                     k500InternalServerError);
+            }
+            syncCollabAndBroadcastChanges(repoId, branch, workDir, oldHead, newHead, dirtyPaths);
+        } else {
+            auto resetResult = GitRunner::reset(workDir, mode, newHead);
+            if (!resetResult.ok()) {
+                LOG_WARN << "reset 실패 (" << branch << ", " << target << ", " << mode << "): "
+                         << trim(resetResult.err);
+                return errorResponse("P0807", "커밋을 되돌리지 못했습니다: " + trim(resetResult.err),
+                                     k500InternalServerError);
+            }
+            broadcastStatusChanged(repoId, branch);
+        }
+
+        // 되돌린 커밋 중 아직 push 되지 않은 기록만 지운다. push 된 기록은 원격 이력이므로 남긴다.
+        int removedCommits = 0;
+        int removedLogs = 0;
+        auto removed = GitRunner::run(workDir, {"rev-list", oldHead, "^" + newHead});
+        if (removed.ok()) {
+            std::istringstream lines(removed.out);
+            std::string sha;
+            while (std::getline(lines, sha)) {
+                sha = trim(sha);
+                if (sha.empty()) {
+                    continue;
+                }
+                removedCommits += 1;
+                try {
+                    Json::Value logRow;
+                    if (singleRow(db->execSqlSync("SELECT * FROM delete_github_unpushed_commit_log($1, $2, $3, $4)",
+                                                  requester, repoId, branch, sha),
+                                  logRow)) {
+                        removedLogs += logRow["deleted_count"].asInt();
+                    }
+                } catch (const orm::DrogonDbException &e) {
+                    // reset 자체는 이미 끝났다. 기록 정리 실패로 사용자의 되돌리기를 되돌리지 않는다.
+                    LOG_WARN << "되돌린 커밋 기록 정리 실패 (" << sha << "): " << e.base().what();
+                }
+            }
+        } else {
+            LOG_WARN << "되돌린 커밋 목록 조회 실패 (" << branch << "): " << trim(removed.err);
+        }
+
+        const SyncState after = readSyncState(workDir, branch);
+        broadcastBranchSynced(repoId, branch, requester, "reset");
+        Json::Value data = syncToJson(after);
+        data["action"] = "reset";
+        data["target"] = target;
+        data["mode"] = mode;
+        data["old_head_sha"] = oldHead;
+        data["new_head_sha"] = newHead;
+        data["removed_commits"] = removedCommits;
+        data["removed_commit_logs"] = removedLogs;
+        return successResponse(singleItemArray(data), "브랜치를 되돌렸습니다.");
     });
 }
 

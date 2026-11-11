@@ -71,7 +71,7 @@ const PUSH_GUIDE: Record<string, string> = {
     credential_missing: '앱 상단의 사용자 아이콘에서 GitHub PAT 자격증명을 등록해 주세요.',
     credential_invalid: 'GitHub 자격증명이 유효하지 않습니다. 앱에서 PAT 를 다시 등록해 주세요.',
     denied: '이 GitHub 계정에 push 권한이 없습니다. 저장소 권한을 확인해 주세요.',
-    non_fast_forward: '원격에 새 커밋이 있습니다. ⟳ 로 가져온 뒤 다시 push 해 주세요.',
+    non_fast_forward: '원격에 새 커밋이 있습니다. Pull 로 병합한 뒤 다시 push 해 주세요.',
     other: '원격 저장소 상태를 확인한 뒤 다시 시도해 주세요.'
 };
 
@@ -98,6 +98,23 @@ export type SyncInfo = {
     origin_sha?: string;
     ahead: number;
     behind: number;
+};
+
+type ResetTarget = 'last' | 'remote';
+type ResetMode = 'soft' | 'mixed' | 'hard';
+
+/** `POST /api/github/repos/reset` 응답 중 확장이 안내에 쓰는 필드. */
+type ResetResultRow = {
+    action?: string;
+    target?: ResetTarget;
+    mode?: ResetMode;
+    removed_commits?: number;
+    removed_commit_logs?: number;
+};
+
+type ResetOption = vscode.QuickPickItem & {
+    target: ResetTarget;
+    mode: ResetMode;
 };
 
 let started = false;
@@ -222,6 +239,10 @@ export function pushBlockedReason(): string | undefined {
 
     if (remoteCommitting) {
         return '같은 브랜치의 다른 사용자가 커밋 중입니다…';
+    }
+
+    if (syncInfo.behind > 0) {
+        return '원격에 새 커밋이 있습니다. 먼저 Pull 로 병합해 주세요.';
     }
 
     if (syncInfo.ahead === 0) {
@@ -350,6 +371,34 @@ export async function fetchRemote(): Promise<void> {
 }
 
 /**
+ * 원격 변경을 현재 브랜치로 가져와 병합한다(§3.2 `POST /api/github/repos/pull`).
+ *
+ * 커밋되지 않은 변경이 있으면 서버가 P0810 으로 거부한다. 병합 충돌은 서버가 `merge --abort` 로
+ * 되돌린 뒤 P0817 로 알려 주므로 작업 트리에 충돌 표시가 남지 않는다.
+ */
+export async function pullBranch(): Promise<void> {
+    const session = getSession();
+    const branch = getCurrentBranch();
+    if (!session || !branch) {
+        void vscode.window.showWarningMessage('저장소에 연결되어 있지 않습니다. 앱에서 저장소를 연결해 주세요.');
+        return;
+    }
+
+    try {
+        await apiRequest('/github/repos/pull', {
+            method: 'POST',
+            body: { repo_id: session.repoId, branch }
+        });
+        await refreshStatus();
+        indexEmitter.fire();
+        commitListEmitter.fire();
+        void vscode.window.showInformationMessage('Axis Share: 원격 변경을 가져와 병합했습니다.');
+    } catch (error) {
+        showError('원격 변경을 가져오지 못했습니다.', error);
+    }
+}
+
+/**
  * 커밋한 내용을 원격으로 올린다(§3.2 `POST /api/github/repos/push`, §12.11).
  *
  * 커밋과 분리된 별도 동작이다 — 커밋은 서버 로컬에만 남고, push 는 사용자가 원할 때만 한다.
@@ -379,6 +428,95 @@ export async function pushBranch(): Promise<void> {
         commitListEmitter.fire(); // 원격 위치(origin/<branch>)가 바뀌었다 — Graph 뷰를 다시 받는다(§15.14).
     } catch (error) {
         showError('원격에 push 하지 못했습니다.', error);
+    }
+}
+
+/**
+ * 현재 브랜치의 커밋을 되돌린다(§3.2 `POST /api/github/repos/reset`).
+ *
+ * `last` 는 HEAD~1 로 reset 하고, `remote` 는 fetch 후 origin/<branch> 로 맞춘다. hard reset 은
+ * 추적 파일의 변경을 버리지만 untracked 파일은 남긴다. 원격 기준 초기화는 로컬 커밋도 버리므로
+ * 반드시 모달로 확인받는다.
+ */
+export async function resetBranch(): Promise<void> {
+    const session = getSession();
+    const branch = getCurrentBranch();
+    if (!session || !branch) {
+        void vscode.window.showWarningMessage('저장소에 연결되어 있지 않습니다. 앱에서 저장소를 연결해 주세요.');
+        return;
+    }
+
+    const options: ResetOption[] = [
+        {
+            label: '마지막 커밋 취소 · 변경 유지 (staged)',
+            description: 'HEAD~1 로 soft reset — 변경 내용은 스테이징된 상태로 남습니다.',
+            target: 'last',
+            mode: 'soft'
+        },
+        {
+            label: '마지막 커밋 취소 · 변경 유지 (unstaged)',
+            description: 'HEAD~1 로 mixed reset — 변경 내용은 작업 트리에 남습니다.',
+            target: 'last',
+            mode: 'mixed'
+        },
+        {
+            label: '마지막 커밋 취소 · 변경 모두 버리기',
+            description: 'HEAD~1 로 hard reset — 추적 파일의 변경 내용이 사라집니다.',
+            target: 'last',
+            mode: 'hard'
+        },
+        {
+            label: '원격 기준으로 초기화 · 로컬 커밋/변경 버리기',
+            description: `origin/${branch} 로 hard reset — 로컬 커밋과 추적 파일의 변경 내용이 사라집니다.`,
+            target: 'remote',
+            mode: 'hard'
+        }
+    ];
+
+    const picked = await vscode.window.showQuickPick(options, {
+        title: 'Axis Share: 커밋 되돌리기',
+        placeHolder: '되돌릴 범위와 변경 내용 처리 방법을 선택하세요.',
+        ignoreFocusOut: true
+    });
+    if (!picked) {
+        return;
+    }
+
+    if (picked.mode === 'hard') {
+        const detail =
+            picked.target === 'remote'
+                ? `origin/${branch} 기준으로 초기화할까요? 로컬 커밋과 추적 파일의 변경 내용이 사라집니다. 새로 만든 untracked 파일은 유지됩니다.`
+                : '마지막 커밋을 취소하고 추적 파일의 변경 내용도 모두 버릴까요? 새로 만든 untracked 파일은 유지됩니다.';
+        const confirmed = await vscode.window.showWarningMessage(detail, { modal: true }, '되돌리기');
+        if (confirmed !== '되돌리기') {
+            return;
+        }
+    }
+
+    try {
+        const rows = await apiRequest<ResetResultRow[]>('/github/repos/reset', {
+            method: 'POST',
+            body: {
+                repo_id: session.repoId,
+                branch,
+                target: picked.target,
+                mode: picked.mode
+            }
+        });
+        const result = Array.isArray(rows) ? rows[0] : undefined;
+        await refreshStatus();
+        indexEmitter.fire();
+        commitListEmitter.fire();
+
+        const removed = typeof result?.removed_commits === 'number' ? result.removed_commits : 0;
+        const suffix = removed > 0 ? ` (커밋 ${removed}개 제거)` : '';
+        void vscode.window.showInformationMessage(
+            picked.target === 'remote'
+                ? `Axis Share: 원격 기준으로 브랜치를 초기화했습니다.${suffix}`
+                : `Axis Share: 마지막 커밋을 되돌렸습니다.${suffix}`
+        );
+    } catch (error) {
+        showError('커밋을 되돌리지 못했습니다.', error);
     }
 }
 
@@ -816,6 +954,14 @@ function onControlEvent(event: ControlEvent): void {
         // 같은 브랜치의 다른 사용자가 원격으로 올렸다 — 원격 대비 위치가 바뀌었다(§15.10).
         void refreshStatus();
         commitListEmitter.fire(); // 원격 위치가 바뀌었다 — Graph 뷰도 다시 받는다(§15.14).
+        return;
+    }
+
+    if (event.type === 'branch_synced') {
+        // pull/reset 으로 HEAD·원격 위치·작업 트리가 함께 바뀌었다. 상태와 Graph, diff 기준을 모두 갱신한다.
+        void refreshStatus();
+        indexEmitter.fire();
+        commitListEmitter.fire();
     }
 }
 

@@ -6,7 +6,7 @@
 --   - 저장소 추가(연결)/해제: GITHUB_REPO_MANAGE (bit 24, ADMIN 계열 — MANAGER 기본값에는 없다)
 --   - 자격증명 등록/조회/삭제, 핸드오프·확장 토큰: 권한 검사 없음 (본인 계정 범위)
 --
--- 오류 코드 (P0801 ~ P0812) — P04xx 는 역할, P03xx 는 노드가 이미 쓰고 있어 대역을 분리했다.
+-- 오류 코드 (P0801 ~ P0818) — P04xx 는 역할, P03xx 는 노드가 이미 쓰고 있어 대역을 분리했다.
 --   P0801 저장소(또는 브랜치)가 연결되어 있지 않음
 --   P0802 GitHub 자격증명이 없거나 무효
 --   P0803 GitHub 토큰 스코프 부족 (컨트롤러가 GitHub API 응답으로 판정)
@@ -19,6 +19,12 @@
 --   P0810 브랜치에 커밋되지 않은 변경이 있음 (컨트롤러 판정)
 --   P0811 핸드오프 코드가 없거나 만료·이미 사용됨
 --   P0812 확장 리프레시 토큰이 없거나 만료·이미 회전됨
+--   P0813 이미 존재하는 파일·디렉터리 경로
+--   P0814 파일·디렉터리 경로를 찾을 수 없음
+--   P0815 AI 파일 쓰기 상한 초과 또는 바이너리 내용
+--   P0816 파일 변경 충돌·기대 해시 불일치·안전하지 않은 경로
+--   P0817 pull 병합 충돌로 병합을 취소함 (컨트롤러 판정)
+--   P0818 reset 대상 커밋 또는 원격 브랜치가 없음 (컨트롤러 판정)
 --
 -- access_token 은 어떤 응답에도 담지 않는다. 복호화를 돌려주는 함수는 get_github_user_token 하나뿐이며,
 -- 그 반환값도 API 응답·로그·에러 메시지에 넣지 않는다 (§3.1 (5), §5).
@@ -1021,6 +1027,78 @@ BEGIN
             RAISE;
         WHEN OTHERS THEN
             RAISE EXCEPTION '[P0807]Failed to mark github branch pushed: % (repo %), (REASON: %)', p_branch_name, p_repo_id, SQLERRM
+            USING ERRCODE = 'P0807';
+END;
+$$ LANGUAGE plpgsql;
+
+-- GitHubController::reset — reset 으로 사라진 로컬 커밋 기록 정리.
+-- reset 자체는 git 이 이미 끝냈다. 이 함수는 해당 SHA 의 'pushed = FALSE' 기록만 지운다.
+-- pushed = TRUE 는 원격에 남은 이력이므로 지우지 않는다. 없는 브랜치/기록은 0건으로 정상 종료한다.
+CREATE OR REPLACE FUNCTION delete_github_unpushed_commit_log(
+    p_requester_email users.email%TYPE,
+    p_repo_id github_repositories.repo_id%TYPE,
+    p_branch_name github_branches.name%TYPE,
+    p_sha github_commit_logs.sha%TYPE
+) RETURNS SETOF integrated_data AS $$
+DECLARE
+    v_requester_id users.user_id%TYPE;
+    v_node_id organization_nodes.node_id%TYPE;
+    v_branch_id github_branches.branch_id%TYPE;
+    v_deleted INTEGER := 0;
+BEGIN
+    -- 1. 요청자 확인
+    SELECT user_id INTO v_requester_id FROM users WHERE email = p_requester_email AND is_deleted = FALSE;
+    IF v_requester_id IS NULL THEN
+        RAISE EXCEPTION '[P0001]Requester user does not exist: %', p_requester_email
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    -- 2. 저장소 존재 확인
+    SELECT node_id INTO v_node_id
+    FROM github_repositories
+    WHERE repo_id = p_repo_id AND is_deleted = FALSE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION '[P0801]Repository is not connected: %', p_repo_id
+        USING ERRCODE = 'P0801';
+    END IF;
+
+    -- 3. 권한 확인 (reset 은 커밋·push 와 같은 작업자 이상)
+    IF NOT check_authority_with_override(v_requester_id, v_node_id, 'GITHUB_CHANGE') THEN
+        RAISE EXCEPTION '[P0103]Requester does not have GITHUB_CHANGE permission on node: %', v_node_id
+        USING ERRCODE = 'P0103';
+    END IF;
+
+    -- 4. 그 브랜치의 해당 SHA 중 아직 push 되지 않은 기록만 지운다.
+    SELECT branch_id INTO v_branch_id
+    FROM github_branches
+    WHERE repo_id = p_repo_id AND name = p_branch_name AND is_deleted = FALSE;
+
+    IF v_branch_id IS NOT NULL THEN
+        DELETE FROM github_commit_logs
+        WHERE repo_id = p_repo_id
+          AND branch_id = v_branch_id
+          AND sha = p_sha
+          AND pushed = FALSE;
+        GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    END IF;
+
+    -- 5. 결과 반환
+    RETURN QUERY
+    SELECT jsonb_build_object(
+        'type', 'GITHUB_RESET',
+        'repo_id', p_repo_id,
+        'branch', p_branch_name,
+        'branch_id', v_branch_id,
+        'sha', p_sha,
+        'deleted_count', v_deleted
+    )::jsonb AS out_data;
+
+    EXCEPTION
+        WHEN SQLSTATE 'P0001' OR SQLSTATE 'P0103' OR SQLSTATE 'P0801' THEN
+            RAISE;
+        WHEN OTHERS THEN
+            RAISE EXCEPTION '[P0807]Failed to delete unpushed github commit log: % (repo %), (REASON: %)', p_sha, p_repo_id, SQLERRM
             USING ERRCODE = 'P0807';
 END;
 $$ LANGUAGE plpgsql;

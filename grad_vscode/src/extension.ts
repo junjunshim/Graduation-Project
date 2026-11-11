@@ -41,8 +41,10 @@ import {
     commitInteractive,
     discardPaths,
     fetchRemote,
+    pullBranch,
     pushBranch,
     refreshStatus,
+    resetBranch,
     showIdentitySettings,
     startRepoStatus,
     stopRepoStatus
@@ -99,8 +101,10 @@ const COMMANDS: readonly string[] = [
     'axis-share.hideDecorations',
     'axis-share.identitySettings',
     'axis-share.fetch',
+    'axis-share.pull',
     'axis-share.commit',
     'axis-share.push',
+    'axis-share.reset',
     'axis-share.stageAll',
     'axis-share.unstageAll',
     'axis-share.discard',
@@ -315,6 +319,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // Changes 뷰 타이틀의 $(cloud-upload). 커밋한 내용을 원격으로 올린다(§12.11 — 커밋과 분리).
         'axis-share.push': () => {
             void pushBranch();
+        },
+        // Changes 뷰 타이틀의 $(cloud-download). 원격 변경을 현재 브랜치로 병합한다.
+        'axis-share.pull': () => {
+            void pullBranch();
+        },
+        // Changes 뷰 타이틀의 $(history). 커밋 이력을 되돌리고, 필요하면 원격 기준으로 초기화한다.
+        'axis-share.reset': () => {
+            void resetBranch();
         },
         // Changes 뷰 타이틀의 ⚙ / ⟳ (§15.7).
         'axis-share.identitySettings': () => {

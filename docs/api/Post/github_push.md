@@ -69,3 +69,5 @@
 1. push 작업은 요청자의 개인 PAT 자격증명을 사용하여 원격 저장소로 인증/전송됩니다.<br>
 2. 성공 시 데이터베이스의 해당 브랜치 커밋 로그 상태가 `pushed: true`로 갱신됩니다.<br>
 3. 성공 시 WebSocket을 통해 `push_finished` 이벤트가 브로드캐스트됩니다.<br>
+4. 원격에 새 커밋이 있어 non-fast-forward(`P0805`)로 거부되면 먼저 `POST /api/github/repos/pull` 로 병합한 뒤 다시 push합니다.<br>
+5. 로컬 커밋을 버리고 원격 기준으로 맞추려면 `POST /api/github/repos/reset` 에 `target=remote`, `mode=hard` 를 보냅니다. 이 동작은 로컬 커밋과 추적 파일의 변경을 삭제합니다.<br>

@@ -132,6 +132,11 @@
                 "icon": "$(sync)"
             },
             {
+                "command": "axis-share.pull",
+                "title": "Axis Share: 원격 변경 병합 (pull)",
+                "icon": "$(cloud-download)"
+            },
+            {
                 "command": "axis-share.stage",
                 "title": "Axis Share: 스테이징",
                 "icon": "$(add)"
@@ -160,6 +165,11 @@
                 "command": "axis-share.push",
                 "title": "Axis Share: 원격으로 push",
                 "icon": "$(cloud-upload)"
+            },
+            {
+                "command": "axis-share.reset",
+                "title": "Axis Share: 커밋 되돌리기 (reset)",
+                "icon": "$(history)"
             },
             {
                 "command": "axis-share.discard",
@@ -248,29 +258,39 @@
                     "group": "navigation@2"
                 },
                 {
-                    "command": "axis-share.stageAll",
+                    "command": "axis-share.pull",
                     "when": "view == axis-share-changes",
                     "group": "navigation@3"
                 },
                 {
-                    "command": "axis-share.unstageAll",
+                    "command": "axis-share.fetch",
                     "when": "view == axis-share-changes",
                     "group": "navigation@4"
                 },
                 {
-                    "command": "axis-share.identitySettings",
+                    "command": "axis-share.stageAll",
                     "when": "view == axis-share-changes",
                     "group": "navigation@5"
                 },
                 {
-                    "command": "axis-share.fetch",
+                    "command": "axis-share.unstageAll",
                     "when": "view == axis-share-changes",
                     "group": "navigation@6"
                 },
                 {
-                    "command": "axis-share.refresh",
+                    "command": "axis-share.identitySettings",
                     "when": "view == axis-share-changes",
                     "group": "navigation@7"
+                },
+                {
+                    "command": "axis-share.reset",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@8"
+                },
+                {
+                    "command": "axis-share.refresh",
+                    "when": "view == axis-share-changes",
+                    "group": "navigation@9"
                 },
                 {
                     "command": "axis-share.openRepoGraph",

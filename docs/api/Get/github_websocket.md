@@ -142,8 +142,19 @@
   "ahead": 0
 }
 ```
-- **파일시스템 변경 (`file_created`, `file_moved`, `file_deleted`, `dir_created`, `worktree_changed`)**
+- **브랜치 동기화 (`branch_synced`)**:
+```json
+{
+  "type": "branch_synced",
+  "repo_id": 1,
+  "branch": "feature/login",
+  "email": "user@example.com",
+  "action": "merged"
+}
+```
+- **파일시스템 변경 (`file_created`, `file_restored`, `file_moved`, `file_deleted`, `dir_created`, `worktree_changed`)**
 - **강제 종료 (`repo_closed`)**: 저장소 연결 해제 또는 권한 상실 시
 
 - 설명<br>
 1. 저장소 및 브랜치 작업 시 다수의 사용자가 동일 브랜치를 편집할 때 충돌을 방지하고 상태를 실시간 동기화합니다.<br>
+2. `branch_synced` 는 pull 또는 reset으로 HEAD와 작업 트리가 바뀌었음을 뜻합니다. `action` 은 `fast_forward` · `merged` · `reset` 중 하나이며, 수신한 확장은 Changes와 Graph를 모두 다시 조회해야 합니다.<br>

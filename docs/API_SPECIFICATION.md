@@ -154,6 +154,8 @@
 | GitHub 파일 언스테이징 | Delete | /api/github/repos/stage | 완료 | [link](api/Delete/github_stage.md) |
 | GitHub 변경사항 되돌리기 | Post | /api/github/repos/discard | 완료 | [link](api/Post/github_discard.md) |
 | GitHub 저장소 Fetch | Post | /api/github/repos/fetch | 완료 | [link](api/Post/github_fetch.md) |
+| GitHub 원격 변경 Pull | Post | /api/github/repos/pull | 완료 | [link](api/Post/github_pull.md) |
+| GitHub 커밋 되돌리기 Reset | Post | /api/github/repos/reset | 완료 | [link](api/Post/github_reset.md) |
 | GitHub 동기화 상태 조회 | Get | /api/github/repos/sync | 완료 | [link](api/Get/github_sync.md) |
 | GitHub 커밋 생성 | Post | /api/github/repos/commits | 완료 | [link](api/Post/github_commit.md) |
 | GitHub 원격 Push | Post | /api/github/repos/push | 완료 | [link](api/Post/github_push.md) |
